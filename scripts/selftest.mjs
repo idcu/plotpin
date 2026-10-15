@@ -101,7 +101,7 @@ code += `\n;globalThis.__api = {
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter,
   sectorSweep, sectorArcPoints, convertAreaShape, pointIconScale, areaParamText,
   applyField,
-  lineMinNodes, setNodeCoord, insertLineNode, removeLineNode,
+  lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   TABLE_COLUMNS
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
@@ -747,6 +747,48 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('节点-删首点后锚点同步 X', l4.x, l4.points[0][0]);
   eq('节点-删首点后锚点同步 Y', l4.y, l4.points[0][1]);
   eq('节点-闭合态保持', l4.closed, true);
+}
+
+/* 21. 节点排序：move/step 语义、越界保护、锚点同步 -------------------------- */
+{
+  const mk=()=>api.baseObject('line','line.custom',{points:[[0,0],[1,1],[2,2],[3,3]],x:0,y:0});
+
+  /* #0 与 #1 交换（上移到头被拒）；下移同理 */
+  const l1=mk();
+  eq('排序-首节点不能上移', api.moveNodeStep(l1,0,-1), false);
+  eq('排序-拒绝后顺序不变', l1.points.map(p=>p[0]).join(','), '0,1,2,3');
+  eq('排序-#1 上移', api.moveNodeStep(l1,1,-1), true);
+  eq('排序-#1 上移后顺序', l1.points.map(p=>p[0]).join(','), '1,0,2,3');
+  eq('排序-末节点不能下移', api.moveNodeStep(l1,3,1), false);
+
+  /* move：#0 移到 #2 位置（1,0,2,3 → 1,2,0,3），其余相对顺序保持 */
+  const l2=mk();
+  eq('排序-move 成功', api.moveNode(l2,0,2), true);
+  eq('排序-move 后序列', l2.points.map(p=>p[0]).join(','), '1,2,0,3');
+  eq('排序-move 非法参数拒绝', api.moveNode(l2,1,9), false);
+  eq('排序-move 同位拒绝', api.moveNode(l2,1,1), false);
+  eq('排序-move 拒绝后序列不变', l2.points.map(p=>p[0]).join(','), '1,2,0,3');
+
+  /* 排序后首点变化同步锚点 */
+  const l3=mk();
+  api.moveNode(l3,2,0);
+  eq('排序-新首点同步锚点', [l3.x,l3.y], [2,2]);
+  eq('排序-新首点位于首位', l3.points[0], [2,2]);
+
+  /* 非折线对象不能排序 */
+  eq('排序-非折线拒绝', api.moveNode({kind:'rect'},0,1), false);
+}
+
+/* 22. 静态资源引用完整性：index.html 引用的本地文件都必须真实存在 ------------- */
+{
+  const exists = rel => { try { readFileSync(join(root, rel)); return true; } catch { return false; } };
+  const referenced = [...html.matchAll(/(?:src|href)="(?!https?:|data:|#)([^"]+)"/g)].map(m => m[1]);
+  ok('静态-存在本地引用（脚本/样式/图标/manifest）', referenced.length >= 16);
+  const missing = referenced.filter(r => !exists(r.split('?')[0]));
+  eq('静态-全部本地引用可达', missing, []);
+  ok('静态-icon.svg 存在', exists('icon.svg'));
+  ok('静态-manifest.webmanifest 存在', exists('manifest.webmanifest'));
+  ok('静态-标题含图钉品牌', /图钉 PlotPin/.test(html));
 }
 
 /* ---------------- 结果汇总 ---------------- */

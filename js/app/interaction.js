@@ -234,6 +234,23 @@ function resizeShapeByHandle(o,h,p){
   }
   o.updatedAt=nowISO();
 }
+/** Esc 取消进行中的拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照 */
+function cancelActiveDrag(){
+  if(!drag) return false;
+  const d=drag; drag=null;
+  document.body.classList.remove('panning');
+  if(d.type==='pan') return true;
+  if(d.type==='move'){
+    if(!d.moved) return true;
+    d.originals.forEach((orig,id)=>{ const o=state.objects.find(x=>x.id===id); if(o) Object.assign(o,deepClone(orig)); });
+    history.past.pop();
+  }else if(['node','rotate','rect','shapeHandle'].includes(d.type)){
+    const o=state.objects.find(x=>x.id===d.id);
+    if(o && d.original) Object.assign(o,deepClone(d.original));
+    history.past.pop();
+  }else return true;
+  commitChange(); return true;
+}
 canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(...pointerScreen(e),e.deltaY<0?1.15:1/1.15); },{passive:false});
 
 /* 兼容只触发 MouseEvent 的自动化工具或旧环境：真实浏览器中 PointerEvent 会先触发，以下事件不会重复执行。 */
@@ -444,7 +461,10 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(); return; }
-  if(e.key==='Escape'){ draft=null; selectedIds.clear(); setTool('select'); refreshUI(); return; }
+  if(e.key==='Escape'){
+    if(cancelActiveDrag()){ requestRender(); return; }   /* 拖拽中 Esc：恢复到按下前，不动选择集 */
+    draft=null; selectedIds.clear(); setTool('select'); refreshUI(); return;
+  }
   if(e.key==='Enter'&&draft&&draft.points){ finishDraft(); return; }
   if(e.key==='Backspace'&&draft?.points?.length){ draft.points.pop(); requestRender(); return; }
   if(e.code==='Space'){ e.preventDefault(); spaceDown=true; document.body.classList.add('panning'); canvas.style.cursor='grabbing'; return; }

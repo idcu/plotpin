@@ -39,21 +39,25 @@ function populateSelects(){
 }
 
 /* -------------------- 属性面板 -------------------- */
-/** 折线/标注节点编辑器：坐标可精确输入；折线还可逐节点插入(＋)/删除(×) */
+/** 折线/标注节点编辑器：坐标精确输入；折线可逐节点插入(＋)/删除(×)/↑↓排序，或拖抓手排序 */
 function renderNodeEditor(o){
   const canEdit=o.kind==='line';
   const min=canEdit?lineMinNodes(o):0;
+  const n=(o.points||[]).length;
   const rows=(o.points||[]).map((p,i)=>`
-    <div class="node-row">
-      <span class="node-idx">#${i+1}</span>
+    <div class="node-row" data-node-row="${i}" ${canEdit?'':''}>
+      ${canEdit?`<span class="node-grip" draggable="true" data-node-grip="${i}" title="拖拽调整节点顺序">⠿</span>`:'<span class="node-idx">#</span>'}
+      <span class="node-idx">${i+1}</span>
       <input type="number" step="0.1" title="节点 X（米，可为负）" data-node-axis="x" data-node-index="${i}" value="${fmt(p[0])}">
       <input type="number" step="0.1" title="节点 Y（米，可为负）" data-node-axis="y" data-node-index="${i}" value="${fmt(p[1])}">
-      ${canEdit?`<button type="button" class="icon-btn" data-node-add="${i}" title="在此节点后插入一个节点">＋</button>
-      <button type="button" class="icon-btn danger" data-node-del="${i}" title="删除该节点" ${o.points.length<=min?'disabled':''}>×</button>`:''}
+      ${canEdit?`<button type="button" class="icon-btn" data-node-up="${i}" title="上移节点" ${i===0?'disabled':''}>↑</button>
+      <button type="button" class="icon-btn" data-node-down="${i}" title="下移节点" ${i===n-1?'disabled':''}>↓</button>
+      <button type="button" class="icon-btn" data-node-add="${i}" title="在此节点后插入一个节点">＋</button>
+      <button type="button" class="icon-btn danger" data-node-del="${i}" title="删除该节点" ${n<=min?'disabled':''}>×</button>`:''}
     </div>`).join('');
   const hint=canEdit
-    ? `<div class="hint-text">共 ${o.points.length} 点（${o.closed?'闭合区域':'开放折线'}至少 ${min} 点）；也可在画布上双击线段插入节点、双击节点删除</div>`
-    : `<div class="hint-text">共 ${o.points.length} 点；可在画布上拖节点手柄调整位置</div>`;
+    ? `<div class="hint-text">共 ${n} 点（${o.closed?'闭合区域':'开放折线'}至少 ${min} 点）；拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除</div>`
+    : `<div class="hint-text">共 ${n} 点；可在画布上拖节点手柄调整位置</div>`;
   return `<div class="node-list">${rows}${hint}</div>`;
 }
 function renderProps(){
@@ -190,6 +194,13 @@ function bindPropEvents(box,o){
     if(o.points.length<=lineMinNodes(o)) return toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn');
     pushHistory(); removeLineNode(o,Number(b.dataset.nodeDel)); commitChange('已删除节点');
   });
+  box.querySelectorAll('[data-node-up]').forEach(b=>b.onclick=()=>{
+    if(moveNodeStep(o,Number(b.dataset.nodeUp),-1)){ pushHistory(); commitChange('节点已上移'); }
+  });
+  box.querySelectorAll('[data-node-down]').forEach(b=>b.onclick=()=>{
+    if(moveNodeStep(o,Number(b.dataset.nodeDown),1)){ pushHistory(); commitChange('节点已下移'); }
+  });
+  bindNodeRowDrag(box,o);
   box.querySelector('[data-action="duplicate"]').onclick=()=>duplicateSelected();
   box.querySelector('[data-action="delete"]').onclick=()=>deleteSelected();
   box.querySelector('[data-action="raise"]').onclick=()=>reorderSelected(1);
@@ -204,6 +215,27 @@ function bindPropEvents(box,o){
     const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; delete o.props[k]; commitChange();
   });
   if(!isEditable(o)) box.querySelectorAll('input,select,textarea,button:not(.danger)').forEach(el=>{ el.disabled=true; });
+}
+/** 节点行 HTML5 拖拽排序：仅抓手可拖，落到目标行=移动到该位置 */
+function bindNodeRowDrag(box,o){
+  if(o.kind!=='line') return;
+  let dragFrom=-1;
+  box.querySelectorAll('.node-row').forEach(row=>{
+    row.addEventListener('dragover',e=>{ e.preventDefault(); row.classList.add('drag-over'); });
+    row.addEventListener('dragleave',()=>row.classList.remove('drag-over'));
+    row.addEventListener('drop',e=>{
+      e.preventDefault(); row.classList.remove('drag-over');
+      const to=Number(row.dataset.nodeRow);
+      if(dragFrom<0||to===dragFrom) return;
+      pushHistory();
+      moveNode(o,dragFrom,to); commitChange('节点顺序已调整');
+    });
+  });
+  box.querySelectorAll('[data-node-grip]').forEach(g=>g.addEventListener('dragstart',()=>{
+    dragFrom=Number(g.dataset.nodeGrip);
+    g.closest('.node-row')?.classList.add('drag-source');
+  }));
+  box.addEventListener('dragend',()=>{ dragFrom=-1; box.querySelectorAll('.node-row').forEach(r=>r.classList.remove('drag-over','drag-source')); },{once:true});
 }
 function applyField(el,o,changed){
   const k=el.dataset.field;

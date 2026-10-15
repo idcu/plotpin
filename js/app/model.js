@@ -104,6 +104,22 @@ function removeLineNode(o,i){
   o.points.splice(i,1);
   o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;
 }
+/** 节点重排（move 语义）：把 from 处节点移到 to 处，其余节点顺序保持 */
+function moveNode(o,from,to){
+  if(!o || o.kind!=='line' || !Array.isArray(o.points)) return false;
+  const n=o.points.length;
+  if(from===to || from<0 || from>=n || to<0 || to>=n) return false;
+  const p=o.points.splice(from,1)[0];
+  o.points.splice(to,0,p);
+  o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;
+}
+/** 与相邻节点交换位置（上移=与前一个，下移=与后一个）；到头返回 false */
+function moveNodeStep(o,i,dir){
+  if(!o || o.kind!=='line' || !Array.isArray(o.points)) return false;
+  const to=i+(dir<0?-1:1);
+  if(to<0 || to>=o.points.length) return false;
+  return moveNode(o,i,to);
+}
 
 /* 点设备屏幕图标有效倍率 = 类型默认大小 × 对象覆盖 × 全局倍率（三层连乘，纯屏幕语义） */
 function pointIconScale(o){

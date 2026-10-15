@@ -100,9 +100,10 @@ function drawScene(c,v,cssW,cssH,opt={}){
   drawGrid(c,v,d,cssW,cssH,toS);
   drawAxes(c,v,toS,cssH);
   const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
-  /* opt.markerScale=导出增益(交互为1)；再乘用户全局点大小倍率 */
-  const iconBoost=(opt.markerScale||1)*(Number(state.settings.markerScale)||1);
-  visible.forEach(o=>drawObject(c,o,v,toS,iconBoost));
+  /* exportGain=导出清晰度增益(交互为1)；iconBoost 再乘用户全局点大小倍率，仅作用于点设备图标 */
+  const exportGain=opt.markerScale||1;
+  const iconBoost=exportGain*(Number(state.settings.markerScale)||1);
+  visible.forEach(o=>drawObject(c,o,v,toS,iconBoost,exportGain));
   drawDraft(c,v,d,toS);
   drawCalibration(c,toS);
   if(opt.interactive){
@@ -182,12 +183,13 @@ function drawScaleBar(c,v,height){
   c.beginPath(); c.moveTo(x,y); c.lineTo(x+len,y); c.moveTo(x,y-5); c.lineTo(x,y+5); c.moveTo(x+len,y-5); c.lineTo(x+len,y+5); c.stroke();
   c.fillStyle='#111827'; c.font='12px sans-serif'; c.fillText(fmt(step)+' '+state.settings.unit,x+len/2-14,y-9);
 }
-function drawObject(c,o,v,toS,markerScale){
+function drawObject(c,o,v,toS,iconBoost,exportGain){
+  const g=exportGain===undefined?iconBoost:exportGain;
   const type=getType(o.typeId), color=o.style.color||type.color||'#2563eb';
-  if(o.kind==='point') drawPoint(c,o,color,type,toS,markerScale,v);
-  else if(o.kind==='rect') drawRect(c,o,color,toS,v,markerScale);
+  if(o.kind==='point') drawPoint(c,o,color,type,toS,iconBoost,v);
+  else if(o.kind==='rect') drawRect(c,o,color,toS,v,g);
   else if(o.kind==='line') drawLine(c,o,color,toS,v);
-  else if(o.kind==='text') drawText(c,o,color,toS,v,markerScale);
+  else if(o.kind==='text') drawText(c,o,color,toS,v,g);
   else if(o.kind==='dimension') drawDimension(c,o,toS);
 }
 function screenAngle(o){ return -o.angle*Math.PI/180; }

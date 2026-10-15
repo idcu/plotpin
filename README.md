@@ -5,7 +5,8 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-274%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-292%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在任意底图（图片 / 矢量场地）上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
 
@@ -26,7 +27,7 @@
 - **区域 / 折线（几何语义）**：统一按世界坐标（米）绘制，缩放时与底图保持真实比例。
   - 区域支持**矩形、圆形、椭圆、扇形（饼形）**参数化形状，属性面板可随时**互换形状**（中心不动、等面积换算）；三角形与任意多边形由闭合折线完成。
   - 每种形状带专用控制点（角点 / 半径端 / 两轴端 / 扇形两边端与弧中点），并可直接设置**基点 / 圆心**坐标。
-  - 线段 / 折线逐点录入，可闭合；实时长度、周长、面积统计。
+  - 线段 / 折线逐点录入，可闭合；实时长度、周长、面积统计；节点支持面板精确改坐标、插入、删除、↑↓/拖拽排序，画布双击线段即可插点。
 - **标注与文字**：两点距离、折线 / 多边形面积、三点角度标注；文字按世界字高放置、可旋转。
 - **编辑能力**：点选 / 框选 / 多选、移动、缩放、旋转、节点编辑、复制粘贴、图层显隐锁定、类型管理、网格吸附、撤销重做。
 - **几何检查**：零尺寸、折线自相交、对象越界、物理尺寸异常等自动提示。
@@ -121,7 +122,7 @@ npm test
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希等纯逻辑模块，当前共 **274 项断言全部通过**。
+底图资产哈希、节点增删改与排序、静态资源引用完整性等纯逻辑模块，当前共 **292 项断言全部通过**。
 
 ---
 
