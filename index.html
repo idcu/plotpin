@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>离线通用图纸标注工具</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="tool-select">
+
+<header class="topbar">
+  <div class="brand">离线图纸标注</div>
+  <div class="tb-group">
+    <button id="newBtn" title="新建工程">新建</button>
+    <button id="importBtn" title="导入 JSON 工程 / CSV·TSV·XLSX 表格；也可直接拖拽文件到画布">导入</button>
+    <select id="exportKind" title="选择导出格式">
+      <option value="json">JSON 工程</option>
+      <option value="png">PNG 高清图</option>
+      <option value="svg">SVG 矢量图</option>
+      <option value="csv">CSV 表格</option>
+      <option value="tsv">TSV 表格</option>
+      <option value="xlsx">Excel (.xlsx)</option>
+    </select>
+    <button id="exportBtn" class="primary">导出</button>
+    <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）">打印/PDF</button>
+  </div>
+  <div class="tb-group">
+    <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/多边形绘制矢量场地">底图/场地</button>
+    <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素">比例尺</button>
+    <button id="settingsBtn" title="工程名称、网格、捕捉、精度等设置">设置</button>
+  </div>
+  <div class="tb-group">
+    <button id="undoBtn" title="撤销 (Ctrl+Z)">↶</button>
+    <button id="redoBtn" title="重做 (Ctrl+Y)">↷</button>
+    <button id="zoomOutBtn" title="缩小">−</button>
+    <button id="zoomFitBtn" title="适应窗口显示整张场地">适应</button>
+    <button id="zoomInBtn" title="放大">＋</button>
+    <label style="color:#cbd5e1"><input type="checkbox" id="showLabels" checked>标签</label>
+    <label title="点设备图标显示大小（仅屏幕醒目程度，不代表实际尺寸/比例）" style="color:#cbd5e1;display:flex;align-items:center;gap:4px">点大小
+      <input type="range" id="markerScaleInput" min="0.5" max="2.5" step="0.1" value="1" style="width:74px"><span id="markerScaleLabel" style="width:32px;color:#e2e8f0">1.0×</span>
+    </label>
+  </div>
+  <div class="save-state" id="saveState">未保存</div>
+</header>
+
+<div class="app-shell">
+  <aside class="tool-rail">
+    <button class="tool-btn active" data-tool="select"><span class="ico">↖</span><span>选择</span></button>
+    <button class="tool-btn" data-tool="pan"><span class="ico">✥</span><span>平移</span></button>
+    <div class="rail-sep"></div>
+    <button class="tool-btn" data-tool="point"><span class="ico">●</span><span>点设备</span></button>
+    <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span>区域</span></button>
+    <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span>折线</span></button>
+    <button class="tool-btn" data-tool="text"><span class="ico">T</span><span>文字</span></button>
+    <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span>标注</span></button>
+    <div class="rail-sep"></div>
+    <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注"><span class="ico">✓</span><span>完成</span></button>
+  </aside>
+
+  <main class="canvas-wrap" id="canvasWrap">
+    <canvas id="canvas" role="application" tabindex="0" aria-label="绘图画布：使用左侧工具在此绘制和选择对象"></canvas>
+    <div class="hud hud-top">
+      <span id="toolTitle">选择：点击对象，框选多个对象</span>
+      <span class="tool-options">
+        <span data-for="point">类型
+          <select id="pointType"></select>
+        </span>
+        <span data-for="rect">形状
+          <select id="areaShape" title="区域形状（世界坐标，按实际比例）">
+            <option value="rect">矩形</option>
+            <option value="circle">圆形</option>
+            <option value="ellipse">椭圆</option>
+            <option value="sector">扇形</option>
+          </select>
+          类型
+          <select id="rectType"></select>
+        </span>
+        <span data-for="line">类型
+          <select id="lineType"></select>
+          <label><input type="checkbox" id="lineClosed">闭合区域</label>
+        </span>
+        <span data-for="dimension">类型
+          <select id="dimensionType">
+            <option value="distance">两点距离</option>
+            <option value="area">面积</option>
+            <option value="angle">角度</option>
+          </select>
+        </span>
+      </span>
+    </div>
+    <div class="hud hud-bottom">
+      <span class="coord" id="coordText">鼠标：-, -</span>
+      <span class="hint" id="hintText">滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；可拖拽文件到画布导入；按 ? 查看全部快捷键</span>
+      <span class="zoom-label" id="zoomLabel">100%</span>
+    </div>
+  </main>
+
+  <aside class="sidebar">
+    <div class="side-tabs">
+      <button class="side-tab active" data-tab="props">属性</button>
+      <button class="side-tab" data-tab="list">清单</button>
+      <button class="side-tab" data-tab="layers">图层/类型</button>
+      <button class="side-tab" data-tab="stats">统计</button>
+    </div>
+
+    <section class="tab-pane active" id="tab-props">
+      <div id="propPanel"></div>
+    </section>
+
+    <section class="tab-pane" id="tab-list">
+      <div class="section">
+        <div class="filter-row">
+          <input id="filterText" placeholder="搜索编号/名称/备注">
+          <select id="filterKind"><option value="">全部对象</option></select>
+          <select id="filterLayer"><option value="">全部图层</option></select>
+        </div>
+        <div class="batch-row">
+          <select id="batchLayer" title="批量移动到图层"></select>
+          <button class="mini" id="batchLayerBtn">改图层</button>
+          <input id="batchDx" type="number" step="0.1" value="0" title="X 平移">
+          <input id="batchDy" type="number" step="0.1" value="0" title="Y 平移">
+          <button class="mini" id="batchMoveBtn">平移</button>
+          <input id="batchAngle" type="number" step="1" value="0" title="旋转角度">
+          <button class="mini" id="batchRotateBtn">旋转</button>
+          <button class="mini danger" id="batchDeleteBtn">删除</button>
+        </div>
+        <label class="hint-text"><input type="checkbox" id="selectAllChk">全选当前筛选结果</label>
+      </div>
+      <div class="table-wrap">
+        <table id="objectTable">
+          <thead><tr>
+            <th><input type="checkbox" id="headSelectChk"></th>
+            <th>编号</th><th>名称</th><th>类型</th><th>图层</th><th>X</th><th>Y</th><th>参数</th><th>显隐</th><th>锁</th>
+          </tr></thead>
+          <tbody id="objectTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="tab-pane" id="tab-layers">
+      <div class="section">
+        <h3>图层</h3>
+        <div id="layerList"></div>
+        <div class="form-grid" style="margin-top:8px">
+          <input id="newLayerName" placeholder="新图层名称" class="span2">
+          <button class="primary span2" id="addLayerBtn">新增图层</button>
+        </div>
+      </div>
+      <div class="section">
+        <h3>类型管理</h3>
+        <div id="typeList"></div>
+        <h3 style="margin-top:14px">新增自定义类型</h3>
+        <div class="form-grid">
+          <label>类别</label><select id="newTypeKind"><option value="point">点设备</option><option value="rect">矩形/区域</option><option value="line">线段/折线</option></select>
+          <label>名称</label><input id="newTypeName" placeholder="例如：烟感、货位、警戒线">
+          <label>颜色</label><input type="color" id="newTypeColor" value="#7c3aed">
+          <label data-icon-row="point">图标</label>
+          <select data-icon-row="point" id="newTypeIcon">
+            <option value="marker">圆点</option><option value="camera">摄像头</option><option value="dome">球机</option>
+            <option value="light">路灯</option><option value="gate">道闸</option><option value="charger">充电桩</option>
+            <option value="warning">警示</option><option value="custom">菱形</option>
+          </select>
+          <label title="点设备设置“物理尺寸(m)”后按世界比例渲染的图形；仅点设备类型生效">尺寸图形</label>
+          <select id="newTypeShape" title="点设备设置物理尺寸后渲染的图形">
+            <option value="none">仅位置图标（不缩放）</option>
+            <option value="circle">圆形覆盖区</option>
+            <option value="square">方形区域</option>
+            <option value="sector" selected>扇形视场（如摄像头）</option>
+            <option value="bar">杆/线段（如道闸）</option>
+          </select>
+          <label title="该类型点设备的默认图标屏幕大小倍率（仅显示醒目程度，非实际尺寸）" data-icon-row="point">图标大小</label>
+          <input type="number" min="0.5" max="5" step="0.1" value="1" id="newTypeIconSize" data-icon-row="point" title="默认图标大小（屏幕倍率）">
+          <button class="primary span2" id="addTypeBtn">新增类型</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-pane" id="tab-stats">
+      <div id="statsPanel"></div>
+    </section>
+  </aside>
+</div>
+
+<input type="file" id="fileInput" accept=".json,.csv,.tsv,.txt,.xlsx" style="display:none">
+<input type="file" id="bgInput" accept="image/*" style="display:none">
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalBox">
+    <header id="modalTitle">提示</header>
+    <div class="body" id="modalBody"></div>
+    <footer id="modalFooter"></footer>
+  </div>
+</div>
+
+<div id="report"></div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="js/common/xml-lite.js"></script>
+<script src="js/common/zip.js"></script>
+<script src="js/common/dsv.js"></script>
+<script src="js/common/xlsx.js"></script>
+<script src="js/common/content-assets.js"></script>
+<script src="js/app/config.js"></script>
+<script src="js/app/model.js"></script>
+<script src="js/app/geometry.js"></script>
+<script src="js/app/persistence.js"></script>
+<script src="js/app/viewport.js"></script>
+<script src="js/app/render.js"></script>
+<script src="js/app/interaction.js"></script>
+<script src="js/app/ui-panels.js"></script>
+<script src="js/app/ui-shell.js"></script>
+<script src="js/app/io.js"></script>
+<script src="js/app/app.js"></script>
+</body>
+</html>

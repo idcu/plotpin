@@ -1,0 +1,13 @@
+# 统一文本文件换行符为 LF（浏览器与 Node 在 Windows 上同样兼容 LF）
+* text=auto eol=lf
+
+# 二进制资源
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.bmp binary
+*.ico binary
+*.xlsx binary
+*.zip binary

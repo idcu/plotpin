@@ -1,0 +1,20 @@
+{
+  "name": "plotpin",
+  "version": "0.1.0",
+  "description": "图钉 PlotPin — 离线、零依赖、双击即用的通用图纸标注工具",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/selftest.mjs"
+  },
+  "keywords": [
+    "canvas",
+    "offline",
+    "annotation",
+    "drawing",
+    "blueprint",
+    "zero-dependency",
+    "cad",
+    "site-plan"
+  ],
+  "license": "MIT"
+}
