@@ -91,6 +91,8 @@ code += `\n;globalThis.__api = {
   createInitialState, migrateProject, baseObject,
   polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
+  boundsIntersect, scaleWorldAround, reachableBgAssetIds,
+  get history(){ return history; },
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
@@ -107,6 +109,7 @@ code += `\n;globalThis.__api = {
   isPolylineEditable, objectArea, objectLength,
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
+  buildSceneSvg,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS
 };`;
@@ -1289,6 +1292,123 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const oldH=['编号','名称','对象类型','X','Y','宽度','高度'];
   const p9=api.rowsToObjectsPlan([oldH,['U9','','点设备','1','2','','']]);
   eq('核对-旧表头无核对告警', p9.warnings.length, 0);
+}
+
+/* 32. 评估报告高优先缺陷回归：框选错轴 / 校准漂移 / 资产可达集合 / 捕捉粗筛 -------- */
+{
+  /* 5.3 boundsIntersect：报告中的两个反例（原实现 b.maxY<a.minX 错轴） */
+  const A={minX:10,maxX:20,minY:0,maxY:5};
+  const inside={minX:12,maxX:14,minY:1,maxY:3};
+  const aside={minX:0,maxX:5,minY:100,maxY:110};
+  eq('框选-内含判定相交', api.boundsIntersect(A,inside), true);
+  eq('框选-X 与 Y 都分离不相交', api.boundsIntersect(A,aside), false);
+  eq('框选-对角不相交(25,0)-(30,5)', api.boundsIntersect(A,{minX:25,maxX:30,minY:0,maxY:5}), false);
+  eq('框选-Y 分离不相交', api.boundsIntersect(A,{minX:12,maxX:14,minY:10,maxY:12}), false);
+  eq('框选-边界接触算相交', api.boundsIntersect(A,{minX:20,maxX:30,minY:0,maxY:5}), true);
+
+  /* 5.1 校准围绕世界原点缩放：对象像素位置保持、校准两点新距离=输入值 */
+  const st=api.resetState();
+  st.objects.push(
+    api.baseObject('point','point.marker',{x:20,y:20}),
+    api.baseObject('line','line.custom',{points:[[10,10],[20,10]],x:10,y:10}),
+    api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:10,shape:null})
+  );
+  api.scaleWorldAround([0,0],2);
+  const p=st.objects[0], l=st.objects[1], rc=st.objects[2];
+  /* 世界坐标×2；新 mpp=0.2 时像素 = world/mpp = 原 (200,200) 不变 */
+  eq('校准-点世界坐标×2', [p.x,p.y], [40,40]);
+  eq('校准-折线节点×2', l.points[1], [40,20]);
+  approx('校准-校准两点新距离=20', api.polylineLength(l.points), 20);
+  eq('校准-矩形宽高×2', [rc.width,rc.height], [20,20]);
+  /* 圆形/椭圆区域半径、圆心也围绕原点同比 */
+  api.resetState();
+  api.state.objects.push(
+    api.baseObject('rect','rect.area',{x:50,y:50,shape:{type:'circle',r:5}}),
+    api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'ellipse',rx:8,ry:4}})
+  );
+  api.scaleWorldAround([0,0],0.5);
+  const cc=api.state.objects[0], ce=api.state.objects[1];
+  eq('校准-圆半径同比缩放', cc.shape.r, 2.5);
+  eq('校准-圆心同比缩放', [cc.x,cc.y], [25,25]);
+  eq('校准-椭圆半轴同比', [ce.shape.rx,ce.shape.ry], [4,2]);
+
+  /* 5.2 底图资产可达集合：当前 + past + future 任一引用都不得回收 */
+  api.resetState();
+  api.history.past.length=0; api.history.future.length=0;
+  api.state.background.assetId='CUR';
+  api.history.past.push({background:{assetId:'A'}},{background:{assetId:'B'}},{background:{}});
+  api.history.future.push({background:{assetId:'C'}});
+  const reach=new Set(api.reachableBgAssetIds());
+  eq('资产-可达集合数量4', reach.size, 4);
+  ok('资产-含当前', reach.has('CUR'));
+  ok('资产-含历史A/B', reach.has('A')&&reach.has('B'));
+  ok('资产-含重做C', reach.has('C'));
+  /* 栈清空后只剩当前（新建/导入新工程场景） */
+  api.history.past.length=0; api.history.future.length=0;
+  eq('资产-无栈时仅当前', api.reachableBgAssetIds(), ['CUR']);
+  api.state.background.assetId='';
+  eq('资产-无引用空集合', api.reachableBgAssetIds().length, 0);
+}
+
+/* 33. 捕捉包围盒粗筛：500 个远处矩形不影响 tol 内交点/垂足命中（性能优化不改变结果） --- */
+{
+  const st=api.createInitialState();
+  /* 远处铺满 500 个矩形（2000 条边），距鼠标邻域极远 */
+  for(let i=0;i<500;i++){
+    const x=1000+(i%25)*60, y=1000+Math.floor(i/25)*60;
+    st.objects.push(api.baseObject('rect','rect.area',{x,y,width:40,height:40}));
+  }
+  /* 近处两条跨对象相交线：y=10 与 x=15 */
+  st.objects.push(
+    api.baseObject('line','line.custom',{points:[[0,10],[40,10]],x:0,y:10}),
+    api.baseObject('line','line.custom',{points:[[15,0],[15,40]],x:15,y:0})
+  );
+  const edges=api.collectSnapEdges(st);
+  eq('性能-500矩形共2002边', edges.length, 2002);
+  const hitI=api.findOsnap(st,[15.12,10.12],0.3);
+  ok('性能-粗筛后交点仍命中', hitI&&hitI.type==='intersection'&&hitI.p[0]===15&&hitI.p[1]===10);
+  const hitP=api.findOsnap(st,[25,14],5);
+  ok('性能-粗筛后垂足仍命中', hitP&&hitP.type==='perpendicular'&&hitP.p[0]===25&&hitP.p[1]===10);
+  /* 鼠标在远处矩形群中：邻域粗筛不丢边/中点（竖边中点 (1040,1020) 距 0.14，优先于垂足） */
+  const hitFar=api.findOsnap(st,[1040.1,1020.1],0.3);
+  ok('性能-远处矩形邻域不被漏筛', hitFar&&['midpoint','perpendicular'].includes(hitFar.type)&&Math.abs(hitFar.p[0]-1040)<1e-9);
+  /* 空旷处无命中（粗筛不误造候选） */
+  eq('性能-空旷处无命中', api.findOsnap(st,[500,500],0.3), null);
+}
+
+/* 34. SVG 导出与画布语义一致：扇形弧/闭合边/面积角度文字/设备图标 ------------- */
+{
+  /* 扇形场地 a0=30,a1=120：圆弧两端点必须不同（原 a0||0+sweep 优先级 bug 会退化为同点） */
+  const st=api.resetState();
+  st.background={kind:'sector',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:1,calibrated:false,
+    shape:{type:'sector',cx:0,cy:0,r:20,a0:30,a1:120}};
+  st.objects.push(
+    api.baseObject('line','line.custom',{name:'BOX',closed:true,points:[[0,0],[10,0],[10,10],[0,10]],x:0,y:0}),
+    api.baseObject('dimension','dimension.distance',{name:'AR',subtype:'area',points:[[30,0],[40,0],[30,10]],x:30,y:0}),
+    api.baseObject('dimension','dimension.distance',{name:'AN',subtype:'angle',points:[[60,0],[70,0],[60,10]],x:60,y:0}),
+    api.baseObject('point','point.camera',{name:'CAM',x:80,y:80}),
+    api.baseObject('rect','rect.area',{name:'RC',x:90,y:90,width:8,height:6})
+  );
+  const svg=api.buildSceneSvg();
+  /* 扇形路径：L 终点(弧起始角端) 与 arc 终点必须不同（原 a0||0+sweep 优先级 bug 会退化为同点） */
+  const sectorPath=svg.match(/<path d="M[\d.\- ,eLA]+Z" fill="#eef2f7"[^>]*>/);
+  ok('SVG-扇形路径存在', !!sectorPath);
+  const lEnd=(sectorPath?.[0]||'').match(/L(-?[\d.]+),(-?[\d.]+) A/);
+  const aEnd=(sectorPath?.[0]||'').match(/1 (-?[\d.]+),(-?[\d.]+) Z"/);
+  ok('SVG-扇形弧两端坐标均解析', !!(lEnd&&aEnd));
+  ok('SVG-30°扇形弧两端不同', lEnd&&aEnd&&(Math.abs(+lEnd[1]-+aEnd[1])>1||Math.abs(+lEnd[2]-+aEnd[2])>1));
+  /* 闭合折线：polyline 坐标点数量 = 节点数+1（首点回补，闭合边有描边） */
+  const closedLine=svg.match(/<polyline points="([^"]+)"[^>]*>/g)?.find(s=>s.includes('fill="#'));
+  const closedPts=closedLine?.match(/([-\d.]+),([-\d.]+)/g)||[];
+  eq('SVG-闭合折线补回首点(5点串)', closedPts.length, 5);
+  ok('SVG-面积标注文字', svg.includes('面积')&&svg.includes('周长'));
+  ok('SVG-90°角度数值文字', svg.includes('90.00°'));
+  /* 摄像头专有图标：机身+支架三角路径，不再是统一圆点 */
+  ok('SVG-摄像头支架三角', svg.includes('L16,-5 L16,5'));
+  ok('SVG-区域面积标签', svg.includes('㎡'));
+  /* 球机图标分支 */
+  st.objects.push(api.baseObject('point','point.dome',{name:'DOME',x:70,y:70}));
+  ok('SVG-球机半圆图标', api.buildSceneSvg().includes('A8,8 0 0 1 8,0'));
 }
 
 /* ---------------- 结果汇总 ---------------- */

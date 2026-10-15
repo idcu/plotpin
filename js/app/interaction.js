@@ -525,9 +525,12 @@ async function finishCalibration(){
   const value=await showPrompt({title:'比例尺校准',label:'两点之间的实际距离（米）',value:fmt(old)});
   if(value===null||Number.isNaN(Number(value))||Number(value)<=0){ calibPoints=[]; setTool('select'); return; }
   pushHistory();
-  const factor=Number(value)/old, c=calibPoints[0];
+  const factor=Number(value)/old;
+  /* 米/像素改变后，世界坐标(0,0) 仍对应图片左上角，已有对象必须围绕世界原点同比缩放，
+     才能保持其在底图上的像素位置不变（围绕校准点缩放会让点位相对底图漂移，见评估报告 5.1）。
+     校准两点间的新世界距离 = 旧距离×factor = 输入值，校准语义同时成立。 */
   state.background.metersPerPixel*=factor; state.background.calibrated=true;
-  scaleWorldAround(c,factor);
+  scaleWorldAround([0,0],factor);
   calibPoints=[]; fitView(); commitChange('比例尺已校准'); setTool('select');
 }
 function scaleWorldAround(center,factor){

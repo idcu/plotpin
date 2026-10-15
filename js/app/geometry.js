@@ -133,10 +133,16 @@ function findOsnap(st,raw,tol,excludeIds,vis,typeFilter){
     if(excludeIds && c.id && excludeIds.has(c.id)) continue;
     consider(c.p,c.type,c.id);
   }
-  /* 交点：仅跨对象的线段相交（同一对象相邻/闭合边共享端点，跳过） */
+  /* 交点：仅跨对象的线段相交（同一对象相邻/闭合边共享端点，跳过）。
+     性能：先按鼠标 tol 邻域做包围盒粗筛，只有包围盒与 [raw±tol] 方块相交的边
+     才可能产生 tol 内的垂足/交点，把 O(E²) 压缩到鼠标附近少数边之间 */
   const edges=collectSnapEdges(st,vis);
-  for(let i=0;i<edges.length;i++) for(let j=i+1;j<edges.length;j++){
-    const e1=edges[i], e2=edges[j];
+  const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
+  const nearEdges=edges.filter(e=>!(
+    Math.max(e.a[0],e.b[0])<box.minX||Math.min(e.a[0],e.b[0])>box.maxX||
+    Math.max(e.a[1],e.b[1])<box.minY||Math.min(e.a[1],e.b[1])>box.maxY));
+  for(let i=0;i<nearEdges.length;i++) for(let j=i+1;j<nearEdges.length;j++){
+    const e1=nearEdges[i], e2=nearEdges[j];
     if(e1.id===e2.id) continue;
     if(excludeIds && excludeIds.has(e1.id) && excludeIds.has(e2.id)) continue;
     const sh=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1])<EPS;
@@ -144,8 +150,8 @@ function findOsnap(st,raw,tol,excludeIds,vis,typeFilter){
     const ip=_segSegInt(e1.a,e1.b,e2.a,e2.b);
     if(ip) consider(ip,'intersection',e1.id+'|'+e2.id);
   }
-  /* 垂足：raw 到各线段的最近点 */
-  for(const e of edges){
+  /* 垂足：raw 到各邻域线段的最近点 */
+  for(const e of nearEdges){
     if(excludeIds && excludeIds.has(e.id)) continue;
     consider(nearestPointOnSegment(raw,e.a,e.b),'perpendicular',e.id);
   }
@@ -226,7 +232,7 @@ function objectBounds(o){
   const ps=objectPoints(o);
   return {minX:Math.min(...ps.map(p=>p[0])),maxX:Math.max(...ps.map(p=>p[0])),minY:Math.min(...ps.map(p=>p[1])),maxY:Math.max(...ps.map(p=>p[1]))};
 }
-function boundsIntersect(a,b){ return !(a.maxX<b.minX||b.maxY<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
+function boundsIntersect(a,b){ return !(a.maxX<b.minX||b.maxX<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
 
 /* -------------------- 统一参数形状（区域与矢量场地共用） -------------------- */
 /* 区域对象：shape=null 为矩形（width/height/angle）；否则 circle/ellipse/sector，锚点 (x,y) */

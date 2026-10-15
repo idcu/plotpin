@@ -1,8 +1,19 @@
 /* persistence.js —— 历史栈、IndexedDB 工程库、底图资产桥接、自动保存、迁移清洗、底图装载 */
 /* -------------------- 历史 / 保存 -------------------- */
+/** 当前工程与撤销/重做栈中所有仍被引用的底图资产 ID（快照可达集合）。
+ *  底图垃圾回收只能删这个集合之外的资产，否则撤销到旧背景时二进制已丢失（评估报告 5.2） */
+function reachableBgAssetIds(){
+  const ids=new Set();
+  const add=s=>{ const id=s&&s.background&&s.background.assetId; if(id) ids.add(id); };
+  add(state);
+  (history.past||[]).forEach(add);
+  (history.future||[]).forEach(add);
+  return Array.from(ids);
+}
+function pruneBgAssets(){ assetPrune(reachableBgAssetIds()).catch(()=>{}); }
 function pushHistory(){
   history.past.push(deepClone(state));
-  if(history.past.length>20) history.past.shift();
+  if(history.past.length>20){ history.past.shift(); pruneBgAssets(); }
   history.future=[];
 }
 function undo(){
@@ -10,14 +21,14 @@ function undo(){
   history.future.push(deepClone(state));
   state=history.past.pop();
   selectedIds.clear();
-  afterStateLoaded(false); requestRender(); toast('已撤销');
+  afterStateLoaded(false); pruneBgAssets(); requestRender(); toast('已撤销');
 }
 function redo(){
   if(!history.future.length) return;
   history.past.push(deepClone(state));
   state=history.future.pop();
   selectedIds.clear();
-  afterStateLoaded(false); requestRender(); toast('已重做');
+  afterStateLoaded(false); pruneBgAssets(); requestRender(); toast('已重做');
 }
 function commitChange(message){
   state.meta.updatedAt=nowISO();

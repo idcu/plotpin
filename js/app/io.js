@@ -144,7 +144,7 @@ async function importBackgroundFile(f){
   let prepared;
   try{ prepared=await prepareBackgroundBytes(f); }
   catch(e){ return toast('底图读取失败：'+e.message,'error'); }
-  const id=assetIdFor(prepared.bytes), oldId=state.background.assetId;
+  const id=assetIdFor(prepared.bytes);
   let stored=true;
   try{ await assetPut(id,{bytes:prepared.bytes,mime:prepared.mime}); }
   catch(e){ stored=false; }   // IndexedDB 不可用时降级：底图仅本次会话保留
@@ -155,11 +155,12 @@ async function importBackgroundFile(f){
   state.background.assetId=stored?id:'';
   state.background.width=prepared.width; state.background.height=prepared.height;
   if(!calibrated) state.background.metersPerPixel=0.05;
-  if(oldId&&stored&&oldId!==id) assetRemove(oldId);
+  /* 不立即删除旧资产：pushHistory 的撤销快照仍引用它，立即删会导致撤销后底图无法恢复；
+     待历史栈不再可达时由 pruneBgAssets 统一回收（评估报告 5.2） */
   bgDataUrl=await bytesToDataUrl(prepared.bytes,prepared.mime).catch(()=> '');
   const seq=++bgLoadSeq;
   try{ bgImage=await loadImageSrc(bgDataUrl); if(seq===bgLoadSeq) requestRender(); }catch(e){ bgImage=null; }
-  fitView(); commitChange('底图已导入');
+  fitView(); pruneBgAssets(); commitChange('底图已导入');
   if(!stored) toast('浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存','warn');
   else if(prepared.note) toast(prepared.note,'warn');
 }
@@ -510,10 +511,11 @@ function downloadBlob(blob,name){
 function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
 async function exportJSON(){
   state.meta.updatedAt=nowISO();
-  // 工程文件保持可移植：底图字节虽存于 IndexedDB，导出 JSON 时内嵌 dataURL 一并带走
+  // 工程文件保持可移植：底图字节虽存于 IndexedDB，导出 JSON 时内嵌 dataURL 一并带走。
+  // 只要运行时有已装载的图片数据就内嵌——IDB 不可用的降级路径 assetId 为空，同样必须带走（评估报告 5.4）
   const copy=persistableState();
   copy.meta.updatedAt=state.meta.updatedAt;
-  if(state.background.assetId&&bgDataUrl) copy.background.dataUrl=bgDataUrl;
+  if(bgDataUrl) copy.background.dataUrl=bgDataUrl;
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
   toast('JSON 工程已导出（含底图）','success');
 }
@@ -572,6 +574,11 @@ function exportPNG(){
   toast('PNG 已导出','success');
 }
 function exportSVG(){
+  downloadBlob(new Blob([buildSceneSvg()],{type:'image/svg+xml;charset=utf-8'}),safeName()+'.svg');
+  toast('SVG 已导出','success');
+}
+/** 纯函数：按当前工程生成 SVG 文本（导出与自测共用，不触发下载） */
+function buildSceneSvg(){
   const d=worldDims(), margin=30, maxW=1800, ppu=Math.min(maxW/d.w,1200/d.h,40), sw=d.w*ppu+margin*2, sh=d.h*ppu+margin*2;
   const X=x=>margin+x*ppu, Y=y=>margin+(d.h-y)*ppu;
   const shapes=[], markers=[];
@@ -586,7 +593,9 @@ function exportSVG(){
   }else if(state.background.shape?.type==='sector'){
     const sh=state.background.shape, R=sh.r*ppu, cx=X(sh.cx), cy=Y(sh.cy), sweep=sectorSweep(sh);
     const ex=a=>[cx+R*Math.cos(a*Math.PI/180),cy-R*Math.sin(a*Math.PI/180)];
-    const p0=ex(Number(sh.a0)||0), p1=ex(Number(sh.a0)||0+sweep), large=sweep>180?1:0;
+    /* 注意运算符优先级：(Number(a0)||0)+sweep，不能写成 a0||0+sweep（起始角非零时退化为同点） */
+    const a0=Number(sh.a0)||0;
+    const p0=ex(a0), p1=ex(a0+sweep), large=sweep>180?1:0;
     shapes.push(`<path d="M${cx},${cy} L${p1[0]},${p1[1]} A${R},${R} 0 ${large} 1 ${p0[0]},${p0[1]} Z" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
   }else if(state.background.shape?.type==='polygon'&&state.background.shape?.points?.length){
     const pts=state.background.shape.points.map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
@@ -594,15 +603,55 @@ function exportSVG(){
   }else{
     shapes.push(`<rect x="${X(0)}" y="${Y(d.h)}" width="${d.w*ppu}" height="${d.h*ppu}" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>`);
   }
+  /* SVG 面积/周长双行标签（与画布 drawAreaTag 语义一致；白描边保证任意底色可读） */
+  const areaTagSvg=(cx,cy,area,perim)=>{
+    const s1=`面积 ${fmt(area)} ㎡`, s2=`周长 ${fmt(perim)} m`;
+    return `<text x="${cx}" y="${cy-7}" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${s1}</text>`+
+      `<text x="${cx}" y="${cy+9}" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${s2}</text>`;
+  };
+  /* 屏幕固定像素的点设备图标（与 render.js drawPoint 的局部坐标一致，不随 ppu 缩放）；
+     返回局部坐标 SVG 片段，由外层 <g scale> 包裹 */
+  const svgPointIcon=(icon,color)=>{
+    let body='';
+    if(icon==='camera'){
+      body=`<rect x="-6" y="-5" width="12" height="10" fill="#fff" stroke="${color}" stroke-width="2"/>`+
+        `<circle cx="0" cy="0" r="3.2" fill="${color}"/><path d="M6,0 L16,-5 L16,5 Z" fill="${color}"/>`;
+    }else if(icon==='dome'){
+      body=`<path d="M-8,0 A8,8 0 0 1 8,0 Z" fill="#fff" stroke="${color}" stroke-width="2"/><circle cx="0" cy="0" r="3" fill="${color}"/>`;
+    }else if(icon==='light'){
+      const rays=[]; for(let i=0;i<8;i++){ const aa=i*Math.PI/4; rays.push(`<line x1="${(9*Math.cos(aa)).toFixed(2)}" y1="${(9*Math.sin(aa)).toFixed(2)}" x2="${(13*Math.cos(aa)).toFixed(2)}" y2="${(13*Math.sin(aa)).toFixed(2)}" stroke="#fde68a" stroke-width="2"/>`); }
+      body=`<circle cx="0" cy="0" r="7" fill="${color}"/>${rays.join('')}`;
+    }else if(icon==='gate'){
+      body=`<line x1="-10" y1="0" x2="12" y2="0" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`+
+        `<rect x="-12" y="-7" width="5" height="14" fill="${color}"/><circle cx="12" cy="0" r="3" fill="${color}"/>`;
+    }else if(icon==='charger'){
+      body=`<rect x="-7" y="-8" width="14" height="16" fill="#fff" stroke="${color}" stroke-width="2"/>`+
+        `<polyline points="1,-5 -3,2 2,2 -1,8" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+    }else if(icon==='warning'){
+      body=`<path d="M0,-11 L11,9 L-11,9 Z" fill="${color}"/><text x="0" y="3" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">!</text>`;
+    }else if(icon==='custom'){
+      body=`<path d="M0,-10 L10,0 L0,10 L-10,0 Z" fill="${color}"/>`;
+    }else{
+      body=`<circle cx="0" cy="0" r="7" fill="#fff" stroke="${color}" stroke-width="2"/><circle cx="0" cy="0" r="3.5" fill="${color}"/>`;
+    }
+    return body;
+  };
   state.objects.filter(isVisible).forEach(o=>{
     const t=getType(o.typeId), color=o.style.color||t.color;
     if(o.kind==='rect'){
       const pts=shapeWorldPoints(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       shapes.push(`<polygon points="${pts}" fill="${color}" fill-opacity="${styleVal(o,'fillAlpha',.15)}" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
-      if(state.settings.showLabels&&o.name){ const ce=shapeLabelCenter(o); markers.push(`<text x="${X(ce[0])}" y="${Y(ce[1])}" text-anchor="middle" font-size="14" fill="${color}">${esc(o.name)}</text>`); }
+      if(state.settings.showLabels&&o.name){ const ce=shapeLabelCenter(o); markers.push(`<text x="${X(ce[0])}" y="${Y(ce[1])}" text-anchor="middle" font-size="14" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`); }
+      if(state.settings.showAreaTag){ const ce=shapeLabelCenter(o); markers.push(areaTagSvg(X(ce[0]),Y(ce[1]),shapeArea(o),shapePerimeter(o))); }
     }else if(o.kind==='line'&&o.points.length){
-      const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
-      shapes.push(`<polyline points="${pts}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
+      /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致） */
+      const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`);
+      if(o.closed) pts.push(pts[0]);
+      shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
+      if(o.closed&&state.settings.showAreaTag&&o.points.length>=3){
+        const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
+        markers.push(areaTagSvg(X(gx),Y(gy),polygonArea(o.points),objectLength(o)));
+      }
     }else if(o.kind==='point'){
       const x=X(o.x),y=Y(o.y), psh=t.scaleShape||'none';
       if((o.phys||0)>0&&psh!=='none'){
@@ -617,12 +666,12 @@ function exportSVG(){
         }
         shapes.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle})">${body}<circle r="3.2" fill="${color}"/></g>`);
       }else{
-        const k=pointIconScale(o);
-        markers.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle}) scale(${k})"><circle r="9" fill="#fff" stroke="${color}" stroke-width="2"/><circle r="3.5" fill="${color}"/><line x1="9" y1="0" x2="20" y2="0" stroke="${color}" stroke-width="2"/></g>`);
+        const k=pointIconScale(o), icon=t.icon||o.style.icon||'marker';
+        markers.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle}) scale(${k})">${svgPointIcon(icon,color)}</g>`);
       }
       if(state.settings.showLabels&&o.name){
         const ly=(o.phys||0)>0?y-Math.max(13,(o.phys||0)/2*ppu+6):y-20*pointIconScale(o);
-        markers.push(`<text x="${x}" y="${ly}" text-anchor="middle" font-size="12" fill="${color}">${esc(o.name)}</text>`);
+        markers.push(`<text x="${x}" y="${ly}" text-anchor="middle" font-size="12" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
       }
     }else if(o.kind==='text'){
       markers.push(`<text x="${X(o.x)}" y="${Y(o.y)}" transform="rotate(${-o.angle} ${X(o.x)} ${Y(o.y)})" text-anchor="middle" font-size="${Math.max(10,o.height*ppu*.55)}" fill="${o.style.color||'#111'}">${esc(o.text||'文字')}</text>`);
@@ -637,6 +686,20 @@ function exportSVG(){
         markers.push(`<text x="${X(ep[0])+6}" y="${Y(ep[1])-6}" text-anchor="start" font-size="12" fill="#0e7490">Σ ${fmt(objectLength(o))} m</text>`);
       }
       if(o.subtype==='distance') markers.push(`<text x="${(X(o.points[0][0])+X(o.points[1][0]))/2}" y="${(Y(o.points[0][1])+Y(o.points[1][1]))/2-8}" text-anchor="middle" font-size="12">${fmt(dist(o.points[0],o.points[1]))} m</text>`);
+      if(o.subtype==='area'&&o.points.length>=3){
+        /* 与画布 drawDimension 的 area 分支一致：中心附近面积+周长 */
+        const cx=o.points.reduce((s,p)=>s+X(p[0]),0)/o.points.length+8;
+        const cy=o.points.reduce((s,p)=>s+Y(p[1]),0)/o.points.length;
+        markers.push(`<text x="${cx}" y="${cy}" font-size="12">面积 ${fmt(polygonArea(o.points))} ㎡</text>`);
+        markers.push(`<text x="${cx}" y="${cy+16}" font-size="12">周长 ${fmt(polylineLength(o.points.concat([o.points[0]])))} m</text>`);
+      }
+      if(o.subtype==='angle'&&o.points.length>=3){
+        /* 与画布一致：按三点算夹角，标在顶点旁 */
+        const v0=o.points[0], v1=o.points[1], v2=o.points[2];
+        const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]), a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
+        let deg=Math.abs((a2-a1)*180/Math.PI); if(deg>180) deg=360-deg;
+        markers.push(`<text x="${X(v0[0])+30}" y="${Y(v0[1])-8}" font-size="12">${fmt(deg)}°</text>`);
+      }
     }
   });
   const svg=`<?xml version="1.0" encoding="UTF-8"?>
@@ -645,8 +708,7 @@ function exportSVG(){
 <g>${shapes.join('\n')}</g><g font-family="Microsoft YaHei,Arial,sans-serif">${markers.join('\n')}</g>
 <text x="${margin}" y="${sh-8}" font-size="11" fill="#666">${esc(state.meta.name)} · ${esc(siteDescription())}</text>
 </svg>`;
-  downloadBlob(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),safeName()+'.svg');
-  toast('SVG 已导出','success');
+  return svg;
 }
 
 /* -------------------- 打印 / PDF 报告 -------------------- */
