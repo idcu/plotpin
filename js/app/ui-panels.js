@@ -6,6 +6,8 @@ function switchTab(tab){
 }
 document.querySelectorAll('.side-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+/* 顶部下拉在 测距/其他标注 间切换时，同步左侧「测距」「标注」按钮互斥高亮 */
+$('dimensionType').addEventListener('change',()=>{ if(currentTool==='dimension') syncToolButtons('dimension'); });
 $('finishDraftBtn').addEventListener('click',finishDraft);
 $('undoBtn').addEventListener('click',undo);
 $('redoBtn').addEventListener('click',redo);

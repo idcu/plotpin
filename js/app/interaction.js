@@ -1,14 +1,29 @@
 /* interaction.js —— 工具/指针交互、对象操作、快捷键、关闭落盘、拖拽导入 */
 /* -------------------- 工具与指针交互 -------------------- */
+/* 左侧按钮高亮：测距是标注工具的独立入口(ruler)，二者互斥点亮；切换下拉时也要同步 */
+function syncToolButtons(tool){
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
+    let on=b.dataset.tool===tool;
+    if(tool==='dimension'){
+      if(b.dataset.tool==='ruler') on=$('dimensionType').value==='ruler';
+      if(b.dataset.tool==='dimension') on=$('dimensionType').value!=='ruler';
+    }
+    b.classList.toggle('active',on);
+  });
+}
 function setTool(tool){
+  /* 独立「测距」按钮 = 标注工具的 ruler 子模式：复用 dimension 全部交互，仅入口更醒目；
+     点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
+  if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
+  else if(tool==='dimension'&&$('dimensionType').value==='ruler'){ $('dimensionType').value='distance'; }
   currentTool=tool; draft=null; calibPoints=[]; rubber=null; drag=null;
   lastCanvasHandledAt=0; lastCanvasPointerUpAt=0;
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
-  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));
+  syncToolButtons(tool);
   const titles={
     select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
     rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击/Enter 完成；按住 Shift 画水平/垂直线，Esc 取消（勾选闭合画三角形/多边形）',
-    text:'文字：单击输入文字内容',dimension:'尺寸标注：按所选类型逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
+    text:'文字：单击输入文字内容',dimension:'尺寸标注：按所选类型逐点单击（测距=多点总长，双击/Enter 结束）',calibrate:'比例尺：依次点击图上两个已知点',
     'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
     'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
     'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
@@ -214,7 +229,10 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('pointermove',e=>{
   const sp=pointerScreen(e), wp=resolveWorldPoint(e);
   setCursorScreen(sp,true,wp,activeOsnap);
-  $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit;
+  $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit+(activeOsnap?'  ◈ '+OSNAP_LABELS[activeOsnap.type]:'');
+  /* 空闲移动（无拖拽/草稿）也必须重绘：十字准星、世界坐标、捕捉标记随鼠标实时显示，
+     不必等到点击；requestRender 内部按帧合并，重复调用无额外开销 */
+  requestRender();
   if(drag?.type==='pan'){
     state.viewport.panX=drag.pan.panX+sp[0]-drag.start[0];
     state.viewport.panY=drag.pan.panY+sp[1]-drag.start[1];

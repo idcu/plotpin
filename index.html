@@ -58,6 +58,7 @@
     <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span>区域</span></button>
     <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span>折线</span></button>
     <button class="tool-btn" data-tool="text"><span class="ico">T</span><span>文字</span></button>
+    <button class="tool-btn" data-tool="ruler" title="测距：沿路径逐点单击，双击/Enter 结束；实时显示每段长度与累计总长"><span class="ico">📏</span><span>测距</span></button>
     <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span>标注</span></button>
     <div class="rail-sep"></div>
     <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注"><span class="ico">✓</span><span>完成</span></button>
@@ -87,8 +88,8 @@
         </span>
         <span data-for="dimension">类型
           <select id="dimensionType">
-            <option value="ruler">测距（多点总长）</option>
             <option value="distance">两点距离</option>
+            <option value="ruler">测距（多点总长）</option>
             <option value="area">面积</option>
             <option value="angle">角度</option>
           </select>
