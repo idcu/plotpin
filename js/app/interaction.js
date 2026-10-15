@@ -22,8 +22,8 @@ function setTool(tool){
   syncToolButtons(tool);
   const titles={
     select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
-    rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击/Enter 完成；按住 Shift 画水平/垂直线，Esc 取消（勾选闭合画三角形/多边形）',
-    text:'文字：单击输入文字内容',dimension:'尺寸标注：按所选类型逐点单击（测距=多点总长，双击/Enter 结束）',calibrate:'比例尺：依次点击图上两个已知点',
+    rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）',
+    text:'文字：单击输入文字内容',dimension:'尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
     'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
     'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
     'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
@@ -144,6 +144,13 @@ canvas.addEventListener('pointerdown',e=>{
   lastCanvasHandledAt=performance.now();
   if(e.pointerId!==undefined && e.pointerId>=0) canvas.setPointerCapture(e.pointerId);
   const sp=pointerScreen(e), wp=resolveWorldPoint(e);
+  /* 逐点录入中（测距/折线/标注/多边形场地）右键=取消当前草稿（百度地图式），已完成的测量不受影响；无草稿时右键仍平移 */
+  if(e.button===2 && draft?.points?.length){
+    const wasRuler=draft.kind==='dimension'&&draft.subtype==='ruler';
+    draft=null; e.preventDefault(); requestRender();
+    toast(wasRuler?'已取消测距':'已取消当前绘制');
+    return;
+  }
   if(e.button===1||e.button===2||spaceDown||currentTool==='pan'){
     drag={type:'pan',start:sp,pan:deepClone(state.viewport)}; document.body.classList.add('panning'); e.preventDefault(); return;
   }
@@ -294,9 +301,23 @@ canvas.addEventListener('pointerup',e=>{
 canvas.addEventListener('pointercancel',()=>{ drag=null; rubber=null; document.body.classList.remove('panning'); setCursorScreen(null); requestRender(); });
 canvas.addEventListener('pointerleave',()=>{ setCursorScreen(null); requestRender(); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
+/** 双击结束录入：双击的两次 click 已各追加一个点（末两点位置几乎相同），按 8px 屏幕阈值去掉重复末点，
+ *  避免测距/折线尾部留下零长度段。返回去除后是否满足最少点数 */
+function dedupeDblClickPoint(){
+  if(!draft?.points||draft.points.length<2) return draft?.points?.length>=1;
+  const ps=draft.points, last=ps[ps.length-1], prev=ps[ps.length-2];
+  if(dist(last,prev) < 8/state.viewport.zoom) ps.pop();
+  return true;
+}
 canvas.addEventListener('dblclick',e=>{
-  if(draft&&draft.kind==='sitePolygon') finishSiteDraft();
-  else if(draft && draft.points && draft.points.length>1) finishDraft();
+  if(draft&&draft.kind==='sitePolygon'){ dedupeDblClickPoint(); finishSiteDraft(); }
+  else if(draft && draft.points && draft.points.length>1){
+    dedupeDblClickPoint();
+    const minPts=(draft.kind==='dimension'&&draft.subtype!=='ruler'&&draft.subtype!=='distance')?3:2;
+    /* 双击处只点过 1 个有效点：视为放弃，不落地也不弹点数不足 */
+    if(draft.points.length<minPts){ draft=null; requestRender(); return; }
+    finishDraft();
+  }
   else editLineNodeByDoubleClick(e);
 });
 /** 选择工具下双击折线：点中节点→删除；点中线段→在该处插入节点（吸附生效） */
@@ -565,7 +586,7 @@ function openShortcutsHelp(){
   const rows=[
     ['Ctrl + Z / Y','撤销 / 重做'],['Delete / Backspace','删除选中对象'],
     ['Ctrl + D','原地复制选中对象'],['Ctrl + C / V','复制 / 粘贴对象（偏移 1m）'],
-    ['Esc','取消当前绘制 / 清除选择'],['Enter','完成折线或面积标注'],
+    ['Esc / 右键（绘制中）','取消当前绘制 / 清除选择（右键取消测距等逐点录入，无草稿时平移）'],['双击 / Enter','完成测距、折线或面积标注（双击处不会产生重复节点）'],
     ['Backspace（绘制中）','删除上一个录入节点'],
     ['双击线段 / 双击节点（选择工具）','在折线上插入节点 / 删除节点'],
     ['Shift（画线/标注/拖节点时）','约束为水平/垂直线（正交）'],
