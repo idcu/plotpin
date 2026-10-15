@@ -146,7 +146,8 @@ let pinch=null;          /* {d0,z0,mx0,my0,panX0,panY0} */
 let touchArm=false;      /* 多指刚结束，抑制剩余手指的误绘，直到全部抬起 */
 canvas.addEventListener('pointerdown',e=>{
   lastCanvasHandledAt=performance.now();
-  if(e.pointerId!==undefined && e.pointerId>=0) canvas.setPointerCapture(e.pointerId);
+  /* 合成事件/失活指针调用 setPointerCapture 会抛 NotFoundError，不能让它中断后续手势处理 */
+  try{ if(e.pointerId!==undefined && e.pointerId>=0) canvas.setPointerCapture(e.pointerId); }catch(_){}
   const sp=pointerScreen(e);
   activePointers.set(e.pointerId,sp);
   /* 第二根手指落下：进入捏合手势，中止当前拖拽但保留绘制草稿（不丢已录节点） */
