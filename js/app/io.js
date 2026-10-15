@@ -1,12 +1,65 @@
 /* io.js —— 文件导入路由、底图导入压缩、表格导入预览、全部导出器、打印报告 */
 /* -------------------- 文件：新建 / 底图 / 导入 -------------------- */
-$('newBtn').onclick=()=>showConfirm('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON？').then(ok=>{
+$('newBtn').onclick=()=>showConfirm('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？').then(ok=>{
   if(!ok)return;
   state=createInitialState(); selectedIds.clear(); history={past:[],future:[]};
   assetPrune([]).catch(()=>{});
   afterStateLoaded(); scheduleSave(); toast('已新建工程','success');
 });
 $('importBtn').onclick=()=>$('fileInput').click();
+/* -------------------- 多工程库 -------------------- */
+const BG_KIND_LABELS={image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',polygon:'多边形场地'};
+$('projBtn').onclick=openProjectLibrary;
+async function openProjectLibrary(){
+  const projects=await listProjects();
+  const rows=projects.map(p=>{
+    const dt=p.updatedAt?new Date(p.updatedAt).toLocaleString():'';
+    const bg=BG_KIND_LABELS[p.bgKind]||p.bgKind;
+    return `<div class="proj-row${p.bound?' bound':''}" data-id="${esc(p.id)}">
+      <div class="proj-info"><b>${esc(p.name)}</b>${p.bound?'<span class="proj-tag">当前打开</span>':''}
+        <span class="hint-text">${p.objectCount} 个对象 · ${esc(bg)} · ${esc(dt)}</span></div>
+      <div class="proj-ops">
+        <button data-op="open" ${p.bound?'disabled':''}>打开</button>
+        <button data-op="rename">重命名</button>
+        <button data-op="copy">复制</button>
+        <button data-op="del" class="danger">删除</button>
+      </div></div>`;
+  }).join('')||'<p class="hint-text">工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。</p>';
+  const boundName=state.meta.projectId?(state.meta.name||'当前工程'):'';
+  openModal('工程库（保存在本机浏览器）',
+    `<div class="proj-current">当前草稿：<b>${esc(state.meta.name)}</b>${boundName?' · 已绑定工程库':''}　对象 ${state.objects.length} 个</div>
+     <div style="margin:8px 0"><button class="primary" id="projSaveAs">💾 把当前图纸另存到工程库</button></div>
+     <div class="proj-list">${rows}</div>
+     <p class="hint-text">工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。</p>`,
+    [{text:'关闭',click:closeModal}]);
+  $('projSaveAs').onclick=async()=>{
+    const v=await showPrompt({title:'另存到工程库',label:'工程名称',value:state.meta.name||'未命名图纸工程'});
+    if(v===null) return;
+    await saveProjectAs(v); toast('已存入工程库','success'); closeModal(); openProjectLibrary();
+  };
+  document.querySelectorAll('.proj-row').forEach(row=>{
+    row.querySelectorAll('button[data-op]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const id=row.dataset.id, op=btn.dataset.op;
+      try{
+        if(op==='open'){
+          closeModal(); await openProjectById(id); toast('已打开工程：'+(state.meta.name||''),'success');
+        }else if(op==='rename'){
+          const cur=projects.find(p=>p.id===id);
+          const v=await showPrompt({title:'重命名工程',label:'工程名称',value:cur?.name||''});
+          if(v===null) return;
+          await renameProjectById(id,v); toast('已重命名','success'); openProjectLibrary();
+        }else if(op==='copy'){
+          await duplicateProjectById(id); toast('已复制一份到工程库','success'); openProjectLibrary();
+        }else if(op==='del'){
+          const cur=projects.find(p=>p.id===id);
+          const ok=await showConfirm('确定删除工程「'+(cur?.name||id)+'」？此操作不可撤销（不影响已导出的文件）。');
+          if(!ok) return;
+          await deleteProjectById(id); toast('工程已删除'); openProjectLibrary();
+        }
+      }catch(e){ toast('操作失败：'+e.message,'error'); }
+    }));
+  });
+}
 $('bgBtn').onclick=openSitePicker;
 $('calibBtn').onclick=()=>{
   if(state.background.kind!=='image') return toast('矢量场地直接以米为坐标，无需比例尺校准；仅图片底图需要','warn');
@@ -26,6 +79,8 @@ async function importJsonFile(f){
     const p=JSON.parse(await f.text());
     if(p.schema!==SCHEMA) throw new Error('schema');
     state=migrateProject(p);
+    /* 跨设备导入的 JSON 不接管本机工程库绑定，避免覆盖同名工程；需要时可另存到工程库 */
+    delete state.meta.projectId;
     const keepAsset=state.background.assetId;
     await ensureBackgroundAsset(state);
     /* 导入即新基线：清空撤销栈，避免 Ctrl+Z 把导入前的工程撤回来；回收不再引用的旧底图 */

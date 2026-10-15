@@ -75,6 +75,85 @@ async function idbGet(){
     const r=s.get('current'); r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error);
   }));
 }
+/* -------------------- 多工程库：除当前草稿外，工程以 proj:<id> 为键独立存取 -------------------- */
+const PROJECT_PREFIX='proj:';
+const projectKey=id=>PROJECT_PREFIX+id;
+function idbReq(store,method,arg){
+  return idbTx(DB_STORE,store,s=>new Promise((resolve,reject)=>{
+    const r=s[method](arg); r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error); r.onblocked=()=>reject(new Error('IndexedDB 被占用'));
+  }));
+}
+async function idbPutKey(key,project){ return idbTx(DB_STORE,'readwrite',s=>s.put(project,key)); }
+async function idbGetKey(key){ return idbReq('readonly','get',key); }
+async function idbDeleteKey(key){ return idbReq('readwrite','delete',key); }
+async function idbAllKeys(){
+  const keys=await idbReq('readonly','getAllKeys',undefined);
+  return Array.from(keys||[]).filter(k=>typeof k==='string');
+}
+/** 工程库摘要列表（不装载底图），按更新时间倒序 */
+async function listProjects(){
+  let keys=[];
+  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(PROJECT_PREFIX)); }catch(e){ return []; }
+  const out=[];
+  for(const key of keys){
+    let p=null; try{ p=await idbGetKey(key); }catch(e){}
+    if(p&&p.schema===SCHEMA){
+      out.push({key,id:key.slice(PROJECT_PREFIX.length),
+        name:p.meta?.name||'未命名工程',updatedAt:p.meta?.updatedAt||'',
+        objectCount:Array.isArray(p.objects)?p.objects.length:0,
+        bgKind:p.background?.kind||'rect', bound:state.meta?.projectId===p.meta?.projectId});
+    }
+  }
+  return out.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+/** 当前草稿绑定/另存为工程库中的命名工程，返回 projectId */
+async function saveProjectAs(name){
+  if(name&&String(name).trim()) state.meta.name=String(name).trim().slice(0,80);
+  state.meta.projectId=state.meta.projectId||uid('PRJ');
+  state.meta.updatedAt=nowISO();
+  await idbPutKey(projectKey(state.meta.projectId),persistableState());
+  return state.meta.projectId;
+}
+/** 打开工程库中的工程：迁移、清空撤销栈（避免撤回到别的工程）、装载底图资产 */
+async function openProjectById(id){
+  const raw=await idbGetKey(projectKey(id));
+  if(!raw||raw.schema!==SCHEMA) throw new Error('工程不存在或已损坏');
+  const p=migrateProject(raw);
+  state=p;
+  history={past:[],future:[]};
+  selectedIds.clear(); draft=null;
+  const keepAsset=state.background.assetId;
+  await ensureBackgroundAsset(state);
+  if(keepAsset) assetPrune(reachableBgAssetIds()).catch(()=>{});
+  afterStateLoaded(); scheduleSave();
+  return state;
+}
+async function renameProjectById(id,name){
+  const raw=await idbGetKey(projectKey(id));
+  if(!raw) throw new Error('工程不存在');
+  raw.meta=raw.meta||{}; raw.meta.name=String(name||'未命名工程').trim().slice(0,80)||'未命名工程';
+  raw.meta.updatedAt=nowISO();
+  await idbPutKey(projectKey(id),raw);
+  if(state.meta?.projectId===id){ state.meta.name=raw.meta.name; refreshUI(); scheduleSave(); }
+}
+async function duplicateProjectById(id){
+  const raw=await idbGetKey(projectKey(id));
+  if(!raw) throw new Error('工程不存在');
+  /* migrateProject 有写全局 state 的副作用，复制不切换现场，先存后还原 */
+  const cur=state;
+  const p=migrateProject(raw);
+  state=cur;
+  p.meta.projectId=uid('PRJ');
+  p.meta.name=(p.meta.name||'未命名工程')+' 副本';
+  p.meta.createdAt=nowISO(); p.meta.updatedAt=nowISO();
+  await idbPutKey(projectKey(p.meta.projectId),deepClone(p));
+  return p.meta.projectId;
+}
+async function deleteProjectById(id){
+  await idbDeleteKey(projectKey(id));
+  if(state.meta?.projectId===id){ state.meta.projectId=''; refreshUI(); scheduleSave(); }
+  pruneBgAssets();
+}
 
 /* -------------------- 底图资产：通用内容寻址库实例（实现见 common/content-assets.js） -------------------- */
 const bgAssetsReady = ContentAssets.open({ dbName: DB_NAME, storeName: DB_ASSETS, version: DB_VERSION, alsoCreate: [DB_STORE] });
@@ -97,9 +176,12 @@ function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{
     try{
-      await idbPut(persistableState());
+      const snapshot=persistableState();
+      await idbPut(snapshot);
+      /* 绑定到工程库的工程：同名键同步更新，工程库内容即最新（失败静默，不影响草稿） */
+      if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(()=>{});
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag}));
-      $('saveState').textContent='已自动保存 '+new Date().toLocaleTimeString();
+      $('saveState').textContent=(state.meta.projectId?'📁 已保存 ':'已自动保存 ')+new Date().toLocaleTimeString();
     }catch(e){
       try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
       $('saveState').textContent='请手动导出';

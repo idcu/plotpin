@@ -110,6 +110,18 @@
   .toast{background:#111827;color:#fff;padding:9px 13px;border-radius:8px;box-shadow:var(--shadow);max-width:360px;font-size:12px;line-height:1.45}
   .toast.error{background:#991b1b}.toast.warn{background:#92400e}.toast.success{background:#166534}
   #report{display:none}
+  /* 工程库 */
+  .proj-current{background:#f1f5f9;border-radius:8px;padding:9px 11px;font-size:13px;line-height:1.6}
+  .proj-list{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;margin-top:6px}
+  .proj-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff}
+  .proj-row.bound{border-color:var(--primary);background:var(--primary-soft)}
+  .proj-info{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+  .proj-info b{display:inline;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .proj-tag{display:inline-block;margin-left:6px;font-size:11px;font-weight:600;color:#fff;background:var(--primary);border-radius:5px;padding:1px 6px;vertical-align:1px}
+  .proj-ops{display:flex;gap:6px;flex-shrink:0}
+  .proj-ops button{padding:4px 9px;font-size:12px}
+  .proj-ops button.danger{color:#b91c1c;border-color:#fecaca}
+  .proj-ops button:disabled{opacity:.45;cursor:default}
   .canvas-wrap.dragover::after{
     content:"松开即可导入：JSON 工程 / CSV·TSV·XLSX 表格 / 底图图片";
     position:absolute;inset:12px;border:2px dashed var(--primary);border-radius:14px;
