@@ -13,6 +13,13 @@ function resizeCanvas(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   requestRender();
 }
+/* 窗口尺寸/DPR 变化时重建画布位图（rAF 合并，避免拖动窗口过程中频繁重建） */
+let resizeQueued=false;
+window.addEventListener('resize',()=>{
+  if(resizeQueued) return;
+  resizeQueued=true;
+  requestAnimationFrame(()=>{ resizeQueued=false; resizeCanvas(); });
+});
 function fitView(){
   const r=wrap.getBoundingClientRect(), d=worldDims();
   const z=Math.min((r.width-44)/d.w,(r.height-44)/d.h);

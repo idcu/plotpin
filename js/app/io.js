@@ -25,11 +25,15 @@ async function importJsonFile(f){
   try{
     const p=JSON.parse(await f.text());
     if(p.schema!==SCHEMA) throw new Error('schema');
-    pushHistory();
     state=migrateProject(p);
+    const keepAsset=state.background.assetId;
     await ensureBackgroundAsset(state);
-    selectedIds.clear(); afterStateLoaded(); scheduleSave(); toast('工程已导入','success');
-  }catch(err){ toast('JSON 工程格式不正确（应为离线图纸标注 v1 工程）','error'); }
+    /* 导入即新基线：清空撤销栈，避免 Ctrl+Z 把导入前的工程撤回来；回收不再引用的旧底图 */
+    history={past:[],future:[]};
+    selectedIds.clear(); draft=null;
+    if(keepAsset) assetPrune([keepAsset]).catch(()=>{});
+    afterStateLoaded(); scheduleSave(); toast('工程已导入','success');
+  }catch(err){ toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error'); }
 }
 async function handleImportFile(f){
   const ext=extOfFile(f.name);

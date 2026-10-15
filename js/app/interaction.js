@@ -190,9 +190,13 @@ function editLineNodeByDoubleClick(e){
   for(let k=0;k<segN;k++){
     const a=o.points[k], b=o.points[(k+1)%o.points.length];
     const dd=distanceToSegment(wp,a,b);
-    if(dd<=tol&&(!best||dd<best.d)) best={k,d:dd};
+    if(dd<=tol&&(!best||dd<best.d)) best={k,d:dd,a,b};
   }
-  if(best){ pushHistory(); insertLineNode(o,best.k,wp); commitChange('已插入节点'); }
+  if(best){
+    /* 取双击点在线段上的垂足，再做网格吸附，保证新节点在线段上而非点击处 */
+    const foot=nearestPointOnSegment(wp,best.a,best.b);
+    pushHistory(); insertLineNode(o,best.k,snapPoint(foot,e)); commitChange('已插入节点');
+  }
 }
 function moveObjectBy(o,orig,d){
   if(!o) return;

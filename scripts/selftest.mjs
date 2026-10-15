@@ -89,7 +89,7 @@ code += `\n;globalThis.__api = {
   get state(){ return state; },
   resetState(){ state = createInitialState(); return state; },
   createInitialState, migrateProject, baseObject,
-  polygonArea, polylineLength, pointInPolygon, distanceToSegment, segmentsIntersect,
+  polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment, segmentsIntersect,
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
@@ -133,6 +133,11 @@ eq('点在多边形外', api.pointInPolygon([11,1],[[0,0],[10,0],[10,10],[0,10]]
 approx('点到线段距离-在线上', api.distanceToSegment([5,0],[0,0],[10,0]), 0);
 approx('点到线段距离-垂直3', api.distanceToSegment([0,3],[0,0],[10,0]), 3);
 approx('点到线段距离-端点外', api.distanceToSegment([12,0],[0,0],[10,0]), 2);
+eq('线段最近点-中点垂足', api.nearestPointOnSegment([5,3],[0,0],[10,0]), [5,0]);
+eq('线段最近点-斜线段投影', api.nearestPointOnSegment([0,0],[10,0],[10,10]), [10,0]);
+eq('线段最近点-端点外夹回端点', api.nearestPointOnSegment([12,0],[0,0],[10,0]), [10,0]);
+eq('线段最近点-反向延长同样夹回', api.nearestPointOnSegment([-2,5],[0,0],[10,0]), [0,0]);
+eq('线段最近点-退化线段取端点', api.nearestPointOnSegment([3,4],[7,7],[7,7]), [7,7]);
 eq('线段相交', api.segmentsIntersect([0,0],[10,10],[0,10],[10,0]), true);
 eq('线段不相交', api.segmentsIntersect([0,0],[1,0],[5,5],[6,5]), false);
 eq('角度归一化', [api.normalizeAngle(-90), api.normalizeAngle(370)], [270, 10]);

@@ -34,6 +34,13 @@ function distanceToSegment(p,a,b){
   let t=(w[0]*v[0]+w[1]*v[1])/l2; t=Math.max(0,Math.min(1,t));
   return dist(p,[a[0]+t*v[0],a[1]+t*v[1]]);
 }
+/** p 到线段 ab 的最近点（垂足夹到线段内）；双击插入节点时保证新点落在线段上 */
+function nearestPointOnSegment(p,a,b){
+  const v=sub(b,a), w=sub(p,a), l2=v[0]*v[0]+v[1]*v[1];
+  if(l2<EPS) return a.slice();
+  let t=(w[0]*v[0]+w[1]*v[1])/l2; t=Math.max(0,Math.min(1,t));
+  return [a[0]+t*v[0],a[1]+t*v[1]];
+}
 function segmentsIntersect(a,b,c,d){
   function ccw(p1,p2,p3){return (p3[1]-p1[1])*(p2[0]-p1[0]) > (p2[1]-p1[1])*(p3[0]-p1[0]);}
   return ccw(a,c,d)!==ccw(b,c,d) && ccw(a,b,c)!==ccw(a,b,d);
