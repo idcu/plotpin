@@ -101,7 +101,7 @@ code += `\n;globalThis.__api = {
   hitPhysicalPoint, siteKindName,
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter,
   sectorSweep, sectorArcPoints, convertAreaShape, pointIconScale, areaParamText,
-  collectSnapCandidates, findOsnap, OSNAP_LABELS,
+  collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   TABLE_COLUMNS
@@ -844,27 +844,28 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   st.objects.push(line,circ,pt);
 
   const cands=api.collectSnapCandidates(st);
-  eq('捕捉-候选总数 3+2+5+1=11', cands.length, 11);
+  eq('捕捉-候选总数 3+2+1+4+1=11', cands.length, 11);
   eq('捕捉-类型标签中文', api.OSNAP_LABELS.midpoint, '中点');
 
   const byType=t=>cands.filter(c=>c.type===t).length;
-  eq('捕捉-端点数 3+4+1=8', byType('endpoint'), 8);
+  eq('捕捉-端点数 折线3+点1=4', byType('endpoint'), 4);
   eq('捕捉-中点数 2', byType('midpoint'), 2);
   eq('捕捉-圆心率 1', byType('center'), 1);
+  eq('捕捉-象限点数 4', byType('quadrant'), 4);
 
   /* 线段中点 (5,0) 与 (10,5) */
   ok('捕捉-含第一段中点', cands.some(c=>c.type==='midpoint'&&c.p[0]===5&&c.p[1]===0));
   ok('捕捉-含第二段中点', cands.some(c=>c.type==='midpoint'&&c.p[0]===10&&c.p[1]===5));
   /* 圆象限点 (35,30)/(25,30)/(30,35)/(30,25) */
   [[35,30],[25,30],[30,35],[30,25]].forEach(q=>{
-    ok('捕捉-圆象限点 '+q.join(), cands.some(c=>c.type==='endpoint'&&Math.abs(c.p[0]-q[0])<1e-9&&Math.abs(c.p[1]-q[1])<1e-9));
+    ok('捕捉-圆象限点 '+q.join(), cands.some(c=>c.type==='quadrant'&&Math.abs(c.p[0]-q[0])<1e-9&&Math.abs(c.p[1]-q[1])<1e-9));
   });
   ok('捕捉-圆心(30,30)', cands.some(c=>c.type==='center'&&c.p[0]===30&&c.p[1]===30));
 
   /* 阈值命中：鼠标世界点在阈值内被吸到候选；阈值外返回 null */
   const hit1=api.findOsnap(st,[10.3,0.2],0.5);
   ok('捕捉-近端点击中端点', hit1&&hit1.type==='endpoint'&&hit1.p[0]===10&&hit1.p[1]===0);
-  eq('捕捉-阈值外无命中', api.findOsnap(st,[20,20],0.5), null);
+  eq('捕捉-空旷处无命中', api.findOsnap(st,[80,80],0.5), null);
   /* 同时靠近端点与中点时取更近者 */
   const hit2=api.findOsnap(st,[10,0.2],0.5);
   ok('捕捉-取最近候选', hit2&&hit2.p[0]===10&&hit2.p[1]===0);
@@ -885,6 +886,75 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const hidden=api.baseObject('point','point.marker',{x:0,y:0,visible:false});
   st3.objects.push(hidden);
   eq('捕捉-隐藏点无候选', api.collectSnapCandidates(st3,o=>o.visible!==false).length, 0);
+}
+
+/* 25. 捕捉扩展：象限点/垂足/跨对象交点/切点 ------------------------------- */
+{
+  api.resetState();
+  const st=api.state;
+  /* 两条跨对象相交的水平线/竖直线：y=10 与 x=15 交于 (15,10)；
+     两线都取不对称长度，使中点不落在交点，保证交点被独立识别 */
+  const hLine=api.baseObject('line','line.custom',{points:[[0,10],[40,10]],x:0,y:10});
+  const vLine=api.baseObject('line','line.custom',{points:[[15,0],[15,40]],x:15,y:0});
+  /* 圆心 (40,10) r=5；点 (40,20) 在圆外，其切线切点之一在圆上 */
+  const circ=api.baseObject('rect','rect.area',{x:40,y:10,shape:{type:'circle',r:5}});
+  st.objects.push(hLine,vLine,circ);
+
+  /* 象限点：圆上 0/90/180/270 四个方向点单独成类 */
+  const quads=api.collectSnapCandidates(st).filter(c=>c.type==='quadrant');
+  eq('象限-圆4个象限点', quads.length, 4);
+  [[45,10],[35,10],[40,15],[40,5]].forEach(q=>{
+    ok('象限-含 '+q.join(), quads.some(c=>Math.hypot(c.p[0]-q[0],c.p[1]-q[1])<1e-9));
+  });
+  const hitQ=api.findOsnap(st,[45.15,10.1],0.3);
+  ok('象限-右点被捕捉', hitQ&&hitQ.type==='quadrant'&&Math.abs(hitQ.p[0]-45)<1e-9);
+
+  /* 垂足：取 (25,14) 到水平线 y=10 的垂足 (25,10)，垂距 4 < tol 5；
+     避开中点(20,10)与交点(15,10)，保证独立命中垂足 */
+  const hitP=api.findOsnap(st,[25,14],5);
+  ok('垂足-命中线段', hitP&&hitP.type==='perpendicular'&&hitP.p[0]===25&&hitP.p[1]===10);
+  /* 垂足夹到线段端点内：x=-5 超出水平线起点，垂足夹回端点 (0,10)，归为端点类型（端点优先） */
+  const hitP2=api.findOsnap(st,[-5,10.2],6);
+  ok('垂足-超出夹回端点', hitP2&&hitP2.type==='endpoint'&&hitP2.p[0]===0);
+
+  /* 跨对象交点：(15,10)，交点优先级高于垂足（鼠标偏离 0.17 仍命中交点而非线上垂足） */
+  const allEdges=api.collectSnapEdges(st);
+  eq('交点-两条线各1边共2', allEdges.length, 2);
+  const hitI=api.findOsnap(st,[15.12,10.12],0.3);
+  ok('交点-跨对象命中 '+JSON.stringify(hitI), hitI&&hitI.type==='intersection'&&hitI.p[0]===15&&hitI.p[1]===10);
+  /* 同对象线段交点不算：单独一条 V 形折线自身节点不产生交点候选 */
+  const st2=api.createInitialState();
+  st2.objects.push(api.baseObject('line','line.custom',{points:[[0,0],[10,10],[0,20]],x:0,y:0}));
+  eq('交点-同对象自身不产交点', api.collectSnapCandidates(st2).filter(c=>c.type==='intersection').length, 0);
+
+  /* 切点（径向语义）：鼠标在圆周外侧贴近时，捕捉到圆心→鼠标方向与圆周交点。
+     取 30° 方向、半径外 0.3 的查询点 (40+5.3cos30°, 10+5.3sin30°)，
+     切点应为 (40+5cos30°, 10+5sin30°)，距查询点恰为 0.3 */
+  const tAng=30*Math.PI/180;
+  const tangentPoint=[40+5*Math.cos(tAng),10+5*Math.sin(tAng)];
+  const nearOutside=[40+5.3*Math.cos(tAng),10+5.3*Math.sin(tAng)];
+  const hitT=api.findOsnap(st,nearOutside,0.6);
+  ok('切点-贴近圆周命中 tangent', hitT&&hitT.type==='tangent');
+  approx('切点-径向圆周点 X', hitT&&hitT.p[0], tangentPoint[0], 1e-9);
+  approx('切点-径向圆周点 Y', hitT&&hitT.p[1], tangentPoint[1], 1e-9);
+  approx('切点-在圆周上', hitT&&Math.hypot(hitT.p[0]-40,hitT.p[1]-10), 5, 1e-9);
+  /* 切线方向（圆在该点的切线⊥半径）：切点与圆心连线斜率已知，切线点积为 0 */
+  approx('切点-半径⊥切线方向', hitT&&((hitT.p[0]-40)*(-Math.sin(tAng))+(hitT.p[1]-10)*Math.cos(tAng)), 0, 1e-9);
+  /* 圆内靠近中心的点不产生切点（径向圆上点距离≈r，超出小容差） */
+  const st3=api.createInitialState();
+  st3.objects.push(circ);
+  const none=api.findOsnap(st3,[40,11],0.5);
+  ok('切点-圆心附近无切点', !none||none.type!=='tangent');
+
+  /* 边收集：每条开放折线 1 边，两条共 2；圆不产生采样边（由切点/圆心/象限覆盖） */
+  eq('边-两条折线共2边', api.collectSnapEdges(st).filter(e=>hLine.id===e.id||vLine.id===e.id).length, 2);
+  eq('边-圆不产生采样边', api.collectSnapEdges(st).filter(e=>e.id===circ.id).length, 0);
+  eq('边-矩形4直边', (function(){
+    const s=api.createInitialState();
+    s.objects.push(api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:10}));
+    return api.collectSnapEdges(s).length;
+  })(), 4);
+  eq('边-圆曲线收集1个', api.collectSnapCircles(st).length, 1);
 }
 
 /* ---------------- 结果汇总 ---------------- */

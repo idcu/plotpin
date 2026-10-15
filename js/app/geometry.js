@@ -35,43 +35,42 @@ function distanceToSegment(p,a,b){
   return dist(p,[a[0]+t*v[0],a[1]+t*v[1]]);
 }
 /* -------------------- 对象捕捉 OSNAP（纯数据，屏幕阈值由调用方换算为世界米） -------------------- */
-const OSNAP_LABELS={endpoint:'端点',midpoint:'中点',center:'圆心'};
+const OSNAP_LABELS={
+  endpoint:'端点', midpoint:'中点', center:'圆心', quadrant:'象限点',
+  perpendicular:'垂足', intersection:'交点', tangent:'切点'
+};
 /**
- * 收集当前工程全部可捕捉特征点。
- * endpoint=折线节点/区域角点/点设备位置；midpoint=线段/边中点；center=区域中心或圆心。
- * @param st state 对象（仅读 objects 与可见性）
- * @param vis 可选可见性判定 (o)=>bool，默认全部可见
+ * 收集当前工程全部"特征点"候选（离散点）。
+ * endpoint 节点/角点；midpoint 边中点；center 中心或圆心；quadrant 圆/椭圆四象限点。
  */
 function collectSnapCandidates(st,vis){
   const out=[];
+  const push=(id,p,type)=>out.push({p:[p[0],p[1]],type,id});
   (st.objects||[]).forEach(o=>{
     if(vis && !vis(o)) return;
-    const push=(p,type)=>out.push({p:[p[0],p[1]],type,id:o.id});
-    if(o.kind==='point'){
-      push([o.x,o.y],'endpoint');
-    }else if(o.kind==='text'){
-      push([o.x,o.y],'endpoint');
+    if(o.kind==='point'||o.kind==='text'){
+      push(o.id,[o.x,o.y],'endpoint');
     }else if(o.kind==='line'||o.kind==='dimension'){
       const ps=o.points||[];
-      ps.forEach(p=>push(p,'endpoint'));
+      ps.forEach(p=>push(o.id,p,'endpoint'));
       const segN=o.closed?ps.length:ps.length-1;
-      for(let k=0;k<segN;k++) push([(ps[k][0]+ps[(k+1)%ps.length][0])/2,(ps[k][1]+ps[(k+1)%ps.length][1])/2],'midpoint');
+      for(let k=0;k<segN;k++) push(o.id,[(ps[k][0]+ps[(k+1)%ps.length][0])/2,(ps[k][1]+ps[(k+1)%ps.length][1])/2],'midpoint');
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);
       if(tt==='rect'){
         const cs=rectPoints(o);
-        cs.forEach(p=>push(p,'endpoint'));
-        for(let k=0;k<4;k++) push([(cs[k][0]+cs[(k+1)%4][0])/2,(cs[k][1]+cs[(k+1)%4][1])/2],'midpoint');
-        push([(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2],'center');
+        cs.forEach(p=>push(o.id,p,'endpoint'));
+        for(let k=0;k<4;k++) push(o.id,[(cs[k][0]+cs[(k+1)%4][0])/2,(cs[k][1]+cs[(k+1)%4][1])/2],'midpoint');
+        push(o.id,[(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2],'center');
       }else{
         const sh=o.shape;
-        push([o.x,o.y],'center');
+        push(o.id,[o.x,o.y],'center');
         if(tt==='circle'||tt==='ellipse'){
           const rx=tt==='circle'?sh.r:sh.rx, ry=tt==='circle'?sh.r:sh.ry;
-          /* 圆/椭圆四象限点（端点标记），旋转椭圆按其角度 */
           const a=(o.angle||0)*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+          /* 象限点独立标记（椭圆旋转按其角度） */
           [[rx,0],[-rx,0],[0,ry],[0,-ry]].forEach(q=>{
-            push([o.x+q[0]*ca-q[1]*sa, o.y+q[0]*sa+q[1]*ca],'endpoint');
+            push(o.id,[o.x+q[0]*ca-q[1]*sa, o.y+q[0]*sa+q[1]*ca],'quadrant');
           });
         }
       }
@@ -79,13 +78,83 @@ function collectSnapCandidates(st,vis){
   });
   return out;
 }
-/** 在世界坐标阈值 tol（米）内找距 raw 最近的候选；excludeIds 中的对象不参与（拖拽时排除自身） */
+/** 收集"可垂足/可交点"的线段边：折线含闭合边；非矩形区域以采样多边形近似 */
+function collectSnapEdges(st,vis){
+  const out=[];
+  const add=(id,a,b)=>out.push({id,a:a.slice(),b:b.slice()});
+  (st.objects||[]).forEach(o=>{
+    if(vis && !vis(o)) return;
+    if(o.kind==='line'||o.kind==='dimension'){
+      const ps=o.points||[];
+      const n=o.closed?ps.length:ps.length-1;
+      for(let k=0;k<n;k++) add(o.id,ps[k],ps[(k+1)%ps.length]);
+    }else if(o.kind==='rect'&&areaShapeType(o)==='rect'){
+      /* 垂足/交点仅取矩形四条直边；圆/椭圆/扇形由切点/圆心/象限点捕捉覆盖，
+         采样边会抢占切点，故不纳入 edges */
+      const ps=shapeWorldPoints(o);
+      for(let k=0;k<4;k++) add(o.id,ps[k],ps[(k+1)%4]);
+    }
+  });
+  return out;
+}
+/** 收集正圆（支持精确切点；椭圆切点不启用）@returns [{id,c,r}] */
+function collectSnapCircles(st,vis){
+  const out=[];
+  (st.objects||[]).forEach(o=>{
+    if(vis && !vis(o)) return;
+    if(o.kind==='rect'&&areaShapeType(o)==='circle') out.push({id:o.id,c:[o.x,o.y],r:o.shape.r});
+  });
+  return out;
+}
+function _segSegInt(a,b,c,d){
+  const r=sub(b,a), s=sub(d,c), den=r[0]*s[1]-r[1]*s[0];
+  if(Math.abs(den)<EPS) return null;
+  const t=((c[0]-a[0])*s[1]-(c[1]-a[1])*s[0])/den;
+  const u=((c[0]-a[0])*r[1]-(c[1]-a[1])*r[0])/den;
+  if(t<0||t>1||u<0||u>1) return null;
+  return [a[0]+t*r[0], a[1]+t*r[1]];
+}
+/* 捕捉类型优先级（数值越小越优先）：精确点 > 交点 > 垂足 > 切点。
+   同优先级再按到鼠标的屏幕距离取最近；不同优先级时即使稍远也优先精确类型。 */
+const OSNAP_PRIORITY={endpoint:0,midpoint:1,quadrant:1,center:1,intersection:2,perpendicular:3,tangent:4};
 function findOsnap(st,raw,tol,excludeIds,vis){
   let best=null, bd=tol;
+  const consider=(p,type,id)=>{
+    const dd=Math.hypot(p[0]-raw[0],p[1]-raw[1]);
+    if(dd>tol) return;
+    if(!best
+       || (OSNAP_PRIORITY[type]??9)<(OSNAP_PRIORITY[best.type]??9)
+       || ((OSNAP_PRIORITY[type]??9)===(OSNAP_PRIORITY[best.type]??9)&&dd<bd)){
+      bd=dd; best={p:[p[0],p[1]],type,id};
+    }
+  };
   for(const c of collectSnapCandidates(st,vis)){
     if(excludeIds && c.id && excludeIds.has(c.id)) continue;
-    const d=Math.hypot(c.p[0]-raw[0],c.p[1]-raw[1]);
-    if(d<=bd){ bd=d; best=c; }
+    consider(c.p,c.type,c.id);
+  }
+  /* 交点：仅跨对象的线段相交（同一对象相邻/闭合边共享端点，跳过） */
+  const edges=collectSnapEdges(st,vis);
+  for(let i=0;i<edges.length;i++) for(let j=i+1;j<edges.length;j++){
+    const e1=edges[i], e2=edges[j];
+    if(e1.id===e2.id) continue;
+    if(excludeIds && excludeIds.has(e1.id) && excludeIds.has(e2.id)) continue;
+    const sh=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1])<EPS;
+    if(sh(e1.a,e2.a)||sh(e1.a,e2.b)||sh(e1.b,e2.a)||sh(e1.b,e2.b)) continue;
+    const ip=_segSegInt(e1.a,e1.b,e2.a,e2.b);
+    if(ip) consider(ip,'intersection',e1.id+'|'+e2.id);
+  }
+  /* 垂足：raw 到各线段的最近点 */
+  for(const e of edges){
+    if(excludeIds && excludeIds.has(e.id)) continue;
+    consider(nearestPointOnSegment(raw,e.a,e.b),'perpendicular',e.id);
+  }
+  /* 切点：鼠标贴近圆周时，取圆心→鼠标方向与圆周的交点（径向上正对的圆上点）。
+     这是无"切线起点"上下文时最直观的切点语义；完整"从 P 引切线"在画线时由上一点判定 */
+  for(const c of collectSnapCircles(st,vis)){
+    if(excludeIds && excludeIds.has(c.id)) continue;
+    const dx=raw[0]-c.c[0], dy=raw[1]-c.c[1], D=Math.hypot(dx,dy);
+    if(D<EPS) continue;
+    consider([c.c[0]+c.r*dx/D, c.c[1]+c.r*dy/D],'tangent',c.id);
   }
   return best;
 }

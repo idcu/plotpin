@@ -116,6 +116,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawSelection(c,v,toS);
     drawRubber(c);
     drawCursorCross(c,v,d,cssW,cssH);
+    drawTrackLine(c,v,d,cssW,cssH,toS);
     drawNodeFocus(c,toS);
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
@@ -150,6 +151,21 @@ function drawCursorCross(c,v,d,cssW,cssH){
   c.restore();
   drawScreenTag(c,x+12,y+12,`X ${fmt(wp[0])}  Y ${fmt(wp[1])} ${state.settings.unit}`);
 }
+/* 极轴/平行追踪虚线：从上一已接受点沿参考方向贯穿画布（橙色点划线） */
+function drawTrackLine(c,v,d,cssW,cssH,toS){
+  if(!trackLine) return;
+  const o=toS(trackLine.from);
+  /* 世界方向(屏幕 Y 翻转)，按屏幕斜率取与画布边界的两个交点 */
+  const sx=trackLine.dir[0]*v.zoom, sy=-trackLine.dir[1]*v.zoom;
+  if(Math.hypot(sx,sy)<1e-9) return;
+  let tmin=-1e9,tmax=1e9;
+  if(Math.abs(sx)>1e-9){ const t1=-o.x/sx, t2=(cssW-o.x)/sx; tmin=Math.max(tmin,Math.min(t1,t2)); tmax=Math.min(tmax,Math.max(t1,t2)); }
+  if(Math.abs(sy)>1e-9){ const t1=-o.y/sy, t2=(cssH-o.y)/sy; tmin=Math.max(tmin,Math.min(t1,t2)); tmax=Math.min(tmax,Math.max(t1,t2)); }
+  c.save(); c.strokeStyle='rgba(217,119,6,.7)'; c.lineWidth=1; c.setLineDash([7,4,2,4]);
+  c.beginPath();
+  c.moveTo(o.x+sx*tmin,o.y+sy*tmin); c.lineTo(o.x+sx*tmax,o.y+sy*tmax); c.stroke();
+  c.restore();
+}
 /* 属性面板正在编辑的节点：黄色脉冲方框提示对应画布位置 */
 function drawNodeFocus(c,toS){
   if(!focusNode) return;
@@ -172,18 +188,28 @@ function drawDragHud(c,toS){
   if(i<o.points.length-1) parts.push('→ '+fmt(dist(p,o.points[i+1]))+' m');
   drawScreenTag(c,s[0]+12,s[1]-28,parts.join('   '));
 }
-/* OSNAP 命中标记：端点=方块，中点=三角，圆心=圆内十字；附类型文字 */
+/* OSNAP 命中标记：端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点(圆+切线)；附类型文字 */
 function drawOsnapMarker(c,toS){
   if(!cursorScreen||!cursorScreen.snap) return;
   const snap=cursorScreen.snap, s=toS(snap.p);
-  c.save(); c.strokeStyle='#d97706'; c.fillStyle='#d97706'; c.lineWidth=1.6;
+  c.save(); c.strokeStyle='#d97706'; c.fillStyle='#d97706'; c.lineWidth=1.6; c.lineCap='round';
+  const k=5;
   if(snap.type==='endpoint'){
-    c.strokeRect(s[0]-4.5,s[1]-4.5,9,9);
+    c.strokeRect(s[0]-k,s[1]-k,k*2,k*2);
   }else if(snap.type==='midpoint'){
-    c.beginPath(); c.moveTo(s[0],s[1]-5.5); c.lineTo(s[0]+5,s[1]+4); c.lineTo(s[0]-5,s[1]+4); c.closePath(); c.stroke();
-  }else{
-    c.beginPath(); c.arc(s[0],s[1],5,0,Math.PI*2); c.stroke();
-    c.beginPath(); c.moveTo(s[0]-8,s[1]); c.lineTo(s[0]+8,s[1]); c.moveTo(s[0],s[1]-8); c.lineTo(s[0],s[1]+8); c.stroke();
+    c.beginPath(); c.moveTo(s[0],s[1]-k-0.5); c.lineTo(s[0]+k,s[1]+k-1); c.lineTo(s[0]-k,s[1]+k-1); c.closePath(); c.stroke();
+  }else if(snap.type==='center'){
+    c.beginPath(); c.arc(s[0],s[1],k,0,Math.PI*2); c.stroke();
+    c.beginPath(); c.moveTo(s[0]-k-3,s[1]); c.lineTo(s[0]+k+3,s[1]); c.moveTo(s[0],s[1]-k-3); c.lineTo(s[0],s[1]+k+3); c.stroke();
+  }else if(snap.type==='quadrant'){
+    c.beginPath(); c.moveTo(s[0],s[1]-k); c.lineTo(s[0]+k,s[1]); c.lineTo(s[0],s[1]+k); c.lineTo(s[0]-k,s[1]); c.closePath(); c.stroke();
+  }else if(snap.type==='perpendicular'){
+    c.beginPath(); c.moveTo(s[0]-k,s[1]+k); c.lineTo(s[0]-k,s[1]-k); c.lineTo(s[0]+k,s[1]+k); c.stroke();
+  }else if(snap.type==='intersection'){
+    c.beginPath(); c.moveTo(s[0]-k,s[1]-k); c.lineTo(s[0]+k,s[1]+k); c.moveTo(s[0]+k,s[1]-k); c.lineTo(s[0]-k,s[1]+k); c.stroke();
+  }else if(snap.type==='tangent'){
+    c.beginPath(); c.arc(s[0],s[1],2.5,0,Math.PI*2); c.fill();
+    c.beginPath(); c.moveTo(s[0]-k,s[1]+k); c.lineTo(s[0]+k,s[1]-k); c.stroke();
   }
   c.restore();
   drawScreenTag(c,s[0]+10,s[1]-26,'◈ '+(OSNAP_LABELS[snap.type]||snap.type));

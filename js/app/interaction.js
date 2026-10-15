@@ -51,6 +51,8 @@ function constrainWorldPoint(wp,e){
 }
 const OSNAP_PX=11;   // 捕捉吸附半径（屏幕像素）
 let activeOsnap=null; // 当前帧命中的捕捉点（渲染标记用）
+/* 极轴/平行追踪提示：{from:[x,y], dir:[dx,dy]}（单位向量，世界坐标），render 画虚线 */
+let trackLine=null;
 /**
  * 唯一的屏幕→最终世界落点解析：对象捕捉优先 → 其次网格吸附 → 最后 Shift 正交/正方形约束。
  * pointerdown 与 pointermove 必须共用本函数，保证预览与落点完全一致。
@@ -65,10 +67,39 @@ function resolveWorldPoint(e){
   }
   if(state.settings.osnap){
     const hit=findOsnap(state,raw,OSNAP_PX/state.viewport.zoom,excl,isVisible);
-    if(hit){ activeOsnap=hit; return hit.p; }
+    if(hit){ activeOsnap=hit; trackLine=null; return hit.p; }
   }
   activeOsnap=null;
-  return constrainWorldPoint(snapPoint(raw,e),e);
+  const p=constrainWorldPoint(snapPoint(raw,e),e);
+  /* 画线录入中：极轴 0/45/90… 或与上一段平行的方向追踪（11px 角度容差内） */
+  trackLine=buildTrackLine(raw,p,e);
+  return p;
+}
+/** 极轴/平行追踪：返回从 from 沿参考方向的单位向量，供 render 画虚线 */
+function buildTrackLine(raw,accepted,e){
+  if(!state.settings.osnap) return null;
+  const from=(draft&&draft.points&&draft.points.length)?draft.points[draft.points.length-1]:null;
+  if(!from) return null;
+  const v=[raw[0]-from[0],raw[1]-from[1]], len=Math.hypot(v[0],v[1]);
+  if(len<EPS) return null;
+  const angDeg=Math.atan2(v[1],v[0])*180/Math.PI;
+  /* 优先与上一段平行（录入第 2 点起），其次 45° 极轴 */
+  let ref=null;
+  if(draft.points.length>=2){
+    const prev=[draft.points[draft.points.length-1],draft.points[draft.points.length-2]];
+    const pv=[prev[0][0]-prev[1][0],prev[0][1]-prev[1][1]], pl=Math.hypot(pv[0],pv[1]);
+    if(pl>EPS){
+      let pd=Math.atan2(pv[1],pv[0])*180/Math.PI-angDeg;
+      pd=((pd%180)+180)%180; if(pd>90)pd=180-pd;
+      if(pd<5) ref=Math.atan2(pv[1],pv[0]);
+    }
+  }
+  if(ref===null){
+    const nearest=Math.round(angDeg/45)*45;
+    if(Math.abs(((angDeg-nearest+540)%360)-180)<5) ref=nearest*Math.PI/180;
+  }
+  if(ref===null) return null;
+  return {from, dir:[Math.cos(ref),Math.sin(ref)]};
 }
 canvas.addEventListener('pointerdown',e=>{
   lastCanvasHandledAt=performance.now();
@@ -490,7 +521,7 @@ function openShortcutsHelp(){
     ['双击线段 / 双击节点（选择工具）','在折线上插入节点 / 删除节点'],
     ['Shift（画线/标注/拖节点时）','约束为水平/垂直线（正交）'],
     ['Shift（拖矩形/椭圆/扇形时）','正方形 / 正圆 / 45°方位吸附'],
-    ['对象捕捉','自动吸附端点□、中点△、圆心◎（设置中开关）'],
+    ['对象捕捉','自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪'],
     ['空格 + 拖拽','临时平移画布'],
     ['方向键','移动选中对象（Shift ×10 倍步距）'],['F','适应窗口（显示整张场地）'],
     ['滚轮 / 右键拖拽','缩放 / 平移画布'],
