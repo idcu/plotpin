@@ -109,8 +109,67 @@ async function handleImportFile(f){
     }catch(e){ toast('XLSX 解析失败：'+e.message,'error'); }
     return;
   }
+  if(ext==='dxf') return importDxfFile(f);
+  if(ext==='pdf') return toast('PDF 是只读版式，无法可靠提取图形（零依赖不内置 PDF 渲染器）；CAD 请用 DXF 互通，PDF 可由本工具「PDF 矢量」导出','warn');
   if(/^image\//.test(f.type||'')||['png','jpg','jpeg','gif','webp','bmp','svg'].includes(ext)) return importBackgroundFile(f);
-  toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / CSV·TSV·XLSX 表格 / 图片底图）','error');
+  toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / DXF / CSV·TSV·XLSX 表格 / 图片底图）','error');
+}
+
+/* -------------------- DXF 导入（CAD 互通） -------------------- */
+async function importDxfFile(f){
+  let parsed;
+  try{ parsed=Dxf.parseDxf(await f.text()); }
+  catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
+  const ents=parsed.entities;
+  if(!ents.length) return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
+  pushHistory();
+  /* DXF 图层：缺失的自动创建（锁定/可见默认） */
+  ents.map(e=>e.layer).forEach(n=>{
+    if(n&&!state.layers.some(l=>l.name===n)) state.layers.push({id:safeId('layer_'+n,'LAYER'),name:n,visible:true,locked:false});
+  });
+  const layerIdFor=n=>{ const l=state.layers.find(x=>x.name===n); return l?l.id:'layer.default'; };
+  const counts={line:0,rect:0,point:0,text:0};
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  const bounds=p=>p.forEach(([x,y])=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);});
+  ents.forEach(e=>{
+    if(e.type==='LWPOLYLINE'){
+      const pts=e.points.map(p=>[p[0],p[1]]);
+      if(pts.length<2) return;
+      bounds(pts);
+      const o=baseObject('line','line.custom',{points:pts,closed:!!e.closed,x:pts[0][0],y:pts[0][1],layerId:layerIdFor(e.layer)});
+      state.objects.push(o); counts.line++;
+    }else if(e.type==='CIRCLE'){
+      if(!(e.r>0)) return;
+      const x=e.x,y=e.y,r=e.r; bounds([[x-r,y-r],[x+r,y+r]]);
+      const o=baseObject('rect','rect.area',{x,y,shape:{type:'circle',r},width:0,height:0,layerId:layerIdFor(e.layer)});
+      state.objects.push(o); counts.rect++;
+    }else if(e.type==='ARC'){
+      if(!(e.r>0)) return;
+      /* 圆弧采样为开放折线（24 段），角度约定与世界坐标同为 Y 向上、度 */
+      const N=24, pts=[];
+      for(let k=0;k<=N;k++){ const a=(e.a0+(e.a1-e.a0)*k/N)*Math.PI/180; pts.push([e.x+e.r*Math.cos(a),e.y+e.r*Math.sin(a)]); }
+      bounds(pts);
+      const o=baseObject('line','line.custom',{points:pts,x:pts[0][0],y:pts[0][1],layerId:layerIdFor(e.layer)});
+      state.objects.push(o); counts.line++;
+    }else if(e.type==='POINT'){
+      const x=e.x,y=e.y; bounds([[x,y]]);
+      const o=baseObject('point','point.marker',{x,y,layerId:layerIdFor(e.layer)});
+      state.objects.push(o); counts.point++;
+    }else if(e.type==='TEXT'){
+      const x=e.x,y=e.y,h=e.height||1; bounds([[x,y],[x+h*4,y+h]]);
+      const o=baseObject('text',null,{x,y,text:e.text||'文字',height:h>0?h:1,layerId:layerIdFor(e.layer)});
+      o.typeId='text.builtin';
+      state.objects.push(o); counts.text++;
+    }
+  });
+  /* 默认 100×70 矩形场地时，扩到能容纳导入几何（坐标允许负值，只扩不挪） */
+  if(state.background.kind==='rect'&&state.background.shape?.type==='rect'&&!state.background.calibrated&&Number.isFinite(maxX)){
+    state.background.shape.w=Math.max(state.background.shape.w,maxX+10);
+    state.background.shape.h=Math.max(state.background.shape.h,maxY+10);
+  }
+  selectedIds.clear();
+  commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字');
+  fitView();
 }
 
 /* -------------------- 底图/场地：选择弹窗与矢量场地应用 -------------------- */
@@ -556,6 +615,8 @@ $('exportBtn').onclick=()=>{
   if(kind==='json') exportJSON();
   if(kind==='png') exportPNG();
   if(kind==='svg') exportSVG();
+  if(kind==='pdf') exportPDF();
+  if(kind==='dxf') exportDXF();
   if(kind==='csv') exportDelimited(',','csv','text/csv;charset=utf-8');
   if(kind==='tsv') exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8');
   if(kind==='xlsx') exportXlsx();
@@ -764,6 +825,106 @@ function buildSceneSvg(){
 <text x="${margin}" y="${sh-8}" font-size="11" fill="#666">${esc(state.meta.name)} · ${esc(siteDescription())}</text>
 </svg>`;
   return svg;
+}
+
+/* -------------------- DXF 导出（CAD 互通，坐标输出毫米） -------------------- */
+function angleDimDeg(o){
+  const v0=o.points[0],v1=o.points[1],v2=o.points[2];
+  const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]),a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
+  let deg=Math.abs((a2-a1)*180/Math.PI); return deg>180?360-deg:deg;
+}
+function exportDXF(){
+  const entities=[];
+  const layers=state.layers.map(l=>({name:l.name,color:'#7c3aed'}));
+  state.objects.filter(isVisible).forEach(o=>{
+    const color=o.style.color||getType(o.typeId).color||'#111827';
+    const layer=layerOf(o).name;
+    if(o.kind==='point'){
+      entities.push({type:'POINT',layer,color,x:o.x,y:o.y});
+    }else if(o.kind==='line'){
+      entities.push({type:'LWPOLYLINE',layer,color,points:o.points.map(p=>p.slice()),closed:!!o.closed});
+    }else if(o.kind==='rect'){
+      const tt=areaShapeType(o);
+      if(tt==='circle') entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
+      else entities.push({type:'LWPOLYLINE',layer,color,points:shapeWorldPoints(o),closed:true});
+    }else if(o.kind==='dimension'&&o.points.length>=2){
+      entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:o.points.map(p=>p.slice()),closed:o.subtype==='area'});
+      const ep=o.points[o.points.length-1];
+      const label=o.subtype==='ruler'?'Σ '+fmt(objectLength(o))+' m'
+        :o.subtype==='distance'?fmt(dist(o.points[0],o.points[1]))+' m'
+        :o.subtype==='area'?fmt(polygonArea(o.points))+' m2'
+        :fmt(angleDimDeg(o))+' deg';
+      entities.push({type:'TEXT',layer,color:'#111827',x:ep[0],y:ep[1],text:label,height:.7});
+    }else if(o.kind==='text'){
+      entities.push({type:'TEXT',layer,color:o.style.color||'#111827',x:o.x,y:o.y,text:o.text||'文字',height:o.height||1});
+    }
+  });
+  if(!entities.length) return toast('当前没有可导出的对象','warn');
+  downloadBlob(new Blob([Dxf.buildDxf(entities,layers)],{type:'image/vnd.dxf;charset=utf-8'}),safeName()+'.dxf');
+  toast('DXF 已导出（坐标单位：毫米，可用 AutoCAD/LibreCAD 打开）','success');
+}
+
+/* -------------------- 多页 PDF 导出（图纸页 + 完整清单分页） -------------------- */
+function canvasToJpegBase64(canvas,quality=.92){
+  return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('JPEG 编码失败')),'image/jpeg',quality))
+    .then(b=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); }));
+}
+async function renderPdfDrawingPage(){
+  const W=1748,H=1240;   /* A4 横向 150dpi 像素 */
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const cc=c.getContext('2d'); cc.fillStyle='#fff'; cc.fillRect(0,0,W,H);
+  const d=worldDims(), margin=36;
+  const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
+  drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
+  cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
+  cc.fillText(state.meta.name+' · '+siteDescription(),margin,H-14);
+  return {width:W,height:H,b64:await canvasToJpegBase64(c)};
+}
+const PDF_COLS=[['编号',110],['名称',120],['对象类型',100],['业务类型',130],['图层',110],['X',90],['Y',90],['参数',190],['长度',90],['面积',100]];
+async function renderPdfListPages(){
+  const W=1240,H=1748, margin=48, rowH=30, headH=40;
+  const rows=objectRows(), pages=[];
+  const per=Math.floor((H-margin*2-150)/rowH);
+  const chunks=[]; for(let i=0;i<rows.length;i+=per) chunks.push(rows.slice(i,i+per));
+  const total=Math.max(1,chunks.length);
+  for(let pi=0;pi<chunks.length||rows.length===0;pi++){
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+    g.fillStyle='#111827'; g.font='bold 26px Microsoft YaHei,Arial'; g.textBaseline='alphabetic';
+    g.fillText(state.meta.name+' — 对象清单',margin,margin+8);
+    g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
+    g.fillText('共 '+rows.length+' 个对象 · 第 '+(pi+1)+' / '+total+' 页 · '+new Date().toLocaleString(),margin,margin+34);
+    let y=margin+70;
+    g.fillStyle='#f1f5f9'; g.fillRect(margin,y,W-margin*2,headH);
+    g.strokeStyle='#cbd5e1'; g.lineWidth=1; g.strokeRect(margin,y,W-margin*2,headH);
+    g.fillStyle='#111827'; g.font='bold 14px Microsoft YaHei,Arial';
+    let x=margin+8;
+    PDF_COLS.forEach(([name,w])=>{ g.fillText(name,x,y+26); x+=w; });
+    y+=headH;
+    const list=chunks[pi]||[];
+    g.font='13px Consolas,Microsoft YaHei,Arial';
+    list.forEach((r,ri)=>{
+      if(ri%2){ g.fillStyle='#f8fafc'; g.fillRect(margin,y,W-margin*2,rowH); }
+      g.strokeStyle='#e2e8f0'; g.beginPath(); g.moveTo(margin,y+rowH); g.lineTo(W-margin,y+rowH); g.stroke();
+      g.fillStyle='#1f2937';
+      x=margin+8;
+      const param=r['形状']!==''&&r['形状']!=='矩形'?r['形状']+(r['形状参数']?' '+r['形状参数']:''):(r['形状']==='矩形'?'矩形':(r['闭合']==='是'?'闭合':'')+(r['标注类型']?' '+r['标注类型']:''));
+      const vals=[r['编号'],r['名称'],r['对象类型'],r['业务类型'],r['图层'],r['X'],r['Y'],param,r['长度'],r['面积']];
+      PDF_COLS.forEach(([name,w],i)=>{ let s=String(vals[i]??''); if(g.measureText(s).width>w-14) s=s.slice(0,10)+'…'; g.fillText(s,x,y+20); x+=w; });
+      y+=rowH;
+    });
+    pages.push({width:W,height:H,b64:await canvasToJpegBase64(c,.9)});
+    if(rows.length===0) break;
+  }
+  return pages;
+}
+async function exportPDF(){
+  try{
+    const pages=[await renderPdfDrawingPage(),...await renderPdfListPages()];
+    const buf=Pdf.buildImagePdf(pages);
+    downloadBlob(new Blob([buf],{type:'application/pdf'}),safeName()+'.pdf');
+    toast('PDF 已导出：图纸 1 页 + 清单 '+ (pages.length-1) +' 页','success');
+  }catch(e){ toast('PDF 生成失败：'+e.message,'error'); }
 }
 
 /* -------------------- 打印 / PDF 报告 -------------------- */

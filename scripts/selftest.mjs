@@ -110,6 +110,7 @@ code += `\n;globalThis.__api = {
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
+  Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS
 };`;
@@ -1409,6 +1410,84 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   /* 球机图标分支 */
   st.objects.push(api.baseObject('point','point.dome',{name:'DOME',x:70,y:70}));
   ok('SVG-球机半圆图标', api.buildSceneSvg().includes('A8,8 0 0 1 8,0'));
+}
+
+/* 35. DXF 解析/生成往返 + 多页 PDF 结构 --------------------------------------- */
+{
+  /* 35.1 生成一段含 7 类实体的 R12 DXF 再解析回来 */
+  const ents=[
+    {type:'LWPOLYLINE',layer:'围墙',color:'#334155',points:[[0,0],[10,0],[10,10],[0,10]],closed:true},
+    {type:'LINE',layer:'0',color:'#2563eb',points:[[1,1],[5,6]]},
+    {type:'CIRCLE',layer:'设备',color:'#dc2626',x:20,y:20,r:5},
+    {type:'POINT',layer:'设备',color:'#16a34a',x:30,y:30},
+    {type:'TEXT',layer:'0',color:'#111111',x:0,y:15,text:'O0001 camera-01',height:.8}
+  ];
+  const dxf=api.Dxf.buildDxf(ents,[{name:'围墙',color:'#334155'},{name:'设备',color:'#dc2626'}]);
+  ok('DXF-头AC1009', dxf.includes('$ACADVER')&&dxf.includes('AC1009'));
+  ok('DXF-单位毫米INSUNITS=4', dxf.includes('$INSUNITS')&&dxf.includes('\r\n70\r\n4\r\n'));
+  ok('DXF-含EOF', dxf.endsWith('EOF\r\n')||dxf.trimEnd().endsWith('EOF'));
+  ok('DXF-图层表含围墙', dxf.includes('\r\n围墙\r\n'));
+  const back=api.Dxf.parseDxf(dxf);
+  eq('DXF-往返实体数5', back.entities.length, 5);
+  const poly=back.entities.find(e=>e.type==='LWPOLYLINE'&&e.layer==='围墙');
+  eq('DXF-闭合多段线4点', poly.points.length, 4);
+  eq('DXF-闭合标志', poly.closed, true);
+  /* 生成时米→毫米 ×1000，解析 INSUNITS=4 时毫米→米 /1000，回到原值 */
+  approx('DXF-坐标往返0点', poly.points[0][0], 0, 1e-6);
+  approx('DXF-坐标往返10m', poly.points[1][0], 10, 1e-6);
+  const line=back.entities.find(e=>e.type==='LINE');
+  approx('DXF-LINE终点', line.points[1][0], 5, 1e-6);
+  const circle=back.entities.find(e=>e.type==='CIRCLE');
+  approx('DXF-圆半径5m', circle.r, 5, 1e-6);
+  approx('DXF-圆心20m', circle.x, 20, 1e-6);
+  const txt=back.entities.find(e=>e.type==='TEXT');
+  eq('DXF-文本往返', txt.text, 'O0001 camera-01');
+  approx('DXF-字高往返', txt.height, .8, 1e-6);
+  const pt=back.entities.find(e=>e.type==='POINT');
+  approx('DXF-点坐标', pt.y, 30, 1e-6);
+
+  /* 35.2 解析外部常见形态：POLYLINE+VERTEX、$INSUNITS=1（英寸→米）、CRLF、多余段 */
+  const sample=[
+    '0','SECTION','2','HEADER','9','$INSUNITS','70','1','0','ENDSEC',
+    '0','SECTION','2','ENTITIES',
+    '0','POLYLINE','8','PIPE','70','1',
+    '0','VERTEX','8','PIPE','10','0.0','20','0.0',
+    '0','VERTEX','8','PIPE','10','39.370079','20','0.0',
+    '0','SEQEND',
+    '0','ENDSEC','0','EOF'
+  ].join('\r\n');
+  const imp=api.Dxf.parseDxf(sample);
+  eq('DXF-英寸系数', Math.abs(imp.unit-0.0254)<1e-12, true);
+  eq('DXF-POLYLINE解析1条', imp.entities.length, 1);
+  const pl=imp.entities[0];
+  eq('DXF-VERTEX累积2点', pl.points.length, 2);
+  approx('DXF-39.37英寸≈1m', pl.points[1][0], 1, 1e-4);
+  eq('DXF-POLYLINE闭合位', pl.closed, true);
+
+  /* 35.3 图层名清洗与颜色索引 */
+  eq('DXF-非法图层名清洗', api.Dxf.safeLayer('a/b:c*'), 'a_b_c_');
+  eq('DXF-红色ACI=1', api.Dxf.nearestAci('#ff0000'), 1);
+  eq('DXF-绿色ACI=3', api.Dxf.nearestAci('#00ff00'), 3);
+
+  /* 35.4 多页 PDF：xref/页对象/图片流结构正确 */
+  const pdf=api.Pdf.buildImagePdf([
+    {width:100,height:80,b64:''/*空JPEG仅验结构*/},
+    {width:100,height:80,b64:''}
+  ]);
+  const head=String.fromCharCode(...pdf.slice(0,5));
+  eq('PDF-魔数%PDF-', head, '%PDF-');
+  const tail=String.fromCharCode(...pdf.slice(-5));
+  eq('PDF-尾%%EOF', tail, '%%EOF');
+  const all=String.fromCharCode(...pdf);
+  eq('PDF-页数Count=2', /\/Count 2/.test(all), true);
+  eq('PDF-两个DCT图片', (all.match(/\/Filter \/DCTDecode/g)||[]).length, 2);
+  ok('PDF-两个页面对象', (all.match(/\/Type \/Page /g)||[]).length===2);
+  ok('PDF-含startxref', all.includes('startxref'));
+  /* xref 表每对象一行 10 位偏移 */
+  ok('PDF-xref段存在', /xref\n0 \d+\n0000000000 65535 f /.test(all));
+  /* 空页面列表抛错 */
+  let threw=false; try{ api.Pdf.buildImagePdf([]); }catch(e){ threw=true; }
+  eq('PDF-空页面拒绝', threw, true);
 }
 
 /* ---------------- 结果汇总 ---------------- */
