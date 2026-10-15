@@ -10,6 +10,7 @@ $('settingsBtn').onclick=()=>{
       <label>显示标签</label><input id="setLabels" type="checkbox" ${state.settings.showLabels?'checked':''}>
       <label>十字准星/坐标</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
       <label>段长度标注</label><input id="setSegLen" type="checkbox" ${state.settings.showSegLen?'checked':''}>
+      <label>对象捕捉</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="自动吸附端点、中点、圆心">
       <label>坐标精度</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>场地/底图</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/多边形</div>
     </div>`,[
@@ -21,6 +22,7 @@ $('settingsBtn').onclick=()=>{
       state.settings.showLabels=$('setLabels').checked;
       state.settings.showCursor=$('setCursor').checked;
       state.settings.showSegLen=$('setSegLen').checked;
+      state.settings.osnap=$('setOsnap').checked;
       state.settings.precision=Math.max(0,Math.min(6,Number($('setPrecision').value)||2));
       closeModal(); commitChange('设置已保存');
     }}

@@ -34,6 +34,62 @@ function distanceToSegment(p,a,b){
   let t=(w[0]*v[0]+w[1]*v[1])/l2; t=Math.max(0,Math.min(1,t));
   return dist(p,[a[0]+t*v[0],a[1]+t*v[1]]);
 }
+/* -------------------- 对象捕捉 OSNAP（纯数据，屏幕阈值由调用方换算为世界米） -------------------- */
+const OSNAP_LABELS={endpoint:'端点',midpoint:'中点',center:'圆心'};
+/**
+ * 收集当前工程全部可捕捉特征点。
+ * endpoint=折线节点/区域角点/点设备位置；midpoint=线段/边中点；center=区域中心或圆心。
+ * @param st state 对象（仅读 objects 与可见性）
+ * @param vis 可选可见性判定 (o)=>bool，默认全部可见
+ */
+function collectSnapCandidates(st,vis){
+  const out=[];
+  (st.objects||[]).forEach(o=>{
+    if(vis && !vis(o)) return;
+    const push=(p,type)=>out.push({p:[p[0],p[1]],type,id:o.id});
+    if(o.kind==='point'){
+      push([o.x,o.y],'endpoint');
+    }else if(o.kind==='text'){
+      push([o.x,o.y],'endpoint');
+    }else if(o.kind==='line'||o.kind==='dimension'){
+      const ps=o.points||[];
+      ps.forEach(p=>push(p,'endpoint'));
+      const segN=o.closed?ps.length:ps.length-1;
+      for(let k=0;k<segN;k++) push([(ps[k][0]+ps[(k+1)%ps.length][0])/2,(ps[k][1]+ps[(k+1)%ps.length][1])/2],'midpoint');
+    }else if(o.kind==='rect'){
+      const tt=areaShapeType(o);
+      if(tt==='rect'){
+        const cs=rectPoints(o);
+        cs.forEach(p=>push(p,'endpoint'));
+        for(let k=0;k<4;k++) push([(cs[k][0]+cs[(k+1)%4][0])/2,(cs[k][1]+cs[(k+1)%4][1])/2],'midpoint');
+        push([(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2],'center');
+      }else{
+        const sh=o.shape;
+        push([o.x,o.y],'center');
+        if(tt==='circle'||tt==='ellipse'){
+          const rx=tt==='circle'?sh.r:sh.rx, ry=tt==='circle'?sh.r:sh.ry;
+          /* 圆/椭圆四象限点（端点标记），旋转椭圆按其角度 */
+          const a=(o.angle||0)*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+          [[rx,0],[-rx,0],[0,ry],[0,-ry]].forEach(q=>{
+            push([o.x+q[0]*ca-q[1]*sa, o.y+q[0]*sa+q[1]*ca],'endpoint');
+          });
+        }
+      }
+    }
+  });
+  return out;
+}
+/** 在世界坐标阈值 tol（米）内找距 raw 最近的候选；excludeIds 中的对象不参与（拖拽时排除自身） */
+function findOsnap(st,raw,tol,excludeIds,vis){
+  let best=null, bd=tol;
+  for(const c of collectSnapCandidates(st,vis)){
+    if(excludeIds && c.id && excludeIds.has(c.id)) continue;
+    const d=Math.hypot(c.p[0]-raw[0],c.p[1]-raw[1]);
+    if(d<=bd){ bd=d; best=c; }
+  }
+  return best;
+}
+
 /* -------------------- Shift 精确约束（预览与落点共用） -------------------- */
 /**
  * 正交（ORTHO）：按住 Shift 时，把 p 钳到相对基点 base 的水平/垂直方向。

@@ -1,7 +1,10 @@
 /* render.js —— 命中测试与 Canvas 全量渲染 */
 /* 鼠标屏幕位置（由 interaction 的 pointermove 写入）；inside=false 时不画十字 */
 let cursorScreen=null;
-function setCursorScreen(p,inside,wp){ cursorScreen=p?{x:p[0],y:p[1],inside:inside!==false,wp:wp||null}:null; }
+function setCursorScreen(p,inside,wp,snap){ cursorScreen=p?{x:p[0],y:p[1],inside:inside!==false,wp:wp||null,snap:snap||null}:null; }
+/* 属性面板聚焦的折线节点 {id,index}，在画布上高亮 */
+let focusNode=null;
+function setFocusNode(v){ focusNode=v; requestRender(); }
 /* -------------------- 命中测试 / 选择 -------------------- */
 function isVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
@@ -113,6 +116,9 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawSelection(c,v,toS);
     drawRubber(c);
     drawCursorCross(c,v,d,cssW,cssH);
+    drawNodeFocus(c,toS);
+    drawDragHud(c,toS);
+    drawOsnapMarker(c,toS);
   }
 }
 /** 深色胶囊小标签（屏幕固定字号），(x,y) 为标签左上角；段长度/十字坐标共用 */
@@ -143,6 +149,44 @@ function drawCursorCross(c,v,d,cssW,cssH){
   c.strokeRect(x-5,y-5,10,10);
   c.restore();
   drawScreenTag(c,x+12,y+12,`X ${fmt(wp[0])}  Y ${fmt(wp[1])} ${state.settings.unit}`);
+}
+/* 属性面板正在编辑的节点：黄色脉冲方框提示对应画布位置 */
+function drawNodeFocus(c,toS){
+  if(!focusNode) return;
+  const o=state.objects.find(x=>x.id===focusNode.id);
+  if(!o||!o.points||focusNode.index>=o.points.length){ focusNode=null; return; }
+  const s=toS(o.points[focusNode.index]);
+  c.save(); c.strokeStyle='#d97706'; c.lineWidth=2;
+  c.beginPath(); c.rect(s[0]-7,s[1]-7,14,14); c.stroke();
+  c.beginPath(); c.arc(s[0],s[1],2.5,0,Math.PI*2); c.fillStyle='#d97706'; c.fill();
+  c.restore();
+}
+/* 拖折线节点时的实时数值：当前坐标 + 与相邻节点的段长 */
+function drawDragHud(c,toS){
+  if(!drag||drag.type!=='node') return;
+  const o=state.objects.find(x=>x.id===drag.id);
+  if(!o||!o.points) return;
+  const i=drag.handle.index, p=o.points[i], s=toS(p);
+  const parts=[`#${i+1}  X ${fmt(p[0])}  Y ${fmt(p[1])}`];
+  if(i>0) parts.push('← '+fmt(dist(p,o.points[i-1]))+' m');
+  if(i<o.points.length-1) parts.push('→ '+fmt(dist(p,o.points[i+1]))+' m');
+  drawScreenTag(c,s[0]+12,s[1]-28,parts.join('   '));
+}
+/* OSNAP 命中标记：端点=方块，中点=三角，圆心=圆内十字；附类型文字 */
+function drawOsnapMarker(c,toS){
+  if(!cursorScreen||!cursorScreen.snap) return;
+  const snap=cursorScreen.snap, s=toS(snap.p);
+  c.save(); c.strokeStyle='#d97706'; c.fillStyle='#d97706'; c.lineWidth=1.6;
+  if(snap.type==='endpoint'){
+    c.strokeRect(s[0]-4.5,s[1]-4.5,9,9);
+  }else if(snap.type==='midpoint'){
+    c.beginPath(); c.moveTo(s[0],s[1]-5.5); c.lineTo(s[0]+5,s[1]+4); c.lineTo(s[0]-5,s[1]+4); c.closePath(); c.stroke();
+  }else{
+    c.beginPath(); c.arc(s[0],s[1],5,0,Math.PI*2); c.stroke();
+    c.beginPath(); c.moveTo(s[0]-8,s[1]); c.lineTo(s[0]+8,s[1]); c.moveTo(s[0],s[1]-8); c.lineTo(s[0],s[1]+8); c.stroke();
+  }
+  c.restore();
+  drawScreenTag(c,s[0]+10,s[1]-26,'◈ '+(OSNAP_LABELS[snap.type]||snap.type));
 }
 function drawBackground(c,v,d,cssW,cssH,toS){
   const p0=toS([0,0]), p1=toS([d.w,d.h]);

@@ -101,6 +101,7 @@ code += `\n;globalThis.__api = {
   hitPhysicalPoint, siteKindName,
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter,
   sectorSweep, sectorArcPoints, convertAreaShape, pointIconScale, areaParamText,
+  collectSnapCandidates, findOsnap, OSNAP_LABELS,
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   TABLE_COLUMNS
@@ -828,6 +829,62 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('正方形-左上符号保留', api.squareCorner([10,10],[2,4],true), [2,2]);
   eq('正方形-不按Shift透传', api.squareCorner([0,0],[8,3],false), [8,3]);
   eq('正方形-零位移透传', api.squareCorner([0,0],[0,0],true), [0,0]);
+}
+
+/* 24. 对象捕捉 OSNAP：候选收集、阈值命中、自身排除、类型齐全 ------------------ */
+{
+  api.resetState();
+  const st=api.state;
+  /* 开放折线 3 点：3 个端点 + 2 个中点 */
+  const line=api.baseObject('line','line.custom',{points:[[0,0],[10,0],[10,10]],x:0,y:0});
+  /* 圆形区域：1 圆心 + 4 象限点 */
+  const circ=api.baseObject('rect','rect.area',{x:30,y:30,shape:{type:'circle',r:5}});
+  /* 点设备：1 端点 */
+  const pt=api.baseObject('point','point.marker',{x:50,y:50});
+  st.objects.push(line,circ,pt);
+
+  const cands=api.collectSnapCandidates(st);
+  eq('捕捉-候选总数 3+2+5+1=11', cands.length, 11);
+  eq('捕捉-类型标签中文', api.OSNAP_LABELS.midpoint, '中点');
+
+  const byType=t=>cands.filter(c=>c.type===t).length;
+  eq('捕捉-端点数 3+4+1=8', byType('endpoint'), 8);
+  eq('捕捉-中点数 2', byType('midpoint'), 2);
+  eq('捕捉-圆心率 1', byType('center'), 1);
+
+  /* 线段中点 (5,0) 与 (10,5) */
+  ok('捕捉-含第一段中点', cands.some(c=>c.type==='midpoint'&&c.p[0]===5&&c.p[1]===0));
+  ok('捕捉-含第二段中点', cands.some(c=>c.type==='midpoint'&&c.p[0]===10&&c.p[1]===5));
+  /* 圆象限点 (35,30)/(25,30)/(30,35)/(30,25) */
+  [[35,30],[25,30],[30,35],[30,25]].forEach(q=>{
+    ok('捕捉-圆象限点 '+q.join(), cands.some(c=>c.type==='endpoint'&&Math.abs(c.p[0]-q[0])<1e-9&&Math.abs(c.p[1]-q[1])<1e-9));
+  });
+  ok('捕捉-圆心(30,30)', cands.some(c=>c.type==='center'&&c.p[0]===30&&c.p[1]===30));
+
+  /* 阈值命中：鼠标世界点在阈值内被吸到候选；阈值外返回 null */
+  const hit1=api.findOsnap(st,[10.3,0.2],0.5);
+  ok('捕捉-近端点击中端点', hit1&&hit1.type==='endpoint'&&hit1.p[0]===10&&hit1.p[1]===0);
+  eq('捕捉-阈值外无命中', api.findOsnap(st,[20,20],0.5), null);
+  /* 同时靠近端点与中点时取更近者 */
+  const hit2=api.findOsnap(st,[10,0.2],0.5);
+  ok('捕捉-取最近候选', hit2&&hit2.p[0]===10&&hit2.p[1]===0);
+
+  /* 排除自身：拖折线节点时不吸到自己的特征点（避免抖动），但能吸到别的对象 */
+  const excl=new Set([line.id]);
+  eq('捕捉-排除自身后原端点不命中', api.findOsnap(st,[10.3,0.2],0.5,excl), null);
+  const hit3=api.findOsnap(st,[30,30.2],0.5,excl);
+  ok('捕捉-排除自身仍可吸其他对象(圆心)', hit3&&hit3.type==='center'&&hit3.p[0]===30);
+
+  /* 闭合多边形：n 个节点产生 n 个中点（含闭合边） */
+  const poly=api.baseObject('line','line.custom',{closed:true,points:[[0,0],[10,0],[10,10],[0,10]],x:0,y:0});
+  const st2=api.createInitialState(); st2.objects.push(poly);
+  eq('捕捉-闭合区域中点含闭合边=4', api.collectSnapCandidates(st2).filter(c=>c.type==='midpoint').length, 4);
+
+  /* 不可见对象不提供候选 */
+  const st3=api.createInitialState();
+  const hidden=api.baseObject('point','point.marker',{x:0,y:0,visible:false});
+  st3.objects.push(hidden);
+  eq('捕捉-隐藏点无候选', api.collectSnapCandidates(st3,o=>o.visible!==false).length, 0);
 }
 
 /* ---------------- 结果汇总 ---------------- */

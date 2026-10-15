@@ -6,7 +6,7 @@ function setTool(tool){
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));
   const titles={
-    select:'选择：点击对象，框选多个对象',pan:'平移：拖拽移动画布',point:'点设备：单击放置',
+    select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
     rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击/Enter 完成；按住 Shift 画水平/垂直线，Esc 取消（勾选闭合画三角形/多边形）',
     text:'文字：单击输入文字内容',dimension:'尺寸标注：按所选类型逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
     'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
@@ -22,11 +22,22 @@ let lastCanvasHandledAt=0, lastCanvasPointerUpAt=0;
 /**
  * 输入点的 Shift 精确约束（网格吸附之后调用）。预览(move)与落点(down)共用，保证所见即所点：
  *  - 折线/尺寸逐点录入：相对上一点正交（水平/垂直）
+ *  - 拖折线节点：相对相邻节点正交（#0 用下一个，其余用上一个）
  *  - 矩形/椭圆包围盒拖画：Shift=正方形（椭圆即正圆）
  *  - 扇形拖画：Shift=方位角吸附 45° 整数倍
  */
 function constrainWorldPoint(wp,e){
-  if(!e.shiftKey||!draft) return wp;
+  if(!e.shiftKey) return wp;
+  if(drag?.type==='node'){
+    const o=state.objects.find(x=>x.id===drag.id);
+    if(o && o.points && o.points.length>1){
+      const i=drag.handle.index;
+      const base=i>0?o.points[i-1]:o.points[i+1];
+      return orthoPoint(base,wp,true);
+    }
+    return wp;
+  }
+  if(!draft) return wp;
   if(draft.points && ['line','dimension'].includes(currentTool) && draft.points.length){
     return orthoPoint(draft.points[draft.points.length-1],wp,true);
   }
@@ -38,10 +49,31 @@ function constrainWorldPoint(wp,e){
   }
   return wp;
 }
+const OSNAP_PX=11;   // 捕捉吸附半径（屏幕像素）
+let activeOsnap=null; // 当前帧命中的捕捉点（渲染标记用）
+/**
+ * 唯一的屏幕→最终世界落点解析：对象捕捉优先 → 其次网格吸附 → 最后 Shift 正交/正方形约束。
+ * pointerdown 与 pointermove 必须共用本函数，保证预览与落点完全一致。
+ */
+function resolveWorldPoint(e){
+  const raw=pointerWorld(e);
+  let excl=null;
+  if(drag){
+    excl=new Set();
+    if(drag.originals) drag.originals.forEach((_,id)=>excl.add(id));
+    if(drag.id) excl.add(drag.id);
+  }
+  if(state.settings.osnap){
+    const hit=findOsnap(state,raw,OSNAP_PX/state.viewport.zoom,excl,isVisible);
+    if(hit){ activeOsnap=hit; return hit.p; }
+  }
+  activeOsnap=null;
+  return constrainWorldPoint(snapPoint(raw,e),e);
+}
 canvas.addEventListener('pointerdown',e=>{
   lastCanvasHandledAt=performance.now();
   if(e.pointerId!==undefined && e.pointerId>=0) canvas.setPointerCapture(e.pointerId);
-  const sp=pointerScreen(e), wp=constrainWorldPoint(snapPoint(pointerWorld(e),e),e);
+  const sp=pointerScreen(e), wp=resolveWorldPoint(e);
   if(e.button===1||e.button===2||spaceDown||currentTool==='pan'){
     drag={type:'pan',start:sp,pan:deepClone(state.viewport)}; document.body.classList.add('panning'); e.preventDefault(); return;
   }
@@ -124,8 +156,8 @@ canvas.addEventListener('pointerdown',e=>{
   }
 });
 canvas.addEventListener('pointermove',e=>{
-  const sp=pointerScreen(e), wp=constrainWorldPoint(snapPoint(pointerWorld(e),e),e);
-  setCursorScreen(sp,true,wp);
+  const sp=pointerScreen(e), wp=resolveWorldPoint(e);
+  setCursorScreen(sp,true,wp,activeOsnap);
   $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit;
   if(drag?.type==='pan'){
     state.viewport.panX=drag.pan.panX+sp[0]-drag.start[0];
@@ -456,8 +488,9 @@ function openShortcutsHelp(){
     ['Esc','取消当前绘制 / 清除选择'],['Enter','完成折线或面积标注'],
     ['Backspace（绘制中）','删除上一个录入节点'],
     ['双击线段 / 双击节点（选择工具）','在折线上插入节点 / 删除节点'],
-    ['Shift（画线/标注时）','约束为水平/垂直线（正交）'],
+    ['Shift（画线/标注/拖节点时）','约束为水平/垂直线（正交）'],
     ['Shift（拖矩形/椭圆/扇形时）','正方形 / 正圆 / 45°方位吸附'],
+    ['对象捕捉','自动吸附端点□、中点△、圆心◎（设置中开关）'],
     ['空格 + 拖拽','临时平移画布'],
     ['方向键','移动选中对象（Shift ×10 倍步距）'],['F','适应窗口（显示整张场地）'],
     ['滚轮 / 右键拖拽','缩放 / 平移画布'],

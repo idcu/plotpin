@@ -182,9 +182,13 @@ function bindPropEvents(box,o){
     const key=Object.keys(o.props||{})[Number(el.dataset.propVal)];
     if(key!==undefined){ o.props[key]=el.value; changed(); }
   }));
-  box.querySelectorAll('[data-node-axis]').forEach(el=>el.addEventListener('input',()=>{
-    if(setNodeCoord(o,Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) changed();
-  }));
+  box.querySelectorAll('[data-node-axis]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      if(setNodeCoord(o,Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) changed();
+    });
+    el.addEventListener('focus',()=>setFocusNode({id:o.id,index:Number(el.dataset.nodeIndex)}));
+    el.addEventListener('blur',()=>setFocusNode(null));
+  });
   box.querySelectorAll('[data-node-add]').forEach(b=>b.onclick=()=>{
     const i=Number(b.dataset.nodeAdd), a=o.points[i], c=o.points[i+1];
     const p=c?[(a[0]+c[0])/2,(a[1]+c[1])/2]:[a[0]+1,a[1]];
