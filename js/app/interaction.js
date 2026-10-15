@@ -140,10 +140,28 @@ function buildTrackLine(raw,accepted,e){
   if(ref===null) return null;
   return {from, dir:[Math.cos(ref),Math.sin(ref)]};
 }
+/* -------------------- 触屏多指手势（捏合缩放 + 双指平移） -------------------- */
+const activePointers=new Map();
+let pinch=null;          /* {d0,z0,mx0,my0,panX0,panY0} */
+let touchArm=false;      /* 多指刚结束，抑制剩余手指的误绘，直到全部抬起 */
 canvas.addEventListener('pointerdown',e=>{
   lastCanvasHandledAt=performance.now();
   if(e.pointerId!==undefined && e.pointerId>=0) canvas.setPointerCapture(e.pointerId);
-  const sp=pointerScreen(e), wp=resolveWorldPoint(e);
+  const sp=pointerScreen(e);
+  activePointers.set(e.pointerId,sp);
+  /* 第二根手指落下：进入捏合手势，中止当前拖拽但保留绘制草稿（不丢已录节点） */
+  if(activePointers.size===2 && !pinch){
+    drag=null;
+    const [a,b]=[...activePointers.values()];
+    const [mx,my]=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    pinch={d0:Math.max(8,Math.hypot(a[0]-b[0],a[1]-b[1])),z0:state.viewport.zoom,mx0:mx,my0:my,
+      panX0:state.viewport.panX,panY0:state.viewport.panY};
+    touchArm=true;
+    e.preventDefault();
+    return;
+  }
+  if(pinch||touchArm) return;   /* 手势进行中/收尾中：后续手指不再触发放置或框选 */
+  const wp=resolveWorldPoint(e);
   /* 逐点录入中（测距/折线/标注/多边形场地）右键=取消当前草稿（百度地图式），已完成的测量不受影响；无草稿时右键仍平移 */
   if(e.button===2 && draft?.points?.length){
     const wasRuler=draft.kind==='dimension'&&draft.subtype==='ruler';
@@ -234,7 +252,21 @@ canvas.addEventListener('pointerdown',e=>{
   }
 });
 canvas.addEventListener('pointermove',e=>{
-  const sp=pointerScreen(e), wp=resolveWorldPoint(e);
+  const sp=pointerScreen(e);
+  if(activePointers.has(e.pointerId)) activePointers.set(e.pointerId,sp);
+  /* 捏合中：以两指距离比缩放、中点位移平移；缩放围绕初始中点保持锚定 */
+  if(pinch&&activePointers.size>=2){
+    const [a,b]=[...activePointers.values()];
+    const dNow=Math.max(8,Math.hypot(a[0]-b[0],a[1]-b[1]));
+    const [mx,my]=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    const nz=Math.max(.02,Math.min(200,pinch.z0*dNow/pinch.d0));
+    /* 保持双指中点下的世界点不动：sx=panX+x·z；sy=panY+(h-y)·z（Y 翻转） */
+    const kx=(pinch.mx0-pinch.panX0)/pinch.z0, ky=(pinch.my0-pinch.panY0)/pinch.z0;
+    state.viewport.zoom=nz; state.viewport.panX=mx-kx*nz; state.viewport.panY=my-ky*nz;
+    requestRender(); updateZoomLabel();
+    return;
+  }
+  const wp=resolveWorldPoint(e);
   setCursorScreen(sp,true,wp,activeOsnap);
   $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit+(activeOsnap?'  ◈ '+OSNAP_LABELS[activeOsnap.type]:'');
   /* 空闲移动（无拖拽/草稿）也必须重绘：十字准星、世界坐标、捕捉标记随鼠标实时显示，
@@ -277,6 +309,16 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerup',e=>{
   if(!e.synthetic) lastCanvasPointerUpAt=performance.now();
+  activePointers.delete(e.pointerId);
+  if(pinch){
+    /* 双指中先抬起一根：结束手势但继续抑制，直到剩余手指也抬起，避免松手瞬间误点 */
+    pinch=null;
+    if(activePointers.size===0){ touchArm=false; }
+    drag=null; document.body.classList.remove('panning');
+    scheduleSave(); requestRender();
+    return;
+  }
+  if(activePointers.size===0) touchArm=false;
   if(drag?.type==='pan'){ drag=null; document.body.classList.remove('panning'); return; }
   if(drag && ['move','node','rotate','rect','shapeHandle'].includes(drag.type)){
     const changed=state.objects.some(o=>drag.originals?.has(o.id) || o.id===drag.id);
@@ -298,7 +340,7 @@ canvas.addEventListener('pointerup',e=>{
     rubber=null; refreshUI(); requestRender();
   }
 });
-canvas.addEventListener('pointercancel',()=>{ drag=null; rubber=null; document.body.classList.remove('panning'); setCursorScreen(null); requestRender(); });
+canvas.addEventListener('pointercancel',e=>{ activePointers.delete(e.pointerId); if(activePointers.size===0){ pinch=null; touchArm=false; } drag=null; rubber=null; document.body.classList.remove('panning'); setCursorScreen(null); requestRender(); });
 canvas.addEventListener('pointerleave',()=>{ setCursorScreen(null); requestRender(); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 /** 双击结束录入：双击的两次 click 已各追加一个点（末两点位置几乎相同），按 8px 屏幕阈值去掉重复末点，
@@ -599,7 +641,8 @@ function openShortcutsHelp(){
     ['空格 + 拖拽','临时平移画布'],
     ['方向键','移动选中对象（Shift ×10 倍步距）'],['F','适应窗口（显示整张场地）'],
     ['滚轮 / 右键拖拽','缩放 / 平移画布'],
-    ['拖拽文件到画布','导入 JSON 工程、CSV/TSV/XLSX 表格或底图图片'],['?','显示本帮助']
+    ['触屏单指 / 双指','单指绘制与移动；双指捏合缩放、双指拖动平移'],
+    ['拖拽文件到画布','导入 JSON / DXF / CSV·TSV·XLSX 表格或底图图片'],['?','显示本帮助']
   ];
   openModal('快捷键帮助','<div class="help-grid">'+rows.map(r=>'<span class="kbd">'+esc(r[0])+'</span><span>'+esc(r[1])+'</span>').join('')+'</div>',
     [{text:'知道了',class:'primary',click:closeModal}]);

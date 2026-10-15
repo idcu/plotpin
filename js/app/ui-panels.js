@@ -3,8 +3,13 @@
 function switchTab(tab){
   document.querySelectorAll('.side-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab));
+  /* 窄屏切换属性/清单等标签时自动展开覆盖侧栏 */
+  if(window.matchMedia('(max-width:860px)').matches) document.body.classList.add('sidebar-open');
 }
 document.querySelectorAll('.side-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+/* 窄屏侧栏覆盖层：☰ 开关；点画布遮罩区域关闭 */
+$('sidebarToggle').addEventListener('click',()=>document.body.classList.toggle('sidebar-open'));
+wrap.addEventListener('pointerdown',()=>{ if(document.body.classList.contains('sidebar-open')&&window.matchMedia('(max-width:860px)').matches) document.body.classList.remove('sidebar-open'); });
 document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
 /* 顶部下拉在 测距/其他标注 间切换时，同步左侧「测距」「标注」按钮互斥高亮 */
 $('dimensionType').addEventListener('change',()=>{ if(currentTool==='dimension') syncToolButtons('dimension'); });
