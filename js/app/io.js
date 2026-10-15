@@ -110,9 +110,9 @@ async function handleImportFile(f){
     return;
   }
   if(ext==='dxf') return importDxfFile(f);
-  if(ext==='pdf') return toast('PDF 是只读版式，无法可靠提取图形（零依赖不内置 PDF 渲染器）；CAD 请用 DXF 互通，PDF 可由本工具「PDF 矢量」导出','warn');
+  if(ext==='pdf') return importPdfFile(f);
   if(/^image\//.test(f.type||'')||['png','jpg','jpeg','gif','webp','bmp','svg'].includes(ext)) return importBackgroundFile(f);
-  toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / DXF / CSV·TSV·XLSX 表格 / 图片底图）','error');
+  toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）','error');
 }
 
 /* -------------------- DXF 导入（CAD 互通） -------------------- */
@@ -161,6 +161,73 @@ async function importDxfFile(f){
   }
   selectedIds.clear();
   commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字');
+  fitView();
+}
+
+/* -------------------- PDF 底图导入（矢量优先，扫描件取最大内嵌图） -------------------- */
+async function importPdfFile(f){
+  let pdf;
+  try{ pdf=await PdfRead.parsePdf(await f.arrayBuffer()); }
+  catch(e){ return toast('PDF 解析失败：'+e.message,'error'); }
+  const k=pdf.unitMeter;
+  /* PDF 单位点→米：内容坐标已按 MediaBox 左下角归零（Y 向上），直接映射 */
+  if(!pdf.paths.length && !pdf.texts.length && !pdf.images.length){
+    return toast('PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）','error');
+  }
+  /* 扫描件/带底图的 PDF：最大内嵌图作为图片底图 */
+  let bgNote='';
+  if(pdf.images.length){
+    const img=pdf.images[0];
+    const mime=img.mime;
+    const bin=img.bytes;
+    let dataUrl='data:'+mime+';base64,';
+    let s=''; const CH=0x4000;
+    for(let i=0;i<bin.length;i+=CH) s+=String.fromCharCode.apply(null,bin.subarray(i,i+CH));
+    dataUrl+=btoa(s);
+    const mpp=pdf.pageWidth*k/img.width;   /* PDF 页宽(米)/图像像素宽 */
+    const wM=pdf.pageWidth*k, hM=pdf.pageHeight*k;
+    pushHistory();
+    state.background.kind='image';
+    state.background.fileName=f.name.replace(/\.pdf$/i,'')+'（PDF内嵌图）';
+    state.background.assetId='';          /* 不进 IDB 资产库，直接 dataUrl 内联运行时 */
+    state.background.dataUrl=dataUrl;
+    state.background.width=img.width; state.background.height=img.height;
+    state.background.metersPerPixel=mpp; state.background.calibrated=true;
+    bgDataUrl=dataUrl;
+    try{ bgImage=await loadImageSrc(dataUrl); }catch(e){ bgImage=null; }
+    bgNote='底图 '+img.width+'×'+img.height;
+    /* 矢量叠加仍以 PDF 页世界尺寸为场地，图片米/像素一致 */
+  }
+  /* 矢量内容：路径转折线/区域，文本转文字对象。点→米 */
+  const counts={line:0,area:0,text:0};
+  const wM=pdf.pageWidth*k, hM=pdf.pageHeight*k;
+  if((pdf.paths.length||pdf.texts.length)&&!pdf.images.length) pushHistory();
+  for(const p of pdf.paths){
+    const pts=p.points.map(q=>[q[0]*k,q[1]*k]);
+    if(pts.length<2) continue;
+    const len=polylineLength(pts);
+    if(len<0.05) continue;   /* 去噪 */
+    const o=baseObject('line','line.custom',{points:pts,closed:!!p.closed,x:pts[0][0],y:pts[0][1]});
+    if(p.closed){
+      o.style={strokeWidth:.05};
+      counts.area++;
+    }else counts.line++;
+    state.objects.push(o);
+  }
+  for(const t of pdf.texts){
+    const h=(t.size||1)*k;
+    if(!(h>0)||!t.text) continue;
+    const o=baseObject('text',null,{x:t.x*k,y:t.y*k,text:t.text,height:h,style:{color:'#111827'}});
+    o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
+    state.objects.push(o); counts.text++;
+  }
+  /* 无内嵌图时，把矢量场地设为 PDF 页面尺寸的矩形域，保证坐标框正确 */
+  if(!pdf.images.length && state.background.kind==='rect' && state.background.shape?.type==='rect' && !state.background.calibrated){
+    state.background.shape.w=Math.max(state.background.shape.w,wM||100);
+    state.background.shape.h=Math.max(state.background.shape.h,hM||70);
+  }
+  selectedIds.clear();
+  commitChange('PDF 已导入：'+counts.line+' 线 / '+counts.area+' 区域 / '+counts.text+' 文字'+(bgNote?' / '+bgNote:''));
   fitView();
 }
 

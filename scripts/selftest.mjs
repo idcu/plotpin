@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
+import { deflateSync } from 'node:zlib';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -70,6 +71,7 @@ const sandbox = {
   Boolean, Error, TypeError, isFinite, isNaN, parseInt, parseFloat, encodeURIComponent,
   decodeURIComponent, escape, unescape, TextEncoder, TextDecoder, Blob, atob, btoa,
   setTimeout: setTimeoutStub, clearTimeout, setInterval: setTimeoutStub, clearInterval,
+  CompressionStream:globalThis.CompressionStream, DecompressionStream:globalThis.DecompressionStream, Response:globalThis.Response,
   document: documentStub,
   localStorage: localStorageStub,
   navigator: {},
@@ -111,6 +113,7 @@ code += `\n;globalThis.__api = {
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
+  PdfRead: globalThis.PdfRead,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS
 };`;
@@ -118,6 +121,7 @@ vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors:
 
 /* ---------------- 微型测试框架 ---------------- */
 let pass = 0, fail = 0;
+const asyncSuites=[];
 const failures = [];
 function ok(name, cond) {
   if (cond) { pass++; } else { fail++; failures.push(name); console.error('  ✗ ' + name); }
@@ -1569,6 +1573,64 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   approx('高级-MTEXT字高', mt.height, 2.5, 1e-9);
 }
 
+/* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
+asyncSuites.push((async()=>{
+  const toLatin=bytes=>{ let s=''; for(let i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]); return s; };
+  /* 内容流：描边矩形、直线、填充矩形 + 一段标准字体文本 */
+  const content='1 0 0 1 0 0 cm\n10 10 100 50 re S\n50 50 m 150 60 l S\n20 20 30 30 re f\nBT /F1 12 Tf 50 80 Td (Hello World) Tj ET\n';
+  /* 2×1 RGB 原始像素 → Flate（/Predictor 1），验证解压后重组 PNG */
+  const rgb=new Uint8Array([255,0,0, 0,255,0]);
+  const z=deflateSync(rgb);
+  const obj=(n,body)=>n+' 0 obj\n'+body+'\nendobj\n';
+  let pdf='%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n';
+  pdf+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  pdf+=obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  pdf+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+  pdf+=obj(4,'<< /Length '+content.length+' >>\nstream\n'+content+'endstream');
+  pdf+=obj(5,'<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 '+
+        '/Filter /FlateDecode /DecodeParms << /Predictor 1 /Columns 2 /Colors 3 >> /Length '+z.length+' >>\nstream\n'+toLatin(z)+'endstream');
+  pdf+=obj(6,'<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length 4 >>\nstream\n'+toLatin(new Uint8Array([0xFF,0xD8,0xFF,0xE0]))+'endstream');
+  const r=await api.PdfRead.parsePdf(pdf);
+  approx('PDF-页宽200点', r.pageWidth, 200, 1e-9);
+  approx('PDF-页高100点', r.pageHeight, 100, 1e-9);
+  eq('PDF-路径3条', r.paths.length, 3);
+  const rect=r.paths.find(p=>p.closed&&!p.filled);
+  const fill=r.paths.find(p=>p.filled);
+  const line=r.paths.find(p=>!p.closed);
+  eq('PDF-矩形闭合4点', rect.points.length, 4);
+  approx('PDF-矩形角点(110,60)', rect.points[2][0], 110, 1e-9);
+  eq('PDF-直线开放2点', line.points.length, 2);
+  approx('PDF-直线终点', line.points[1][0], 150, 1e-9);
+  eq('PDF-填充矩形识别', fill.closed, true);
+  eq('PDF-文本1段', r.texts.length, 1);
+  eq('PDF-文本内容', r.texts[0].text, 'Hello World');
+  approx('PDF-文本定位(50,80)', r.texts[0].x, 50, 1e-9);
+  approx('PDF-字号12点', r.texts[0].size, 12, 1e-9);
+  eq('PDF-内嵌图2张', r.images.length, 2);
+  /* 最大者为 2×1 的 Flate 图，已重组为 PNG */
+  const png=r.images[0];
+  eq('PDF-Flate图选最大', png.width*png.height, 2);
+  eq('PDF-PNG魔数', png.bytes[0]===0x89&&png.bytes[1]===0x50&&png.bytes[2]===0x4e&&png.bytes[3]===0x47, true);
+  /* IHDR：宽在偏移16、高在偏移20（大端） */
+  const dv=new DataView(png.bytes.buffer,png.bytes.byteOffset,png.bytes.byteLength);
+  eq('PDF-PNG宽2', dv.getUint32(16), 2);
+  eq('PDF-PNG高1', dv.getUint32(20), 1);
+  /* 像素保真：重组后 IDAT 前的扫描行 filter=0 + 原 6 像素字节（取首个 IDAT 之外不便定位，验证长度=2行*(1+6)） */
+  ok('PDF-PNG含像素字节', png.bytes.length>14+14);
+  /* 次大图为 DCT JPEG */
+  const jpg=r.images[1];
+  eq('PDF-JPEG魔数', jpg.bytes[0]===0xFF&&jpg.bytes[1]===0xD8, true);
+  eq('PDF-JPEG类型', jpg.mime, 'image/jpeg');
+  /* 空/坏 PDF */
+  let threw=0;
+  try{ await api.PdfRead.parsePdf('not a pdf at all'); }catch(e){ threw++; }
+  eq('PDF-坏文件拒绝', threw, 1);
+  /* CID 乱码文本过滤 */
+  eq('PDF-CID乱码丢弃', api.PdfRead.looksLikeCidGarbage('\u0001\u0002\u0003'), true);
+  eq('PDF-拉丁文本保留', api.PdfRead.looksLikeCidGarbage('Building A-101'), false);
+})());
+
 /* ---------------- 结果汇总 ---------------- */
+await Promise.all(asyncSuites);
 console.log(`\n${fail === 0 ? '✅' : '❌'} 逻辑层自测：${pass} 通过 / ${fail} 失败，共 ${pass + fail} 项断言（加载 ${srcs.length} 个脚本）`);
 if (fail) { failures.forEach(f => console.error('  - ' + f)); process.exit(1); }

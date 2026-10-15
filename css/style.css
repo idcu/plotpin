@@ -139,7 +139,7 @@
   .proj-ops button.danger{color:#b91c1c;border-color:#fecaca}
   .proj-ops button:disabled{opacity:.45;cursor:default}
   .canvas-wrap.dragover::after{
-    content:"松开即可导入：JSON 工程 / CSV·TSV·XLSX 表格 / 底图图片";
+    content:"松开即可导入：JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 底图图片";
     position:absolute;inset:12px;border:2px dashed var(--primary);border-radius:14px;
     background:rgba(37,99,235,.08);z-index:9;pointer-events:none;
     display:flex;align-items:center;justify-content:center;color:var(--primary);font-weight:700;font-size:15px
