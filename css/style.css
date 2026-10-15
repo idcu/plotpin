@@ -54,6 +54,8 @@
   .hud-bottom .hint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .coord{font-family:Consolas,Menlo,monospace;color:#334155}
   .zoom-label{min-width:54px;text-align:right;font-weight:600}
+  .osnap-chip{pointer-events:auto;cursor:default;white-space:nowrap;font-weight:600;color:#475569;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:3px 10px;user-select:none}
+  .osnap-chip.locked{color:#fff;background:#d97706;border-color:#b45309;cursor:pointer}
   .tool-options [data-for]{display:none;align-items:center;gap:6px}
   body.tool-point .tool-options [data-for="point"],
   body.tool-rect .tool-options [data-for="rect"],

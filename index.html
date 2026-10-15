@@ -87,6 +87,7 @@
         </span>
         <span data-for="dimension">类型
           <select id="dimensionType">
+            <option value="ruler">测距（多点总长）</option>
             <option value="distance">两点距离</option>
             <option value="area">面积</option>
             <option value="angle">角度</option>
@@ -96,7 +97,8 @@
     </div>
     <div class="hud hud-bottom">
       <span class="coord" id="coordText">鼠标：-, -</span>
-      <span class="hint" id="hintText">滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；可拖拽文件到画布导入；按 ? 查看全部快捷键</span>
+      <span class="hint" id="hintText">滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉类型；可拖拽文件到画布导入；按 ? 查看全部快捷键</span>
+      <span class="osnap-chip" id="osnapChip" title="Tab / Shift+Tab 循环切换捕捉类型；点击恢复自动" hidden></span>
       <span class="zoom-label" id="zoomLabel">100%</span>
     </div>
   </main>

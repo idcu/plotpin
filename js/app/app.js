@@ -7,4 +7,5 @@
   afterStateLoaded(!state.viewport.zoom || state.viewport.zoom===1);
   resizeCanvas();
   if(state.viewport.zoom===1) fitView();
+  updateOsnapChip();
 })();

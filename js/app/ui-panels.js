@@ -41,7 +41,7 @@ function populateSelects(){
 /* -------------------- 属性面板 -------------------- */
 /** 折线/标注节点编辑器：坐标精确输入；折线可逐节点插入(＋)/删除(×)/↑↓排序，或拖抓手排序 */
 function renderNodeEditor(o){
-  const canEdit=o.kind==='line';
+  const canEdit=isPolylineEditable(o);
   const min=canEdit?lineMinNodes(o):0;
   const n=(o.points||[]).length;
   const rows=(o.points||[]).map((p,i)=>`
@@ -55,8 +55,9 @@ function renderNodeEditor(o){
       <button type="button" class="icon-btn" data-node-add="${i}" title="在此节点后插入一个节点">＋</button>
       <button type="button" class="icon-btn danger" data-node-del="${i}" title="删除该节点" ${n<=min?'disabled':''}>×</button>`:''}
     </div>`).join('');
+  const shapeName=o.kind==='dimension'?'测距链':(o.closed?'闭合区域':'开放折线');
   const hint=canEdit
-    ? `<div class="hint-text">共 ${n} 点（${o.closed?'闭合区域':'开放折线'}至少 ${min} 点）；拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除</div>`
+    ? `<div class="hint-text">共 ${n} 点（${shapeName}至少 ${min} 点）；拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除</div>`
     : `<div class="hint-text">共 ${n} 点；可在画布上拖节点手柄调整位置</div>`;
   return `<div class="node-list">${rows}${hint}</div>`;
 }
@@ -98,6 +99,7 @@ function renderProps(){
     }
     specific=`
       ${row('形状',shapeSel)}${params}
+      ${row('面积',`<b>${fmt(shapeArea(o))}</b> ㎡`)}${row('周长',`<b>${fmt(shapePerimeter(o))}</b> m`)}
       ${row('填充色',`<input type="color" data-style="color" value="${o.style.color||t.color}"> <label style="display:inline"><input type="checkbox" data-style="noFill" ${styleVal(o,'fillAlpha',.15)==0?'checked':''}>透明</label>`)}
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
@@ -107,6 +109,8 @@ function renderProps(){
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
       ${row('颜色',`<input type="color" data-style="color" value="${o.style.color||(o.kind==='dimension'?'#111827':t.color)}">`)}
       ${o.kind==='line'?row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`):''}
+      ${o.closed?row('面积',`<b>${fmt(polygonArea(o.points))}</b> ㎡`):''}
+      ${o.closed?row('周长',`<b>${fmt(objectLength(o))}</b> m（含闭合边）`):''}
       ${row('节点',renderNodeEditor(o))}`;
   }else if(o.kind==='point'){
     const psh=t.scaleShape||'none';
@@ -297,8 +301,8 @@ function renderList(){
     const t=getType(o.typeId), l=layerOf(o);
     const param=o.kind==='rect'?areaParamText(o):
       o.kind==='point'?`${Math.round(o.angle)}°${(o.phys||0)>0?' / '+fmt(o.phys)+'m':''}`:
-      o.kind==='line'?`${o.points.length}点 / ${fmt(polylineLength(o.points)+(o.closed?dist(o.points.at(-1),o.points[0]):0))}m`:
-      o.kind==='text'?esc(o.text):o.subtype||'';
+      o.kind==='line'?`${o.points.length}点 / ${fmt(objectLength(o))}m${o.closed&&o.points.length>=3?' / '+fmt(polygonArea(o.points))+'㎡':''}`:
+      o.kind==='text'?esc(o.text):(o.kind==='dimension'&&o.subtype==='ruler'?`${o.points.length}点 / Σ ${fmt(objectLength(o))}m`:o.subtype||'');
     return `<tr data-id="${esc(o.id)}" class="${selectedIds.has(o.id)?'selected':''} ${o.locked?'locked':''} ${!o.visible?'hidden-row':''}">
       <td><input type="checkbox" data-row-select="${esc(o.id)}" ${selectedIds.has(o.id)?'checked':''}></td>
       <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</td>

@@ -99,7 +99,7 @@ code += `\n;globalThis.__api = {
   ellipseShapeFromCorners, sectorShapeFrom,
   siteDescription, worldDims,
   hitPhysicalPoint, siteKindName,
-  areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter,
+  areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter,
   sectorSweep, sectorArcPoints, convertAreaShape, pointIconScale, areaParamText,
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField,
@@ -481,6 +481,14 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   approx('面积-90°扇形=25π', api.shapeArea(sector), 25*Math.PI, 1e-9);
   approx('面积-整圆扇形=100π', api.shapeArea({shape:{type:'sector',r:10,a0:0,a1:360}}), 100*Math.PI, 1e-9);
 
+  /* 周长：矩形 2(w+h)；圆 2πr；椭圆退化为圆时=2πr；扇形=2r+弧长；整圆扇=圆周 */
+  approx('周长-矩形 40', api.shapePerimeter(rect), 40, 1e-9);
+  approx('周长-圆 20π', api.shapePerimeter(circle), 20*Math.PI, 1e-9);
+  approx('周长-椭圆(a=b=10)退化圆', api.shapePerimeter({kind:'rect',x:0,y:0,shape:{type:'ellipse',rx:10,ry:10}}), 20*Math.PI, 1e-6);
+  approx('周长-90°扇形 20+5π', api.shapePerimeter(sector), 20+5*Math.PI, 1e-9);
+  approx('周长-整圆扇=20π', api.shapePerimeter({kind:'rect',x:0,y:0,shape:{type:'sector',r:10,a0:0,a1:360}}), 20*Math.PI, 1e-9);
+  approx('周长-零尺寸矩形为0', api.shapePerimeter({kind:'rect',x:0,y:0,width:0,height:0,shape:null}), 0, 1e-9);
+
   eq('扇形张角-普通 90', api.sectorSweep({a0:0,a1:90}), 90);
   eq('扇形张角-反向取模 270', api.sectorSweep({a0:90,a1:0}), 270);
   eq('扇形张角-零张角视为 360', api.sectorSweep({a0:30,a1:30}), 360);
@@ -673,6 +681,27 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const m6=api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background:{ kind:'ellipse', shape:{type:'ellipse',rx:0,ry:0} } });
   eq('迁移-坏椭圆回退矩形形状', m6.background.shape.type, 'rect');
+
+  /* 测距链：subtype=ruler 保留；非法 subtype 回退 distance；ruler 至少 2 点，单点丢弃 */
+  const m7=api.migrateProject({ schema:'offline-drawing-annotation/v1',
+    objects:[
+      { id:'r1', kind:'dimension', typeId:'dim.custom', name:'R1', x:0, y:0, subtype:'ruler',
+        points:[[0,0],[3,4],[3,14]] },
+      { id:'r2', kind:'dimension', typeId:'dim.custom', name:'R2', x:0, y:0, subtype:'bogus',
+        points:[[0,0],[1,1]] },
+      { id:'r3', kind:'dimension', typeId:'dim.custom', name:'R3', x:0, y:0, subtype:'ruler',
+        points:[[0,0]] }
+    ]});
+  const R1=m7.objects.find(o=>o.name==='R1');
+  eq('迁移-测距链子类型保留', R1.subtype, 'ruler');
+  eq('迁移-测距链3点保留', R1.points.length, 3);
+  eq('迁移-测距链首点同步锚点', [R1.x,R1.y], [0,0]);
+  eq('迁移-非法子类型回退 distance', m7.objects.find(o=>o.name==='R2').subtype, 'distance');
+  eq('迁移-单点测距链丢弃', m7.objects.some(o=>o.name==='R3'), false);
+
+  /* 面积图签开关：旧档缺省开，显式关闭保留 */
+  eq('迁移-面积图签缺省开', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.showAreaTag, true);
+  eq('迁移-面积图签关闭保留', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{showAreaTag:false}}).settings.showAreaTag, false);
 }
 
 /* 19. 区域基点：面板设置 (o.x,o.y) 与渲染/命中同基准，允许负值 ---------------- */
@@ -886,6 +915,17 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const hidden=api.baseObject('point','point.marker',{x:0,y:0,visible:false});
   st3.objects.push(hidden);
   eq('捕捉-隐藏点无候选', api.collectSnapCandidates(st3,o=>o.visible!==false).length, 0);
+
+  /* Tab 类型锁定：仅命中指定类型，其余类型即使更近也被过滤 */
+  const hitF1=api.findOsnap(st,[5.1,0.1],0.5,null,null,'midpoint');
+  ok('锁定中点-命中第一段中点', hitF1&&hitF1.type==='midpoint'&&hitF1.p[0]===5&&hitF1.p[1]===0);
+  eq('锁定端点-中点位置不命中', api.findOsnap(st,[5.1,0.1],0.5,null,null,'endpoint'), null);
+  /* 锁定圆心：(30,30.2) 只命中圆心；锁定端点时同位置无端点候选 → null */
+  const hitF2=api.findOsnap(st,[30,30.2],0.5,null,null,'center');
+  ok('锁定圆心-命中', hitF2&&hitF2.type==='center'&&hitF2.p[0]===30);
+  eq('锁定端点-圆心位置不命中', api.findOsnap(st,[30,30.2],0.5,null,null,'endpoint'), null);
+  /* 锁定类型不放宽阈值：远处无该类型候选时返回 null */
+  eq('锁定象限-空旷处无命中', api.findOsnap(st,[80,80],0.5,null,null,'quadrant'), null);
 }
 
 /* 25. 捕捉扩展：象限点/垂足/跨对象交点/切点 ------------------------------- */

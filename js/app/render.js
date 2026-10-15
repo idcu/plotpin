@@ -177,15 +177,17 @@ function drawNodeFocus(c,toS){
   c.beginPath(); c.arc(s[0],s[1],2.5,0,Math.PI*2); c.fillStyle='#d97706'; c.fill();
   c.restore();
 }
-/* 拖折线节点时的实时数值：当前坐标 + 与相邻节点的段长 */
+/* 拖折线节点时的实时数值：当前坐标 + 与相邻节点的段长（闭合折线首尾按闭合边环绕） */
 function drawDragHud(c,toS){
   if(!drag||drag.type!=='node') return;
   const o=state.objects.find(x=>x.id===drag.id);
   if(!o||!o.points) return;
-  const i=drag.handle.index, p=o.points[i], s=toS(p);
+  const n=o.points.length, i=drag.handle.index, p=o.points[i], s=toS(p);
   const parts=[`#${i+1}  X ${fmt(p[0])}  Y ${fmt(p[1])}`];
-  if(i>0) parts.push('← '+fmt(dist(p,o.points[i-1]))+' m');
-  if(i<o.points.length-1) parts.push('→ '+fmt(dist(p,o.points[i+1]))+' m');
+  const prev=i>0?i-1:(o.closed?n-1:-1);
+  const next=i<n-1?i+1:(o.closed?0:-1);
+  if(prev>=0 && prev!==i) parts.push('↩ '+fmt(dist(p,o.points[prev]))+' m');
+  if(next>=0 && next!==i && next!==prev) parts.push('↪ '+fmt(dist(p,o.points[next]))+' m');
   drawScreenTag(c,s[0]+12,s[1]-28,parts.join('   '));
 }
 /* OSNAP 命中标记：端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点(圆+切线)；附类型文字 */
@@ -370,6 +372,19 @@ function drawRect(c,o,color,toS,v,markerScale){
   c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineJoin='round'; c.stroke();
   const ce=shapeLabelCenter(o), s=toS(ce);
   if(o.name) drawLabel(c,o,s[0],s[1],color,toS,12*markerScale);
+  if(state.settings.showAreaTag) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o));
+}
+/** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性） */
+function drawAreaTag(c,cx,cy,area,perimeter){
+  c.save();
+  c.font='12px Consolas,Menlo,monospace'; c.textAlign='center'; c.textBaseline='middle';
+  const t1=`面积 ${fmt(area)} ㎡`, t2=`周长 ${fmt(perimeter)} m`;
+  const w=Math.max(c.measureText(t1).width,c.measureText(t2).width)+16, h=33;
+  c.fillStyle='rgba(255,255,255,.82)';
+  c.beginPath(); c.roundRect?c.roundRect(cx-w/2,cy-h/2,w,h,5):c.rect(cx-w/2,cy-h/2,w,h); c.fill();
+  c.strokeStyle='rgba(37,99,235,.35)'; c.lineWidth=1; c.stroke();
+  c.fillStyle='#1e3a8a'; c.fillText(t1,cx,cy-8); c.fillText(t2,cx,cy+8);
+  c.restore();
 }
 function drawLine(c,o,color,toS,v){
   if(!o.points.length) return;
@@ -382,6 +397,12 @@ function drawLine(c,o,color,toS,v){
   if(o.name && !o.closed) drawLabel(c,o,mid[0],mid[1]-8,color,toS);
   /* 选中且开启“段长度”：每段中点标段长，末节点旁标总长（屏幕固定字号，不随缩放变） */
   if(state.settings.showSegLen && selectedIds.has(o.id)) drawLineSegTags(c,o,toS);
+  /* 闭合区域：中心显示面积/周长（可开关） */
+  if(o.closed && state.settings.showAreaTag && o.points.length>=3){
+    const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
+    const s=toS([gx,gy]);
+    drawAreaTag(c,s[0],s[1],polygonArea(o.points),objectLength(o));
+  }
 }
 /** 折线/闭合区域段长度标注（屏幕像素坐标下绘制） */
 function drawLineSegTags(c,o,toS){
@@ -408,7 +429,20 @@ function drawText(c,o,color,toS,v,markerScale){
 function drawDimension(c,o,toS){
   const ps=o.points.map(toS), color=o.style.color||'#111827';
   c.save(); c.strokeStyle=color; c.fillStyle=color; c.lineWidth=1.6; c.font='12px sans-serif';
-  if(o.subtype==='distance' && ps.length>=2){
+  if(o.subtype==='ruler' && ps.length>=2){
+    /* 测距链：青色虚线 + 端点圆记 + 每段长度 + 末端总长 */
+    c.setLineDash([7,4]); c.lineWidth=1.8;
+    c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke();
+    c.setLineDash([]);
+    ps.forEach(p=>{ c.beginPath(); c.arc(p[0],p[1],3,0,Math.PI*2); c.stroke(); });
+    let total=0;
+    for(let k=1;k<o.points.length;k++){
+      const len=dist(o.points[k-1],o.points[k]); total+=len;
+      const mx=(ps[k-1][0]+ps[k][0])/2, my=(ps[k-1][1]+ps[k][1])/2;
+      drawScreenTag(c,mx+3,my-19,fmt(len)+' m');
+    }
+    drawScreenTag(c,ps[ps.length-1][0]+9,ps[ps.length-1][1]-9,'Σ '+fmt(total)+' m');
+  }else if(o.subtype==='distance' && ps.length>=2){
     arrowLine(c,ps[0],ps[1]); tick(c,ps[0],ps[1]); tick(c,ps[1],ps[0]);
     labelAtMid(c,ps[0],ps[1],fmt(dist(o.points[0],o.points[1]))+' '+state.settings.unit);
   }else if(o.subtype==='area' && o.points.length>=3){
@@ -491,9 +525,13 @@ function drawDraft(c,v,d,toS){
     c.globalAlpha=.15; c.beginPath(); c.moveTo(ce[0],ce[1]); c.arc(ce[0],ce[1],R,-e1*Math.PI/180,-a0*Math.PI/180,false); c.closePath(); c.fill(); c.globalAlpha=1; c.stroke();
   }else if(draft.points){
     const ps=draft.points.map(toS);
+    const draftClosed=draft.kind==='sitePolygon'
+      ||(draft.kind==='line'&&$('lineClosed')&&$('lineClosed').checked)
+      ||(draft.kind==='dimension'&&draft.subtype==='area');
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
-    if(draft.current){ c.lineTo(toS(draft.current)[0],toS(draft.current)[1]); }
-    if(draft.kind==='sitePolygon'){ c.setLineDash([5,4]); c.lineTo(ps[0][0],ps[0][1]); c.setLineDash([]); }
+    if(draft.current && !draftClosed){ c.lineTo(toS(draft.current)[0],toS(draft.current)[1]); }
+    if(draftClosed){ c.setLineDash([5,4]); c.lineTo(ps[0][0],ps[0][1]); c.setLineDash([]); }
+    if(draftClosed){ c.globalAlpha=.07; c.fillStyle='#2563eb'; c.fill(); c.globalAlpha=1; }
     c.stroke();
     ps.forEach(p=>{ c.beginPath(); c.arc(p[0],p[1],4,0,Math.PI*2); c.fill(); });
     c.restore();
@@ -510,11 +548,15 @@ function drawDraft(c,v,d,toS){
   }
   c.restore();
 }
-/** 折线/标注录入中：已录段标段长，橡皮筋段与总长实时更新 */
+/** 折线/标注录入中：已录段标段长，橡皮筋段与总长实时更新；闭合录入显示面积 */
 function drawDraftSegTags(c,v,toS,d){
   if(!state.settings.showSegLen || !d.points || d.points.length<1) return;
+  const closed=!!(d.points.length>=2 && (
+    d.kind==='sitePolygon' ||
+    (d.kind==='dimension'&&d.subtype==='area') ||
+    (d.kind==='line'&&$('lineClosed')&&$('lineClosed').checked)));
   const wps=d.points.slice();
-  if(d.current) wps.push(d.current);
+  if(d.current && !closed) wps.push(d.current);
   let total=0;
   for(let k=1;k<wps.length;k++){
     const len=dist(wps[k-1],wps[k]); total+=len;
@@ -522,8 +564,15 @@ function drawDraftSegTags(c,v,toS,d){
     const s=toS([(wps[k-1][0]+wps[k][0])/2,(wps[k-1][1]+wps[k][1])/2]);
     drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
   }
+  if(closed) total+=dist(wps[wps.length-1],wps[0]);
   const last=toS(wps[wps.length-1]);
   drawScreenTag(c,last[0]+9,last[1]-9,'Σ '+fmt(total)+' m');
+  /* 闭合录入且 ≥3 点：重心处实时面积 */
+  if(closed && state.settings.showAreaTag && wps.length>=3){
+    const gx=wps.reduce((s,p)=>s+p[0],0)/wps.length, gy=wps.reduce((s,p)=>s+p[1],0)/wps.length;
+    const gs=toS([gx,gy]);
+    drawAreaTag(c,gs[0],gs[1],polygonArea(wps),total);
+  }
 }
 function drawRubber(c){
   if(!rubber) return;

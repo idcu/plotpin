@@ -39,6 +39,8 @@ function constrainWorldPoint(wp,e){
   }
   if(!draft) return wp;
   if(draft.points && ['line','dimension'].includes(currentTool) && draft.points.length){
+    /* 测距链(ruler)与普通折线一样正交；角度/面积/两点距离标注不约束 */
+    if(currentTool==='dimension' && draft.subtype!=='ruler') return wp;
     return orthoPoint(draft.points[draft.points.length-1],wp,true);
   }
   if(draft.start && ['rect','siteRect','areaEllipse','siteEllipse'].includes(draft.kind)){
@@ -51,6 +53,27 @@ function constrainWorldPoint(wp,e){
 }
 const OSNAP_PX=11;   // 捕捉吸附半径（屏幕像素）
 let activeOsnap=null; // 当前帧命中的捕捉点（渲染标记用）
+/* Tab 循环锁定的捕捉类型：null=自动（全部类型按优先级），其余为仅吸附该类型。
+   循环顺序：自动 → 端点 → 中点 → 圆心 → 象限点 → 交点 → 垂足 → 切点 → 自动 */
+const OSNAP_CYCLE=[null,'endpoint','midpoint','center','quadrant','intersection','perpendicular','tangent'];
+let osnapMode=null;
+function cycleOsnapMode(back){
+  if(!state.settings.osnap) return;
+  const i=OSNAP_CYCLE.indexOf(osnapMode);
+  osnapMode=OSNAP_CYCLE[(i+(back?-1:1)+OSNAP_CYCLE.length)%OSNAP_CYCLE.length];
+  updateOsnapChip();
+  toast(osnapMode?('捕捉已锁定：'+OSNAP_LABELS[osnapMode]+'（Tab 切换，循环回自动）'):'捕捉：自动（全部类型）');
+  requestRender();
+}
+function updateOsnapChip(){
+  const chip=$('osnapChip');
+  if(!chip) return;
+  if(!state.settings.osnap){ chip.hidden=true; return; }
+  chip.hidden=false;
+  chip.textContent=osnapMode?('◈ 捕捉：'+OSNAP_LABELS[osnapMode]+' ✕'):'◈ 捕捉：自动';
+  chip.classList.toggle('locked',!!osnapMode);
+}
+$('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast('捕捉：自动（全部类型）'); requestRender(); } });
 /* 极轴/平行追踪提示：{from:[x,y], dir:[dx,dy]}（单位向量，世界坐标），render 画虚线 */
 let trackLine=null;
 /**
@@ -66,7 +89,7 @@ function resolveWorldPoint(e){
     if(drag.id) excl.add(drag.id);
   }
   if(state.settings.osnap){
-    const hit=findOsnap(state,raw,OSNAP_PX/state.viewport.zoom,excl,isVisible);
+    const hit=findOsnap(state,raw,OSNAP_PX/state.viewport.zoom,excl,isVisible,osnapMode);
     if(hit){ activeOsnap=hit; trackLine=null; return hit.p; }
   }
   activeOsnap=null;
@@ -77,7 +100,8 @@ function resolveWorldPoint(e){
 }
 /** 极轴/平行追踪：返回从 from 沿参考方向的单位向量，供 render 画虚线 */
 function buildTrackLine(raw,accepted,e){
-  if(!state.settings.osnap) return null;
+  if(!state.settings.osnap || !draft) return null;
+  if(currentTool==='dimension' && draft.subtype!=='ruler') return null;
   const from=(draft&&draft.points&&draft.points.length)?draft.points[draft.points.length-1]:null;
   if(!from) return null;
   const v=[raw[0]-from[0],raw[1]-from[1]], len=Math.hypot(v[0],v[1]);
@@ -172,6 +196,7 @@ canvas.addEventListener('pointerdown',e=>{
     const subtype=$('dimensionType').value;
     if(!draft){ draft={kind:'dimension',subtype,points:[wp],current:wp}; }
     else draft.points.push(wp);
+    /* distance/angle 点数够了自动结束；ruler（测距链）与 area 手动 Enter/双击结束 */
     if((subtype==='distance'&&draft.points.length>=2)||(subtype==='angle'&&draft.points.length>=3)) finishDraft();
     else requestRender();
     return;
@@ -260,7 +285,7 @@ canvas.addEventListener('dblclick',e=>{
 function editLineNodeByDoubleClick(e){
   if(currentTool!=='select'||selectedIds.size!==1) return;
   const o=state.objects.find(x=>x.id===Array.from(selectedIds)[0]);
-  if(!o||o.kind!=='line'||!isEditable(o)||o.points.length<2) return;
+  if(!o||!isPolylineEditable(o)||!isEditable(o)||o.points.length<2) return;
   const wp=snapPoint(pointerWorld(e),e), tol=9/state.viewport.zoom;
   let ni=-1;
   o.points.forEach((p,i)=>{ if(dist(p,wp)<=tol) ni=i; });
@@ -406,12 +431,18 @@ function finishDraft(){
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange(closed?'已添加闭合区域':'已添加折线'); switchTab('props');
   }else if(draft.kind==='dimension'){
     const ps=draft.points;
-    if((draft.subtype==='distance'&&ps.length>=2)||(draft.subtype==='angle'&&ps.length>=3)||(draft.subtype==='area'&&ps.length>=3)){
+    const okCount=(draft.subtype==='distance'&&ps.length>=2)
+      ||(draft.subtype==='angle'&&ps.length>=3)
+      ||(draft.subtype==='area'&&ps.length>=3)
+      ||(draft.subtype==='ruler'&&ps.length>=2);
+    if(okCount){
       pushHistory();
-      const o=baseObject('dimension',null,{subtype:draft.subtype,points:ps,x:ps[0][0],y:ps[0][1],style:{color:'#111827'}});
-      o.name='D'+String(state.objects.length+1).padStart(4,'0');
-      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加尺寸标注'); switchTab('props');
-    }
+      const o=baseObject('dimension',null,{subtype:draft.subtype,points:ps,x:ps[0][0],y:ps[0][1],
+        style:{color:draft.subtype==='ruler'?'#0d9488':'#111827'}});
+      o.name=(draft.subtype==='ruler'?'测':'D')+String(state.objects.length+1).padStart(4,'0');
+      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
+      commitChange(draft.subtype==='ruler'?'已添加测距':'已添加尺寸标注'); switchTab('props');
+    }else toast('点数不足','warn');
   }
   draft=null; requestRender();
 }
@@ -522,6 +553,7 @@ function openShortcutsHelp(){
     ['Shift（画线/标注/拖节点时）','约束为水平/垂直线（正交）'],
     ['Shift（拖矩形/椭圆/扇形时）','正方形 / 正圆 / 45°方位吸附'],
     ['对象捕捉','自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪'],
+    ['Tab / Shift+Tab','循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动'],
     ['空格 + 拖拽','临时平移画布'],
     ['方向键','移动选中对象（Shift ×10 倍步距）'],['F','适应窗口（显示整张场地）'],
     ['滚轮 / 右键拖拽','缩放 / 平移画布'],
@@ -545,6 +577,7 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
   if(typing) return;
   if($('modalBackdrop').classList.contains('show')){ if(e.key==='Escape') closeModal(); return; }
+  if(e.key==='Tab'){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }
   if(e.key==='f'||e.key==='F'){ fitView(); return; }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }

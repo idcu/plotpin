@@ -117,9 +117,10 @@ function _segSegInt(a,b,c,d){
 /* 捕捉类型优先级（数值越小越优先）：精确点 > 交点 > 垂足 > 切点。
    同优先级再按到鼠标的屏幕距离取最近；不同优先级时即使稍远也优先精确类型。 */
 const OSNAP_PRIORITY={endpoint:0,midpoint:1,quadrant:1,center:1,intersection:2,perpendicular:3,tangent:4};
-function findOsnap(st,raw,tol,excludeIds,vis){
+function findOsnap(st,raw,tol,excludeIds,vis,typeFilter){
   let best=null, bd=tol;
   const consider=(p,type,id)=>{
+    if(typeFilter && type!==typeFilter) return;   /* Tab 锁定单一捕捉类型时过滤其余候选 */
     const dd=Math.hypot(p[0]-raw[0],p[1]-raw[1]);
     if(dd>tol) return;
     if(!best
@@ -299,6 +300,23 @@ function shapeArea(o){
   if(tt==='ellipse') return Math.PI*(Number(sh.rx)||0)*(Number(sh.ry)||0);
   const r=Number(sh.r)||0;
   return sectorSweep(sh)/360*Math.PI*r*r;
+}
+/** 周长（米）：矩形 2(w+h)；圆 2πr；椭圆 Ramanujan 近似；扇形 2r+弧长（整圆扇=圆） */
+function shapePerimeter(o){
+  const tt=areaShapeType(o);
+  if(tt==='rect') return Math.max(0,o.width)*2+Math.max(0,o.height)*2;
+  const sh=o.shape;
+  if(tt==='circle') return 2*Math.PI*sh.r;
+  if(tt==='ellipse'){
+    const a=Math.max(0,sh.rx), b=Math.max(0,sh.ry);
+    if(a+b<EPS) return 0;
+    const h=((a-b)*(a-b))/((a+b)*(a+b));
+    return Math.PI*(a+b)*(1+3*h/(10+Math.sqrt(4-3*h)));
+  }
+  const r=Math.max(0,sh.r);
+  let sweep=sectorSweep(sh); if(!sh.a0&&!sh.a1) sweep=360;
+  /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
+  return (sweep>=360?0:2*r)+r*sweep*Math.PI/180;
 }
 /** 标签/变换中心：矩形取四角中心；圆/椭圆/扇形锚点即圆心 (x,y) */
 function shapeLabelCenter(o){

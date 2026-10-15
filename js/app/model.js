@@ -29,6 +29,7 @@ function createInitialState(){
     settings: { unit:'m', precision:2, gridVisible:true, gridSize:1, snap:true, showLabels:true, markerScale:1,
       showCursor:true,   /* 鼠标十字准星与实时世界坐标 */
       showSegLen:true,   /* 折线选中/绘制时显示段长度与总长 */
+      showAreaTag:true,  /* 区域/闭合折线在图上显示面积 */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     viewport: { zoom:1, panX:0, panY:0 },
     /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */
@@ -84,6 +85,8 @@ function styleVal(o, key, fallback){
 function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注'})[k] || k; }
 
 /* -------------------- 折线节点编辑（纯数据，供面板与画布双击共用） -------------------- */
+/* 开放折线与测距链(ruler)可自由增删节点；闭合区域最少 3 点 */
+function isPolylineEditable(o){ return o && (o.kind==='line' || (o.kind==='dimension'&&o.subtype==='ruler')); }
 function lineMinNodes(o){ return o && o.closed ? 3 : 2; }
 /** 修改第 i 个节点坐标（允许负值，与拖拽同一基准）；i===0 时同步锚点 x,y */
 function setNodeCoord(o,i,axis,v){
@@ -95,21 +98,21 @@ function setNodeCoord(o,i,axis,v){
 }
 /** 在第 at 个节点之后插入节点 p（at 为末节点时追加到末尾） */
 function insertLineNode(o,at,p){
-  if(!o || o.kind!=='line' || !Array.isArray(o.points) || !Array.isArray(p)) return false;
+  if(!isPolylineEditable(o) || !Array.isArray(o.points) || !Array.isArray(p)) return false;
   const i=Math.min(Math.max(0,at+1),o.points.length);
   o.points.splice(i,0,[Number(p[0]),Number(p[1])]);
   o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;
 }
 /** 删除第 i 个节点；低于最小节点数（开放折线2、闭合区域3）时拒绝 */
 function removeLineNode(o,i){
-  if(!o || o.kind!=='line' || !Array.isArray(o.points) || i<0 || i>=o.points.length) return false;
+  if(!isPolylineEditable(o) || !Array.isArray(o.points) || i<0 || i>=o.points.length) return false;
   if(o.points.length<=lineMinNodes(o)) return false;
   o.points.splice(i,1);
   o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;
 }
 /** 节点重排（move 语义）：把 from 处节点移到 to 处，其余节点顺序保持 */
 function moveNode(o,from,to){
-  if(!o || o.kind!=='line' || !Array.isArray(o.points)) return false;
+  if(!isPolylineEditable(o) || !Array.isArray(o.points)) return false;
   const n=o.points.length;
   if(from===to || from<0 || from>=n || to<0 || to>=n) return false;
   const p=o.points.splice(from,1)[0];
@@ -118,7 +121,7 @@ function moveNode(o,from,to){
 }
 /** 与相邻节点交换位置（上移=与前一个，下移=与后一个）；到头返回 false */
 function moveNodeStep(o,i,dir){
-  if(!o || o.kind!=='line' || !Array.isArray(o.points)) return false;
+  if(!isPolylineEditable(o) || !Array.isArray(o.points)) return false;
   const to=i+(dir<0?-1:1);
   if(to<0 || to>=o.points.length) return false;
   return moveNode(o,i,to);

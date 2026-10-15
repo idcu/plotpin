@@ -87,7 +87,7 @@ function scheduleSave(){
   saveTimer=setTimeout(async()=>{
     try{
       await idbPut(persistableState());
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap}));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag}));
       $('saveState').textContent='已自动保存 '+new Date().toLocaleTimeString();
     }catch(e){
       try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
@@ -141,6 +141,7 @@ function migrateProject(p){
   settings.showCursor=settings.showCursor!==false;
   settings.showSegLen=settings.showSegLen!==false;
   settings.osnap=settings.osnap!==false;
+  settings.showAreaTag=settings.showAreaTag!==false;
   const rawBg=typeof p.background==='object'&&p.background?p.background:{};
   // 兼容旧档（无 kind）：有图片引用判为 image，否则按像素域推导为矩形矢量场地
   const hasImage=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
@@ -278,7 +279,7 @@ function sanitizeObjects(arr,layers,types){
       id:safeId(raw.id,'OBJ'), name:String(raw.name??'').slice(0,80)||nextObjectId(),
       layerId, x, y, angle,
       text:String(raw.text??'').slice(0,500), closed:!!raw.closed,
-      subtype:['distance','area','angle'].includes(raw.subtype)?raw.subtype:'distance',
+      subtype:['ruler','distance','area','angle'].includes(raw.subtype)?raw.subtype:'distance',
       phys:Math.max(0,finiteNumber(raw.phys,0)),
       visible:raw.visible!==false, locked:!!raw.locked, z:finiteNumber(raw.z,out.length),
       createdAt:typeof raw.createdAt==='string'?raw.createdAt:nowISO(), updatedAt:typeof raw.updatedAt==='string'?raw.updatedAt:nowISO()
@@ -298,7 +299,8 @@ function sanitizeObjects(arr,layers,types){
     if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)) return; syncFirstPoint(o); }
     if(kind==='dimension'){
       o.points=points;
-      if((o.subtype==='distance'&&points.length<2)||(o.subtype!=='distance'&&points.length<3)) return;
+      const minPts=(o.subtype==='distance'||o.subtype==='ruler')?2:3;
+      if(points.length<minPts) return;
       syncFirstPoint(o);
     }
     if(raw.style&&typeof raw.style==='object'){
