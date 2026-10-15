@@ -143,14 +143,6 @@ async function importDxfFile(f){
       const x=e.x,y=e.y,r=e.r; bounds([[x-r,y-r],[x+r,y+r]]);
       const o=baseObject('rect','rect.area',{x,y,shape:{type:'circle',r},width:0,height:0,layerId:layerIdFor(e.layer)});
       state.objects.push(o); counts.rect++;
-    }else if(e.type==='ARC'){
-      if(!(e.r>0)) return;
-      /* 圆弧采样为开放折线（24 段），角度约定与世界坐标同为 Y 向上、度 */
-      const N=24, pts=[];
-      for(let k=0;k<=N;k++){ const a=(e.a0+(e.a1-e.a0)*k/N)*Math.PI/180; pts.push([e.x+e.r*Math.cos(a),e.y+e.r*Math.sin(a)]); }
-      bounds(pts);
-      const o=baseObject('line','line.custom',{points:pts,x:pts[0][0],y:pts[0][1],layerId:layerIdFor(e.layer)});
-      state.objects.push(o); counts.line++;
     }else if(e.type==='POINT'){
       const x=e.x,y=e.y; bounds([[x,y]]);
       const o=baseObject('point','point.marker',{x,y,layerId:layerIdFor(e.layer)});

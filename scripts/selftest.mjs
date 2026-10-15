@@ -1435,7 +1435,8 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   /* 生成时米→毫米 ×1000，解析 INSUNITS=4 时毫米→米 /1000，回到原值 */
   approx('DXF-坐标往返0点', poly.points[0][0], 0, 1e-6);
   approx('DXF-坐标往返10m', poly.points[1][0], 10, 1e-6);
-  const line=back.entities.find(e=>e.type==='LINE');
+  /* LINE 在解析器中统一落地为开放 2 点 LWPOLYLINE（与 ARC/ELLIPSE 一致，方便同一套编辑） */
+  const line=back.entities.find(e=>e.type==='LWPOLYLINE'&&!e.closed&&e.points.length===2);
   approx('DXF-LINE终点', line.points[1][0], 5, 1e-6);
   const circle=back.entities.find(e=>e.type==='CIRCLE');
   approx('DXF-圆半径5m', circle.r, 5, 1e-6);
@@ -1462,7 +1463,8 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const pl=imp.entities[0];
   eq('DXF-VERTEX累积2点', pl.points.length, 2);
   approx('DXF-39.37英寸≈1m', pl.points[1][0], 1, 1e-4);
-  eq('DXF-POLYLINE闭合位', pl.closed, true);
+  /* 仅 2 个顶点的闭合多段线是退化图形，降级为开放线（首尾边为零长度） */
+  eq('DXF-2点闭合降级开放', pl.closed, false);
 
   /* 35.3 图层名清洗与颜色索引 */
   eq('DXF-非法图层名清洗', api.Dxf.safeLayer('a/b:c*'), 'a_b_c_');
@@ -1488,6 +1490,83 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   /* 空页面列表抛错 */
   let threw=false; try{ api.Pdf.buildImagePdf([]); }catch(e){ threw=true; }
   eq('PDF-空页面拒绝', threw, true);
+}
+
+/* 36. DXF 高级实体：凸度弧 / ELLIPSE / SPLINE / INSERT 块 / MTEXT ---------------- */
+{
+  const P=(c,v)=>c+'\n'+v+'\n';
+  let s=P(0,'SECTION')+P(2,'HEADER')+P(9,'$INSUNITS')+P(70,0)+P(0,'ENDSEC');
+  s+=P(0,'SECTION')+P(2,'BLOCKS');
+  s+=P(0,'BLOCK')+P(8,'0')+P(2,'MK')+P(70,0)+P(10,0)+P(20,0)+P(30,0)+P(3,'MK');
+  s+=P(0,'CIRCLE')+P(8,'0')+P(10,0)+P(20,0)+P(30,0)+P(40,2);
+  s+=P(0,'LINE')+P(8,'PIPE')+P(10,0)+P(20,0)+P(30,0)+P(11,10)+P(21,0)+P(31,0);
+  s+=P(0,'ENDBLK')+P(8,'0')+P(0,'ENDSEC');
+  s+=P(0,'SECTION')+P(2,'ENTITIES');
+  /* 凸度半圆：(0,0)→(10,0) b=1；AutoCAD 约定正凸度逆时针，+X 弦弧经过 (5,-5) */
+  s+=P(0,'LWPOLYLINE')+P(8,'0')+P(90,2)+P(70,0)+P(10,0)+P(20,0)+P(42,1)+P(10,10)+P(20,0)+P(42,0);
+  /* 圆角矩形闭合：10×10 方形、R=2，8 个相切点；4 条直边凸度 0，4 个内角弧凸度 -tan(22.5°) */
+  const bb=(-Math.tan(Math.PI/8)).toFixed(10), z='0';
+  const rv=(x,y,b)=>P(10,x)+P(20,y)+P(42,b);
+  s+=P(0,'LWPOLYLINE')+P(8,'0')+P(90,8)+P(70,1)
+    +rv(2,0,z)+rv(8,0,bb)+rv(10,2,z)+rv(10,8,bb)+rv(8,10,z)+rv(2,10,bb)+rv(0,8,z)+rv(0,2,bb);
+  /* 椭圆：中心(20,20)，长轴 (10,0)，ratio .5，完整 */
+  s+=P(0,'ELLIPSE')+P(8,'0')+P(10,20)+P(20,20)+P(30,0)+P(11,10)+P(21,0)+P(31,0)+P(40,.5)+P(41,0)+P(42,6.283185307179586);
+  /* 椭圆弧：90°~270°（左半椭圆） */
+  s+=P(0,'ELLIPSE')+P(8,'0')+P(10,60)+P(20,20)+P(30,0)+P(11,5)+P(21,0)+P(31,0)+P(40,1)+P(41,Math.PI/2)+P(42,3*Math.PI/2);
+  /* 二次 B 样条：3 控制点，首末必通过 */
+  s+=P(0,'SPLINE')+P(8,'0')+P(70,8)+P(71,2)+P(74,0)+P(73,3)+P(75,0)
+    +P(10,40)+P(20,0)+P(10,50)+P(20,10)+P(10,60)+P(20,0);
+  /* INSERT：块 MK（layer0 圆+PIPE 线）放到(100,100) 缩放2 */
+  s+=P(0,'INSERT')+P(8,'TOP')+P(2,'MK')+P(10,100)+P(20,100)+P(30,0)+P(41,2)+P(42,2)+P(50,0);
+  /* MTEXT 格式清洗 */
+  s+=P(0,'MTEXT')+P(8,'0')+P(10,0)+P(20,30)+P(30,0)+P(40,2.5)+P(1,'{\\fArial;Hello}\\PWorld');
+  s+=P(0,'ENDSEC')+P(0,'EOF');
+  const r=api.Dxf.parseDxf(s);
+  eq('高级-块定义被识别', r.blockCount, 1);
+  const polylines=r.entities.filter(e=>e.type==='LWPOLYLINE');
+  /* 凸度半圆：采样点密集，首(0,0) 末(10,0)，弧顶≈(5,-5) */
+  const semi=polylines.find(p=>!p.closed&&p.points.length>2&&p.points[0][0]===0&&p.points.at(-1)[0]===10);
+  ok('高级-半圆采样>10点', semi.points.length>10);
+  const apex=semi.points.reduce((m,p)=>p[1]<m[1]?p:m,semi.points[0]);
+  approx('高级-凸度弧顶(5,-5)x', apex[0], 5, 1e-6);
+  approx('高级-凸度弧顶(5,-5)y', apex[1], -5, 1e-6);
+  eq('高级-半圆首尾精确', Math.abs(semi.points.at(-1)[0]-10)<1e-9&&semi.points.at(-1)[1]===0, true);
+  /* 圆角矩形：闭合、4 个角点保留且边中点在原 10×10 包络附近 */
+  const rounded=polylines.find(p=>p.closed);
+  ok('高级-圆角矩形闭合', rounded.closed);
+  const rx=rounded.points.map(p=>p[0]), ry=rounded.points.map(p=>p[1]);
+  approx('高级-圆角矩形包络x0', Math.min(...rx), 0, 1e-6);
+  approx('高级-圆角矩形包络x10', Math.max(...rx), 10, 1e-6);
+  approx('高级-圆角矩形包络y10', Math.max(...ry), 10, 1e-6);
+  /* 圆角把尖角(10,0)切掉：所有点在包络内且不存在尖角顶点 */
+  ok('高级-圆角不越界', rounded.points.every(q=>q[0]>=-1e-9&&q[0]<=10+1e-9&&q[1]>=-1e-9&&q[1]<=10+1e-9));
+  ok('高级-角弧切点光滑(无10,0尖角)', !rounded.points.some(q=>Math.abs(q[0]-10)<1e-6&&Math.abs(q[1])<1e-6));
+  /* 完整椭圆：x[10,30] y[15,25] 闭合 */
+  const fullEll=polylines.find(p=>p.closed&&p.points.some(q=>q[0]>15&&q[0]<25));
+  approx('高级-椭圆x左界', Math.min(...fullEll.points.map(q=>q[0])), 10, 1e-6);
+  approx('高级-椭圆x右界', Math.max(...fullEll.points.map(q=>q[0])), 30, 1e-6);
+  approx('高级-椭圆短轴半高', Math.max(...fullEll.points.map(q=>q[1]))-20, 5, 1e-6);
+  /* 椭圆弧不闭合，起止点在 (60,20) 两端（左半圆上下端） */
+  const arcEll=polylines.find(p=>!p.closed&&p.points.length>2&&p.points[0][0]===60);
+  eq('高级-椭圆弧开放', arcEll.closed, false);
+  approx('高级-椭圆弧端点x=60', arcEll.points.at(-1)[0], 60, 1e-6);
+  ok('高级-椭圆弧全部在左半(x≤60)', arcEll.points.every(q=>q[0]<=60+1e-9));
+  /* 样条首末通过控制点 */
+  const sp=polylines.find(p=>!p.closed&&p.points[0][0]===40);
+  approx('高级-样条起点', sp.points[0][0], 40, 1e-9);
+  approx('高级-样条终点', sp.points.at(-1)[0], 60, 1e-9);
+  approx('高级-二次样条中点(50,5)', sp.points[Math.floor(sp.points.length/2)][1], 5, 1e-6);
+  /* INSERT 展开：layer0 圆继承 TOP、r=4 中心(100,100)；PIPE 线保持图层、终点(120,100) */
+  const ic=r.entities.find(e=>e.type==='CIRCLE');
+  eq('高级-INSERT圆继承图层', ic.layer, 'TOP');
+  approx('高级-INSERT圆中心', ic.x, 100, 1e-9);
+  approx('高级-INSERT圆缩放r=4', ic.r, 4, 1e-9);
+  const il=polylines.find(p=>p.layer==='PIPE');
+  approx('高级-INSERT线终点', il.points[1][0], 120, 1e-9);
+  /* MTEXT */
+  const mt=r.entities.find(e=>e.type==='TEXT'&&e.text.includes('Hello'));
+  eq('高级-MTEXT清洗', mt.text, 'Hello World');
+  approx('高级-MTEXT字高', mt.height, 2.5, 1e-9);
 }
 
 /* ---------------- 结果汇总 ---------------- */
