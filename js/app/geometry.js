@@ -34,6 +34,39 @@ function distanceToSegment(p,a,b){
   let t=(w[0]*v[0]+w[1]*v[1])/l2; t=Math.max(0,Math.min(1,t));
   return dist(p,[a[0]+t*v[0],a[1]+t*v[1]]);
 }
+/* -------------------- Shift 精确约束（预览与落点共用） -------------------- */
+/**
+ * 正交（ORTHO）：按住 Shift 时，把 p 钳到相对基点 base 的水平/垂直方向。
+ * 主轴取位移分量绝对值较大者；不按 Shift 或无基点时原样返回。
+ */
+function orthoPoint(base,p,shift){
+  if(!shift||!base) return p;
+  const dx=p[0]-base[0], dy=p[1]-base[1];
+  if(Math.abs(dx)>=Math.abs(dy)) return [p[0],base[1]];
+  return [base[0],p[1]];
+}
+/** 极轴吸附：按住 Shift 时把 p 相对 center 的方位角钳到 45° 的整数倍（0/45/90/…），半径不变 */
+function polarSnap45(center,p,shift,stepDeg){
+  if(!shift||!center) return p;
+  const r=Math.hypot(p[0]-center[0],p[1]-center[1]);
+  if(r<EPS) return p;
+  const step=stepDeg||45;
+  const deg=Math.atan2(p[1]-center[1],p[0]-center[0])*180/Math.PI;
+  const a=Math.round(deg/step)*step*Math.PI/180;
+  return [center[0]+r*Math.cos(a),center[1]+r*Math.sin(a)];
+}
+/**
+ * 正方形/正圆拖画：以 a 为固定角点（圆心式拖画时 a 为包围盒第一角），
+ * Shift 时把另一角 p 拉成边长等于主导位移的正方形，保留各轴方向符号。
+ */
+function squareCorner(a,p,shift){
+  if(!shift) return p;
+  const dx=p[0]-a[0], dy=p[1]-a[1];
+  const s=Math.max(Math.abs(dx),Math.abs(dy));
+  if(s<EPS) return p;
+  return [a[0]+(dx===0?0:Math.sign(dx))*s, a[1]+(dy===0?0:Math.sign(dy))*s];
+}
+
 /** p 到线段 ab 的最近点（垂足夹到线段内）；双击插入节点时保证新点落在线段上 */
 function nearestPointOnSegment(p,a,b){
   const v=sub(b,a), w=sub(p,a), l2=v[0]*v[0]+v[1]*v[1];

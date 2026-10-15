@@ -89,7 +89,8 @@ code += `\n;globalThis.__api = {
   get state(){ return state; },
   resetState(){ state = createInitialState(); return state; },
   createInitialState, migrateProject, baseObject,
-  polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment, segmentsIntersect,
+  polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
+  orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
@@ -797,6 +798,36 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('静态-icon.svg 存在', exists('icon.svg'));
   ok('静态-manifest.webmanifest 存在', exists('manifest.webmanifest'));
   ok('静态-标题含图钉品牌', /图钉 PlotPin/.test(html));
+}
+
+/* 23. Shift 精确约束：正交/极轴/正方形（预览与落点共用纯函数） ---------------- */
+{
+  /* 正交：主导分量为 X 时钳为水平（Y 回到基点）；主导为 Y 时钳为垂直 */
+  eq('正交-水平(右)', api.orthoPoint([0,0],[8,2],true), [8,0]);
+  eq('正交-水平(左)', api.orthoPoint([0,0],[-8,-2],true), [-8,0]);
+  eq('正交-垂直(上)', api.orthoPoint([5,5],[6,12],true), [5,12]);
+  eq('正交-垂直(下)', api.orthoPoint([5,5],[4,-9],true), [5,-9]);
+  eq('正交-45°等分量取水平(含等号)', api.orthoPoint([0,0],[5,5],true), [5,0]);
+  eq('正交-不按Shift透传', api.orthoPoint([0,0],[8,2],false), [8,2]);
+  eq('正交-无基点透传', api.orthoPoint(null,[8,2],true), [8,2]);
+
+  /* 极轴 45° 吸附：半径保持，角度钳到最近的 45° 倍 */
+  eq('极轴-20°→0°', api.polarSnap45([0,0],[10*Math.cos(20*Math.PI/180),10*Math.sin(20*Math.PI/180)],true).map(v=>Math.round(v*1e6)), [10000000,0]);
+  const p90=api.polarSnap45([0,0],[0,10],true);
+  approx('极轴-70°→90° X≈0', p90[0], 0, 1e-9);
+  approx('极轴-70°→90° Y=10', p90[1], 10, 1e-9);
+  eq('极轴-120°→135°', (()=>{const p=api.polarSnap45([0,0],[10*Math.cos(120*Math.PI/180),10*Math.sin(120*Math.PI/180)],true);return [Math.round(p[0]*1e6),Math.round(p[1]*1e6)];})(),
+    [Math.round(10*Math.cos(135*Math.PI/180)*1e6),Math.round(10*Math.sin(135*Math.PI/180)*1e6)]);
+  const c=[3,4], snapped=api.polarSnap45(c,[13,9],true);
+  approx('极轴-吸附后到圆心半径不变', Math.hypot(snapped[0]-c[0],snapped[1]-c[1]), Math.hypot(10,5), 1e-9);
+  eq('极轴-不按Shift透传', api.polarSnap45([0,0],[3,1],false), [3,1]);
+
+  /* 正方形角点：边长=主导位移，方向符号保留 */
+  eq('正方形-右下拉正', api.squareCorner([0,0],[8,3],true), [8,8]);
+  eq('正方形-右下拉正(Y主导)', api.squareCorner([0,0],[3,8],true), [8,8]);
+  eq('正方形-左上符号保留', api.squareCorner([10,10],[2,4],true), [2,2]);
+  eq('正方形-不按Shift透传', api.squareCorner([0,0],[8,3],false), [8,3]);
+  eq('正方形-零位移透传', api.squareCorner([0,0],[0,0],true), [0,0]);
 }
 
 /* ---------------- 结果汇总 ---------------- */

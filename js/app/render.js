@@ -1,7 +1,7 @@
 /* render.js —— 命中测试与 Canvas 全量渲染 */
 /* 鼠标屏幕位置（由 interaction 的 pointermove 写入）；inside=false 时不画十字 */
 let cursorScreen=null;
-function setCursorScreen(p,inside){ cursorScreen=p?{x:p[0],y:p[1],inside:inside!==false}:null; }
+function setCursorScreen(p,inside,wp){ cursorScreen=p?{x:p[0],y:p[1],inside:inside!==false,wp:wp||null}:null; }
 /* -------------------- 命中测试 / 选择 -------------------- */
 function isVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
@@ -134,9 +134,8 @@ function drawCursorCross(c,v,d,cssW,cssH){
   if(!state.settings.showCursor || !cursorScreen || cursorScreen.inside===false) return;
   if(['pan','calibrate'].includes(currentTool)) return;
   const x=cursorScreen.x, y=cursorScreen.y;
-  /* 坐标按当前工具的吸附结果显示，做到“所见即落点” */
-  const raw=s2w([x,y],v,d);
-  const wp=snapPoint(raw,{shiftKey:false});
+  /* 坐标直接取交互层算好的最终落点（已含网格吸附与 Shift 正交/极轴），所见即所点 */
+  const wp=cursorScreen.wp || snapPoint(s2w([x,y],v,d),{shiftKey:false});
   c.save();
   c.strokeStyle='rgba(37,99,235,.55)'; c.lineWidth=1; c.setLineDash([5,5]);
   c.beginPath(); c.moveTo(0,y); c.lineTo(cssW,y); c.moveTo(x,0); c.lineTo(x,cssH); c.stroke();
