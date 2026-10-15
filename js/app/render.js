@@ -1,4 +1,7 @@
 /* render.js —— 命中测试与 Canvas 全量渲染 */
+/* 鼠标屏幕位置（由 interaction 的 pointermove 写入）；inside=false 时不画十字 */
+let cursorScreen=null;
+function setCursorScreen(p,inside){ cursorScreen=p?{x:p[0],y:p[1],inside:inside!==false}:null; }
 /* -------------------- 命中测试 / 选择 -------------------- */
 function isVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
@@ -109,7 +112,38 @@ function drawScene(c,v,cssW,cssH,opt={}){
   if(opt.interactive){
     drawSelection(c,v,toS);
     drawRubber(c);
+    drawCursorCross(c,v,d,cssW,cssH);
   }
+}
+/** 深色胶囊小标签（屏幕固定字号），(x,y) 为标签左上角；段长度/十字坐标共用 */
+function drawScreenTag(c,x,y,text){
+  c.save();
+  c.font='11px Consolas,Menlo,monospace';
+  const padX=5, padY=3, m=c.measureText(text);
+  const w=m.width+padX*2, h=15+padY;
+  x=Math.max(2,Math.min(x,c.canvas.clientWidth-w-2));
+  y=Math.max(2,Math.min(y,c.canvas.clientHeight-h-2));
+  c.fillStyle='rgba(15,23,42,.82)';
+  c.beginPath(); c.roundRect?c.roundRect(x,y,w,h,4):c.rect(x,y,w,h); c.fill();
+  c.fillStyle='#e2e8f0'; c.textBaseline='middle'; c.textAlign='left';
+  c.fillText(text,x+padX,y+h/2+0.5);
+  c.restore();
+}
+/** 鼠标十字准星：贯穿画布的虚线 + 中心方框 + 吸附后世界坐标；平移/校准工具下隐藏 */
+function drawCursorCross(c,v,d,cssW,cssH){
+  if(!state.settings.showCursor || !cursorScreen || cursorScreen.inside===false) return;
+  if(['pan','calibrate'].includes(currentTool)) return;
+  const x=cursorScreen.x, y=cursorScreen.y;
+  /* 坐标按当前工具的吸附结果显示，做到“所见即落点” */
+  const raw=s2w([x,y],v,d);
+  const wp=snapPoint(raw,{shiftKey:false});
+  c.save();
+  c.strokeStyle='rgba(37,99,235,.55)'; c.lineWidth=1; c.setLineDash([5,5]);
+  c.beginPath(); c.moveTo(0,y); c.lineTo(cssW,y); c.moveTo(x,0); c.lineTo(x,cssH); c.stroke();
+  c.setLineDash([]); c.strokeStyle='#2563eb';
+  c.strokeRect(x-5,y-5,10,10);
+  c.restore();
+  drawScreenTag(c,x+12,y+12,`X ${fmt(wp[0])}  Y ${fmt(wp[1])} ${state.settings.unit}`);
 }
 function drawBackground(c,v,d,cssW,cssH,toS){
   const p0=toS([0,0]), p1=toS([d.w,d.h]);
@@ -277,6 +311,22 @@ function drawLine(c,o,color,toS,v){
   c.stroke(); c.restore();
   const mid=pts[Math.floor((pts.length-1)/2)];
   if(o.name && !o.closed) drawLabel(c,o,mid[0],mid[1]-8,color,toS);
+  /* 选中且开启“段长度”：每段中点标段长，末节点旁标总长（屏幕固定字号，不随缩放变） */
+  if(state.settings.showSegLen && selectedIds.has(o.id)) drawLineSegTags(c,o,toS);
+}
+/** 折线/闭合区域段长度标注（屏幕像素坐标下绘制） */
+function drawLineSegTags(c,o,toS){
+  const ps=o.points, n=ps.length;
+  if(n<2) return;
+  const segN=o.closed?n:n-1, total=objectLength(o);
+  for(let k=0;k<segN;k++){
+    const a=ps[k], b=ps[(k+1)%n], len=dist(a,b);
+    if(len*state.viewport.zoom<26) continue;   // 屏幕上过短的段不标，避免拥挤
+    const s=toS([(a[0]+b[0])/2,(a[1]+b[1])/2]);
+    drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
+  }
+  const end=toS(ps[n-1]);
+  drawScreenTag(c,end[0]+9,end[1]-9,'Σ '+fmt(total)+' m');
 }
 function drawText(c,o,color,toS,v,markerScale){
   const s=toS([o.x,o.y]);
@@ -377,8 +427,34 @@ function drawDraft(c,v,d,toS){
     if(draft.kind==='sitePolygon'){ c.setLineDash([5,4]); c.lineTo(ps[0][0],ps[0][1]); c.setLineDash([]); }
     c.stroke();
     ps.forEach(p=>{ c.beginPath(); c.arc(p[0],p[1],4,0,Math.PI*2); c.fill(); });
+    c.restore();
+    drawDraftSegTags(c,v,toS,draft);
+    return;
+  }
+  /* 区域/场地拖画尺寸预览（标签在拖点旁） */
+  if(state.settings.showSegLen && draft.start && draft.current){
+    const a=draft.start,b=draft.current, s=toS(b);
+    if(draft.kind==='rect'||draft.kind==='siteRect') drawScreenTag(c,s[0]+10,s[1]-26,fmt(Math.abs(a[0]-b[0]))+' × '+fmt(Math.abs(a[1]-b[1]))+' m');
+    else if(draft.kind==='siteCircle'||draft.kind==='areaCircle') drawScreenTag(c,s[0]+10,s[1]-26,'r '+fmt(dist(a,b))+' m');
+    else if(draft.kind==='siteEllipse'||draft.kind==='areaEllipse') drawScreenTag(c,s[0]+10,s[1]-26,fmt(Math.abs(a[0]-b[0]))+' × '+fmt(Math.abs(a[1]-b[1]))+' m（外接盒）');
+    else if(draft.kind==='siteSector'||draft.kind==='areaSector') drawScreenTag(c,s[0]+10,s[1]-26,'r '+fmt(dist(a,b))+' m');
   }
   c.restore();
+}
+/** 折线/标注录入中：已录段标段长，橡皮筋段与总长实时更新 */
+function drawDraftSegTags(c,v,toS,d){
+  if(!state.settings.showSegLen || !d.points || d.points.length<1) return;
+  const wps=d.points.slice();
+  if(d.current) wps.push(d.current);
+  let total=0;
+  for(let k=1;k<wps.length;k++){
+    const len=dist(wps[k-1],wps[k]); total+=len;
+    if(len*v.zoom<26) continue;
+    const s=toS([(wps[k-1][0]+wps[k][0])/2,(wps[k-1][1]+wps[k][1])/2]);
+    drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
+  }
+  const last=toS(wps[wps.length-1]);
+  drawScreenTag(c,last[0]+9,last[1]-9,'Σ '+fmt(total)+' m');
 }
 function drawRubber(c){
   if(!rubber) return;

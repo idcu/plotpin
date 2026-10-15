@@ -106,6 +106,7 @@ canvas.addEventListener('pointerdown',e=>{
 });
 canvas.addEventListener('pointermove',e=>{
   const sp=pointerScreen(e), wp=snapPoint(pointerWorld(e),e);
+  setCursorScreen(sp,true);
   $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit;
   if(drag?.type==='pan'){
     state.viewport.panX=drag.pan.panX+sp[0]-drag.start[0];
@@ -165,7 +166,8 @@ canvas.addEventListener('pointerup',e=>{
     rubber=null; refreshUI(); requestRender();
   }
 });
-canvas.addEventListener('pointercancel',()=>{ drag=null; rubber=null; document.body.classList.remove('panning'); requestRender(); });
+canvas.addEventListener('pointercancel',()=>{ drag=null; rubber=null; document.body.classList.remove('panning'); setCursorScreen(null); requestRender(); });
+canvas.addEventListener('pointerleave',()=>{ setCursorScreen(null); requestRender(); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('dblclick',e=>{
   if(draft&&draft.kind==='sitePolygon') finishSiteDraft();
@@ -435,7 +437,8 @@ function openShortcutsHelp(){
     ['Esc','取消当前绘制 / 清除选择'],['Enter','完成折线或面积标注'],
     ['Backspace（绘制中）','删除上一个录入节点'],
     ['双击线段 / 双击节点（选择工具）','在折线上插入节点 / 删除节点'],['空格 + 拖拽','临时平移画布'],
-    ['方向键','移动选中对象（Shift ×10 倍步距）'],['滚轮 / 右键拖拽','缩放 / 平移画布'],
+    ['方向键','移动选中对象（Shift ×10 倍步距）'],['F','适应窗口（显示整张场地）'],
+    ['滚轮 / 右键拖拽','缩放 / 平移画布'],
     ['拖拽文件到画布','导入 JSON 工程、CSV/TSV/XLSX 表格或底图图片'],['?','显示本帮助']
   ];
   openModal('快捷键帮助','<div class="help-grid">'+rows.map(r=>'<span class="kbd">'+esc(r[0])+'</span><span>'+esc(r[1])+'</span>').join('')+'</div>',
@@ -457,6 +460,7 @@ window.addEventListener('keydown',e=>{
   if(typing) return;
   if($('modalBackdrop').classList.contains('show')){ if(e.key==='Escape') closeModal(); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }
+  if(e.key==='f'||e.key==='F'){ fitView(); return; }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }

@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-292%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-296%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在任意底图（图片 / 矢量场地）上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -30,6 +30,7 @@
   - 线段 / 折线逐点录入，可闭合；实时长度、周长、面积统计；节点支持面板精确改坐标、插入、删除、↑↓/拖拽排序，画布双击线段即可插点。
 - **标注与文字**：两点距离、折线 / 多边形面积、三点角度标注；文字按世界字高放置、可旋转。
 - **编辑能力**：点选 / 框选 / 多选、移动、缩放、旋转、节点编辑、复制粘贴、图层显隐锁定、类型管理、网格吸附、撤销重做。
+- **精确绘图辅助（均可开关）**：鼠标**十字准星 + 吸附后世界坐标**实时跟随；折线绘制中/选中后显示**每段长度与累计总长**；区域拖画实时显示宽×高/半径；`F` 一键适应窗口。
 - **几何检查**：零尺寸、折线自相交、对象越界、物理尺寸异常等自动提示。
 - **本地自动保存**：工程存于 IndexedDB（底图按内容哈希去重），localStorage 兜底；刷新不丢。
 - **导入导出**
@@ -75,6 +76,7 @@ npx serve .
 | `空格 + 拖拽` / 右键拖拽 | 平移画布 |
 | `滚轮` | 以光标为中心缩放 |
 | `方向键`（`Shift` ×10） | 微移选中对象 |
+| `F` | 适应窗口（显示整张场地） |
 | `?` | 快捷键帮助 |
 
 ---
@@ -122,7 +124,7 @@ npm test
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希、节点增删改与排序、静态资源引用完整性等纯逻辑模块，当前共 **292 项断言全部通过**。
+底图资产哈希、节点增删改与排序、绘图辅助开关迁移、静态资源引用完整性等纯逻辑模块，当前共 **296 项断言全部通过**。
 
 ---
 

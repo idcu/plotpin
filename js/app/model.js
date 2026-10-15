@@ -26,7 +26,9 @@ function createInitialState(){
   return {
     schema: SCHEMA,
     meta: { id: uid('PRJ'), name: '未命名图纸工程', createdAt: now, updatedAt: now },
-    settings: { unit:'m', precision:2, gridVisible:true, gridSize:1, snap:true, showLabels:true, markerScale:1 },
+    settings: { unit:'m', precision:2, gridVisible:true, gridSize:1, snap:true, showLabels:true, markerScale:1,
+      showCursor:true,   /* 鼠标十字准星与实时世界坐标 */
+      showSegLen:true }, /* 折线选中/绘制时显示段长度与总长 */
     viewport: { zoom:1, panX:0, panY:0 },
     /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */
     background: { kind:'rect', fileName:'', assetId:'', width:1000, height:700, origin:[0,0], metersPerPixel:0.1, calibrated:false,

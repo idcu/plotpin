@@ -639,6 +639,14 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('迁移-markerScale 过大钳 2.5', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{markerScale:9}}).settings.markerScale, 2.5);
   eq('迁移-markerScale 过小钳 .5', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{markerScale:0}}).settings.markerScale, .5);
 
+  /* 十字准星/段长度开关：旧档缺省为 true，显式 false 保留 */
+  const dflt=api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings;
+  eq('迁移-十字开关缺省开', dflt.showCursor, true);
+  eq('迁移-段长开关缺省开', dflt.showSegLen, true);
+  const off=api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{showCursor:false,showSegLen:false}}).settings;
+  eq('迁移-十字关闭保留', off.showCursor, false);
+  eq('迁移-段长关闭保留', off.showSegLen, false);
+
   /* 自定义点类型 iconSize 保留，越界丢弃 */
   const m3=api.migrateProject({ schema:'offline-drawing-annotation/v1',
     objectTypes:[
