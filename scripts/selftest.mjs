@@ -104,6 +104,9 @@ code += `\n;globalThis.__api = {
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
+  isPolylineEditable, objectArea, objectLength,
+  objectRows, formatNodeCoords, parseNodeCoords,
+  csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
@@ -163,20 +166,26 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
 
 /* 4. XLSX 构建→读取双向往返 ---------------------------------------------- */
 {
+  const C4=api.TABLE_COLUMNS;
+  const r4=(m)=>C4.map((_,i)=>m[i]??'');
   const table = [
-    api.TABLE_COLUMNS,
-    ['O0001', '监控,一号', '点设备', '摄像头', '默认图层', '1.5', '-2.25', '90', '', '', '0', '', '', '是', '否', '含"引号"\n换行', '2026-10-14T00:00:00Z'],
-    ['O0002', '区域A', '矩形/区域', '普通区域', '默认图层', '0', '0', '0', '12.5', '3.5', '0', '', '43.75', '是', '否', '', '2026-10-14T00:00:00Z']
+    C4,
+    r4(['O0001', '监控,一号', '点设备', '摄像头', '默认图层', '1.5', '-2.25', '90', '', '', '', '', '', '', '', '0', '', '', '是', '否', '含"引号"\n换行', '2026-10-14T00:00:00Z']),
+    r4(['O0002', '区域A', '矩形/区域', '普通区域', '默认图层', '0', '0', '0', '12.5', '3.5', '矩形', '', '', '', '', '0', '', '43.75', '是', '否', '', '2026-10-14T00:00:00Z']),
+    r4(['O0003', '', '尺寸标注', '两点距离', '默认图层', '', '', '', '', '', '', '', '', '测距', '0,0;3,4;3,14', '3', '15', '', '是', '否', '', '2026-10-14T00:00:00Z'])
   ];
   const buf = api.Xlsx.build(table, '图纸标注');
   ok('XLSX 是 ZIP（PK 头）', new Uint8Array(buf)[0] === 0x50);
   const rows = await api.Xlsx.readRows(buf);
-  eq('XLSX 往返行数', rows.length, 3);
-  eq('XLSX 表头往返', rows[0], api.TABLE_COLUMNS);
+  eq('XLSX 往返行数', rows.length, 4);
+  eq('XLSX 表头往返', rows[0], C4);
   eq('XLSX 含逗号/引号/换行单元格往返', rows[1][1], '监控,一号');
-  eq('XLSX 备注引号换行往返', rows[1][15], '含"引号"\n换行');
+  eq('XLSX 备注引号换行往返', rows[1][20], '含"引号"\n换行');
   eq('XLSX 数字以文本往返', rows[2][9], '3.5');
-  eq('XLSX 面积往返', rows[2][12], '43.75');
+  eq('XLSX 面积往返', rows[2][17], '43.75');
+  eq('XLSX 测距类型往返', rows[3][13], '测距');
+  eq('XLSX 节点坐标单元格往返', rows[3][14], '0,0;3,4;3,14');
+  eq('XLSX 节点坐标解析3点', api.parseNodeCoords(rows[3][14]).length, 3);
   eq('列字母 A/Z/AA', [api.Xlsx.colLetter(0), api.Xlsx.colLetter(25), api.Xlsx.colLetter(26)], ['A', 'Z', 'AA']);
 }
 
@@ -995,6 +1004,202 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
     return api.collectSnapEdges(s).length;
   })(), 4);
   eq('边-圆曲线收集1个', api.collectSnapCircles(st).length, 1);
+}
+
+/* 26. 测距链(ruler)：可编辑性、节点操作、长度/面积语义 ---------------------- */
+{
+  api.resetState();
+  const ruler=api.baseObject('dimension','dimension.distance',{subtype:'ruler',points:[[0,0],[3,4],[3,14]],x:0,y:0});
+  const distDim=api.baseObject('dimension','dimension.distance',{subtype:'distance',points:[[0,0],[6,8]]});
+  const areaDim=api.baseObject('dimension','dimension.distance',{subtype:'area',points:[[0,0],[10,0],[0,10]]});
+  const angleDim=api.baseObject('dimension','dimension.distance',{subtype:'angle',points:[[0,0],[10,0],[0,10]]});
+  const line=api.baseObject('line','line.custom',{points:[[0,0],[1,1]]});
+
+  /* 仅开放折线与测距链可增删拖拽节点；其余标注类型不可 */
+  eq('测距-链可编辑', api.isPolylineEditable(ruler), true);
+  eq('测距-折线可编辑', api.isPolylineEditable(line), true);
+  eq('测距-两点距离不可编辑', api.isPolylineEditable(distDim), false);
+  eq('测距-面积标注不可编辑', api.isPolylineEditable(areaDim), false);
+  eq('测距-角度标注不可编辑', api.isPolylineEditable(angleDim), false);
+  eq('测距-点设备不可编辑', api.isPolylineEditable({kind:'point'}), false);
+  eq('测距-最小2点', api.lineMinNodes(ruler), 2);
+
+  /* 测距链节点操作与折线完全同一套，且首点变更同步基点 */
+  eq('测距-中段插入', api.insertLineNode(ruler,1,[10,10]), true);
+  eq('测距-插入后4点', ruler.points.length, 4);
+  eq('测距-插入后锚点不变', [ruler.x,ruler.y], [0,0]);
+  eq('测距-末点不可再删(2点下限)', (function(){
+    const r2=api.baseObject('dimension','dimension.distance',{subtype:'ruler',points:[[0,0],[3,4]],x:0,y:0});
+    return api.removeLineNode(r2,0);
+  })(), false);
+  eq('测距-重排节点', api.moveNode(ruler,0,2), true);
+  approx('测距-重排后锚点跟随新首点X', ruler.x, ruler.points[0][0]);
+  approx('测距-重排后锚点跟随新首点Y', ruler.y, ruler.points[0][1]);
+
+  /* 长度：3-4-5 链 = 5+10=15，开放不闭合；面积恒 0 */
+  const r3=api.baseObject('dimension','dimension.distance',{subtype:'ruler',points:[[0,0],[3,4],[3,14]],x:0,y:0});
+  approx('测距-总长15', api.objectLength(r3), 15, 1e-9);
+  eq('测距-面积恒0', api.objectArea(r3), 0);
+  /* 面积标注的面积取自其节点多边形 */
+  approx('测距-面积标注=50', api.objectArea(areaDim), 50, 1e-9);
+  eq('测距-两点距离无面积', api.objectArea(distDim), 0);
+}
+
+/* 27. 面积/长度统计：区域四形状、闭合折线、开放折线、点设备 ------------------- */
+{
+  const rect={kind:'rect',x:0,y:0,width:10,height:10,shape:null};
+  const circle={kind:'rect',x:0,y:0,shape:{type:'circle',r:5}};
+  const square={kind:'line',closed:true,points:[[0,0],[10,0],[10,10],[0,10]]};
+  const tri={kind:'line',closed:true,points:[[0,0],[10,0],[0,10]]};
+  const open={kind:'line',closed:false,points:[[0,0],[3,4],[3,14]]};
+  approx('统计-矩形面积100', api.objectArea(rect), 100);
+  approx('统计-圆面积25π', api.objectArea(circle), 25*Math.PI, 1e-9);
+  approx('统计-闭合方形100', api.objectArea(square), 100);
+  approx('统计-闭合三角50', api.objectArea(tri), 50);
+  eq('统计-开放折线无面积', api.objectArea(open), 0);
+  eq('统计-点设备无面积', api.objectArea({kind:'point',x:0,y:0,phys:5}), 0);
+  /* 长度：开放链 15；闭合方形含闭合边 40；三角 10+10+10√2；无节点对象 0 */
+  approx('统计-开放链长15', api.objectLength(open), 15, 1e-9);
+  approx('统计-闭合周长40', api.objectLength(square), 40, 1e-9);
+  approx('统计-三角周长', api.objectLength(tri), 20+10*Math.SQRT2, 1e-9);
+  eq('统计-点设备长度0', api.objectLength({kind:'point'}), 0);
+}
+
+/* 28. 表格导入导出往返：节点坐标/闭合/形状/标注类型新列 + CSV 引号往返 -------- */
+{
+  /* 28.1 节点坐标编解码：负坐标、空白/分号、容错 */
+  eq('节点码-编码', api.formatNodeCoords([[0,0],[3.5,-2],[10,4]]), '0.00,0.00;3.50,-2.00;10.00,4.00');
+  const parsed=api.parseNodeCoords('0,0; 3.5, -2 ;10/4');
+  eq('节点码-解析3点', parsed.length, 3);
+  approx('节点码-负值解析', parsed[1][1], -2);
+  approx('节点码-斜杠分隔', parsed[2][0], 10);
+  eq('节点码-空文本', api.parseNodeCoords('').length, 0);
+  eq('节点码-坏段跳过', api.parseNodeCoords('0,0;a,b;5,6').length, 2);
+  eq('节点码-单点丢弃', api.parseNodeCoords('1,2;3').length, 1);
+  /* CSV 中含逗号的整格被引号包裹后可无损往返 */
+  const cell=api.csvCell('0,0;3,4;10,4',',');
+  ok('节点码-CSV自动加引号', cell.startsWith('"')&&cell.endsWith('"'));
+  const reparsed=api.parseRowsStub(['a,b',cell+',x'].join('\n'),',');
+  eq('节点码-CSV引号往返字段数', reparsed[1].length, 2);
+  eq('节点码-CSV引号内容保持', reparsed[1][0].trim(), '0,0;3,4;10,4');
+
+  /* 28.2 导出行包含全部新列 */
+  const st=api.resetState();
+  st.objects.push(
+    api.baseObject('line','line.custom',{name:'L1',closed:true,points:[[0,0],[10,0],[10,10],[0,10]],x:0,y:0}),
+    api.baseObject('dimension','dimension.distance',{name:'R1',subtype:'ruler',points:[[1,1],[4,5]],x:1,y:1}),
+    api.baseObject('rect','rect.area',{name:'C1',x:30,y:30,shape:{type:'circle',r:5}}),
+    api.baseObject('rect','rect.area',{name:'S1',x:0,y:0,shape:{type:'sector',r:10,a0:30,a1:120}}),
+    api.baseObject('point','point.marker',{name:'P1',x:1,y:2})
+  );
+  const rows=api.objectRows(); const byCode=Object.fromEntries(rows.map(r=>[r.编号,r]));
+  eq('导出-闭合列', byCode['L1']['闭合'], '是');
+  ok('导出-闭合折线节点坐标', byCode['L1']['节点坐标'].startsWith('0.00,0.00;10.00,0.00'));
+  eq('导出-测距标注类型', byCode['R1']['标注类型'], '测距');
+  ok('导出-测距节点坐标', byCode['R1']['节点坐标'].includes('4.00,5.00'));
+  eq('导出-圆形形状列', byCode['C1']['形状'], '圆形');
+  eq('导出-圆形直径列', byCode['C1']['宽度'], '10.00');
+  eq('导出-扇形形状列', byCode['S1']['形状'], '扇形');
+  eq('导出-扇形起止角', byCode['S1']['形状参数'], '30,120');
+  eq('导出-点设备无闭合列', byCode['P1']['闭合'], '');
+  eq('导出-点设备无节点坐标列', byCode['P1']['节点坐标'], '');
+  ok('导出-列头含全部新列', ['形状','形状参数','闭合','标注类型','节点坐标'].every(k=>api.TABLE_COLUMNS.includes(k)));
+}
+
+/* 29. 表格规划与应用：折线/测距/形状重建、基点平移、非法行告警 -------------- */
+{
+  const st=api.resetState();
+  const L1=api.baseObject('line','line.custom',{name:'L1',points:[[0,0],[10,0],[10,10]],x:0,y:0});
+  const L2=api.baseObject('line','line.custom',{name:'L2',points:[[5,5],[15,5]],x:5,y:5});
+  const D1=api.baseObject('dimension','dimension.distance',{name:'D1',subtype:'distance',points:[[0,0],[5,0]],x:0,y:0});
+  st.objects.push(L1,L2,D1);
+  const C=api.TABLE_COLUMNS;
+  const row=m=>{ const o={}; m.forEach((v,i)=>{ if(v!=='')o[C[i]]=v; }); return C.map(k=>o[k]??''); };
+  const H=C.slice();
+  const rL1=row(['L1','','线段/折线','','','','','','','','','','是','','0,0;20,0;20,10;0,10']);
+  const rL2=row(['L2','','线段/折线','','','25','35']);                       /* 仅改基点：整体平移 */
+  const rD1=row(['D1','','尺寸标注','','','','','','','','','','','测距']);  /* distance→ruler */
+  const rNewRuler=row(['','','尺寸标注','','','','','','','','','','','测距','0,0;6,8;6,18']);
+  const rNewLine=row(['','','线段/折线','','','','','','','','','','是','','0,0;10,0;10,10;0,10']);
+  const rCircle=row(['','','矩形/区域','','','30','30','','10','','圆形']);
+  const rSector=row(['','','矩形/区域','','','0','0','','20','','扇形','30,120']);
+  const rEllipse=row(['','','矩形/区域','','','1','2','30','10','6','椭圆']);
+  const rBadRuler=row(['','','尺寸标注','','','','','','','','','','','测距','0,0']);
+  const rBadClosed=row(['','','线段/折线','','','','','','','','','','是','','0,0;10,0']);
+  const rBadCircle=row(['','','矩形/区域','','','0','0','','0','','圆形']);
+  const plan=api.rowsToObjectsPlan([H,rL1,rL2,rD1,rNewRuler,rNewLine,rCircle,rSector,rEllipse,rBadRuler,rBadClosed,rBadCircle]);
+  eq('表格29-更新3项', plan.updates.length, 3);
+  eq('表格29-新建6项（含闭合2点降级的开放折线）', plan.creates.length, 6);
+  ok('表格29-测距单点告警', plan.warnings.some(w=>w.includes('尺寸标注')&&w.includes('2 点')));
+  ok('表格29-闭合2点降级告警', plan.warnings.some(w=>w.includes('闭合折线至少需要 3')));
+  ok('表格29-圆缺直径告警', plan.warnings.some(w=>w.includes('圆形')));
+  const degraded=plan.creates.find(cr=>cr.kind==='line'&&cr.points.length===2);
+  ok('表格29-闭合2点降级为开放', degraded&&degraded.closed===false);
+  api.applyTableImport(plan);
+
+  const aL1=st.objects.find(o=>o.name==='L1');
+  eq('表格29-L1闭合生效', aL1.closed, true);
+  eq('表格29-L1四点替换', aL1.points.length, 4);
+  approx('表格29-L1周长60', api.objectLength(aL1), 60, 1e-9);
+  approx('表格29-L1面积200', api.objectArea(aL1), 200, 1e-9);
+  const aL2=st.objects.find(o=>o.name==='L2');
+  eq('表格29-L2基点平移', [aL2.x,aL2.y,aL2.points[0][0],aL2.points[0][1],aL2.points[1][0],aL2.points[1][1]],
+    [25,35,25,35,35,35]);
+  const aD1=st.objects.find(o=>o.name==='D1');
+  eq('表格29-D1变测距', aD1.subtype, 'ruler');
+  eq('表格29-D1节点保留', aD1.points.length, 2);
+
+  const nr=st.objects.find(o=>o.kind==='dimension'&&o.name!=='D1');
+  eq('表格29-新测距3点', nr.points.length, 3);
+  eq('表格29-新测距基点取首点', [nr.x,nr.y], [0,0]);
+  approx('表格29-新测距总长20', api.objectLength(nr), 20, 1e-9);
+  const nl=st.objects.find(o=>o.kind==='line'&&o.closed&&o.points.length===4);
+  eq('表格29-新折线闭合', nl.closed, true);
+  const nd=st.objects.find(o=>o.kind==='line'&&!o.closed&&o.name!=='L2');
+  ok('表格29-降级折线落地为开放2点', nd&&nd.points.length===2);
+  const nc=st.objects.find(o=>o.kind==='rect'&&o.shape?.type==='circle');
+  eq('表格29-圆重建半径', nc.shape.r, 5);
+  eq('表格29-圆基点即圆心', [nc.x,nc.y], [30,30]);
+  eq('表格29-圆清空宽高', [nc.width,nc.height], [0,0]);
+  const ns=st.objects.find(o=>o.shape?.type==='sector');
+  eq('表格29-扇形重建', [ns.shape.r,ns.shape.a0,ns.shape.a1], [10,30,120]);
+  const ne=st.objects.find(o=>o.shape?.type==='ellipse');
+  eq('表格29-椭圆半轴', [ne.shape.rx,ne.shape.ry], [5,3]);
+  approx('表格29-椭圆角度', ne.angle, 30, 1e-9);
+
+  /* 29.2 旧版表头（无新列）仍可规划：折线行无法新建但不报错阻断 */
+  const oldH=['编号','名称','对象类型','X','Y','宽度','高度'];
+  const oldPlan=api.rowsToObjectsPlan([oldH,
+    ['O100','','点设备','1','2','',''],
+    ['O101','','线段/折线','0','0','','']]);
+  eq('表格29-旧表头点设备可新建', oldPlan.creates.length, 1);
+  ok('表格29-旧表头折线缺坐标告警', oldPlan.warnings.some(w=>w.includes('O101')&&w.includes('节点坐标')));
+}
+
+/* 30. JSON 工程往返：基点(含负值)/节点/闭合/测距子类型/形状全保留 ----------- */
+{
+  const m=api.migrateProject({ schema:'offline-drawing-annotation/v1',
+    objects:[
+      { id:'l1', kind:'line', typeId:'line.custom', name:'L1', x:-12.5, y:-8.25, closed:true,
+        points:[[-12.5,-8.25],[20,-8.25],[20,30],[-12.5,30]] },
+      { id:'r1', kind:'dimension', typeId:'dimension.distance', name:'R1', x:-3, y:4, subtype:'ruler',
+        points:[[-3,4],[0,8],[0,0],[9,0]] },
+      { id:'c1', kind:'rect', typeId:'rect.area', name:'C1', x:-50, y:-50, shape:{type:'circle',r:12} }
+    ]});
+  const L1=m.objects.find(o=>o.name==='L1');
+  eq('JSON-闭合保留', L1.closed, true);
+  eq('JSON-节点数保留', L1.points.length, 4);
+  approx('JSON-负基点X', L1.x, -12.5, 1e-9);
+  approx('JSON-负基点Y', L1.y, -8.25, 1e-9);
+  approx('JSON-负节点坐标', L1.points[3][0], -12.5, 1e-9);
+  const R1=m.objects.find(o=>o.name==='R1');
+  eq('JSON-测距子类型保留', R1.subtype, 'ruler');
+  eq('JSON-测距4点保留', R1.points.length, 4);
+  eq('JSON-测距首点同步基点', [R1.x,R1.y], [-3,4]);
+  approx('JSON-测距总长', api.objectLength(R1), 5+8+9, 1e-9);
+  const C1=m.objects.find(o=>o.name==='C1');
+  eq('JSON-圆形形状保留', C1.shape.type, 'circle');
+  eq('JSON-圆形负圆心保留', [C1.x,C1.y,C1.shape.r], [-50,-50,12]);
 }
 
 /* ---------------- 结果汇总 ---------------- */

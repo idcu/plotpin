@@ -166,6 +166,52 @@ async function importBackgroundFile(f){
 
 /* -------------------- 表格导入（CSV/TSV/XLSX → 对象更新/新增） -------------------- */
 const TABLE_KIND_BY_NAME={'点设备':'point','矩形/区域':'rect','线段/折线':'line','文字':'text','尺寸标注':'dimension'};
+/* 区域形状 / 标注子类型：表格中文 ↔ 模型枚举（导出导入共用同一映射） */
+const AREA_SHAPE_LABELS={rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形'};
+const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':'circle','椭圆':'ellipse','扇形':'sector'};
+const DIM_SUB_LABELS={ruler:'测距',distance:'两点距离',area:'面积',angle:'角度'};
+const DIM_SUB_BY_LABEL={'测距':'ruler','两点距离':'distance','距离':'distance','面积':'area','角度':'angle'};
+/* 节点坐标文本：节点间用分号、XY 间用逗号，如 "0,0;3.5,-2;10,4"（CSV 中整格自动加引号）；
+   解析宽容逗号/空格/斜杠/竖线等分隔，支持负坐标 */
+function formatNodeCoords(points){
+  return (points||[]).map(p=>fmt(p[0])+','+fmt(p[1])).join(';');
+}
+function parseNodeCoords(text){
+  if(text===undefined||text===null) return [];
+  const out=[];
+  String(text).split(';').forEach(seg=>{
+    const nums=seg.trim().split(/[,，\s/|xX×]+/).filter(s=>s!=='').map(Number);
+    if(nums.length===2&&nums.every(Number.isFinite)) out.push(nums);
+  });
+  return out;
+}
+/** 按表格行数据设置区域形状（基点为矩形左下角/圆·椭圆·扇形圆心）；参数不足返回 false */
+function applyRowShape(o,label,v){
+  const tt=AREA_SHAPE_BY_LABEL[label];
+  if(!tt||!Number.isFinite(v.x)||!Number.isFinite(v.y)) return false;
+  if(tt==='rect'){
+    if(!(v.w>0)||!(v.h>0)) return false;
+    o.shape=null; o.width=v.w; o.height=v.h; o.x=v.x; o.y=v.y; o.angle=normalizeAngle(v.angle);
+    return true;
+  }
+  o.x=v.x; o.y=v.y;
+  if(tt==='circle'){
+    if(!(v.w>0)) return false;
+    o.shape={type:'circle',r:v.w/2}; o.width=0; o.height=0; o.angle=0; return true;
+  }
+  if(tt==='ellipse'){
+    if(!(v.w>0)||!(v.h>0)) return false;
+    o.shape={type:'ellipse',rx:v.w/2,ry:v.h/2}; o.width=0; o.height=0; o.angle=normalizeAngle(v.angle); return true;
+  }
+  if(tt==='sector'){
+    if(!(v.w>0)) return false;
+    let a0=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:0);
+    let a1=Number.isFinite(v.params[1])?v.params[1]:a0+90;
+    let sweep=((a1-a0)%360+360)%360; if(sweep===0) sweep=360;
+    o.shape={type:'sector',r:v.w/2,a0,a1:a0+sweep}; o.width=0; o.height=0; o.angle=0; return true;
+  }
+  return false;
+}
 function tableNum(v){ const n=Number(String(v??'').trim()); return Number.isFinite(n)&&String(v??'').trim()!==''?n:NaN; }
 function tableBool(v){ return /^(是|true|1|y|yes)$/i.test(String(v??'').trim()); }
 function rowsToObjectsPlan(rows){
@@ -188,10 +234,34 @@ function rowsToObjectsPlan(rows){
     if(code&&byCode.has(code)){ updates.push({obj:byCode.get(code),cell:c=>cell(r,c)}); return; }
     const kind=TABLE_KIND_BY_NAME[cell(r,'对象类型')];
     if(!kind){ warnings.push(where+'：对象类型「'+(cell(r,'对象类型')||'空')+'」无法识别，已跳过'); return; }
-    if(kind==='line'||kind==='dimension'){ warnings.push(where+'：'+kindName(kind)+'节点坐标不在表格中，无法从表格重建，已跳过'); return; }
     const x=tableNum(cell(r,'X')), y=tableNum(cell(r,'Y'));
+    /* 折线/尺寸标注：从「节点坐标」列重建（基点 X/Y 取首节点）；无坐标列无法新建 */
+    if(kind==='line'||kind==='dimension'){
+      const pts=parseNodeCoords(cell(r,'节点坐标'));
+      const subtype=kind==='dimension'?(DIM_SUB_BY_LABEL[cell(r,'标注类型')]||'distance'):'';
+      const minPts=(kind==='dimension'&&subtype!=='ruler'&&subtype!=='distance')?3:2;
+      if(pts.length<minPts){
+        warnings.push(where+'：缺少有效「节点坐标」（格式 x,y;x,y;…，'+kindName(kind)+'至少 '+minPts+' 点），无法新建，已跳过');
+        return;
+      }
+      const closed=kind==='line'&&tableBool(cell(r,'闭合'));
+      if(closed&&pts.length<3){ warnings.push(where+'：闭合折线至少需要 3 个节点，已按开放折线处理'); }
+      creates.push({kind,x,y,closed:closed&&pts.length>=3,subtype,points:pts,cell:c=>cell(r,c)});
+      return;
+    }
     if(!Number.isFinite(x)||!Number.isFinite(y)){ warnings.push(where+'：缺少有效 X/Y 坐标，已跳过'); return; }
-    if(kind==='rect'&&(!(tableNum(cell(r,'宽度'))>0)||!(tableNum(cell(r,'高度'))>0))){ warnings.push(where+'：矩形缺少有效宽度/高度，已跳过'); return; }
+    if(kind==='rect'){
+      /* 形状列决定尺寸校验：矩形/椭圆要宽+高；圆/扇形只要直径（宽度列） */
+      const shape=AREA_SHAPE_BY_LABEL[cell(r,'形状')]||'rect';
+      const w=tableNum(cell(r,'宽度')), h=tableNum(cell(r,'高度'));
+      const needH=shape==='rect'||shape==='ellipse';
+      if(!(w>0)||(needH&&!(h>0))){
+        warnings.push(where+'：'+AREA_SHAPE_LABELS[shape]+'缺少有效宽度'+(needH?'/高度':'')+'，已跳过');
+        return;
+      }
+      creates.push({kind,x,y,shape,cell:c=>cell(r,c)});
+      return;
+    }
     creates.push({kind,x,y,cell:c=>cell(r,c)});
   });
   return {updates,creates,warnings};
@@ -208,7 +278,7 @@ function showTableImportPreview(fileName,plan){
     : '<div class="ok-banner">全部行均可导入。</div>';
   openModal('表格导入预览：'+fileName,
     '<p style="line-height:1.7">将按「编号」匹配对象并更新属性：<b>'+plan.updates.length+'</b> 项更新、<b>'+plan.creates.length+'</b> 项新增。</p>'+
-    '<p class="hint-text">可更新：名称、业务类型、图层、坐标、角度、宽高、显隐、锁定、备注；新对象仅支持点设备/矩形/文字。建议导入前先导出 JSON 备份。</p>'+warnHtml,
+    '<p class="hint-text">可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；新对象支持点设备 / 矩形·圆·椭圆·扇形区域 / 折线（含闭合）/ 测距等标注（需「节点坐标」列）。建议导入前先导出 JSON 备份。</p>'+warnHtml,
     [{text:'取消',click:closeModal},
      {text:'合并导入',class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }
@@ -223,10 +293,50 @@ function applyTableImport(plan){
     const ln=c('图层');
     if(ln){ const l=state.layers.find(x=>x.name===ln); if(l) o.layerId=l.id; }
     const x=tableNum(c('X')),y=tableNum(c('Y')),ang=tableNum(c('角度'));
-    if(Number.isFinite(x)) o.x=x;
-    if(Number.isFinite(y)) o.y=y;
-    if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
-    if(o.kind==='rect'&&areaShapeType(o)==='rect'){ const w=tableNum(c('宽度')),h=tableNum(c('高度')); if(w>0)o.width=w; if(h>0)o.height=h; }
+    if(o.kind==='line'||o.kind==='dimension'){
+      /* 折线/标注：「节点坐标」整体替换并同步基点；只改 X/Y 时按基点平移全部节点，杜绝锚点与节点脱节 */
+      const pts=parseNodeCoords(c('节点坐标'));
+      if(pts.length){
+        const wantClosed=o.kind==='line'&&c('闭合')!==''?tableBool(c('闭合')):o.closed;
+        const wantSub=o.kind==='dimension'&&c('标注类型')?DIM_SUB_BY_LABEL[c('标注类型')]:o.subtype;
+        const subMin=(o.kind==='dimension'&&wantSub!=='ruler'&&wantSub!=='distance')?3:2;
+        const closedOk=o.kind==='line'?(!wantClosed||pts.length>=3):true;
+        if(pts.length>=subMin&&closedOk){
+          o.points=pts;
+          if(o.kind==='line') o.closed=wantClosed;
+          if(o.kind==='dimension') o.subtype=wantSub;
+          syncFirstPoint(o);
+        }
+      }else{
+        const nx=Number.isFinite(x)?x:o.x, ny=Number.isFinite(y)?y:o.y;
+        const dx=nx-o.x, dy=ny-o.y;
+        if(dx||dy){ o.points=o.points.map(p=>[p[0]+dx,p[1]+dy]); o.x=nx; o.y=ny; }
+        if(o.kind==='line'&&c('闭合')!==''&&o.points.length>=3) o.closed=tableBool(c('闭合'));
+        /* 仅切换标注类型（不带节点列）：现有节点数满足新类型下限才生效 */
+        if(o.kind==='dimension'&&c('标注类型')){
+          const wantSub=DIM_SUB_BY_LABEL[c('标注类型')];
+          const subMin=(wantSub!=='ruler'&&wantSub!=='distance')?3:2;
+          if(wantSub&&o.points.length>=subMin) o.subtype=wantSub;
+        }
+      }
+    }else if(o.kind==='rect'){
+      /* 形状列存在时按形状重建（基点/圆心系同一套 X/Y）；否则沿用旧的宽高更新 */
+      const shapeLabel=c('形状');
+      const params=String(c('形状参数')||'').split(/[,，\s]+/).filter(s=>s.trim()!=='').map(Number);
+      if(shapeLabel){
+        applyRowShape(o,shapeLabel,{x:Number.isFinite(x)?x:o.x,y:Number.isFinite(y)?y:o.y,
+          w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(ang)?ang:o.angle,params});
+      }else{
+        if(Number.isFinite(x)) o.x=x;
+        if(Number.isFinite(y)) o.y=y;
+        if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
+        if(areaShapeType(o)==='rect'){ const w=tableNum(c('宽度')),h=tableNum(c('高度')); if(w>0)o.width=w; if(h>0)o.height=h; }
+      }
+    }else{
+      if(Number.isFinite(x)) o.x=x;
+      if(Number.isFinite(y)) o.y=y;
+      if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
+    }
     const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
     const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
     const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
@@ -236,10 +346,21 @@ function applyTableImport(plan){
     const c=cr.cell;
     const type=state.objectTypes.find(x=>x.kind===cr.kind&&x.name===c('业务类型'));
     const o=baseObject(cr.kind,type?type.id:defaultTypeId(cr.kind));
-    o.x=cr.x; o.y=cr.y;
-    const ang=tableNum(c('角度')); if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
-    if(cr.kind==='rect'){ o.width=tableNum(c('宽度')); o.height=tableNum(c('高度')); }
-    if(cr.kind==='text'){ o.text=c('名称')||'文字'; o.height=2.2; }
+    const ang=tableNum(c('角度'));
+    if(cr.kind==='line'||cr.kind==='dimension'){
+      o.points=cr.points;
+      if(cr.kind==='line') o.closed=!!cr.closed;
+      if(cr.kind==='dimension') o.subtype=cr.subtype||'distance';
+      syncFirstPoint(o);
+    }else if(cr.kind==='rect'){
+      const params=String(c('形状参数')||'').split(/[,，\s]+/).filter(s=>s.trim()!=='').map(Number);
+      applyRowShape(o,AREA_SHAPE_LABELS[cr.shape]||'矩形',
+        {x:cr.x,y:cr.y,w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(ang)?ang:0,params});
+    }else{
+      o.x=cr.x; o.y=cr.y;
+      if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
+      if(cr.kind==='text'){ o.text=c('名称')||'文字'; o.height=2.2; }
+    }
     const ln=c('图层'); const l=state.layers.find(x=>x.name===ln); if(l) o.layerId=l.id;
     const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
     const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
@@ -273,22 +394,27 @@ async function exportJSON(){
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
   toast('JSON 工程已导出（含底图）','success');
 }
-const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','X','Y','角度','宽度','高度','节点数','长度','面积','显示','锁定','备注','更新时间'];
+const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','X','Y','角度','宽度','高度','形状','形状参数','闭合','标注类型','节点坐标','节点数','长度','面积','显示','锁定','备注','更新时间'];
 function objectRows(){
   return state.objects.map(o=>{
     const t=getType(o.typeId),l=layerOf(o);
-    /* 非矩形区域：宽/高列填外接盒尺寸（圆/扇形=2r，椭圆=2rx×2ry），面积仍取精确值 */
-    let w='',h='',ang=o.angle||0;
+    /* 非矩形区域：宽/高列填外接盒尺寸（圆/扇形=2r，椭圆=2rx×2ry），形状列保留精确类型，面积仍取精确值 */
+    let w='',h='',ang=o.angle||0,shape='',shapeParam='';
     if(o.kind==='rect'){
       const tt=areaShapeType(o), sh=o.shape||{};
+      shape=AREA_SHAPE_LABELS[tt]||'';
       if(tt==='rect'){ w=o.width; h=o.height; }
       else if(tt==='circle'){ w=h=2*sh.r; }
       else if(tt==='ellipse'){ w=2*sh.rx; h=2*sh.ry; }
-      else { w=h=2*sh.r; ang=Math.round(Number(sh.a0)||0); }
+      else { w=h=2*sh.r; shapeParam=Math.round(Number(sh.a0)||0)+','+Math.round(Number(sh.a1)||0); }
     }
     return {
       编号:o.name,名称:o.text||'',对象类型:kindName(o.kind),业务类型:t.name,图层:l.name,
       X:fmt(o.x),Y:fmt(o.y),角度:ang,宽度:w?fmt(w):'',高度:h?fmt(h):'',
+      形状:shape,'形状参数':shapeParam,
+      闭合:o.kind==='line'?(o.closed?'是':'否'):'',
+      标注类型:o.kind==='dimension'?(DIM_SUB_LABELS[o.subtype]||o.subtype||''):'',
+      节点坐标:(o.kind==='line'||o.kind==='dimension')&&o.points?.length?formatNodeCoords(o.points):'',
       节点数:o.points?.length||0,长度:objectLength(o)?fmt(objectLength(o)):'',面积:objectArea(o)?fmt(objectArea(o)):'',
       显示:o.visible?'是':'否',锁定:o.locked?'是':'否',备注:o.props.note||'',更新时间:o.updatedAt
     };
@@ -379,7 +505,14 @@ function exportSVG(){
       markers.push(`<text x="${X(o.x)}" y="${Y(o.y)}" transform="rotate(${-o.angle} ${X(o.x)} ${Y(o.y)})" text-anchor="middle" font-size="${Math.max(10,o.height*ppu*.55)}" fill="${o.style.color||'#111'}">${esc(o.text||'文字')}</text>`);
     }else if(o.kind==='dimension'&&o.points.length>=2){
       const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
-      shapes.push(`<polyline points="${pts}" fill="none" stroke="#111827" stroke-width="1.6"/>`);
+      const dash=o.subtype==='ruler'?' stroke-dasharray="7,4"':'';
+      const dcolor=o.subtype==='ruler'?'#0891b2':'#111827';
+      shapes.push(`<polyline points="${pts}" fill="none" stroke="${dcolor}" stroke-width="1.8"${dash}/>`);
+      if(o.subtype==='ruler'){
+        o.points.forEach(p=>shapes.push(`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="none" stroke="#0891b2" stroke-width="1.5"/>`));
+        const ep=o.points[o.points.length-1];
+        markers.push(`<text x="${X(ep[0])+6}" y="${Y(ep[1])-6}" text-anchor="start" font-size="12" fill="#0e7490">Σ ${fmt(objectLength(o))} m</text>`);
+      }
       if(o.subtype==='distance') markers.push(`<text x="${(X(o.points[0][0])+X(o.points[1][0]))/2}" y="${(Y(o.points[0][1])+Y(o.points[1][1]))/2-8}" text-anchor="middle" font-size="12">${fmt(dist(o.points[0],o.points[1]))} m</text>`);
     }
   });
