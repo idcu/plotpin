@@ -167,10 +167,33 @@ canvas.addEventListener('pointerup',e=>{
 });
 canvas.addEventListener('pointercancel',()=>{ drag=null; rubber=null; document.body.classList.remove('panning'); requestRender(); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('dblclick',()=>{
+canvas.addEventListener('dblclick',e=>{
   if(draft&&draft.kind==='sitePolygon') finishSiteDraft();
   else if(draft && draft.points && draft.points.length>1) finishDraft();
+  else editLineNodeByDoubleClick(e);
 });
+/** 选择工具下双击折线：点中节点→删除；点中线段→在该处插入节点（吸附生效） */
+function editLineNodeByDoubleClick(e){
+  if(currentTool!=='select'||selectedIds.size!==1) return;
+  const o=state.objects.find(x=>x.id===Array.from(selectedIds)[0]);
+  if(!o||o.kind!=='line'||!isEditable(o)||o.points.length<2) return;
+  const wp=snapPoint(pointerWorld(e),e), tol=9/state.viewport.zoom;
+  let ni=-1;
+  o.points.forEach((p,i)=>{ if(dist(p,wp)<=tol) ni=i; });
+  if(ni>=0){
+    if(o.points.length<=lineMinNodes(o)){ toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn'); return; }
+    pushHistory(); removeLineNode(o,ni); commitChange('已删除节点');
+    return;
+  }
+  let best=null;
+  const segN=o.closed?o.points.length:o.points.length-1;
+  for(let k=0;k<segN;k++){
+    const a=o.points[k], b=o.points[(k+1)%o.points.length];
+    const dd=distanceToSegment(wp,a,b);
+    if(dd<=tol&&(!best||dd<best.d)) best={k,d:dd};
+  }
+  if(best){ pushHistory(); insertLineNode(o,best.k,wp); commitChange('已插入节点'); }
+}
 function moveObjectBy(o,orig,d){
   if(!o) return;
   o.x=orig.x+d[0]; o.y=orig.y+d[1];
@@ -389,7 +412,8 @@ function openShortcutsHelp(){
     ['Ctrl + Z / Y','撤销 / 重做'],['Delete / Backspace','删除选中对象'],
     ['Ctrl + D','原地复制选中对象'],['Ctrl + C / V','复制 / 粘贴对象（偏移 1m）'],
     ['Esc','取消当前绘制 / 清除选择'],['Enter','完成折线或面积标注'],
-    ['Backspace（绘制中）','删除上一个录入节点'],['空格 + 拖拽','临时平移画布'],
+    ['Backspace（绘制中）','删除上一个录入节点'],
+    ['双击线段 / 双击节点（选择工具）','在折线上插入节点 / 删除节点'],['空格 + 拖拽','临时平移画布'],
     ['方向键','移动选中对象（Shift ×10 倍步距）'],['滚轮 / 右键拖拽','缩放 / 平移画布'],
     ['拖拽文件到画布','导入 JSON 工程、CSV/TSV/XLSX 表格或底图图片'],['?','显示本帮助']
   ];

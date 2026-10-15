@@ -39,6 +39,23 @@ function populateSelects(){
 }
 
 /* -------------------- 属性面板 -------------------- */
+/** 折线/标注节点编辑器：坐标可精确输入；折线还可逐节点插入(＋)/删除(×) */
+function renderNodeEditor(o){
+  const canEdit=o.kind==='line';
+  const min=canEdit?lineMinNodes(o):0;
+  const rows=(o.points||[]).map((p,i)=>`
+    <div class="node-row">
+      <span class="node-idx">#${i+1}</span>
+      <input type="number" step="0.1" title="节点 X（米，可为负）" data-node-axis="x" data-node-index="${i}" value="${fmt(p[0])}">
+      <input type="number" step="0.1" title="节点 Y（米，可为负）" data-node-axis="y" data-node-index="${i}" value="${fmt(p[1])}">
+      ${canEdit?`<button type="button" class="icon-btn" data-node-add="${i}" title="在此节点后插入一个节点">＋</button>
+      <button type="button" class="icon-btn danger" data-node-del="${i}" title="删除该节点" ${o.points.length<=min?'disabled':''}>×</button>`:''}
+    </div>`).join('');
+  const hint=canEdit
+    ? `<div class="hint-text">共 ${o.points.length} 点（${o.closed?'闭合区域':'开放折线'}至少 ${min} 点）；也可在画布上双击线段插入节点、双击节点删除</div>`
+    : `<div class="hint-text">共 ${o.points.length} 点；可在画布上拖节点手柄调整位置</div>`;
+  return `<div class="node-list">${rows}${hint}</div>`;
+}
 function renderProps(){
   const box=$('propPanel');
   const objs=state.objects.filter(o=>selectedIds.has(o.id));
@@ -86,7 +103,7 @@ function renderProps(){
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
       ${row('颜色',`<input type="color" data-style="color" value="${o.style.color||(o.kind==='dimension'?'#111827':t.color)}">`)}
       ${o.kind==='line'?row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`):''}
-      ${row('节点',`<div class="hint-text">${o.points.map((p,i)=>`#${i+1}: ${fmt(p[0])}, ${fmt(p[1])}`).join('<br>')}</div>`)}`;
+      ${row('节点',renderNodeEditor(o))}`;
   }else if(o.kind==='point'){
     const psh=t.scaleShape||'none';
     const canScale=psh!=='none';
@@ -161,6 +178,18 @@ function bindPropEvents(box,o){
     const key=Object.keys(o.props||{})[Number(el.dataset.propVal)];
     if(key!==undefined){ o.props[key]=el.value; changed(); }
   }));
+  box.querySelectorAll('[data-node-axis]').forEach(el=>el.addEventListener('input',()=>{
+    if(setNodeCoord(o,Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) changed();
+  }));
+  box.querySelectorAll('[data-node-add]').forEach(b=>b.onclick=()=>{
+    const i=Number(b.dataset.nodeAdd), a=o.points[i], c=o.points[i+1];
+    const p=c?[(a[0]+c[0])/2,(a[1]+c[1])/2]:[a[0]+1,a[1]];
+    pushHistory(); insertLineNode(o,i,p); commitChange('已插入节点');
+  });
+  box.querySelectorAll('[data-node-del]').forEach(b=>b.onclick=()=>{
+    if(o.points.length<=lineMinNodes(o)) return toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn');
+    pushHistory(); removeLineNode(o,Number(b.dataset.nodeDel)); commitChange('已删除节点');
+  });
   box.querySelector('[data-action="duplicate"]').onclick=()=>duplicateSelected();
   box.querySelector('[data-action="delete"]').onclick=()=>deleteSelected();
   box.querySelector('[data-action="raise"]').onclick=()=>reorderSelected(1);
@@ -181,7 +210,11 @@ function applyField(el,o,changed){
   /* 基点坐标允许负值（可在场地外，与拖拽移动同一基准）；尺寸类字段仍非负 */
   if(k==='x'||k==='y'){ const n=Number(el.value); o[k]=Number.isFinite(n)?n:0; }
   else if(['width','height','angle','strokeWidth','phys'].includes(k)) o[k]=Math.max(0,Number(el.value)||0);
-  else if(k==='closed'||k==='visible'||k==='locked') o[k]=el.checked;
+  else if(k==='closed'){
+    if(el.checked && o.points.length<3){ el.checked=false; toast('闭合区域至少需要 3 个节点，请先插入节点','warn'); return; }
+    o.closed=el.checked;
+  }
+  else if(k==='visible'||k==='locked') o[k]=el.checked;
   else if(k==='iconSize') o.iconSize=Math.min(3,Math.max(.5,Number(el.value)||1));
   else if(k==='shapeType'){
     convertAreaShape(o,el.value); changed(); renderProps(); return;

@@ -101,6 +101,7 @@ code += `\n;globalThis.__api = {
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter,
   sectorSweep, sectorArcPoints, convertAreaShape, pointIconScale, areaParamText,
   applyField,
+  lineMinNodes, setNodeCoord, insertLineNode, removeLineNode,
   TABLE_COLUMNS
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
@@ -691,6 +692,56 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
 
   /* 基点修改不破坏形状对象引用（圆仍可正常换算面积） */
   approx('基点-移动后圆面积不变', api.shapeArea(c), 25*Math.PI, 1e-9);
+}
+
+/* 20. 折线节点编辑：坐标修改、插入、删除、最小点数与锚点同步 ----------------- */
+{
+  const mk=closed=>api.baseObject('line','line.custom',{points:[[0,0],[10,0],[10,10]],closed:!!closed,x:0,y:0});
+
+  /* 最小节点数：开放 2 / 闭合 3 */
+  eq('节点-开放折线最小2点', api.lineMinNodes(mk(false)), 2);
+  eq('节点-闭合区域最小3点', api.lineMinNodes(mk(true)), 3);
+
+  /* 修改坐标：允许负值；首点修改同步锚点；非法值拒绝 */
+  const l1=mk(false);
+  eq('节点-改节点1 Y', api.setNodeCoord(l1,1,'y',-5), true);
+  eq('节点-负值写入', l1.points[1][1], -5);
+  eq('节点-非节点对象拒改', api.setNodeCoord({},0,'x',1), false);
+  eq('节点-越界索引拒改', api.setNodeCoord(l1,9,'x',1), false);
+  eq('节点-非法数字拒改', api.setNodeCoord(l1,0,'x','abc'), false);
+  eq('节点-非法时原值保留', l1.points[0][0], 0);
+  api.setNodeCoord(l1,0,'x',3);
+  eq('节点-首点同步锚点 X', l1.x, 3);
+
+  /* 中间插入：在 #1 后插中点 (10,5)，点数 4，位置索引 2 */
+  const l2=mk(false);
+  eq('节点-插入返回成功', api.insertLineNode(l2,1,[10,5]), true);
+  eq('节点-插入后点数', l2.points.length, 4);
+  eq('节点-插入点坐标', l2.points[2], [10,5]);
+  /* 末尾节点后插入=追加 */
+  eq('节点-末点后追加', api.insertLineNode(l2,3,[20,20]), true);
+  eq('节点-追加在末尾', l2.points[4], [20,20]);
+  /* 非折线对象不能插 */
+  eq('节点-非折线拒插', api.insertLineNode({kind:'rect'},0,[1,1]), false);
+
+  /* 删除：开放折线 3 点可删 1 个；2 点时再删被拒 */
+  const l3=mk(false);
+  eq('节点-删除成功', api.removeLineNode(l3,1), true);
+  eq('节点-删除后点数', l3.points.length, 2);
+  eq('节点-删除后剩余点正确', l3.points[1], [10,10]);
+  eq('节点-2点拒绝再删', api.removeLineNode(l3,0), false);
+  eq('节点-拒绝后点数不变', l3.points.length, 2);
+
+  /* 闭合 3 点不允许删除；插入后可删；删首点后锚点跟随新首点 */
+  const l4=mk(true);
+  eq('节点-闭合3点拒删', api.removeLineNode(l4,2), false);
+  api.insertLineNode(l4,0,[0,5]);           // #1 后插入，新点成 #2
+  eq('节点-闭合插入后4点', l4.points.length, 4);
+  eq('节点-闭合插入位置', l4.points[1], [0,5]);
+  eq('节点-闭合4点可删', api.removeLineNode(l4,0), true);
+  eq('节点-删首点后锚点同步 X', l4.x, l4.points[0][0]);
+  eq('节点-删首点后锚点同步 Y', l4.y, l4.points[0][1]);
+  eq('节点-闭合态保持', l4.closed, true);
 }
 
 /* ---------------- 结果汇总 ---------------- */

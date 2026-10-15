@@ -80,6 +80,31 @@ function styleVal(o, key, fallback){
 }
 function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注'})[k] || k; }
 
+/* -------------------- 折线节点编辑（纯数据，供面板与画布双击共用） -------------------- */
+function lineMinNodes(o){ return o && o.closed ? 3 : 2; }
+/** 修改第 i 个节点坐标（允许负值，与拖拽同一基准）；i===0 时同步锚点 x,y */
+function setNodeCoord(o,i,axis,v){
+  if(!o || !Array.isArray(o.points) || i<0 || i>=o.points.length) return false;
+  const n=Number(v); if(!Number.isFinite(n)) return false;
+  o.points[i][axis==='y'?1:0]=n;
+  if(i===0){ o.x=o.points[0][0]; o.y=o.points[0][1]; }
+  o.updatedAt=nowISO(); return true;
+}
+/** 在第 at 个节点之后插入节点 p（at 为末节点时追加到末尾） */
+function insertLineNode(o,at,p){
+  if(!o || o.kind!=='line' || !Array.isArray(o.points) || !Array.isArray(p)) return false;
+  const i=Math.min(Math.max(0,at+1),o.points.length);
+  o.points.splice(i,0,[Number(p[0]),Number(p[1])]);
+  o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;
+}
+/** 删除第 i 个节点；低于最小节点数（开放折线2、闭合区域3）时拒绝 */
+function removeLineNode(o,i){
+  if(!o || o.kind!=='line' || !Array.isArray(o.points) || i<0 || i>=o.points.length) return false;
+  if(o.points.length<=lineMinNodes(o)) return false;
+  o.points.splice(i,1);
+  o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;
+}
+
 /* 点设备屏幕图标有效倍率 = 类型默认大小 × 对象覆盖 × 全局倍率（三层连乘，纯屏幕语义） */
 function pointIconScale(o){
   const t=getType(o.typeId);
