@@ -106,6 +106,7 @@ code += `\n;globalThis.__api = {
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength,
   objectRows, formatNodeCoords, parseNodeCoords,
+  previewGeomCandidate, checkRowGeom, geomRoundingTol,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS
 };`;
@@ -1200,6 +1201,94 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const C1=m.objects.find(o=>o.name==='C1');
   eq('JSON-圆形形状保留', C1.shape.type, 'circle');
   eq('JSON-圆形负圆心保留', [C1.x,C1.y,C1.shape.r], [-50,-50,12]);
+}
+
+/* 31. 导入面积/长度/节点数核对：导出回导零告警、篡改告警非阻断、取整容差、非法值 ---- */
+{
+  /* 31.1 全类型工程导出后原样回导：长度/面积/节点数必须零告警（含大坐标多小数的取整传播） */
+  const st=api.resetState();
+  st.objects.push(
+    api.baseObject('line','line.custom',{name:'K1',points:[[0,0],[3,4],[3,14]],x:0,y:0}),
+    api.baseObject('line','line.custom',{name:'K2',closed:true,points:[[1000.333,500.777],[1234.567,512.123],[1230.9,777.456],[990.1,760.0]],x:1000.333,y:500.777}),
+    api.baseObject('dimension','dimension.distance',{name:'K3',subtype:'ruler',points:[[0,0],[6,8],[6,18]],x:0,y:0}),
+    api.baseObject('dimension','dimension.distance',{name:'K4',subtype:'distance',points:[[0,0],[9,12]],x:0,y:0}),
+    api.baseObject('dimension','dimension.distance',{name:'K5',subtype:'area',points:[[0,0],[10,0],[0,10]],x:0,y:0}),
+    api.baseObject('rect','rect.area',{name:'K6',x:0,y:0,width:12.5,height:8.25}),
+    api.baseObject('rect','rect.area',{name:'K7',x:500.1,y:500.2,shape:{type:'circle',r:33.333}}),
+    api.baseObject('rect','rect.area',{name:'K8',x:0,y:0,shape:{type:'ellipse',rx:40.5,ry:12.25}}),
+    api.baseObject('rect','rect.area',{name:'K9',x:0,y:0,shape:{type:'sector',r:25.5,a0:15,a1:195}}),
+    api.baseObject('point','point.marker',{name:'K10',x:1,y:2}),
+    api.baseObject('text',undefined,{name:'K11',x:3,y:4,text:'注'})
+  );
+  const cols=api.TABLE_COLUMNS;
+  const dataRows=api.objectRows().map(r=>cols.map(c=>String(r[c]??'')));
+  const rt=api.rowsToObjectsPlan([cols,...dataRows]);
+  eq('核对-全类型导出回导零告警', rt.warnings.length, 0);
+  eq('核对-回导全部走更新(11项)', rt.updates.length, 11);
+
+  /* 31.2 直接核对函数：候选长度/面积推算 */
+  {
+    const o=api.baseObject('line','line.custom',{points:[[0,0],[3,4],[3,14]],x:0,y:0});
+    eq('核对-空列不校验', api.checkRowGeom('行X',()=> '',o).length, 0);
+    const get=n=>({'长度':'15','节点数':'3'})[n]??'';
+    eq('核对-长度一致无告警', api.checkRowGeom('行X',get,o).length, 0);
+  }
+
+  /* 31.3 规划层篡改：长度/面积/节点数错误要告警但仍新建（非阻断） */
+  const H=cols.slice();
+  const row=m=>{ const o={}; m.forEach(([k,v])=>o[k]=v); return cols.map(k=>o[k]??''); };
+  const tamperedLen=row([['对象类型','线段/折线'],['闭合','否'],['节点坐标','0,0;3,4;3,14'],['节点数','3'],['长度','99'],['面积','']]);
+  const tamperedArea=row([['对象类型','矩形/区域'],['X','0'],['Y','0'],['宽度','10'],['高度','10'],['形状','矩形'],['面积','999']]);
+  const tamperedN=row([['对象类型','尺寸标注'],['标注类型','测距'],['节点坐标','0,0;6,8;6,18'],['节点数','5'],['长度','20']]);
+  const negLen=row([['对象类型','线段/折线'],['节点坐标','0,0;3,4'],['长度','-1']]);
+  const badAreaTxt=row([['对象类型','矩形/区域'],['X','0'],['Y','0'],['宽度','2'],['高度','2'],['形状','矩形'],['面积','abc']]);
+  const p2=api.rowsToObjectsPlan([H,tamperedLen,tamperedArea,tamperedN,negLen,badAreaTxt]);
+  eq('核对-篡改后仍全部新建5项', p2.creates.length, 5);
+  ok('核对-长度不一致告警', p2.warnings.some(w=>w.includes('长度列')&&w.includes('不一致')));
+  ok('核对-面积不一致告警', p2.warnings.some(w=>w.includes('面积列')&&w.includes('999')));
+  ok('核对-节点数不一致告警', p2.warnings.some(w=>w.includes('节点数列')));
+  ok('核对-负长度非法告警', p2.warnings.some(w=>w.includes('长度列')&&w.includes('非法')));
+  ok('核对-非数字面积非法告警', p2.warnings.some(w=>w.includes('面积列')&&w.includes('非法')));
+  /* 告警文本带推算值与差值 */
+  ok('核对-告警含推算值15', p2.warnings.some(w=>w.includes('15.00')));
+
+  /* 31.4 取整容差内不告警：闭合4边周长60，容差 4*1.5*.01+.005=.065，60.01 通过 */
+  const near=row([['对象类型','线段/折线'],['闭合','是'],['节点坐标','0,0;20,0;20,10;0,10'],['节点数','4'],['长度','60.01'],['面积','199.98']]);
+  const p3=api.rowsToObjectsPlan([H,near]);
+  eq('核对-容差内零告警', p3.warnings.filter(w=>w.includes('不一致')).length, 0);
+  const far=row([['对象类型','线段/折线'],['闭合','是'],['节点坐标','0,0;20,0;20,10;0,10'],['长度','60.5']]);
+  const p4=api.rowsToObjectsPlan([H,far]);
+  ok('核对-超出容差告警', p4.warnings.some(w=>w.includes('长度列')));
+
+  /* 31.5 更新行：节点坐标已改但长度列还是旧值 → 告警（防止台账与图脱节） */
+  const uo=api.baseObject('line','line.custom',{name:'U1',points:[[0,0],[10,0]],x:0,y:0});
+  st.objects.push(uo);
+  const upd=row([['编号','U1'],['节点坐标','0,0;30,0'],['长度','10']]);
+  const p5=api.rowsToObjectsPlan([H,upd]);
+  eq('核对-更新1项', p5.updates.length, 1);
+  ok('核对-更新行旧长度告警', p5.warnings.some(w=>w.includes('U1')&&w.includes('长度列')));
+  /* 节点改成 30m 后长度列同步改为 30 → 不告警 */
+  const upd2=row([['编号','U1'],['节点坐标','0,0;30,0'],['长度','30']]);
+  const p6=api.rowsToObjectsPlan([H,upd2]);
+  eq('核对-更新行一致零告警', p6.warnings.length, 0);
+
+  /* 31.6 点设备填长度/面积无效列 → 告警；留空不告警 */
+  const p7=api.rowsToObjectsPlan([H,
+    row([['对象类型','点设备'],['X','1'],['Y','2'],['长度','5']]),
+    row([['对象类型','点设备'],['X','1'],['Y','2']])]);
+  eq('核对-点设备2项新建', p7.creates.length, 2);
+  ok('核对-点设备长度无效告警', p7.warnings.some(w=>w.includes('长度列')&&w.includes('不一致')));
+  eq('核对-点设备留空零告警', p7.warnings.length, 1);
+
+  /* 31.7 圆形面积篡改：πr² 推算 25π≈78.54，填 100 必告警 */
+  const p8=api.rowsToObjectsPlan([H,
+    row([['对象类型','矩形/区域'],['X','0'],['Y','0'],['宽度','10'],['形状','圆形'],['面积','100']])]);
+  ok('核对-圆形面积不一致告警', p8.warnings.some(w=>w.includes('面积列')));
+
+  /* 31.8 旧版表头（无长度/面积列）不产生任何核对告警 */
+  const oldH=['编号','名称','对象类型','X','Y','宽度','高度'];
+  const p9=api.rowsToObjectsPlan([oldH,['U9','','点设备','1','2','','']]);
+  eq('核对-旧表头无核对告警', p9.warnings.length, 0);
 }
 
 /* ---------------- 结果汇总 ---------------- */
