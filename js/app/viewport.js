@@ -1,9 +1,23 @@
 /* viewport.js —— 屏幕/世界坐标、DPR、缩放平移、网格吸附 */
 /* -------------------- 画布视图 / 坐标 -------------------- */
-function worldDims(){ return siteDomainOf(state.background); }
+/**
+ * 世界坐标取景框（米）：矢量场地/未校准图片规整在第一象限 (0,0)-(w,h)；
+ * 仿射校准后的图片四角可为任意平行四边形，取其轴对齐包围框（min 允许负值）。
+ * w2s/s2w 统一以该框为基准，保证旋转底图与对象、网格、交互仍共用同一坐标链路。
+ */
+function worldFrame(){
+  const bg=state.background;
+  if(bg&&bg.kind==='image'){
+    const f=imageWorldFrame(bg);
+    if(f) return f;
+  }
+  const d=siteDomainOf(bg);
+  return {minX:0,minY:0,maxX:d.w,maxY:d.h,w:d.w,h:d.h};
+}
+function worldDims(){ return worldFrame(); }
 function view(){ return state.viewport; }
-function w2s(p,v=state.viewport,dims=worldDims()){ return [v.panX+p[0]*v.zoom, v.panY+(dims.h-p[1])*v.zoom]; }
-function s2w(p,v=state.viewport,dims=worldDims()){ return [(p[0]-v.panX)/v.zoom, dims.h-(p[1]-v.panY)/v.zoom]; }
+function w2s(p,v=state.viewport,f=worldFrame()){ return [v.panX+(p[0]-f.minX)*v.zoom, v.panY+(f.maxY-p[1])*v.zoom]; }
+function s2w(p,v=state.viewport,f=worldFrame()){ return [(p[0]-v.panX)/v.zoom+f.minX, f.maxY-(p[1]-v.panY)/v.zoom]; }
 function resizeCanvas(){
   const r=wrap.getBoundingClientRect();
   dpr=window.devicePixelRatio||1;

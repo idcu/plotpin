@@ -115,7 +115,12 @@ code += `\n;globalThis.__api = {
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   PdfRead: globalThis.PdfRead,
   csvCell: (v,d)=>csvCell(v,d),
-  TABLE_COLUMNS
+  TABLE_COLUMNS,
+  cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage,
+  defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
+  imageCornerWorld, imageWorldFrame, validImageTransform,
+  solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
+  worldFrame
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -391,7 +396,7 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('初始场地 kind=rect', init.background.kind, 'rect');
   eq('初始场地形状', init.background.shape, { type:'rect', w:100, h:70 });
   api.resetState();
-  eq('worldDims 取初始矩形域', api.worldDims(), { w:100, h:70 });
+  eq('worldDims 取初始矩形域', api.worldDims(), { minX:0, minY:0, maxX:100, maxY:70, w:100, h:70 });
 
   /* 非法/非正尺寸一律回退默认（100×70）或最小下限，不能产生 NaN/0/负域 */
   eq('rect 域 w=0 回退100', api.siteDomainOf({kind:'rect',shape:{type:'rect',w:0,h:8}}), {w:100,h:8});
@@ -1629,6 +1634,159 @@ asyncSuites.push((async()=>{
   eq('PDF-CID乱码丢弃', api.PdfRead.looksLikeCidGarbage('\u0001\u0002\u0003'), true);
   eq('PDF-拉丁文本保留', api.PdfRead.looksLikeCidGarbage('Building A-101'), false);
 })());
+
+/* 38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区 ------------------- */
+{
+  api.resetState();
+  /* 20×20 区域（面积400），先不放点设备 → 全盲 */
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'P1',x:0,y:0,width:20,height:20}));
+  let r=api.analyzeCoverage(api.state);
+  eq('覆盖-区域数1', r.regions.length, 1);
+  eq('覆盖-无设备相机数0', r.cameraCount, 0);
+  approx('覆盖-无设备覆盖率0', r.ratio, 0, 1e-9);
+  approx('覆盖-无设备盲区=总面积', r.totalBlind, 400, 1e-6);
+
+  /* 球机（圆形覆盖）phys=1000→半径500，完全覆盖 */
+  api.state.objects.push(api.baseObject('point','point.dome',{name:'D1',x:10,y:10,phys:1000}));
+  r=api.analyzeCoverage(api.state);
+  eq('覆盖-球机计数1', r.cameraCount, 1);
+  approx('覆盖-全圆覆盖率≈1', r.ratio, 1, 1e-6);
+  approx('覆盖-全圆盲区≈0', r.totalBlind, 0, 1e-3);
+
+  /* 换成摄像头（扇形90°，0°朝 +X）：仅右半锥覆盖，覆盖率≈0.25 */
+  api.state.objects[1]=api.baseObject('point','point.camera',{name:'C1',x:10,y:10,phys:1000,angle:0});
+  r=api.analyzeCoverage(api.state);
+  eq('覆盖-扇形计数1', r.cameraCount, 1);
+  ok('覆盖-扇形部分覆盖(0<ratio<1)', r.ratio>0.15&&r.ratio<0.45);
+  ok('覆盖-扇形盲区>0', r.totalBlind>0);
+
+  /* footprint 判定单测：0°=+X，半径=phys（扇形）/ phys/2（圆） */
+  const cam=api.cameraFootprint(api.baseObject('point','point.camera',{x:0,y:0,phys:10,angle:0}));
+  eq('覆盖-footprint扇形类型', cam.kind, 'sector');
+  eq('覆盖-扇形半径=phys', cam.r, 10);
+  eq('覆盖-锥内点命中', api.pointInFootprint([5,0],cam), true);
+  eq('覆盖-反方向点不命中', api.pointInFootprint([-5,0],cam), false);
+  eq('覆盖-超半径点不命中', api.pointInFootprint([20,0],cam), false);
+  const dome=api.cameraFootprint(api.baseObject('point','point.dome',{x:0,y:0,phys:10}));
+  eq('覆盖-circle半径=phys/2', dome.r, 5);
+  eq('覆盖-圆内点命中', api.pointInFootprint([4,0],dome), true);
+  /* fov=360 扇形退化为整圆，不再受朝向限制 */
+  const ctype=api.state.objectTypes.find(t=>t.id==='point.camera');
+  const oldFov=ctype.fov; ctype.fov=360;
+  const cam360=api.cameraFootprint(api.baseObject('point','point.camera',{x:0,y:0,phys:10,angle:0}));
+  eq('覆盖-360视场=圆', cam360.kind, 'circle');
+  eq('覆盖-360背后点也命中', api.pointInFootprint([-5,0],cam360), true);
+  ctype.fov=oldFov;
+  /* 纯位置图标点（phys=0）不计入覆盖 */
+  eq('覆盖-图标点无footprint', api.cameraFootprint(api.baseObject('point','point.marker',{x:0,y:0,phys:0})), null);
+
+  /* 统计区域来源：闭合折线计入，开放折线不计入 */
+  api.resetState();
+  api.state.objects.push(
+    api.baseObject('line','line.custom',{name:'Z1',closed:true,points:[[0,0],[10,0],[10,10],[0,10]],x:0,y:0}),
+    api.baseObject('line','line.custom',{name:'Z2',closed:false,points:[[0,0],[10,0]],x:0,y:0}),
+    api.baseObject('point','point.marker',{x:1,y:1,phys:0})
+  );
+  const rg=api.regionPolygons(api.state);
+  eq('覆盖-仅闭合折线计入', rg.length, 1);
+  eq('覆盖-闭合折线名', rg[0].name, 'Z1');
+  eq('覆盖-图标点计入忽略数', api.analyzeCoverage(api.state).ignoredPoints, 1);
+  eq('覆盖-多边形包围盒', (()=>{const bb=api.polygonBBox(rg[0].points);return [bb.minX,bb.minY,bb.maxX,bb.maxY];})(), [0,0,10,10]);
+}
+
+/* 39. 仿射校准：像素↔世界映射 / 相似与完整仿射求解 / 旧对象随映射迁移 ---------- */
+{
+  /* 39.1 缺省（轴对齐）映射与往返：像素 v 向下、世界 y 向上 */
+  const bg={kind:'image',width:100,height:10,metersPerPixel:0.1,transform:null};
+  approx('仿射-缺省a项=mpp', api.defaultImageTransform(bg).a, 0.1, 1e-12);
+  approx('仿射-缺省e项=-mpp', api.defaultImageTransform(bg).e, -0.1, 1e-12);
+  approx('仿射-缺省f项=高×mpp', api.defaultImageTransform(bg).f, 1, 1e-12);
+  eq('仿射-像素(30,4)→世界', api.bgPixelToWorld(bg,[30,4]), [3,0.6]);
+  eq('仿射-世界(3,0.6)→像素', api.bgWorldToPixel(bg,[3,0.6]), [30,4]);
+  eq('仿射-四角世界坐标', api.imageCornerWorld(bg), [[0,1],[10,1],[10,0],[0,0]]);
+
+  /* 39.2 2 点求相似（纯放大 2×、无旋转）：像素(0,0)(10,0) → 世界(0,0)(20,0) */
+  const s2=api.solveImageAffine([{u:0,v:0,x:0,y:0},{u:10,v:0,x:20,y:0}]);
+  approx('仿射-相似a=2', s2.T.a, 2, 1e-9);
+  approx('仿射-相似e=-2', s2.T.e, -2, 1e-9);
+  approx('仿射-相似b=0', s2.T.b, 0, 1e-9);
+  approx('仿射-相似d=0', s2.T.d, 0, 1e-9);
+  approx('仿射-相似缩放=2', s2.scale, 2, 1e-9);
+  eq('仿射-相似标志', s2.isSimilarity, true);
+  /* 2 点含 45° 旋转：像素(0,0)(1,0) → 世界(0,0)(0,1)（世界 +Y） */
+  const rot=api.solveImageAffine([{u:0,v:0,x:0,y:0},{u:1,v:0,x:0,y:1}]);
+  approx('仿射-45旋转scale=1', rot.scale, 1, 1e-9);
+  approx('仿射-45旋转角', rot.rotationDeg, 90, 1e-9);   /* y-down 像素系中 +90° */
+  /* 两点退化（重合像素）应抛错 */
+  let threw=0; try{ api.solveImageAffine([{u:1,v:1,x:0,y:0},{u:1,v:1,x:5,y:5}]); }catch(e){ threw++; }
+  eq('仿射-重合点拒绝', threw, 1);
+
+  /* 39.3 3 点最小二乘完整仿射：精确还原已知系数 */
+  const pairs=[
+    {u:0,v:0,x:10,y:5},
+    {u:100,v:0,x:210,y:-25},
+    {u:0,v:100,x:60,y:155}
+  ];
+  const f3=api.solveImageAffine(pairs);
+  approx('仿射-完整a', f3.T.a, 2, 1e-6);
+  approx('仿射-完整b', f3.T.b, 0.5, 1e-6);
+  approx('仿射-完整c', f3.T.c, 10, 1e-6);
+  approx('仿射-完整d', f3.T.d, -0.3, 1e-6);
+  approx('仿射-完整e', f3.T.e, 1.5, 1e-6);
+  approx('仿射-完整f', f3.T.f, 5, 1e-6);
+  eq('仿射-非相似标志', f3.isSimilarity, false);
+  /* 6 系数全有限且行列式非退化的才判有效 */
+  ok('仿射-有效性校验通过', !!api.validImageTransform(f3.T));
+  eq('仿射-全零transform无效', api.validImageTransform({a:0,b:0,c:0,d:0,e:0,f:0}), null);
+  eq('仿射-缺字段无效', api.validImageTransform({a:1,b:0}), null);
+
+  /* 39.4 图片四角世界包围框：含负 min 的旋转+缩放 */
+  const rotBg={kind:'image',width:10,height:20,transform:{a:0,b:-2,c:0,d:2,e:0,f:0}};
+  const fr=api.imageWorldFrame(rotBg);
+  eq('仿射-旋转框minX', fr.minX, -40);
+  eq('仿射-旋转框maxY', fr.maxY, 20);
+  approx('仿射-旋转框w', fr.w, 40, 1e-9);
+  approx('仿射-旋转框h', fr.h, 20, 1e-9);
+
+  /* 39.5 仿射矩阵基本运算：逆 × 原 = 单位阵；组合映射等价逐步映射 */
+  const T=[2,0.5,10,-0.3,1.5,5];
+  const Ti=api.affInv(T);
+  const I=api.affMul(Ti,T);
+  approx('仿射-逆×原≈单位a', I[0], 1, 1e-9);
+  approx('仿射-逆×原≈单位e', I[4], 1, 1e-9);
+  approx('仿射-逆×原≈单位c', I[2], 0, 1e-9);
+  approx('仿射-逆×原≈单位f', I[5], 0, 1e-9);
+  eq('仿射-单点映射', api.affApply(T,[100,0]), [210,-25]);
+  eq('仿射-复合映射=逐步', api.affApply(api.affMul(T,[2,0,0,0,2,0]),[3,4]), api.affApply(T,api.affApply([2,0,0,0,2,0],[3,4])));
+
+  /* 39.6 旧对象迁移：相似缩放（点/线/圆/矩形精确同步） */
+  const objs=[
+    api.baseObject('point','point.marker',{x:5,y:7,angle:0,phys:4}),
+    api.baseObject('line','line.custom',{points:[[0,0],[3,4]],x:0,y:0}),
+    api.baseObject('rect','rect.area',{x:5,y:7,shape:{type:'circle',r:3}}),
+    api.baseObject('rect','rect.area',{x:0,y:0,width:4,height:2,angle:0,shape:null})
+  ];
+  api.migrateObjectsByAffine(objs,[2,0,0,0,2,0]);   /* 纯放大 2× */
+  eq('迁移-点坐标×2', [objs[0].x,objs[0].y], [10,14]);
+  approx('迁移-点物理尺寸×2', objs[0].phys, 8, 1e-9);
+  eq('迁移-折线节点×2', objs[1].points[1], [6,8]);
+  approx('迁移-圆半径×2', objs[2].shape.r, 6, 1e-9);
+  eq('迁移-圆仍为圆', objs[2].shape.type, 'circle');
+  approx('迁移-矩形宽×2', objs[3].width, 8, 1e-9);
+  approx('迁移-矩形高×2', objs[3].height, 4, 1e-9);
+
+  /* 39.7 一般仿射（不等比）：圆升级为椭圆，矩形按主轴伸缩 */
+  const objs2=[
+    api.baseObject('rect','rect.area',{x:5,y:7,shape:{type:'circle',r:3}}),
+    api.baseObject('rect','rect.area',{x:0,y:0,width:4,height:2,angle:0,shape:null})
+  ];
+  api.migrateObjectsByAffine(objs2,[2,0,0,0,3,0]);   /* x×2, y×3 */
+  eq('迁移-非等比圆→椭圆', objs2[0].shape.type, 'ellipse');
+  approx('迁移-椭圆rx', objs2[0].shape.rx, 6, 1e-9);
+  approx('迁移-椭圆ry', objs2[0].shape.ry, 9, 1e-9);
+  approx('迁移-非等比矩形宽', objs2[1].width, 8, 1e-9);
+  approx('迁移-非等比矩形高', objs2[1].height, 6, 1e-9);
+}
 
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites);

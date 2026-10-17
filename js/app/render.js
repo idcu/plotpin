@@ -104,6 +104,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   drawBackground(c,v,d,cssW,cssH,toS);
   drawGrid(c,v,d,cssW,cssH,toS);
+  drawCoverage(c,v,d);
   drawAxes(c,v,toS,cssH);
   const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
   /* exportGain=导出清晰度增益(交互为1)；iconBoost 再乘用户全局点大小倍率，仅作用于点设备图标 */
@@ -217,14 +218,14 @@ function drawOsnapMarker(c,toS){
   drawScreenTag(c,s[0]+10,s[1]-26,'◈ '+(OSNAP_LABELS[snap.type]||snap.type));
 }
 function drawBackground(c,v,d,cssW,cssH,toS){
-  const p0=toS([0,0]), p1=toS([d.w,d.h]);
-  const x=p0[0], y=p1[1], w=p1[0]-p0[0], h=p0[1]-p1[1];
   const bg=state.background;
   if(bg.kind==='image' && bgImage && bgDataUrl){
-    c.drawImage(bgImage,x,y,w,h);
-    c.strokeStyle='#94a3b8'; c.lineWidth=1.5; c.strokeRect(x,y,w,h);
+    drawImageBackground(c,v,d,bg);
     return;
   }
+  /* 矢量场地域矩形（左下(0,0)→右上(d.w,d.h)）的屏幕范围；用 min/abs 规避 Y 轴翻转导致的负尺寸 */
+  const a=toS([0,0]), b=toS([d.w,d.h]);
+  const x=Math.min(a[0],b[0]), y=Math.min(a[1],b[1]), w=Math.abs(b[0]-a[0]), h=Math.abs(b[1]-a[1]);
   /* 矢量场地：域外白色，域内浅色；形状边界用蓝色实线 */
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   c.save();
@@ -253,6 +254,47 @@ function drawBackground(c,v,d,cssW,cssH,toS){
   }else{
     c.fillStyle='#f8fafc'; c.fillRect(x,y,w,h);
     c.strokeStyle='#94a3b8'; c.lineWidth=1.5; c.strokeRect(x,y,w,h);
+  }
+  c.restore();
+}
+/**
+ * 图片底图渲染：像素(u,v y-down) → 世界(x,y y-up) → 屏幕在 render 层用一次 canvas 变换完成，
+ * 支持仿射校准后的旋转 / 不等比缩放 / 轻微切变（直线仍保持直线）。缺省无 transform 时退化为轴对齐矩形。
+ */
+function drawImageBackground(c,v,d,bg){
+  if(!(bgImage&&bgDataUrl)) return;
+  const t=validImageTransform(bg.transform)||defaultImageTransform(bg);
+  /* canvas 变换矩阵列 [u 的像, v 的像, 平移]；世界 Y 向上、屏幕 Y 向下，故 d/e 分量取负 */
+  c.save();
+  c.transform(t.a*v.zoom, -t.d*v.zoom, t.b*v.zoom, -t.e*v.zoom,
+    v.panX+(t.c-d.minX)*v.zoom, v.panY+(d.maxY-t.f)*v.zoom);
+  try{ c.drawImage(bgImage,0,0); }catch(_){}
+  c.restore();
+  /* 四角按世界点独立描边，保证旋转后包围轮廓正确 */
+  const corners=imageCornerWorld(bg).map(p=>w2s(p,v,d));
+  c.save(); c.strokeStyle='#94a3b8'; c.lineWidth=1.5;
+  c.beginPath(); corners.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.stroke();
+  c.restore();
+}
+/**
+ * 视场覆盖率叠加层：按 analyzeCoverage 的逐区域栅格着色（绿=已覆盖 / 红=盲区），
+ * 格心在区域外不绘制。叠加层数据由「覆盖率分析」写入 coverageResult，任何对象/底图变更后自动失效。
+ */
+function drawCoverage(c,v,d){
+  const res=coverageResult;
+  if(!res||!res.regions||!res.regions.length) return;
+  const toS=p=>w2s(p,v,d);
+  c.save();
+  for(const r of res.regions){
+    for(let j=0;j<r.ny;j++){
+      for(let i=0;i<r.nx;i++){
+        const g=r.grid[j*r.nx+i];
+        if(g===2) continue;                       /* 2=区域外，不绘制 */
+        const s=toS([r.minX+i*r.cell, r.minY+(j+1)*r.cell]);   /* 世界格左上角 → 屏幕 */
+        c.fillStyle = g===1?'rgba(34,197,94,.26)':'rgba(239,68,68,.28)';
+        c.fillRect(s[0],s[1],r.cell*v.zoom+.6,r.cell*v.zoom+.6); /* +0.6 消除相邻格的细缝 */
+      }
+    }
   }
   c.restore();
 }
@@ -583,6 +625,20 @@ function drawRubber(c){
   c.restore();
 }
 function drawCalibration(c,toS){
+  if(currentTool==='affine'){
+    /* 仿射校准：红点=图上已记录的像素位置，绿点=用户输入的实地坐标，虚线示意两者偏差 */
+    affinePairs.forEach((p,i)=>{
+      const src=toS(bgPixelToWorld(state.background,[p.u,p.v])), dst=toS([p.x,p.y]);
+      c.save();
+      c.strokeStyle='#94a3b8'; c.lineWidth=1; c.setLineDash([5,4]);
+      c.beginPath(); c.moveTo(src[0],src[1]); c.lineTo(dst[0],dst[1]); c.stroke(); c.setLineDash([]);
+      c.fillStyle='#dc2626'; c.beginPath(); c.arc(src[0],src[1],5,0,Math.PI*2); c.fill();
+      c.fillStyle='#16a34a'; c.beginPath(); c.arc(dst[0],dst[1],5,0,Math.PI*2); c.fill();
+      c.fillStyle='#111827'; c.font='11px Consolas,Menlo,monospace'; c.fillText('A'+(i+1),src[0]+8,src[1]-8);
+      c.restore();
+    });
+    return;
+  }
   if(currentTool!=='calibrate') return;
   calibPoints.forEach((p,i)=>{
     const s=toS(p); c.fillStyle=i?'#16a34a':'#dc2626'; c.beginPath(); c.arc(s[0],s[1],6,0,Math.PI*2); c.fill();

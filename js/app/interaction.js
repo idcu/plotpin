@@ -16,7 +16,7 @@ function setTool(tool){
      点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
   if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
   else if(tool==='dimension'&&$('dimensionType').value==='ruler'){ $('dimensionType').value='distance'; }
-  currentTool=tool; draft=null; calibPoints=[]; rubber=null; drag=null;
+  currentTool=tool; draft=null; calibPoints=[]; affinePairs=[]; rubber=null; drag=null;
   lastCanvasHandledAt=0; lastCanvasPointerUpAt=0;
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   syncToolButtons(tool);
@@ -24,6 +24,7 @@ function setTool(tool){
     select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
     rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）',
     text:'文字：单击输入文字内容',dimension:'尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
+    affine:'仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；按 Enter 或左侧 ✓ 求解，右键/Esc 取消',
     'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
     'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
     'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
@@ -164,7 +165,8 @@ canvas.addEventListener('pointerdown',e=>{
   if(pinch||touchArm) return;   /* 手势进行中/收尾中：后续手指不再触发放置或框选 */
   const wp=resolveWorldPoint(e);
   /* 逐点录入中（测距/折线/标注/多边形场地）右键=取消当前草稿（百度地图式），已完成的测量不受影响；无草稿时右键仍平移 */
-  if(e.button===2 && draft?.points?.length){
+  if(e.button===2 && (draft?.points?.length || (currentTool==='affine'&&affinePairs.length))){
+    if(currentTool==='affine'&&affinePairs.length){ affinePairs=[]; e.preventDefault(); requestRender(); toast('已取消仿射校准'); return; }
     const wasRuler=draft.kind==='dimension'&&draft.subtype==='ruler';
     draft=null; e.preventDefault(); requestRender();
     toast(wasRuler?'已取消测距':'已取消当前绘制');
@@ -179,6 +181,7 @@ canvas.addEventListener('pointerdown',e=>{
     if(calibPoints.length===2) finishCalibration();
     requestRender(); return;
   }
+  if(currentTool==='affine'){ pickAffinePoint(e); return; }
   if(['site-rect','site-circle','site-ellipse','site-sector'].includes(currentTool)){
     const kindMap={'site-rect':'siteRect','site-circle':'siteCircle','site-ellipse':'siteEllipse','site-sector':'siteSector'};
     draft={kind:kindMap[currentTool],start:wp,current:wp,pending:true};
@@ -468,6 +471,7 @@ canvas.addEventListener('click',e=>{
 });
 
 function finishDraft(){
+  if(currentTool==='affine'){ finishAffine(); return; }
   if(!draft) return;
   if(draft.kind==='sitePolygon') return finishSiteDraft();
   if(draft.kind==='rect'){
@@ -592,6 +596,44 @@ function scaleWorldAround(center,factor){
   });
 }
 
+/* ==================== 多点仿射校准（旋转 / 不等比缩放 / 纠偏） ==================== */
+/** 记录一个校准点：图上点击位置反解为原图像素 (u,v)，再让用户输入该点的实地坐标 (x,y) */
+async function pickAffinePoint(e){
+  const bg=state.background;
+  if(bg.kind!=='image'){ toast('仿射校准仅适用于图片底图','warn'); return; }
+  const wp=pointerWorld(e);
+  const px=bgWorldToPixel(bg,wp);
+  const v=await showPrompt({title:'仿射校准 · 第 '+(affinePairs.length+1)+' 点',
+    label:`该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 (${px[0].toFixed(1)}, ${px[1].toFixed(1)})`,
+    value:fmt(wp[0])+','+fmt(wp[1])});
+  if(v===null) return;
+  const m=String(v).split(/[,，\s]+/).map(Number);
+  if(!Number.isFinite(m[0])||!Number.isFinite(m[1])){ toast('坐标无效，请输入 X,Y','error'); return; }
+  affinePairs.push({u:px[0],v:px[1],x:m[0],y:m[1]});
+  requestRender();
+  toast(affinePairs.length>=2?('已记录 '+affinePairs.length+' 个点，Enter/✓ 求解'):'已记录 1 个点，继续点击下一已知点');
+}
+/** 求解仿射并把「旧世界→新世界」映射迁移到所有既有对象，再落地新的 bg.transform */
+async function finishAffine(){
+  const bg=state.background;
+  if(bg.kind!=='image'){ affinePairs=[]; setTool('select'); return; }
+  if(affinePairs.length<2){ toast('仿射校准至少需要 2 个对应点','warn'); return; }
+  let sol;
+  try{ sol=solveImageAffine(affinePairs); }catch(err){ toast(err.message||'校准点退化（共线/重合），无法求解','error'); return; }
+  pushHistory();
+  const tNew=sol.T, tOld=imageTransformOf(bg);
+  /* M = 新(像素→世界) ∘ 旧(世界→像素)：把既有对象从旧世界坐标搬到新世界坐标 */
+  const M=affMul([tNew.a,tNew.b,tNew.c,tNew.d,tNew.e,tNew.f], affInv([tOld.a,tOld.b,tOld.c,tOld.d,tOld.e,tOld.f]));
+  migrateObjectsByAffine(state.objects,M);
+  bg.transform=tNew;
+  bg.calibrated=true;
+  const nom=Math.sqrt(Math.abs(tNew.a*tNew.e-tNew.b*tNew.d));
+  if(nom>0) bg.metersPerPixel=nom;   /* 等效米/像素（供描述显示；真实映射以 transform 为准） */
+  affinePairs=[]; fitView();
+  commitChange('已完成仿射校准');
+  setTool('select');
+}
+
 /* -------------------- 对象操作 -------------------- */
 function deleteSelected(){
   const deletable=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
@@ -674,7 +716,7 @@ window.addEventListener('keydown',e=>{
     if(cancelActiveDrag()){ requestRender(); return; }   /* 拖拽中 Esc：恢复到按下前，不动选择集 */
     draft=null; selectedIds.clear(); setTool('select'); refreshUI(); return;
   }
-  if(e.key==='Enter'&&draft&&draft.points){ finishDraft(); return; }
+  if(e.key==='Enter'&&(currentTool==='affine'||(draft&&draft.points))){ finishDraft(); return; }
   if(e.key==='Backspace'&&draft?.points?.length){ draft.points.pop(); requestRender(); return; }
   if(e.code==='Space'){ e.preventDefault(); spaceDown=true; document.body.classList.add('panning'); canvas.style.cursor='grabbing'; return; }
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)&&selectedIds.size){

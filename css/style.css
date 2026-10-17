@@ -29,7 +29,8 @@
   .topbar button:hover{background:#fff;color:#111827}
   .topbar button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
   .topbar button.primary:hover{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
-  .topbar button:disabled{color:#94a3b8}
+  .topbar button:disabled{color:#94a3b8;opacity:.5;cursor:not-allowed}
+  .topbar button:disabled:hover{background:rgba(255,255,255,.94);color:#94a3b8}
   .topbar select{background:rgba(255,255,255,.94);color:#1f2937;font-weight:600}
   .site-pick{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0}
   .site-card{text-align:left;border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:#fff;cursor:pointer;line-height:1.5}

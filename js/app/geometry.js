@@ -364,7 +364,11 @@ function convertAreaShape(o,newType){
 /** 场地世界域（米）：图片=像素×m/px；矢量形状直接以米定义、规整在第一象限 */
 function siteDomainOf(bg){
   bg=bg||state.background;
-  if(bg.kind==='image') return {w:Math.max(.01,bg.width*bg.metersPerPixel),h:Math.max(.01,bg.height*bg.metersPerPixel)};
+  if(bg.kind==='image'){
+    const f=imageWorldFrame(bg);   /* 仿射校准后取四角轴对齐包围框，保证域尺寸与渲染/网格一致 */
+    if(f) return {w:Math.max(.01,f.w),h:Math.max(.01,f.h)};
+    return {w:Math.max(.01,bg.width*bg.metersPerPixel),h:Math.max(.01,bg.height*bg.metersPerPixel)};
+  }
   const sh=bg.shape||{type:'rect',w:100,h:70};
   if(sh.type==='circle'){ const r=positiveNum(sh.r,50); return {w:r*2,h:r*2}; }
   if(sh.type==='ellipse'){
@@ -460,4 +464,241 @@ function hitPhysicalPoint(o,shape,p){
   return false;
 }
 function normalizeAngle(a){ a=((a%360)+360)%360; return a; }
+
+/* ==================== 视场覆盖率分析（栅格法，零依赖） ==================== */
+/** 点设备的有效覆盖 footprint：扇形摄像机/全向圆点；无物理半径或仅图标设备返回 null */
+function cameraFootprint(o){
+  const r=Number(o.phys);
+  if(!(r>0)) return null;
+  const type=getType(o.typeId), shape=type.scaleShape;
+  if(shape==='sector'){
+    const fov=Math.min(360,Math.max(10,Number(type.fov)||90));
+    return {kind:fov>=360?'circle':'sector',id:o.id,name:o.name||'',x:o.x,y:o.y,r,fov,angle:Number(o.angle)||0};
+  }
+  if(shape==='circle') return {kind:'circle',id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2};
+  if(shape==='square') return {kind:'square',id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2,angle:Number(o.angle)||0};
+  return null;
+}
+/** 世界点是否落在覆盖域内（角度约定与 hitPhysicalPoint 一致：0°=+X，Y 向上） */
+function pointInFootprint(p,cam){
+  const dx=p[0]-cam.x, dy=p[1]-cam.y, d=Math.hypot(dx,dy);
+  if(cam.kind==='square'){
+    const q=rotatePoint(p,[cam.x,cam.y],-cam.angle);
+    return Math.abs(q[0]-cam.x)<=cam.r+EPS && Math.abs(q[1]-cam.y)<=cam.r+EPS;
+  }
+  if(d>cam.r+EPS) return false;
+  if(cam.kind==='circle'||d<EPS) return true;
+  let bearing=Math.atan2(dy,dx)*180/Math.PI-cam.angle;
+  bearing=((bearing%360)+360)%360;
+  const half=cam.fov/2;
+  return bearing<=half||bearing>=360-half;
+}
+/** 参与覆盖率统计的闭合区域：区域对象 + 闭合折线 */
+function regionPolygons(st){
+  const out=[];
+  for(const o of st.objects){
+    if(o.kind==='rect'){ const pts=shapeWorldPoints(o); if(pts.length>=3) out.push({id:o.id,name:o.name||'未命名区域',points:pts}); }
+    else if(o.kind==='line'&&o.closed&&Array.isArray(o.points)&&o.points.length>=3){
+      out.push({id:o.id,name:o.name||'未命名闭合折线',points:o.points.map(p=>p.slice())});
+    }
+  }
+  return out;
+}
+function polygonBBox(poly){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const [x,y] of poly){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
+  return {minX,minY,maxX,maxY,w:maxX-minX,h:maxY-minY};
+}
+/**
+ * 栅格覆盖率：每个区域自适应步长（目标 ~targetCells 个候选格），
+ * 格心在区域内且被任一摄像机覆盖即计入。返回每区域网格，供画布叠加层逐格渲染。
+ */
+function analyzeCoverage(st,opt){
+  opt=opt||{};
+  const target=Math.max(400,opt.targetCells||18000);
+  const cameras=st.objects.filter(o=>isVisible(o)).map(cameraFootprint).filter(Boolean);
+  const ignored=st.objects.filter(o=>o.kind==='point'&&isVisible(o)&&!(Number(o.phys)>0)).length;
+  const regions=regionPolygons(st).map(r=>{
+    const bb=polygonBBox(r.points), area=polygonArea(r.points);
+    const cell=Math.max(.03,Math.min(2,Math.sqrt(bb.w*bb.h/target)));
+    const nx=Math.max(1,Math.ceil(bb.w/cell)), ny=Math.max(1,Math.ceil(bb.h/cell));
+    /* 0=区内盲区 1=已覆盖 2=区外；边界格按面积误差随机偏移取心可减小系统偏差，这里用格心（统计已足够稳定） */
+    const grid=new Uint8Array(nx*ny);
+    let inside=0, covered=0;
+    for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){
+      const p=[bb.minX+(i+.5)*cell, bb.minY+(j+.5)*cell];
+      if(!pointInPolygon(p,r.points)){ grid[j*nx+i]=2; continue; }
+      inside++;
+      if(cameras.some(cam=>pointInFootprint(p,cam))){ grid[j*nx+i]=1; covered++; }
+    }
+    const ratio=inside?covered/inside:0;
+    return {id:r.id,name:r.name,area,coveredArea:area*ratio,blindArea:area*(1-ratio),
+      ratio,cell,minX:bb.minX,minY:bb.minY,nx,ny,grid};
+  });
+  const totalArea=regions.reduce((s,r)=>s+r.area,0);
+  const totalCovered=regions.reduce((s,r)=>s+r.coveredArea,0);
+  return {regions,cameraCount:cameras.length,ignoredPoints:ignored,
+    totalArea,totalCovered,totalBlind:totalArea-totalCovered,
+    ratio:totalArea?totalCovered/totalArea:0};
+}
+
+/* ==================== 仿射校准：图像像素(y向下) ↔ 世界坐标(米,y向上) ==================== */
+/** 图片底图缺省仿射：px→m，X=a u+b v+c，Y=d u+e v+f（像素 v 向下，故 e 为负） */
+function defaultImageTransform(bg){
+  const m=Number(bg.metersPerPixel)>0?Number(bg.metersPerPixel):0.05;
+  const h=Number(bg.height)||0;
+  return {a:m,b:0,c:0,d:0,e:-m,f:h*m};
+}
+function imageTransformOf(bg){ return bg.transform||defaultImageTransform(bg); }
+function bgPixelToWorld(bg,p){
+  const t=imageTransformOf(bg);
+  return [t.a*p[0]+t.b*p[1]+t.c, t.d*p[0]+t.e*p[1]+t.f];
+}
+function bgWorldToPixel(bg,p){
+  const t=imageTransformOf(bg), det=t.a*t.e-t.b*t.d;
+  if(Math.abs(det)<1e-18) return [0,0];
+  const dx=p[0]-t.c, dy=p[1]-t.f;
+  return [(dx*t.e-dy*t.b)/det, (t.a*dy-t.d*dx)/det];
+}
+/** 图片四角世界坐标（transform 存在时可为任意旋转平行四边形） */
+function imageCornerWorld(bg){
+  const w=Number(bg.width)||0, h=Number(bg.height)||0;
+  return [[0,0],[w,0],[w,h],[0,h]].map(px=>bgPixelToWorld(bg,px));
+}
+/* 2x3 仿射 [a,b,c;d,e,f] 行优先拼长度 6 */
+function affApply(T,p){ return [T[0]*p[0]+T[1]*p[1]+T[2], T[3]*p[0]+T[4]*p[1]+T[5]]; }
+function affMul(A,B){
+  return [
+    A[0]*B[0]+A[1]*B[3], A[0]*B[1]+A[1]*B[4], A[0]*B[2]+A[1]*B[5]+A[2],
+    A[3]*B[0]+A[4]*B[3], A[3]*B[1]+A[4]*B[4], A[3]*B[2]+A[4]*B[5]+A[5]];
+}
+function affInv(T){
+  const det=T[0]*T[4]-T[1]*T[3];
+  if(Math.abs(det)<1e-18) return [1,0,0,0,1,0];
+  const ia=T[4]/det, ib=-T[1]/det, id=-T[3]/det, ie=T[0]/det;
+  return [ia,ib,-(ia*T[2]+ib*T[5]), id,ie,-(id*T[2]+ie*T[5])];
+}
+/** 最小二乘解 A(3列)·coef=z */
+function _ls3(U,z){
+  let ATA=[[0,0,0],[0,0,0],[0,0,0]], ATz=[0,0,0];
+  U.forEach((u,i)=>{
+    const row=[u[0],u[1],1], zi=z[i];
+    for(let r=0;r<3;r++){ ATz[r]+=row[r]*zi; for(let c2=0;c2<3;c2++) ATA[r][c2]+=row[r]*row[c2]; }
+  });
+  /* 高斯消元 3x3 */
+  const M=ATA.map((row,r)=>row.concat([ATz[r]]));
+  for(let i=0;i<3;i++){
+    let p=i; for(let k=i+1;k<3;k++) if(Math.abs(M[k][i])>Math.abs(M[p][i])) p=k;
+    const tmp=M[i]; M[i]=M[p]; M[p]=tmp;
+    if(Math.abs(M[i][i])<1e-18) return null;
+    for(let k=0;k<3;k++){ if(k===i) continue; const f=M[k][i]/M[i][i]; for(let j=i;j<4;j++) M[k][j]-=f*M[i][j]; }
+  }
+  return [M[0][3]/M[0][0],M[1][3]/M[1][1],M[2][3]/M[2][2]];
+}
+/**
+ * 由像素点(u,v y-down)/世界点(x,y y-up)对应求图片仿射。
+ * 2 对点 → 精确相似（旋转+等比缩放+平移，复数解）；≥3 → 六点最小二乘完整仿射。
+ * 返回 {T:{a,b,c,d,e,f}, scale, rotationDeg, isSimilarity}
+ */
+function solveImageAffine(pairs){
+  if(pairs.length<2) throw new Error('仿射校准至少需要 2 个对应点');
+  if(pairs.length===2){
+    const [p0,p1]=pairs;
+    const du=p1.u-p0.u, dv=p1.v-p0.v;
+    const dx=p1.x-p0.x, dy=p1.y-p0.y;
+    /* y 向上像素复数 z=u-i·v；W=α z+β */
+    const den=du*du+dv*dv;
+    if(den<1e-18) throw new Error('两个校准点重合，无法求解');
+    const ar=(dx*du+dy*dv)/den, ai=(-dx*dv+dy*du)/den; /* α=(dx+i dy)/(du-i dv) */
+    const c=p0.x-(ar*p0.u+ai*p0.v), f=p0.y-(ai*p0.u-ar*p0.v);
+    const T={a:ar,b:ai,c,d:ai,e:-ar,f};
+    return {T,scale:Math.hypot(ar,ai),rotationDeg:Math.atan2(ai,ar)*180/Math.PI,isSimilarity:true};
+  }
+  const cx=_ls3(pairs.map(p=>[p.u,p.v]),pairs.map(p=>p.x));
+  const cy=_ls3(pairs.map(p=>[p.u,p.v]),pairs.map(p=>p.y));
+  if(!cx||!cy) throw new Error('校准点退化（共线或重合），无法求解仿射');
+  const T={a:cx[0],b:cx[1],c:cx[2],d:cy[0],e:cy[1],f:cy[2]};
+  const scale=Math.sqrt(Math.abs(T.a*T.e-T.b*T.d));
+  /* 相似度判定：y-down 像素下相似形满足 a≈-e 且 b≈d */
+  const ref=Math.max(1,Math.hypot(T.a,T.b));
+  const isSimilarity=Math.abs(T.a+T.e)<ref*1e-6 && Math.abs(T.b-T.d)<ref*1e-6;
+  const rotationDeg=Math.atan2(T.b,T.a)*180/Math.PI;
+  return {T,scale,rotationDeg,isSimilarity};
+}
+/** 校验图片仿射系数：6 个有限数且行列式非退化才采用，否则返回 null */
+function validImageTransform(t){
+  if(!t||typeof t!=='object') return null;
+  const c=['a','b','c','d','e','f'].map(k=>Number(t[k]));
+  if(!c.every(Number.isFinite)) return null;
+  if(Math.abs(c[0]*c[4]-c[1]*c[3])<1e-18) return null;
+  return {a:c[0],b:c[1],c:c[2],d:c[3],e:c[4],f:c[5]};
+}
+/** 仿射校准后图片四角的世界轴对齐包围框；无有效 transform 时返回 null */
+function imageWorldFrame(bg){
+  if(!bg||bg.kind!=='image') return null;
+  const t=validImageTransform(bg.transform);
+  if(!t) return null;
+  const w=Number(bg.width)||0, h=Number(bg.height)||0, px=[[0,0],[w,0],[w,h],[0,h]];
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const uv of px){
+    const x=t.a*uv[0]+t.b*uv[1]+t.c, y=t.d*uv[0]+t.e*uv[1]+t.f;
+    if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y;
+  }
+  return {minX,minY,maxX,maxY,w:maxX-minX,h:maxY-minY};
+}
+/**
+ * 旧世界坐标→新世界坐标仿射 M（2x3 长度 6 数组）下迁移既有对象。
+ * 点位精确映射；相似（旋转+等比缩放+平移）时形状参数精确同步；
+ * 一般仿射含非等比/切变时：圆按两轴伸缩升级为椭圆，矩形按变换后的两条主边取旋转外接矩形
+ * （切变无法用旋转矩形表示，予以舍弃），扇形角度随基矢旋转。
+ */
+function migrateObjectsByAffine(objects,M){
+  const theta=Math.atan2(M[3],M[0])*180/Math.PI;
+  const sx=Math.hypot(M[0],M[3]), sy=Math.hypot(M[1],M[4]);
+  const mapP=p=>affApply(M,p);
+  const mapVec=v=>[M[0]*v[0]+M[1]*v[1], M[3]*v[0]+M[4]*v[1]];
+  objects.forEach(o=>{
+    const origAng=Number(o.angle)||0;
+    if(Array.isArray(o.points)&&o.points.length) o.points=o.points.map(mapP);
+    if(Number.isFinite(Number(o.x))&&Number.isFinite(Number(o.y))){
+      const q=mapP([o.x,o.y]); o.x=q[0]; o.y=q[1];
+    }
+    o.angle=normalizeAngle(origAng+theta);
+    if(o.kind==='point'){
+      o.phys=Math.max(0,(Number(o.phys)||0)*sx);
+    }else if(o.kind==='text'){
+      o.height=Math.max(.05,(Number(o.height)||2.2)*sx);
+    }else if(o.kind==='rect'){
+      if(!o.shape){
+        const rad=origAng*Math.PI/180;
+        const ex=mapVec([Math.cos(rad),Math.sin(rad)]);
+        const ey=mapVec([-Math.sin(rad),Math.cos(rad)]);
+        o.width=Math.max(.05,(Number(o.width)||0)*Math.hypot(ex[0],ex[1]));
+        o.height=Math.max(.05,(Number(o.height)||0)*Math.hypot(ey[0],ey[1]));
+        o.angle=normalizeAngle(Math.atan2(ex[1],ex[0])*180/Math.PI);
+      }else if(o.shape.type==='circle'){
+        const r=Number(o.shape.r)||0;
+        if(Math.abs(sx-sy)>1e-7*Math.max(sx,sy,1e-9)){
+          o.shape={type:'ellipse',rx:Math.max(.05,r*sx),ry:Math.max(.05,r*sy)};
+          o.angle=normalizeAngle(theta);
+        }else o.shape.r=Math.max(.05,r*sx);
+      }else if(o.shape.type==='ellipse'){
+        const rx=Number(o.shape.rx)||0, ry=Number(o.shape.ry)||0, rad=origAng*Math.PI/180;
+        const u=mapVec([Math.cos(rad)*rx,Math.sin(rad)*rx]);
+        const v=mapVec([-Math.sin(rad)*ry,Math.cos(rad)*ry]);
+        o.shape.rx=Math.max(.05,Math.hypot(u[0],u[1]));
+        o.shape.ry=Math.max(.05,Math.hypot(v[0],v[1]));
+        o.angle=normalizeAngle(Math.atan2(u[1],u[0])*180/Math.PI);
+      }else if(o.shape.type==='sector'){
+        o.shape.r=Math.max(.05,(Number(o.shape.r)||0)*sx);
+        o.shape.a0=(Number(o.shape.a0)||0)+theta;
+        o.shape.a1=(Number(o.shape.a1)||0)+theta;
+      }
+    }
+    if(o.style&&o.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,Number(o.style.strokeWidth)*sx);
+    if(Array.isArray(o.points)&&o.points.length) syncFirstPoint(o);
+  });
+  return objects;
+}
+
 function fmt(n){ const p=state.settings.precision ?? 2; return (Math.round(n*Math.pow(10,p))/Math.pow(10,p)).toFixed(p); }

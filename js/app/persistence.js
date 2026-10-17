@@ -11,10 +11,17 @@ function reachableBgAssetIds(){
   return Array.from(ids);
 }
 function pruneBgAssets(){ assetPrune(reachableBgAssetIds()).catch(()=>{}); }
+/** 撤销/重做按钮可用态：空栈即置灰（禁用），避免点击后无反馈 */
+function updateHistoryButtons(){
+  const u=$('undoBtn'), r=$('redoBtn');
+  if(u) u.disabled=!history.past.length;
+  if(r) r.disabled=!history.future.length;
+}
 function pushHistory(){
   history.past.push(deepClone(state));
   if(history.past.length>20){ history.past.shift(); pruneBgAssets(); }
   history.future=[];
+  updateHistoryButtons();
 }
 function undo(){
   if(!history.past.length) return;
@@ -33,12 +40,14 @@ function redo(){
 function commitChange(message){
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
+  coverageResult=null;               /* 对象变更后覆盖率叠加层失效，需重新分析 */
   refreshUI(); scheduleSave(); requestRender();
   if(message) toast(message,'success');
 }
 function commitObjectEdit(){
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
+  coverageResult=null;
   renderList(); renderLayers(); renderStats(); scheduleSave(); requestRender();
 }
 let dbPromise=null;
@@ -255,7 +264,8 @@ function migrateProject(p){
     assetId:typeof rawBg.assetId==='string'?rawBg.assetId:'',
     dataUrl:typeof rawBg.dataUrl==='string'?rawBg.dataUrl:'',
     fileName:typeof rawBg.fileName==='string'?rawBg.fileName:'',
-    calibrated:!!rawBg.calibrated
+    calibrated:!!rawBg.calibrated,
+    transform:validImageTransform(rawBg.transform)   /* 仿射校准系数；非法/缺失时为 null（回退缺省轴对齐） */
   });
   const viewport=Object.assign(base.viewport,typeof p.viewport==='object'&&p.viewport?p.viewport:{});
   viewport.zoom=Math.min(200,Math.max(.02,positiveNumber(viewport.zoom,base.viewport.zoom)));
@@ -417,6 +427,7 @@ function loadImageSrc(src){
 async function afterStateLoaded(fit=true){
   const seq=++bgLoadSeq;
   bgImage=null; bgDataUrl='';
+  coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
   refreshUI();
   if(fit) fitView();
   requestRender();

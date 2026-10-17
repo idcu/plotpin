@@ -16,6 +16,13 @@ $('dimensionType').addEventListener('change',()=>{ if(currentTool==='dimension')
 $('finishDraftBtn').addEventListener('click',finishDraft);
 $('undoBtn').addEventListener('click',undo);
 $('redoBtn').addEventListener('click',redo);
+/* 仿射校准：仅图片底图可用（矢量场地本就以米绘制，无需校准） */
+$('affineBtn').addEventListener('click',()=>{
+  if(state.background.kind!=='image'){ toast('仿射校准仅适用于图片底图；矢量场地已按米绘制无需校准','warn'); return; }
+  if(!bgImage){ toast('请先导入图片底图','warn'); return; }
+  setTool('affine');
+});
+$('coverageBtn').addEventListener('click',runCoverageAnalysis);
 $('zoomInBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.2));
 $('zoomOutBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1/1.2));
 $('zoomFitBtn').addEventListener('click',fitView);
@@ -519,6 +526,33 @@ function refreshStorageUsage(){
   }else render(lsBytes,0,'localStorage');
 }
 
+/* -------------------- 视场覆盖率分析 -------------------- */
+/** 分析摄像头/球机等点设备视场对区域与闭合折线的覆盖率，写入叠加层数据并弹出报告 */
+function runCoverageAnalysis(){
+  const res=analyzeCoverage(state);
+  coverageResult=res;
+  requestRender();
+  const pct=x=>(x*100).toFixed(1)+'%';
+  const head=`<div style="font-size:13px;line-height:1.9;margin-bottom:10px">
+    <div>参与统计的点设备：<b>${res.cameraCount}</b> 个（含物理尺寸的圆/球机、扇形/摄像头、方形覆盖）${res.ignoredPoints?`；仅标识位置的图标点 <b>${res.ignoredPoints}</b> 个未计入`:''}</div>
+    <div>区域/闭合折线：<b>${res.regions.length}</b> 个 ｜ 合计覆盖 <b>${pct(res.ratio)}</b></div>
+    <div>覆盖面积 <b>${fmt(res.totalCovered)}</b> m² ｜ 盲区 <b>${fmt(res.totalBlind)}</b> m² ｜ 总面积 <b>${fmt(res.totalArea)}</b> m²</div>
+  </div>`;
+  const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">
+    <span style="font-weight:600">${esc(r.name)}</span>
+    <span>覆盖 <b>${pct(r.ratio)}</b> ｜ ${fmt(r.coveredArea)}/${fmt(r.area)} m² ｜ 盲区 ${fmt(r.blindArea)} m²</span></div>`).join('');
+  const legend=`<div style="display:flex;gap:16px;font-size:12px;color:#475569;margin-top:12px">
+    <span><i style="display:inline-block;width:11px;height:11px;background:rgba(34,197,94,.5);border:1px solid #16a34a;border-radius:2px;vertical-align:-1px"></i> 已覆盖</span>
+    <span><i style="display:inline-block;width:11px;height:11px;background:rgba(239,68,68,.5);border:1px solid #dc2626;border-radius:2px;vertical-align:-1px"></i> 盲区</span>
+    <span style="color:#94a3b8">栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比</span></div>`;
+  const body=res.regions.length? head+rows+legend
+    : head+`<div class="hint-text" style="padding:8px 0">当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。</div>`;
+  openModal('视场覆盖率分析', body, [
+    {text:'清除叠加层',class:'',click:()=>{ coverageResult=null; closeModal(); requestRender(); }},
+    {text:'关闭',class:'primary',click:closeModal}
+  ]);
+}
+
 /* -------------------- 统一刷新 -------------------- */
 function refreshUI(){
   populateSelects();
@@ -528,4 +562,5 @@ function refreshUI(){
   const msLbl=$('markerScaleLabel');
   if(msLbl) msLbl.textContent=(Number(state.settings.markerScale)||1).toFixed(1)+'×';
   renderProps(); renderList(); renderLayers(); renderTypes(); renderStats(); updateZoomLabel();
+  updateHistoryButtons();
 }

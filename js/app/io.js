@@ -193,6 +193,7 @@ async function importPdfFile(f){
     state.background.dataUrl=dataUrl;
     state.background.width=img.width; state.background.height=img.height;
     state.background.metersPerPixel=mpp; state.background.calibrated=true;
+    state.background.transform=null;   /* 新图像素坐标改变，清除旧仿射校准 */
     bgDataUrl=dataUrl;
     try{ bgImage=await loadImageSrc(dataUrl); }catch(e){ bgImage=null; }
     bgNote='底图 '+img.width+'×'+img.height;
@@ -285,7 +286,7 @@ function openSitePicker(){
 function applyVectorSite(kind,shape){
   pushHistory();
   const oldId=state.background.assetId;
-  Object.assign(state.background,{kind,shape,assetId:'',fileName:'',calibrated:false});
+  Object.assign(state.background,{kind,shape,assetId:'',fileName:'',calibrated:false,transform:null});
   bgImage=null; bgDataUrl=''; selectedIds.clear();
   if(oldId) assetPrune([]).catch(()=>{});
   fitView(); commitChange('已设置为'+siteKindName(kind)); setTool('select');
@@ -327,6 +328,7 @@ async function importBackgroundFile(f){
   state.background.fileName=f.name;
   state.background.assetId=stored?id:'';
   state.background.width=prepared.width; state.background.height=prepared.height;
+  state.background.transform=null;   /* 新图像素坐标改变，清除旧仿射校准 */
   if(!calibrated) state.background.metersPerPixel=0.05;
   /* 不立即删除旧资产：pushHistory 的撤销快照仍引用它，立即删会导致撤销后底图无法恢复；
      待历史栈不再可达时由 pruneBgAssets 统一回收（评估报告 5.2） */
@@ -755,10 +757,18 @@ function exportSVG(){
 /** 纯函数：按当前工程生成 SVG 文本（导出与自测共用，不触发下载） */
 function buildSceneSvg(){
   const d=worldDims(), margin=30, maxW=1800, ppu=Math.min(maxW/d.w,1200/d.h,40), sw=d.w*ppu+margin*2, sh=d.h*ppu+margin*2;
-  const X=x=>margin+x*ppu, Y=y=>margin+(d.h-y)*ppu;
+  /* 世界→SVG：以取景框 (minX,minY)-(maxX,maxY) 为基准，兼容仿射校准后含负 min 的包围框 */
+  const X=x=>margin+(x-d.minX)*ppu, Y=y=>margin+(d.minY+d.h-y)*ppu;
   const shapes=[], markers=[];
   if(state.background.kind==='image'&&bgImage&&bgDataUrl){
-    shapes.push(`<image x="${X(0)}" y="${Y(d.h)}" width="${d.w*ppu}" height="${d.h*ppu}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
+    const bg=state.background, t=validImageTransform(bg.transform);
+    if(t){
+      /* 按仿射系数把图像像素空间直接映射到 SVG 坐标（支持旋转/不等比/切变） */
+      const m=`matrix(${t.a*ppu} ${-t.d*ppu} ${t.b*ppu} ${-t.e*ppu} ${X(t.c)} ${Y(t.f)})`;
+      shapes.push(`<image x="0" y="0" width="${bg.width}" height="${bg.height}" transform="${m}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
+    }else{
+      shapes.push(`<image x="${X(0)}" y="${Y(d.minY+d.h)}" width="${d.w*ppu}" height="${d.h*ppu}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
+    }
   }else if(state.background.shape?.type==='circle'){
     const sh=state.background.shape;
     shapes.push(`<circle cx="${X(sh.cx)}" cy="${Y(sh.cy)}" r="${sh.r*ppu}" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);

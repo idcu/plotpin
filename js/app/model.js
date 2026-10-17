@@ -19,6 +19,8 @@ let calibPoints = [];
 let spaceDown = false;
 let saveTimer = null;
 let dpr = 1;
+let coverageResult = null;   /* 视场覆盖率分析结果（含逐区域栅格），供画布叠加层与报告弹窗；对象/底图变更后清空 */
+let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(u,v y-down) → 实地(x,y y-up) */
 
 /* -------------------- 初始化 / 工程数据 -------------------- */
 function createInitialState(){
@@ -34,6 +36,7 @@ function createInitialState(){
     viewport: { zoom:1, panX:0, panY:0 },
     /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */
     background: { kind:'rect', fileName:'', assetId:'', width:1000, height:700, origin:[0,0], metersPerPixel:0.1, calibrated:false,
+      transform:null,   /* 仿射校准系数 {a,b,c,d,e,f}：像素(u,v y-down)→世界(x,y y-up)；null=缺省轴对齐 */
       shape:{type:'rect', w:100, h:70} },
     layers: [{ id:'layer.default', name:'默认图层', visible:true, locked:false }],
     objectTypes: deepClone(BUILTIN_TYPES),
