@@ -97,8 +97,9 @@ function sitePropsHTML(bg, mode){
   let params='';
   if(sh.type==='polygon'){
     const pts=sh.points||[];
-    params=`<div class="node-list">${pts.map((p,i)=>`
-      <div class="node-row" data-site-node-row="${i}">
+    /* span2：节点列表需跨满 form-grid 两列（否则会被压进 78px 的标签列） */
+    params=`<div class="node-list span2">${pts.map((p,i)=>`
+      <div class="node-row vtx" data-site-node-row="${i}">
         <span class="node-idx">${i+1}</span>
         <input type="number" step="0.1" title="顶点 X（米，可为负）" data-site-node-axis="x" data-site-node-index="${i}" value="${fv(p[0])}">
         <input type="number" step="0.1" title="顶点 Y（米，可为负）" data-site-node-axis="y" data-site-node-index="${i}" value="${fv(p[1])}">

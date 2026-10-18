@@ -1968,6 +1968,9 @@ asyncSuites.push((async()=>{
   const hp=api.sitePropsHTML({kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}},'default');
   ok('场地属性-多边形顶点行数', (hp.match(/data-site-node-row=/g)||[]).length===4);
   ok('场地属性-多边形含插入/删除顶点', hp.includes('data-site-node-add=') && hp.includes('data-site-node-del='));
+  /* 布局回归：节点列表需跨满 form-grid 两列，顶点行需用无抓手的 7 列模板（否则输入框被压进 78px 标签列） */
+  ok('场地属性-多边形列表跨满整行', hp.includes('class="node-list span2"'));
+  ok('场地属性-多边形行采用顶点列模板', hp.includes('class="node-row vtx"'));
   ok('场地属性-扇形含张角', api.sitePropsHTML({kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}},'default').includes('data-site-field="sweep"'));
   ok('场地属性-椭圆含两半径与旋转', (()=>{ const e=api.sitePropsHTML({kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}},'default'); return e.includes('data-site-field="rx"') && e.includes('data-site-field="ry"') && e.includes('data-site-field="angle"'); })());
   /* 图片底图：显示摘要 + 校准入口按钮；工具模式下给引导语 */

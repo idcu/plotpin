@@ -162,6 +162,8 @@
   .node-row.drag-over{outline:2px dashed var(--primary);background:var(--primary-soft)}
   .node-row input{padding:4px 6px;min-width:0}
   .node-row .icon-btn{padding:0;height:24px;line-height:1;font-size:12px}
+  /* 场地顶点行无拖拽抓手：列为「序号 + X + Y + 4 个操作按钮」，让两个坐标输入框吃满剩余宽度 */
+  .node-row.vtx{grid-template-columns:22px 1fr 1fr 24px 24px 24px 24px}
   .chev{font-size:10px;color:var(--muted)}
   @media (max-width:1100px){
     .sidebar{width:340px;min-width:340px}
