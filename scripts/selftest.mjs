@@ -120,6 +120,7 @@ code += `\n;globalThis.__api = {
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
+  siteBoundaryPoints, siteShapeCenter, siteAreaPerimeter,
   worldFrame
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
@@ -1786,6 +1787,69 @@ asyncSuites.push((async()=>{
   approx('迁移-椭圆ry', objs2[0].shape.ry, 9, 1e-9);
   approx('迁移-非等比矩形宽', objs2[1].width, 8, 1e-9);
   approx('迁移-非等比矩形高', objs2[1].height, 6, 1e-9);
+}
+
+/* 40. 矢量场地标注：边界折点 / 几何中心 / 面积周长（三开关默认值与旧档迁移） -------- */
+{
+  api.resetState();
+  /* 缺省矩形场地（域 100×70，基点原点）：四角折点、中心均值、面积周长 */
+  eq('场地标注-默认矩形折点', api.siteBoundaryPoints(api.state.background), [[0,0],[100,0],[100,70],[0,70]]);
+  eq('场地标注-默认矩形中心', api.siteShapeCenter(api.state.background), [50,35]);
+  { const ap=api.siteAreaPerimeter(api.state.background);
+    approx('场地标注-默认矩形面积', ap.area, 7000, 1e-6);
+    approx('场地标注-默认矩形周长', ap.perimeter, 340, 1e-6); }
+
+  /* 多边形场地：顶点即折点，面积用鞋带公式、周长为闭合边长和，中心为顶点均值 */
+  api.state.background={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  eq('场地标注-多边形折点', api.siteBoundaryPoints(api.state.background), [[0,0],[10,0],[10,10],[0,10]]);
+  eq('场地标注-多边形中心', api.siteShapeCenter(api.state.background), [5,5]);
+  { const ap=api.siteAreaPerimeter(api.state.background);
+    approx('场地标注-多边形面积', ap.area, 100, 1e-9);
+    approx('场地标注-多边形周长', ap.perimeter, 40, 1e-9); }
+  /* 退化多边形（两点）不构成面：无折点标注可闭合，面积 0、周长为线段长 */
+  api.state.background={kind:'polygon',shape:{type:'polygon',points:[[0,0],[3,4]]}};
+  { const ap=api.siteAreaPerimeter(api.state.background);
+    approx('场地标注-两点多边形面积0', ap.area, 0, 1e-9);
+    approx('场地标注-两点多边形周长=线段长', ap.perimeter, 5, 1e-9); }
+
+  /* 圆形：无折点（不逐点标坐标），中心取圆心，面积 πr²、周长 2πr */
+  api.state.background={kind:'circle',shape:{type:'circle',cx:0,cy:0,r:10}};
+  eq('场地标注-圆形无折点', api.siteBoundaryPoints(api.state.background), null);
+  eq('场地标注-圆形中心', api.siteShapeCenter(api.state.background), [0,0]);
+  { const ap=api.siteAreaPerimeter(api.state.background);
+    approx('场地标注-圆面积', ap.area, Math.PI*100, 1e-9);
+    approx('场地标注-圆周长', ap.perimeter, Math.PI*20, 1e-9); }
+
+  /* 扇形：无折点，中心取圆心，面积 πr²·sweep/360、周长 2r+弧长 */
+  api.state.background={kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}};
+  eq('场地标注-扇形无折点', api.siteBoundaryPoints(api.state.background), null);
+  eq('场地标注-扇形中心', api.siteShapeCenter(api.state.background), [0,0]);
+  { const ap=api.siteAreaPerimeter(api.state.background);
+    approx('场地标注-扇形面积', ap.area, Math.PI*100/4, 1e-9);
+    approx('场地标注-扇形周长', ap.perimeter, 20+10*Math.PI/2, 1e-9); }
+
+  /* 椭圆：无折点，中心取圆心，面积 πrx·ry，周长取 Ramanujan（界于两轴圆周之间） */
+  api.state.background={kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}};
+  eq('场地标注-椭圆无折点', api.siteBoundaryPoints(api.state.background), null);
+  eq('场地标注-椭圆中心', api.siteShapeCenter(api.state.background), [0,0]);
+  { const ap=api.siteAreaPerimeter(api.state.background);
+    approx('场地标注-椭圆面积', ap.area, Math.PI*200, 1e-9);
+    ok('场地标注-椭圆周长界于两轴周长之间', ap.perimeter>2*Math.PI*10 && ap.perimeter<2*Math.PI*20); }
+
+  /* 三开关：新建工程默认全开；旧档缺省补齐为 true；显式 false 被保留 */
+  const fresh=api.createInitialState();
+  eq('场地标注-默认开关(坐标)', fresh.settings.siteNodes, true);
+  eq('场地标注-默认开关(段长)', fresh.settings.siteSegLen, true);
+  eq('场地标注-默认开关(面积)', fresh.settings.siteArea, true);
+  { const m=api.migrateProject({});
+    eq('场地标注-旧档缺省补齐(坐标)', m.settings.siteNodes, true);
+    eq('场地标注-旧档缺省补齐(段长)', m.settings.siteSegLen, true);
+    eq('场地标注-旧档缺省补齐(面积)', m.settings.siteArea, true); }
+  { const m=api.migrateProject({settings:{siteNodes:false,siteSegLen:false,siteArea:false}});
+    eq('场地标注-显式关闭保留(坐标)', m.settings.siteNodes, false);
+    eq('场地标注-显式关闭保留(段长)', m.settings.siteSegLen, false);
+    eq('场地标注-显式关闭保留(面积)', m.settings.siteArea, false); }
+  api.resetState();
 }
 
 /* ---------------- 结果汇总 ---------------- */

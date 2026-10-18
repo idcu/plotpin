@@ -11,6 +11,9 @@ $('settingsBtn').onclick=()=>{
       <label>十字准星/坐标</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
       <label>段长度标注</label><input id="setSegLen" type="checkbox" ${state.settings.showSegLen?'checked':''}>
       <label>图上显示面积</label><input id="setAreaTag" type="checkbox" ${state.settings.showAreaTag?'checked':''} title="区域与闭合折线在图形中心显示面积/周长">
+      <label>场地节点坐标</label><input id="setSiteNodes" type="checkbox" ${state.settings.siteNodes?'checked':''} title="矢量场地边界各节点显示世界坐标（矩形/多边形）">
+      <label>场地段长</label><input id="setSiteSegLen" type="checkbox" ${state.settings.siteSegLen?'checked':''} title="矢量场地相邻节点之间显示边长">
+      <label>场地周长面积</label><input id="setSiteArea" type="checkbox" ${state.settings.siteArea?'checked':''} title="矢量场地中心显示周长与面积">
       <label>对象捕捉</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）">
       <label>坐标精度</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>场地/底图</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/多边形</div>
@@ -27,6 +30,9 @@ $('settingsBtn').onclick=()=>{
       if(!state.settings.osnap) osnapMode=null;
       updateOsnapChip();
       state.settings.showAreaTag=$('setAreaTag').checked;
+      state.settings.siteNodes=$('setSiteNodes').checked;
+      state.settings.siteSegLen=$('setSiteSegLen').checked;
+      state.settings.siteArea=$('setSiteArea').checked;
       state.settings.precision=Math.max(0,Math.min(6,Number($('setPrecision').value)||2));
       closeModal(); commitChange('设置已保存');
     }}

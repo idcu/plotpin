@@ -32,6 +32,9 @@ function createInitialState(){
       showCursor:true,   /* 鼠标十字准星与实时世界坐标 */
       showSegLen:true,   /* 折线选中/绘制时显示段长度与总长 */
       showAreaTag:true,  /* 区域/闭合折线在图上显示面积 */
+      siteNodes:true,    /* 矢量场地：边界节点世界坐标标注 */
+      siteSegLen:true,   /* 矢量场地：相邻节点段长度标注 */
+      siteArea:true,     /* 矢量场地：周长与面积胶囊 */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     viewport: { zoom:1, panX:0, panY:0 },
     /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */

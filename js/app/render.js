@@ -105,6 +105,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   drawBackground(c,v,d,cssW,cssH,toS);
   drawGrid(c,v,d,cssW,cssH,toS);
   drawCoverage(c,v,d);
+  drawSiteAnnotations(c,v,toS);
   drawAxes(c,v,toS,cssH);
   const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
   /* exportGain=导出清晰度增益(交互为1)；iconBoost 再乘用户全局点大小倍率，仅作用于点设备图标 */
@@ -297,6 +298,66 @@ function drawCoverage(c,v,d){
     }
   }
   c.restore();
+}
+/* -------------------- 矢量场地标注（节点坐标 / 段长 / 周长面积，可配置） -------------------- */
+/** 场地边界折点（世界坐标，Y 向上）：矩形→按域取四角；多边形→顶点；圆/椭圆/扇形无折点返回 null */
+function siteBoundaryPoints(bg){
+  const sh=(bg&&bg.shape)||{};
+  if(sh.type==='polygon') return (sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
+  if(!sh.type||sh.type==='rect'){
+    const d=siteDomainOf(bg);
+    return [[0,0],[d.w,0],[d.w,d.h],[0,d.h]];
+  }
+  return null;
+}
+/** 场地几何中心：圆/椭圆/扇形取圆心，其余取边界折点均值（与区域面积标签同口径） */
+function siteShapeCenter(bg){
+  const sh=(bg&&bg.shape)||{};
+  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
+  const pts=siteBoundaryPoints(bg);
+  if(pts&&pts.length) return [pts.reduce((s,p)=>s+p[0],0)/pts.length, pts.reduce((s,p)=>s+p[1],0)/pts.length];
+  const d=siteDomainOf(bg); return [d.w/2,d.h/2];
+}
+/** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/圆/椭圆/扇形） */
+function siteAreaPerimeter(bg){
+  const sh=(bg&&bg.shape)||{};
+  if(sh.type==='polygon'){
+    const ps=(sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
+    if(ps.length<3) return {area:0,perimeter:ps.length===2?polylineLength(ps):0};
+    return {area:polygonArea(ps), perimeter:polylineLength(ps.concat([ps[0]]))};
+  }
+  const d=siteDomainOf(bg);
+  const o={shape:Object.assign({type:'rect'},sh), x:Number(sh.cx)||0, y:Number(sh.cy)||0, angle:Number(sh.angle)||0, width:d.w, height:d.h};
+  return {area:shapeArea(o), perimeter:shapePerimeter(o)};
+}
+/**
+ * 绘制矢量场地标注：边界节点世界坐标、相邻节点段长、场地周长/面积胶囊。
+ * 由工程设置中「场地节点坐标 / 场地段长 / 场地周长面积」三个开关控制；屏幕固定字号，缩放不糊。
+ */
+function drawSiteAnnotations(c,v,toS){
+  const bg=state.background, S=state.settings;
+  if(!bg||bg.kind==='image') return;
+  if(!(S.siteNodes||S.siteSegLen||S.siteArea)) return;
+  const pts=siteBoundaryPoints(bg);
+  if(pts&&pts.length>=2){
+    const n=pts.length, closed=n>=3;
+    if(S.siteSegLen){
+      const segN=closed?n:n-1;
+      for(let k=0;k<segN;k++){
+        const a=pts[k], b=pts[(k+1)%n], len=dist(a,b);
+        if(len*v.zoom<26) continue;                       /* 屏幕上过短的段不标，避免拥挤 */
+        const s=toS([(a[0]+b[0])/2,(a[1]+b[1])/2]);
+        drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
+      }
+    }
+    if(S.siteNodes){
+      pts.forEach(p=>{ const s=toS(p); drawScreenTag(c,s[0]+6,s[1]+6,'('+fmt(p[0])+', '+fmt(p[1])+')'); });
+    }
+  }
+  if(S.siteArea){
+    const ap=siteAreaPerimeter(bg), cs=toS(siteShapeCenter(bg));
+    drawAreaTag(c,cs[0],cs[1],ap.area,ap.perimeter);
+  }
 }
 function drawGrid(c,v,d,cssW,cssH,toS){
   if(!state.settings.gridVisible) return;
@@ -570,11 +631,21 @@ function drawDraft(c,v,d,toS){
     const draftClosed=draft.kind==='sitePolygon'
       ||(draft.kind==='line'&&$('lineClosed')&&$('lineClosed').checked)
       ||(draft.kind==='dimension'&&draft.subtype==='area');
+    /* 已录入点之间的边：实线（未闭合时再带上指向光标的橡皮筋段） */
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
     if(draft.current && !draftClosed){ c.lineTo(toS(draft.current)[0],toS(draft.current)[1]); }
-    if(draftClosed){ c.setLineDash([5,4]); c.lineTo(ps[0][0],ps[0][1]); c.setLineDash([]); }
-    if(draftClosed){ c.globalAlpha=.07; c.fillStyle='#2563eb'; c.fill(); c.globalAlpha=1; }
     c.stroke();
+    /* 闭合预览：末节点→首节点的合拢边单独以虚线描边，与已定边界区分。
+       同一条路径无法混用实/虚线型，故必须在 stroke 之后再单独二次描边。 */
+    if(draftClosed && ps.length>=2){
+      if(ps.length>=3){
+        c.globalAlpha=.07; c.fillStyle='#2563eb';
+        c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.fill(); c.globalAlpha=1;
+      }
+      c.save(); c.setLineDash([6,4]);
+      c.beginPath(); c.moveTo(ps[ps.length-1][0],ps[ps.length-1][1]); c.lineTo(ps[0][0],ps[0][1]); c.stroke();
+      c.restore();
+    }
     ps.forEach(p=>{ c.beginPath(); c.arc(p[0],p[1],4,0,Math.PI*2); c.fill(); });
     c.restore();
     drawDraftSegTags(c,v,toS,draft);

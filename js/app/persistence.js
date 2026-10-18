@@ -189,7 +189,7 @@ function scheduleSave(){
       await idbPut(snapshot);
       /* 绑定到工程库的工程：同名键同步更新，工程库内容即最新（失败静默，不影响草稿） */
       if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(()=>{});
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag}));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag,siteNodes:state.settings.siteNodes,siteSegLen:state.settings.siteSegLen,siteArea:state.settings.siteArea}));
       $('saveState').textContent=(state.meta.projectId?'📁 已保存 ':'已自动保存 ')+new Date().toLocaleTimeString();
     }catch(e){
       try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
@@ -244,6 +244,9 @@ function migrateProject(p){
   settings.showSegLen=settings.showSegLen!==false;
   settings.osnap=settings.osnap!==false;
   settings.showAreaTag=settings.showAreaTag!==false;
+  settings.siteNodes=settings.siteNodes!==false;    /* 旧档缺省：场地标注三开关默认开启 */
+  settings.siteSegLen=settings.siteSegLen!==false;
+  settings.siteArea=settings.siteArea!==false;
   const rawBg=typeof p.background==='object'&&p.background?p.background:{};
   // 兼容旧档（无 kind）：有图片引用判为 image，否则按像素域推导为矩形矢量场地
   const hasImage=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
