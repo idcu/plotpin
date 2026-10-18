@@ -89,7 +89,7 @@ vm.createContext(sandbox);
 /* 暴露内部函数给断言 */
 code += `\n;globalThis.__api = {
   get state(){ return state; },
-  resetState(){ state = createInitialState(); return state; },
+  resetState(){ state = createInitialState(); resetFrameRef(); return state; },
   createInitialState, migrateProject, baseObject,
   polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
@@ -121,7 +121,8 @@ code += `\n;globalThis.__api = {
   imageCornerWorld, imageWorldFrame, validImageTransform,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteAreaPerimeter,
-  worldFrame
+  worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
+  siteHandleList, siteHandleAt, resizeSiteByHandle
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -363,10 +364,14 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('迁移-空白档判为 rect', blank.background.kind, 'rect');
   eq('迁移-空白档形状域 100×70', [blank.background.shape.w, blank.background.shape.h], [100, 70]);
 
-  /* 圆形场地清洗：cx/cy 必须回到域中心 r,r */
+  /* 圆形场地清洗：保留实际圆心坐标（不再强制拉回域中心，便于「场地节点」编辑后重载还原） */
   const circ = api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background: { kind:'circle', shape:{ type:'circle', r:20, cx:0, cy:0 } } });
-  eq('迁移-圆形形状清洗', circ.background.shape, { type:'circle', cx:20, cy:20, r:20 });
+  eq('迁移-圆形形状保留圆心', circ.background.shape, { type:'circle', cx:0, cy:0, r:20 });
+  /* 缺省 cx/cy 时回退到域中心 r,r，与新建场地一致 */
+  const circ2 = api.migrateProject({ schema:'offline-drawing-annotation/v1',
+    background: { kind:'circle', shape:{ type:'circle', r:20 } } });
+  eq('迁移-圆形缺省圆心回退域中心', [circ2.background.shape.cx, circ2.background.shape.cy], [20, 20]);
 
   /* 损坏的多边形（不足3点）回退矩形域 */
   const badPoly = api.migrateProject({ schema:'offline-drawing-annotation/v1',
@@ -1849,6 +1854,92 @@ asyncSuites.push((async()=>{
     eq('场地标注-显式关闭保留(坐标)', m.settings.siteNodes, false);
     eq('场地标注-显式关闭保留(段长)', m.settings.siteSegLen, false);
     eq('场地标注-显式关闭保留(面积)', m.settings.siteArea, false); }
+  api.resetState();
+}
+
+/* 41. 场地节点编辑：实际包围盒取景框 / pan 补偿 / 控制点拖拽改写 ------------------ */
+{
+  api.resetState();
+  /* siteBounds：默认矩形（基点原点）与实际取景框一致 */
+  eq('场地节点-默认矩形包围盒', api.siteBounds(api.state.background), {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70});
+  eq('场地节点-默认取景框=包围盒', api.computeWorldFrame(), {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70});
+  /* 偏移矩形：基点 x,y 生效，包围盒随基点平移 */
+  eq('场地节点-偏移矩形包围盒', api.siteBounds({kind:'rect',shape:{type:'rect',x:-5,y:-2,w:100,h:70}}), {minX:-5,minY:-2,maxX:95,maxY:68,w:100,h:70});
+  /* 负坐标多边形：包围盒取实际 min/max（不裁剪到 0） */
+  eq('场地节点-负坐标多边形包围盒', api.siteBounds({kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10],[-10,10]]}}), {minX:-10,minY:-10,maxX:10,maxY:10,w:20,h:20});
+  /* 偏心圆 / 旋转椭圆 / 扇形包围盒 */
+  eq('场地节点-偏心圆包围盒', api.siteBounds({kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}}), {minX:20,minY:10,maxX:40,maxY:30,w:20,h:20});
+  { const b=api.siteBounds({kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:90}});
+    approx('场地节点-旋转椭圆包围盒宽', b.w, 20, 1e-9);
+    approx('场地节点-旋转椭圆包围盒高', b.h, 40, 1e-9); }
+  { const b=api.siteBounds({kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}});
+    approx('场地节点-扇形包围盒宽', b.w, 10, 1e-6);
+    approx('场地节点-扇形包围盒高', b.h, 10, 1e-6); }
+
+  /* syncFramePan：形状变更时按取景框差值补偿 pan，使未变内容保持屏幕位置 */
+  api.resetState();
+  api.state.viewport.panX=10; api.state.viewport.panY=20; api.state.viewport.zoom=2;
+  api.state.background={kind:'rect',shape:{type:'rect',x:-5,y:0,w:100,h:70}};
+  const nf=api.syncFramePan();
+  approx('场地节点-补偿后 panX（minX −5×zoom2）', api.state.viewport.panX, 0, 1e-9);
+  approx('场地节点-补偿后 panY 不变', api.state.viewport.panY, 20, 1e-9);
+  eq('场地节点-取景框刷新为新包围盒', [nf.minX,nf.maxX], [-5,95]);
+  eq('场地节点-worldFrame 缓存同步', [api.worldFrame().minX,api.worldFrame().maxX], [-5,95]);
+
+  /* 控制点清单：各形状手柄数量与位置 */
+  api.resetState();
+  api.state.background={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  eq('场地节点-多边形手柄数', api.siteHandleList().length, 4);
+  eq('场地节点-多边形手柄0', [api.siteHandleList()[0].mode,api.siteHandleList()[0].x,api.siteHandleList()[0].y], ['vertex',0,0]);
+  { const hs=api.siteHandleList({kind:'circle',shape:{type:'circle',cx:5,cy:5,r:10}});
+    eq('场地节点-圆手柄数', hs.length, 2);
+    eq('场地节点-圆圆心手柄', [hs[0].mode,hs[0].x,hs[0].y], ['center',5,5]);
+    eq('场地节点-圆半径手柄', [hs[1].mode,hs[1].x,hs[1].y], ['radius',15,5]); }
+  eq('场地节点-矩形手柄数', api.siteHandleList({kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:20}}).length, 4);
+  { const hs=api.siteHandleList({kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}});
+    eq('场地节点-椭圆手柄数', hs.length, 4);
+    eq('场地节点-椭圆模式', hs.map(h=>h.mode), ['center','rx','ry','rotate']); }
+  { const hs=api.siteHandleList({kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}});
+    eq('场地节点-扇形手柄数', hs.length, 4);
+    eq('场地节点-扇形模式', hs.map(h=>h.mode), ['center','edge0','edge1','radius']); }
+  eq('场地节点-图片底图无手柄', api.siteHandleList({kind:'image',shape:{}}), []);
+
+  /* resizeSiteByHandle：按模式改写规格参数 */
+  api.resetState();
+  api.state.background={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  api.resizeSiteByHandle({mode:'vertex',index:1},[20,3]);
+  eq('场地节点-拖拽多边形顶点', api.state.background.shape.points[1], [20,3]);
+
+  api.state.background={kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:20}};
+  api.resizeSiteByHandle({mode:'corner',index:2},[14,30]);
+  eq('场地节点-拖拽矩形角(对角固定)', [api.state.background.shape.x,api.state.background.shape.y,api.state.background.shape.w,api.state.background.shape.h], [0,0,14,30]);
+
+  api.state.background={kind:'circle',shape:{type:'circle',cx:5,cy:5,r:10}};
+  api.resizeSiteByHandle({mode:'center'},[7,8]);
+  eq('场地节点-拖拽圆心(半径不变)', [api.state.background.shape.cx,api.state.background.shape.cy,api.state.background.shape.r], [7,8,10]);
+  api.resizeSiteByHandle({mode:'radius'},[7,18]);
+  approx('场地节点-拖拽圆半径', api.state.background.shape.r, 10, 1e-9);
+
+  api.state.background={kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}};
+  api.resizeSiteByHandle({mode:'rx'},[30,0]);
+  approx('场地节点-拖拽椭圆长轴', api.state.background.shape.rx, 30, 1e-9);
+  api.resizeSiteByHandle({mode:'ry'},[0,4]);
+  approx('场地节点-拖拽椭圆短轴', api.state.background.shape.ry, 4, 1e-9);
+
+  api.state.background={kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}};
+  api.resizeSiteByHandle({mode:'edge0'},[0,20]);
+  approx('场地节点-拖拽扇形边0半径', api.state.background.shape.r, 20, 1e-9);
+  approx('场地节点-拖拽扇形边0角度', api.state.background.shape.a0, 90, 1e-9);
+  api.resizeSiteByHandle({mode:'edge1'},[-30,0]);
+  approx('场地节点-拖拽扇形边1角度', api.state.background.shape.a1, 180, 1e-9);
+
+  /* sanitizeShape：编辑后的负坐标/偏移在保存→重载后保留（不被打回原点） */
+  const mp=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10]]}}});
+  eq('场地节点-负坐标多边形重载保留', mp.background.shape.points, [[-10,-10],[10,-10],[10,10]]);
+  const mrx=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'rect',shape:{type:'rect',x:-5,y:-3,w:20,h:10}}});
+  eq('场地节点-偏移矩形重载保留', [mrx.background.shape.x,mrx.background.shape.y,mrx.background.shape.w,mrx.background.shape.h], [-5,-3,20,10]);
+  const mc=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}}});
+  eq('场地节点-偏心圆重载保留', [mc.background.shape.cx,mc.background.shape.cy,mc.background.shape.r], [30,20,10]);
   api.resetState();
 }
 

@@ -388,6 +388,43 @@ function siteDomainOf(bg){
   return {w:Math.max(.01,positiveNum(sh.w,100)),h:Math.max(.01,positiveNum(sh.h,70))};
 }
 function positiveNum(v,fb){ const n=Number(v); return Number.isFinite(n)&&n>0?n:fb; }
+/**
+ * 矢量场地实际世界包围盒（米，允许负值）：各类形状按真实位置/旋转取轴对齐外接框；
+ * 图片底图复用仿射(imageWorldFrame)或像素×m/px。矩形以 shape.x/shape.y 为基点，
+ * 圆/椭圆/扇形以 cx/cy 为圆心，多边形取顶点 min/max。
+ * 供 worldFrame 取景框使用：节点拖拽到负坐标或超出原范围时取景框随实际形状更新。
+ */
+function siteBounds(bg){
+  bg=bg||state.background;
+  const mk=(minX,minY,maxX,maxY)=>({minX,minY,maxX,maxY,w:Math.max(.01,maxX-minX),h:Math.max(.01,maxY-minY)});
+  if(bg.kind==='image'){
+    const f=imageWorldFrame(bg);
+    if(f) return f;
+    const w=Math.max(.01,bg.width*bg.metersPerPixel), h=Math.max(.01,bg.height*bg.metersPerPixel);
+    return {minX:0,minY:0,maxX:w,maxY:h,w,h};
+  }
+  const sh=bg.shape||{type:'rect',w:100,h:70};
+  if(sh.type==='circle'){ const r=positiveNum(sh.r,50),cx=Number(sh.cx)||0,cy=Number(sh.cy)||0; return mk(cx-r,cy-r,cx+r,cy+r); }
+  if(sh.type==='ellipse'){
+    const rx=positiveNum(sh.rx,50), ry=positiveNum(sh.ry,35);
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0, a=(Number(sh.angle)||0)*Math.PI/180;
+    const c=Math.cos(a), s=Math.sin(a);
+    const hw=Math.sqrt(rx*rx*c*c+ry*ry*s*s), hh=Math.sqrt(rx*rx*s*s+ry*ry*c*c);
+    return mk(cx-hw,cy-hh,cx+hw,cy+hh);
+  }
+  if(sh.type==='sector'){
+    const r=positiveNum(sh.r,50), cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+    const pts=sectorArcPoints(cx,cy,r,Number(sh.a0)||0,sectorSweep(sh)).concat([[cx,cy]]);
+    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+    return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
+  }
+  if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3){
+    const xs=sh.points.map(p=>Number(p[0])||0), ys=sh.points.map(p=>Number(p[1])||0);
+    return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
+  }
+  const w=positiveNum(sh.w,100), h=positiveNum(sh.h,70), x=Number(sh.x)||0, y=Number(sh.y)||0;
+  return mk(x,y,x+w,y+h);
+}
 /** 把任意位置的两个角点规整为原点矩形 {type:'rect',w,h} */
 function rectShapeFromCorners(a,b){
   return {type:'rect',w:Math.max(.05,Math.abs(a[0]-b[0])),h:Math.max(.05,Math.abs(a[1]-b[1]))};

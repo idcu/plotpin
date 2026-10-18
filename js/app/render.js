@@ -119,10 +119,35 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawRubber(c);
     drawCursorCross(c,v,d,cssW,cssH);
     drawTrackLine(c,v,d,cssW,cssH,toS);
+    drawSiteHandles(c,v,toS);
     drawNodeFocus(c,toS);
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
   }
+}
+/**
+ * 矢量场地控制点手柄（「场地节点」工具激活时显示）：多边形=各顶点；矩形=四角；
+ * 圆=圆心+半径端；椭圆=中心+两轴端+旋转；扇形=圆心+两弧端+弧中点(半径)。
+ * 橙色方块=移动类控制点（圆心/中心），白色蓝边=几何控制点；拖拽时显示实时世界坐标。
+ */
+function drawSiteHandles(c,v,toS){
+  if(currentTool!=='site-node') return;
+  const hs=siteHandleList();
+  if(!hs.length) return;
+  c.save();
+  hs.forEach(h=>{
+    const s=toS([h.x,h.y]), isCenter=h.mode==='center';
+    c.fillStyle=isCenter?'#f59e0b':'#ffffff';
+    c.strokeStyle=isCenter?'#b45309':'#2563eb';
+    c.lineWidth=1.6;
+    const r=isCenter?5:4.5;
+    c.beginPath(); c.rect(s[0]-r,s[1]-r,r*2,r*2); c.fill(); c.stroke();
+  });
+  if(drag && drag.type==='siteHandle'){
+    const cur=hs.find(x=>x.mode===drag.handle.mode && x.index===drag.handle.index);
+    if(cur){ const s=toS([cur.x,cur.y]); drawScreenTag(c,s[0]+12,s[1]-28,`X ${fmt(cur.x)}  Y ${fmt(cur.y)}`); }
+  }
+  c.restore();
 }
 /** 深色胶囊小标签（屏幕固定字号），(x,y) 为标签左上角；段长度/十字坐标共用 */
 function drawScreenTag(c,x,y,text){
@@ -224,9 +249,6 @@ function drawBackground(c,v,d,cssW,cssH,toS){
     drawImageBackground(c,v,d,bg);
     return;
   }
-  /* 矢量场地域矩形（左下(0,0)→右上(d.w,d.h)）的屏幕范围；用 min/abs 规避 Y 轴翻转导致的负尺寸 */
-  const a=toS([0,0]), b=toS([d.w,d.h]);
-  const x=Math.min(a[0],b[0]), y=Math.min(a[1],b[1]), w=Math.abs(b[0]-a[0]), h=Math.abs(b[1]-a[1]);
   /* 矢量场地：域外白色，域内浅色；形状边界用蓝色实线 */
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   c.save();
@@ -253,6 +275,9 @@ function drawBackground(c,v,d,cssW,cssH,toS){
     c.fillStyle='#eef2f7'; c.fill();
     c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
   }else{
+    /* 矩形场地：按实际基点/宽高（siteBounds）取屏幕矩形，用 min/abs 规避 Y 轴翻转导致的负尺寸 */
+    const sb=siteBounds(bg), pa=toS([sb.minX,sb.minY]), pb=toS([sb.maxX,sb.maxY]);
+    const x=Math.min(pa[0],pb[0]), y=Math.min(pa[1],pb[1]), w=Math.abs(pb[0]-pa[0]), h=Math.abs(pb[1]-pa[1]);
     c.fillStyle='#f8fafc'; c.fillRect(x,y,w,h);
     c.strokeStyle='#94a3b8'; c.lineWidth=1.5; c.strokeRect(x,y,w,h);
   }
@@ -305,8 +330,8 @@ function siteBoundaryPoints(bg){
   const sh=(bg&&bg.shape)||{};
   if(sh.type==='polygon') return (sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
   if(!sh.type||sh.type==='rect'){
-    const d=siteDomainOf(bg);
-    return [[0,0],[d.w,0],[d.w,d.h],[0,d.h]];
+    const b=siteBounds(bg);
+    return [[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]];
   }
   return null;
 }

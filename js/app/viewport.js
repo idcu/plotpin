@@ -5,16 +5,32 @@
  * 仿射校准后的图片四角可为任意平行四边形，取其轴对齐包围框（min 允许负值）。
  * w2s/s2w 统一以该框为基准，保证旋转底图与对象、网格、交互仍共用同一坐标链路。
  */
-function worldFrame(){
+function computeWorldFrame(){
   const bg=state.background;
   if(bg&&bg.kind==='image'){
     const f=imageWorldFrame(bg);
     if(f) return f;
   }
-  const d=siteDomainOf(bg);
-  return {minX:0,minY:0,maxX:d.w,maxY:d.h,w:d.w,h:d.h};
+  return siteBounds(bg);
 }
+/* 当前取景框缓存：随场地形状变更经 syncFramePan/resetFrameRef 显式刷新。
+   缓存可避免每次 w2s 重复计算（扇形弧采样），更重要的是让同一交互帧内的坐标映射保持稳定。 */
+let _frameRef=null;
+function worldFrame(){ return _frameRef || (_frameRef=computeWorldFrame()); }
 function worldDims(){ return worldFrame(); }
+/** 重新按实际形状计算取景框并刷新缓存（fitView/载入/撤销重做后调用） */
+function resetFrameRef(){ _frameRef=computeWorldFrame(); return _frameRef; }
+/**
+ * 场地形状变更后调用：取景框随实际包围盒变化时，用 pan 差值补偿，
+ * 使视野中未被拖拽/编辑的内容保持屏幕位置不动（拖拽中的节点仍跟随光标）。
+ */
+function syncFramePan(){
+  const old=_frameRef||computeWorldFrame(), next=computeWorldFrame();
+  const z=state.viewport.zoom||1;
+  state.viewport.panX+=(next.minX-old.minX)*z;
+  state.viewport.panY-=(next.maxY-old.maxY)*z;
+  _frameRef=next; return next;
+}
 function view(){ return state.viewport; }
 function w2s(p,v=state.viewport,f=worldFrame()){ return [v.panX+(p[0]-f.minX)*v.zoom, v.panY+(f.maxY-p[1])*v.zoom]; }
 function s2w(p,v=state.viewport,f=worldFrame()){ return [(p[0]-v.panX)/v.zoom+f.minX, f.maxY-(p[1]-v.panY)/v.zoom]; }
@@ -35,7 +51,7 @@ window.addEventListener('resize',()=>{
   requestAnimationFrame(()=>{ resizeQueued=false; resizeCanvas(); });
 });
 function fitView(){
-  const r=wrap.getBoundingClientRect(), d=worldDims();
+  const r=wrap.getBoundingClientRect(), d=resetFrameRef();
   const z=Math.min((r.width-44)/d.w,(r.height-44)/d.h);
   state.viewport.zoom=z;
   state.viewport.panX=(r.width-d.w*z)/2;

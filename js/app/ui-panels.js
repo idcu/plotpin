@@ -75,8 +75,113 @@ function renderNodeEditor(o){
     : `<div class="hint-text">共 ${n} 点；可在画布上拖节点手柄调整位置</div>`;
   return `<div class="node-list">${rows}${hint}</div>`;
 }
+/* -------------------- 场地节点编辑（矢量场地控制点精确输入） -------------------- */
+/** 「场地节点」工具下的属性面板：按形状提供坐标/参数精确输入；多边形支持逐点增删排序 */
+function renderSiteNodeProps(box){
+  const bg=state.background;
+  if(!bg||bg.kind==='image'){
+    box.innerHTML='<div class="prop-empty">当前为图片底图，暂无场地节点可编辑。<br><br>请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/多边形矢量场地；图片底图请改用「仿射校准」。</div>';
+    return;
+  }
+  const sh=bg.shape||{};
+  const fv=(v,fb=0)=>{ const n=Number(v); return fmt(Number.isFinite(n)?n:fb); };
+  const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-site-field="${field}" value="${val}">`;
+  const row=(label,inner)=>`<label>${label}</label><div>${inner}</div>`;
+  const ap=siteAreaPerimeter(bg);
+  let params='';
+  if(sh.type==='polygon'){
+    const pts=sh.points||[];
+    params=`<div class="node-list">${pts.map((p,i)=>`
+      <div class="node-row" data-site-node-row="${i}">
+        <span class="node-idx">${i+1}</span>
+        <input type="number" step="0.1" title="顶点 X（米，可为负）" data-site-node-axis="x" data-site-node-index="${i}" value="${fv(p[0])}">
+        <input type="number" step="0.1" title="顶点 Y（米，可为负）" data-site-node-axis="y" data-site-node-index="${i}" value="${fv(p[1])}">
+        <button type="button" class="icon-btn" data-site-node-up="${i}" title="上移顶点" ${i===0?'disabled':''}>↑</button>
+        <button type="button" class="icon-btn" data-site-node-down="${i}" title="下移顶点" ${i===pts.length-1?'disabled':''}>↓</button>
+        <button type="button" class="icon-btn" data-site-node-add="${i}" title="在此顶点后插入一个顶点">＋</button>
+        <button type="button" class="icon-btn danger" data-site-node-del="${i}" title="删除该顶点" ${pts.length<=3?'disabled':''}>×</button>
+      </div>`).join('')}
+      <div class="hint-text">共 ${pts.length} 个顶点（至少 3）；画布上双击边插入顶点、双击顶点删除</div>
+    </div>`;
+  }else if(sh.type==='circle'){
+    params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}`;
+  }else if(sh.type==='ellipse'){
+    params=`${row('中心 X',num('cx',fv(sh.cx)))}${row('中心 Y',num('cy',fv(sh.cy)))}
+      ${row('半径X (m)',num('rx',fv(sh.rx,50)))}${row('半径Y (m)',num('ry',fv(sh.ry,35)))}
+      ${row('旋转角',num('angle',Math.round(Number(sh.angle)||0),1))}`;
+  }else if(sh.type==='sector'){
+    params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}
+      ${row('起始角',num('a0',Math.round(Number(sh.a0)||0),1))}${row('张角 (0–360)',num('sweep',Math.round(sectorSweep(sh)),1))}`;
+  }else{
+    params=`${row('基点 X',num('x',fv(sh.x)))}${row('基点 Y',num('y',fv(sh.y)))}
+      ${row('宽度 (m)',num('w',fv(sh.w,100)))}${row('高度 (m)',num('h',fv(sh.h,70)))}`;
+  }
+  box.innerHTML=`<div class="section"><h3>场地节点 <span class="hint-text">${esc(siteKindName(bg.kind))}</span></h3>
+    <div class="form-grid">${params}</div>
+    <div class="form-grid">
+      <label>面积</label><div><b id="siteAreaVal">${fmt(ap.area)}</b> ㎡</div>
+      <label>周长</label><div><b id="sitePerimVal">${fmt(ap.perimeter)}</b> m</div>
+    </div>
+    <div class="hint-text">拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地随底图保持真实比例。</div>
+  </div>`;
+  bindSiteNodeEvents(box);
+}
+function updateSiteStats(box){
+  const ap=siteAreaPerimeter(state.background);
+  const a=box.querySelector('#siteAreaVal'), p=box.querySelector('#sitePerimVal');
+  if(a) a.textContent=fmt(ap.area);
+  if(p) p.textContent=fmt(ap.perimeter);
+}
+function bindSiteNodeEvents(box){
+  box.addEventListener('focusin',()=>pushHistory(),{once:true});
+  const changed=()=>{ state.meta.updatedAt=nowISO(); coverageResult=null; syncFramePan(); updateSiteStats(box); scheduleSave(); requestRender(); };
+  box.querySelectorAll('[data-site-field]').forEach(el=>el.addEventListener('input',()=>{
+    if(applySiteField(el.dataset.siteField,el.value)) changed();
+  }));
+  box.querySelectorAll('[data-site-node-axis]').forEach(el=>el.addEventListener('input',()=>{
+    const pts=state.background.shape?.points, i=Number(el.dataset.siteNodeIndex), n=Number(el.value);
+    if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return;
+    pts[i][el.dataset.siteNodeAxis==='y'?1:0]=n; changed();
+  }));
+  box.querySelectorAll('[data-site-node-add]').forEach(b=>b.onclick=()=>siteInsertNode(Number(b.dataset.siteNodeAdd)));
+  box.querySelectorAll('[data-site-node-del]').forEach(b=>b.onclick=()=>siteRemoveNode(Number(b.dataset.siteNodeDel)));
+  box.querySelectorAll('[data-site-node-up]').forEach(b=>b.onclick=()=>siteMoveNode(Number(b.dataset.siteNodeUp),-1));
+  box.querySelectorAll('[data-site-node-down]').forEach(b=>b.onclick=()=>siteMoveNode(Number(b.dataset.siteNodeDown),1));
+}
+function applySiteField(field,v){
+  const sh=state.background.shape; if(!sh) return false;
+  const n=Number(v); if(!Number.isFinite(n)) return false;
+  if(field==='a0') sh.a0=normalizeAngle(n);
+  else if(field==='angle') sh.angle=normalizeAngle(n);
+  else if(field==='sweep') sh.a1=(Number(sh.a0)||0)+Math.min(360,Math.max(1,n));
+  else if(['w','h','r','rx','ry'].includes(field)) sh[field]=Math.max(.05,n);
+  else if(['x','y','cx','cy'].includes(field)) sh[field]=n;
+  return true;
+}
+/* 场地多边形顶点增删排序（闭合环；操作后同步取景框并提交） */
+function siteInsertNode(at){
+  const pts=state.background.shape?.points; if(!pts) return;
+  const a=pts[at], c=pts[(at+1)%pts.length];
+  pushHistory();
+  pts.splice(Math.min(at+1,pts.length),0,[(a[0]+c[0])/2,(a[1]+c[1])/2]);
+  syncFramePan(); commitChange('已插入场地顶点');
+}
+function siteRemoveNode(i){
+  const pts=state.background.shape?.points; if(!pts) return;
+  if(pts.length<=3) return toast('多边形场地至少保留 3 个顶点','warn');
+  pushHistory(); pts.splice(i,1); syncFramePan(); commitChange('已删除场地顶点');
+}
+function siteMoveNode(i,dir){
+  const pts=state.background.shape?.points; if(!pts) return;
+  const to=i+(dir<0?-1:1);
+  if(to<0||to>=pts.length) return;
+  pushHistory();
+  const p=pts.splice(i,1)[0]; pts.splice(to,0,p);
+  syncFramePan(); commitChange('场地顶点顺序已调整');
+}
 function renderProps(){
   const box=$('propPanel');
+  if(currentTool==='site-node'){ renderSiteNodeProps(box); return; }
   const objs=state.objects.filter(o=>selectedIds.has(o.id));
   if(!objs.length){ box.innerHTML='<div class="prop-empty">使用左上角工具添加点设备、区域、折线、文字或尺寸标注。<br><br>提示：单击选择对象，拖拽移动；框选可批量选择；Delete 删除；Ctrl+Z 撤销。</div>'; return; }
   if(objs.length>1){ renderMultiProps(box,objs); return; }

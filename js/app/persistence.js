@@ -286,34 +286,39 @@ function pointArray(v){
   return Array.isArray(v) ? v.filter(Array.isArray).map(p=>[finiteNumber(p[0],NaN),finiteNumber(p[1],NaN)])
     .filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])) : [];
 }
-/** 矢量场地形状清洗；image 不需要形状但仍保留一个合法默认 */
+/**
+ * 矢量场地形状清洗；image 不需要形状但仍保留一个合法默认。
+ * 保留绝对坐标（矩形基点 x,y；圆/椭圆/扇形圆心 cx,cy；多边形顶点原值），
+ * 使「场地节点」编辑后的负坐标/越界位置在保存→重载后不被打回原点。
+ * 新建场地本就规整在第一象限，故既有工程数据清洗结果与旧版一致。
+ */
 function sanitizeShape(raw,kind,legacyW,legacyH){
   const sh=raw&&typeof raw==='object'?raw:{};
   if(kind==='circle'){
     const r=positiveNumber(sh.r,50);
-    return {type:'circle',cx:r,cy:r,r};
+    return {type:'circle',cx:finiteNumber(sh.cx,r),cy:finiteNumber(sh.cy,r),r};
   }
   if(kind==='ellipse'){
     const rx=positiveNumber(sh.rx,NaN), ry=positiveNumber(sh.ry,NaN);
-    if(Number.isFinite(rx)&&Number.isFinite(ry)) return {type:'ellipse',cx:rx,cy:ry,rx,ry,angle:finiteNumber(sh.angle,0)};
-    return {type:'rect',w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
+    if(Number.isFinite(rx)&&Number.isFinite(ry)) return {type:'ellipse',cx:finiteNumber(sh.cx,rx),cy:finiteNumber(sh.cy,ry),rx,ry,angle:finiteNumber(sh.angle,0)};
+    return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
   if(kind==='sector'){
     const r=positiveNumber(sh.r,NaN);
     if(Number.isFinite(r)){
       const a0=finiteNumber(sh.a0,0);
       const a1=finiteNumber(sh.a1,finiteNumber(sh.a0,0)+90);
-      return sectorShapeFrom([finiteNumber(sh.cx,0),finiteNumber(sh.cy,0)],r,a0,a1);
+      return {type:'sector',cx:finiteNumber(sh.cx,0),cy:finiteNumber(sh.cy,0),r,a0,a1};
     }
-    return {type:'rect',w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
+    return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
   if(kind==='polygon'){
     const pts=pointArray(sh.points);
-    if(pts.length>=3) return polygonShapeFromPoints(pts);
-    return {type:'rect',w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
+    if(pts.length>=3) return {type:'polygon',points:pts.map(p=>[p[0],p[1]])};
+    return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
-  if(kind==='rect') return {type:'rect',w:positiveNumber(sh.w,positiveNum(legacyW,100)),h:positiveNumber(sh.h,positiveNum(legacyH,70))};
-  return {type:'rect',w:100,h:70};
+  if(kind==='rect') return {type:'rect',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),w:positiveNumber(sh.w,positiveNum(legacyW,100)),h:positiveNumber(sh.h,positiveNum(legacyH,70))};
+  return {type:'rect',x:0,y:0,w:100,h:70};
 }
 function sanitizeLayers(arr){
   const out=[];
@@ -429,9 +434,9 @@ function loadImageSrc(src){
 }
 async function afterStateLoaded(fit=true){
   const seq=++bgLoadSeq;
-  bgImage=null; bgDataUrl='';
-  coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
-  refreshUI();
+  bgImage=null; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
+  resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
+  /* 旧版底图资产 */refreshUI();
   if(fit) fitView();
   requestRender();
   const bg=state.background;

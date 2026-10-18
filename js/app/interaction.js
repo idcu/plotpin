@@ -29,9 +29,11 @@ function setTool(tool){
     'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
     'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
     'site-sector':'绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消',
-    'site-polygon':'绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消'
+    'site-polygon':'绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消',
+    'site-node':'场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除'
   };
   $('toolTitle').textContent=titles[tool]||'';
+  refreshUI();
   requestRender();
 }
 let lastCanvasHandledAt=0, lastCanvasPointerUpAt=0;
@@ -192,6 +194,14 @@ canvas.addEventListener('pointerdown',e=>{
     else draft.points.push(wp);
     requestRender(); return;
   }
+  if(currentTool==='site-node'){
+    const h=siteHandleAt(wp,sp);
+    if(h){
+      pushHistory();
+      drag={type:'siteHandle',handle:h,start:wp,originalShape:deepClone(state.background.shape)};
+    }
+    return;
+  }
   if(currentTool==='select'){
     const h=handleAt(wp,sp);
     if(h){
@@ -305,6 +315,11 @@ canvas.addEventListener('pointermove',e=>{
     resizeShapeByHandle(state.objects.find(x=>x.id===drag.id),drag.handle,wp);
     requestRender(); return;
   }
+  if(drag?.type==='siteHandle'){
+    resizeSiteByHandle(drag.handle,wp);
+    syncFramePan();               /* 形状变更后取景框随实际包围盒更新，pan 补偿使其它内容保持不动 */
+    requestRender(); return;
+  }
   if(draft && draft.points){ draft.current=wp; requestRender(); }
   if(draft && ['rect','siteRect','siteCircle','siteEllipse','siteSector','areaCircle','areaEllipse','areaSector'].includes(draft.kind)){
     draft.current=wp; if(draft.kind==='rect'&&e.buttons===1) draft.pending=false; requestRender();
@@ -324,10 +339,14 @@ canvas.addEventListener('pointerup',e=>{
   }
   if(activePointers.size===0) touchArm=false;
   if(drag?.type==='pan'){ drag=null; document.body.classList.remove('panning'); return; }
-  if(drag && ['move','node','rotate','rect','shapeHandle'].includes(drag.type)){
-    const changed=state.objects.some(o=>drag.originals?.has(o.id) || o.id===drag.id);
+  if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
+    const isSite=drag.type==='siteHandle';
+    const changed=isSite
+      ? JSON.stringify(drag.originalShape)!==JSON.stringify(state.background.shape)
+      : state.objects.some(o=>drag.originals?.has(o.id) || o.id===drag.id);
+    if(isSite && !changed) history.past.pop();      /* 仅点击未拖动：弹出未变更的撤销快照 */
     drag=null;
-    if(changed) commitChange(); else refreshUI();
+    if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); }
     return;
   }
   if(draft && draft.kind==='rect' && draft.pending===false){ finishDraft(); return; }
@@ -364,8 +383,33 @@ canvas.addEventListener('dblclick',e=>{
     if(draft.points.length<minPts){ draft=null; requestRender(); return; }
     finishDraft();
   }
+  else if(currentTool==='site-node') editSiteNodeByDoubleClick(e);
   else editLineNodeByDoubleClick(e);
 });
+/** 「场地节点」工具下双击多边形场地：点中顶点→删除；点中边→在该处插入顶点（吸附生效） */
+function editSiteNodeByDoubleClick(e){
+  const bg=state.background;
+  if(!bg||bg.kind==='image') return;
+  const sh=bg.shape||{};
+  if(sh.type!=='polygon'||!(sh.points||[]).length) return;
+  const wp=resolveWorldPoint(e), tol=9/state.viewport.zoom, pts=sh.points, n=pts.length;
+  let ni=-1;
+  pts.forEach((p,i)=>{ if(dist(p,wp)<=tol) ni=i; });
+  if(ni>=0){
+    if(n<=3){ toast('多边形场地至少保留 3 个顶点','warn'); return; }
+    pushHistory(); pts.splice(ni,1);
+  }else{
+    let best=null;
+    for(let k=0;k<n;k++){
+      const dd=distanceToSegment(wp,pts[k],pts[(k+1)%n]);
+      if(dd<=tol&&(!best||dd<best.d)) best={k,d:dd};
+    }
+    if(!best) return;
+    const foot=nearestPointOnSegment(wp,pts[best.k],pts[(best.k+1)%n]);
+    pushHistory(); pts.splice(best.k+1,0,[foot[0],foot[1]]);
+  }
+  syncFramePan(); commitChange('场地节点已更新');
+}
 /** 选择工具下双击折线：点中节点→删除；点中线段→在该处插入节点（吸附生效） */
 function editLineNodeByDoubleClick(e){
   if(currentTool!=='select'||selectedIds.size!==1) return;
@@ -428,6 +472,87 @@ function resizeShapeByHandle(o,h,p){
   }
   o.updatedAt=nowISO();
 }
+
+/* -------------------- 矢量场地控制点编辑（「场地节点」工具） -------------------- */
+/** 场地控制点清单（世界坐标，Y 向上）：与渲染手柄、命中、拖拽共用同一基准 */
+function siteHandleList(bg){
+  bg=bg||state.background;
+  if(!bg||bg.kind==='image') return [];
+  const sh=bg.shape||{}, out=[];
+  if(sh.type==='polygon'){
+    (sh.points||[]).forEach((p,i)=>out.push({type:'siteNode',mode:'vertex',index:i,x:Number(p[0])||0,y:Number(p[1])||0}));
+    return out;
+  }
+  const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+  if(sh.type==='circle'){
+    const r=Number(sh.r)||0;
+    out.push({type:'siteNode',mode:'center',x:cx,y:cy});
+    out.push({type:'siteNode',mode:'radius',x:cx+r,y:cy});
+    return out;
+  }
+  if(sh.type==='ellipse'){
+    const rx=Number(sh.rx)||0, ry=Number(sh.ry)||0, a=(Number(sh.angle)||0)*Math.PI/180, b=a+Math.PI/2;
+    out.push({type:'siteNode',mode:'center',x:cx,y:cy});
+    out.push({type:'siteNode',mode:'rx',x:cx+Math.cos(a)*rx,y:cy+Math.sin(a)*rx});
+    out.push({type:'siteNode',mode:'ry',x:cx+Math.cos(b)*ry,y:cy+Math.sin(b)*ry});
+    const off=Math.max(.55,30/state.viewport.zoom);
+    out.push({type:'siteNode',mode:'rotate',x:cx+Math.cos(b)*off,y:cy+Math.sin(b)*off});
+    return out;
+  }
+  if(sh.type==='sector'){
+    const r=Number(sh.r)||0, a0=Number(sh.a0)||0, sw=sectorSweep(sh), a1=a0+sw;
+    const p=deg=>[cx+r*Math.cos(deg*Math.PI/180),cy+r*Math.sin(deg*Math.PI/180)];
+    out.push({type:'siteNode',mode:'center',x:cx,y:cy});
+    out.push({type:'siteNode',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
+    out.push({type:'siteNode',mode:'edge1',x:p(a1)[0],y:p(a1)[1]});
+    out.push({type:'siteNode',mode:'radius',x:p(a0+sw/2)[0],y:p(a0+sw/2)[1]});
+    return out;
+  }
+  const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), h=positiveNum(sh.h,70);
+  [[x,y],[x+w,y],[x+w,y+h],[x,y+h]].forEach((p,i)=>out.push({type:'siteNode',mode:'corner',index:i,x:p[0],y:p[1]}));
+  return out;
+}
+/** 命中场地控制点（屏幕阈值，与对象手柄一致） */
+function siteHandleAt(wp,sp){
+  for(const h of siteHandleList()){
+    const s=w2s([h.x,h.y]);
+    if(Math.hypot(s[0]-sp[0],s[1]-sp[1])<=9) return h;
+  }
+  return null;
+}
+/** 拖拽场地控制点：按模式改写场地 shape 参数（世界坐标米） */
+function resizeSiteByHandle(h,p){
+  const bg=state.background; if(!bg||bg.kind==='image') return;
+  const sh=bg.shape||{};
+  if(h.mode==='vertex'){ sh.points[h.index]=[p[0],p[1]]; return; }
+  if(h.mode==='corner'){
+    const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
+    const fix=[[x,y],[x+w,y],[x+w,y+hh],[x,y+hh]][(h.index+2)%4];
+    sh.x=Math.min(fix[0],p[0]); sh.y=Math.min(fix[1],p[1]);
+    sh.w=Math.max(.05,Math.abs(p[0]-fix[0])); sh.h=Math.max(.05,Math.abs(p[1]-fix[1]));
+    return;
+  }
+  if(h.mode==='center'){ sh.cx=p[0]; sh.cy=p[1]; return; }
+  if(h.mode==='radius'){ sh.r=Math.max(.05,dist([Number(sh.cx)||0,Number(sh.cy)||0],p)); return; }
+  if(h.mode==='rx'||h.mode==='ry'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0, q=rotatePoint(p,[cx,cy],-(Number(sh.angle)||0));
+    if(h.mode==='rx') sh.rx=Math.max(.05,Math.abs(q[0]-cx));
+    else sh.ry=Math.max(.05,Math.abs(q[1]-cy));
+    return;
+  }
+  if(h.mode==='rotate'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+    sh.angle=normalizeAngle(Math.round(Math.atan2(p[1]-cy,p[0]-cx)*180/Math.PI-90));
+    return;
+  }
+  if(h.mode==='edge0'||h.mode==='edge1'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+    sh.r=Math.max(.05,dist([cx,cy],p));
+    const deg=normalizeAngle(Math.round(Math.atan2(p[1]-cy,p[0]-cx)*180/Math.PI));
+    if(h.mode==='edge0') sh.a0=deg; else sh.a1=deg;
+    return;
+  }
+}
 /** Esc 取消进行中的拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照 */
 function cancelActiveDrag(){
   if(!drag) return false;
@@ -441,6 +566,10 @@ function cancelActiveDrag(){
   }else if(['node','rotate','rect','shapeHandle'].includes(d.type)){
     const o=state.objects.find(x=>x.id===d.id);
     if(o && d.original) Object.assign(o,deepClone(d.original));
+    history.past.pop();
+  }else if(d.type==='siteHandle'){
+    if(state.background) state.background.shape=deepClone(d.originalShape);
+    syncFramePan();                 /* 形状还原后同步取景框，视野回到拖拽前 */
     history.past.pop();
   }else return true;
   commitChange(); return true;

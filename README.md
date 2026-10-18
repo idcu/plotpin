@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-697%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-734%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在任意底图（图片 / 矢量场地）上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -22,6 +22,7 @@
   - 图片底图（PNG/JPG/WebP/BMP/GIF/SVG）：两点定距完成**米/像素比例尺校准**。
   - 矢量场地：直接以米为世界坐标绘制**矩形 / 圆形 / 椭圆 / 扇形 / 多边形**场地，无需校准。
   - 矢量场地可在图上叠加**场地标注**：边界节点世界坐标、相邻节点**段长**、场地中心**周长 / 面积胶囊**；三项各自可在「工程设置」独立开关（固定字号不随缩放变化），矩形与多边形按真实边界逐点标注。
+  - 场地绘制完成后可继续微调：左侧「**⊗ 场地节点**」工具在画布上显示各控制点，拖拽即改形状（多边形顶点 / 矩形四角 / 圆心与半径 / 椭圆两轴与旋转 / 扇形两边与张角）；属性面板同步提供**坐标与参数精确输入**，多边形支持顶点增删与 ↑↓ 排序、画布双击边插点 / 双击顶点删点。
 - **点设备（位置语义）**：内置通用标记、摄像头、球机、路灯、道闸、充电桩、警示点等图标；图标为**屏幕固定大小**，缩放画布时始终清晰可点。
   - 图标大小三层可调：**全局倍率 × 类型默认大小 × 单个对象覆盖**，底图再大也能让点位醒目。
   - 高级选项：设置物理尺寸（米）后可按真实比例渲染覆盖范围（圆形覆盖、方形区域、摄像头扇形视场、道闸杆）。
@@ -184,7 +185,7 @@ Double-click `index.html` — or serve the folder with any static file server. M
 ### Test
 
 ```bash
-node scripts/selftest.mjs   # 697 assertions, no dependencies
+node scripts/selftest.mjs   # 734 assertions, no dependencies
 ```
 
 ### License
