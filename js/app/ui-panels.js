@@ -73,7 +73,8 @@ function renderNodeEditor(o){
   const hint=canEdit
     ? `<div class="hint-text">共 ${n} 点（${shapeName}至少 ${min} 点）；拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除</div>`
     : `<div class="hint-text">共 ${n} 点；可在画布上拖节点手柄调整位置</div>`;
-  return `<div class="node-list">${rows}${hint}</div>`;
+  /* span2：节点列表需跨满 form-grid 两列，否则会被压进 78px 的标签列导致坐标输入框仅剩几十像素 */
+  return `<div class="node-list span2">${rows}${hint}</div>`;
 }
 /* -------------------- 场地属性 / 场地节点编辑 -------------------- */
 /**
@@ -271,7 +272,7 @@ function renderProps(){
       ${o.kind==='line'?row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`):''}
       ${o.closed?row('面积',`<b>${fmt(polygonArea(o.points))}</b> ㎡`):''}
       ${o.closed?row('周长',`<b>${fmt(objectLength(o))}</b> m（含闭合边）`):''}
-      ${row('节点',renderNodeEditor(o))}`;
+      <label class="span2">节点</label>${renderNodeEditor(o)}`;
   }else if(o.kind==='point'){
     const psh=t.scaleShape||'none';
     const canScale=psh!=='none';

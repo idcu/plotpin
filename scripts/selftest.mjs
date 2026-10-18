@@ -108,7 +108,7 @@ code += `\n;globalThis.__api = {
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
-  isPolylineEditable, objectArea, objectLength,
+  isPolylineEditable, objectArea, objectLength, renderNodeEditor,
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
@@ -815,6 +815,11 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('节点-删首点后锚点同步 X', l4.x, l4.points[0][0]);
   eq('节点-删首点后锚点同步 Y', l4.y, l4.points[0][1]);
   eq('节点-闭合态保持', l4.closed, true);
+
+  /* 节点编辑器 HTML：列表需跨满属性面板两列（否则坐标输入框被压进标签列只剩几十像素） */
+  const eh=api.renderNodeEditor(mk(false));
+  ok('节点编辑器-列表跨满整行', eh.includes('class="node-list span2"'));
+  ok('节点编辑器-含坐标输入框', eh.includes('data-node-axis="x"') && eh.includes('data-node-axis="y"'));
 }
 
 /* 21. 节点排序：move/step 语义、越界保护、锚点同步 -------------------------- */
