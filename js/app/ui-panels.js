@@ -75,19 +75,25 @@ function renderNodeEditor(o){
     : `<div class="hint-text">共 ${n} 点；可在画布上拖节点手柄调整位置</div>`;
   return `<div class="node-list">${rows}${hint}</div>`;
 }
-/* -------------------- 场地节点编辑（矢量场地控制点精确输入） -------------------- */
-/** 「场地节点」工具下的属性面板：按形状提供坐标/参数精确输入；多边形支持逐点增删排序 */
-function renderSiteNodeProps(box){
-  const bg=state.background;
-  if(!bg||bg.kind==='image'){
-    box.innerHTML='<div class="prop-empty">当前为图片底图，暂无场地节点可编辑。<br><br>请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/多边形矢量场地；图片底图请改用「仿射校准」。</div>';
-    return;
+/* -------------------- 场地属性 / 场地节点编辑 -------------------- */
+/**
+ * 场地/底图属性面板 HTML（纯函数，便于逻辑层自测）。
+ * mode='default'：未选中任何对象时显示「场地属性」；mode='tool'：「场地节点」工具下显示并给出画布拖拽提示。
+ * 矢量场地按形状提供可编辑坐标/参数（世界坐标米，可为负）；图片底图给出底图摘要与比例尺/仿射校准入口。
+ */
+function sitePropsHTML(bg, mode){
+  bg=bg||state.background;
+  const tool=mode==='tool';
+  const heading=tool?'场地节点':'场地属性';
+  if(!bg) return `<div class="section"><h3>${esc(heading)}</h3><div class="prop-empty">尚未设置底图/场地，请点顶部「底图/场地」上传图片或绘制矢量场地。</div></div>`;
+  if(bg.kind==='image'){
+    if(tool) return `<div class="section"><h3>场地节点 <span class="hint-text">图片底图</span></h3><div class="prop-empty">当前为图片底图，暂无场地节点可编辑。<br><br>请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/多边形矢量场地；图片底图请改用「仿射校准」。</div></div>`;
+    return imagePropsHTML(bg, heading);
   }
   const sh=bg.shape||{};
   const fv=(v,fb=0)=>{ const n=Number(v); return fmt(Number.isFinite(n)?n:fb); };
   const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-site-field="${field}" value="${val}">`;
   const row=(label,inner)=>`<label>${label}</label><div>${inner}</div>`;
-  const ap=siteAreaPerimeter(bg);
   let params='';
   if(sh.type==='polygon'){
     const pts=sh.points||[];
@@ -116,14 +122,44 @@ function renderSiteNodeProps(box){
     params=`${row('基点 X',num('x',fv(sh.x)))}${row('基点 Y',num('y',fv(sh.y)))}
       ${row('宽度 (m)',num('w',fv(sh.w,100)))}${row('高度 (m)',num('h',fv(sh.h,70)))}`;
   }
-  box.innerHTML=`<div class="section"><h3>场地节点 <span class="hint-text">${esc(siteKindName(bg.kind))}</span></h3>
+  const ap=siteAreaPerimeter(bg);
+  const hint=tool
+    ?'拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地随底图保持真实比例。'
+    :'直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
+  return `<div class="section"><h3>${esc(heading)} <span class="hint-text">${esc(siteKindName(bg.kind))}</span></h3>
     <div class="form-grid">${params}</div>
     <div class="form-grid">
       <label>面积</label><div><b id="siteAreaVal">${fmt(ap.area)}</b> ㎡</div>
       <label>周长</label><div><b id="sitePerimVal">${fmt(ap.perimeter)}</b> m</div>
     </div>
-    <div class="hint-text">拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地随底图保持真实比例。</div>
+    <div class="hint-text">${hint}</div>
+    ${tool?'':`<div class="hint-text">提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。</div>`}
   </div>`;
+}
+/** 图片底图属性摘要（含比例尺/仿射校准入口）；实测范围为其外接矩形 */
+function imagePropsHTML(bg, heading){
+  const d=siteDomainOf(bg);
+  const cal=bg.calibrated?'已校准':'未校准';
+  const rot=bg.transform?'已校正倾斜':'轴对齐';
+  return `<div class="section"><h3>${esc(heading)} <span class="hint-text">图片底图</span></h3>
+    <div class="form-grid">
+      <label>名称</label><div>${esc(bg.fileName||'未命名')}</div>
+      <label>像素</label><div>${bg.width}×${bg.height} px</div>
+      <label>比例</label><div>${fmt(bg.metersPerPixel)} m/px</div>
+      <label>校准</label><div>${cal} ｜ ${rot}</div>
+      <label>实测范围</label><div>${fmt(d.w)}×${fmt(d.h)} m（外接矩形）</div>
+    </div>
+    <div class="form-grid">
+      <button class="primary" id="siteOpenBtn" title="上传图片底图，或改画矢量场地">底图/场地…</button>
+      <button id="siteCalibBtn" title="仅图片底图需要：指定两点实际距离校准米/像素">比例尺校准</button>
+      <button id="siteAffineBtn" title="在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放">仿射校准</button>
+    </div>
+    <div class="hint-text">图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。</div>
+  </div>`;
+}
+/** 渲染场地/底图属性面板并按 mode 绑定事件（default=未选中对象时的场地属性；tool=场地节点工具） */
+function renderSiteProps(box, mode){
+  box.innerHTML=sitePropsHTML(state.background, mode||'default');
   bindSiteNodeEvents(box);
 }
 function updateSiteStats(box){
@@ -147,6 +183,10 @@ function bindSiteNodeEvents(box){
   box.querySelectorAll('[data-site-node-del]').forEach(b=>b.onclick=()=>siteRemoveNode(Number(b.dataset.siteNodeDel)));
   box.querySelectorAll('[data-site-node-up]').forEach(b=>b.onclick=()=>siteMoveNode(Number(b.dataset.siteNodeUp),-1));
   box.querySelectorAll('[data-site-node-down]').forEach(b=>b.onclick=()=>siteMoveNode(Number(b.dataset.siteNodeDown),1));
+  /* 图片底图属性面板的入口按钮：复用顶部同名按钮的处理逻辑 */
+  const openB=box.querySelector('#siteOpenBtn'); if(openB) openB.onclick=()=>openSitePicker();
+  const calB=box.querySelector('#siteCalibBtn'); if(calB) calB.onclick=()=>$('calibBtn').click();
+  const affB=box.querySelector('#siteAffineBtn'); if(affB) affB.onclick=()=>$('affineBtn').click();
 }
 function applySiteField(field,v){
   const sh=state.background.shape; if(!sh) return false;
@@ -181,9 +221,9 @@ function siteMoveNode(i,dir){
 }
 function renderProps(){
   const box=$('propPanel');
-  if(currentTool==='site-node'){ renderSiteNodeProps(box); return; }
+  if(currentTool==='site-node'){ renderSiteProps(box,'tool'); return; }
   const objs=state.objects.filter(o=>selectedIds.has(o.id));
-  if(!objs.length){ box.innerHTML='<div class="prop-empty">使用左上角工具添加点设备、区域、折线、文字或尺寸标注。<br><br>提示：单击选择对象，拖拽移动；框选可批量选择；Delete 删除；Ctrl+Z 撤销。</div>'; return; }
+  if(!objs.length){ renderSiteProps(box,'default'); return; }
   if(objs.length>1){ renderMultiProps(box,objs); return; }
   const o=objs[0], t=getType(o.typeId);
   const row=(label,inner)=>`<label>${label}</label><div>${inner}</div>`;

@@ -122,7 +122,7 @@ code += `\n;globalThis.__api = {
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
-  siteHandleList, siteHandleAt, resizeSiteByHandle
+  siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -1940,6 +1940,46 @@ asyncSuites.push((async()=>{
   eq('场地节点-偏移矩形重载保留', [mrx.background.shape.x,mrx.background.shape.y,mrx.background.shape.w,mrx.background.shape.h], [-5,-3,20,10]);
   const mc=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}}});
   eq('场地节点-偏心圆重载保留', [mc.background.shape.cx,mc.background.shape.cy,mc.background.shape.r], [30,20,10]);
+  api.resetState();
+}
+
+/* 42. 场地属性面板：未选中对象时的可编辑场地属性 / 图片底图摘要 ------------------------ */
+{
+  api.resetState();
+  /* 矢量场地（默认模式 = 未选中对象时显示，可编辑） */
+  const rectBG={kind:'rect',shape:{type:'rect',x:-5,y:-2,w:112,h:74}};
+  const h1=api.sitePropsHTML(rectBG,'default');
+  ok('场地属性-默认模式含标题', h1.includes('场地属性'));
+  ok('场地属性-含场地类型', h1.includes('矩形场地'));
+  ok('场地属性-含可编辑基点X（负坐标）', h1.includes('data-site-field="x"') && h1.includes('value="-5.00"'));
+  ok('场地属性-含宽高可编辑', h1.includes('data-site-field="w"') && h1.includes('data-site-field="h"'));
+  ok('场地属性-含面积周长', h1.includes('id="siteAreaVal"') && h1.includes('id="sitePerimVal"'));
+  ok('场地属性-面积值', h1.includes('8288.00'));
+  ok('场地属性-周长值', h1.includes('372.00'));
+  ok('场地属性-未选中对象操作提示', h1.includes('单击对象可在此编辑其属性'));
+  /* 工具模式（场地节点）：标题与提示切换，且不再出现未选中对象的操作提示 */
+  const h2=api.sitePropsHTML(rectBG,'tool');
+  ok('场地节点-工具模式标题', h2.includes('场地节点') && !h2.includes('场地属性'));
+  ok('场地节点-工具模式含画布拖拽提示', h2.includes('拖拽画布上的控制点'));
+  ok('场地节点-工具模式无未选中提示', !h2.includes('单击对象可在此编辑其属性'));
+  /* 各矢量形状的参数入口 */
+  const hc=api.sitePropsHTML({kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}},'default');
+  ok('场地属性-圆形含半径与圆心', hc.includes('data-site-field="r"') && hc.includes('data-site-field="cx"') && hc.includes('314.16'));
+  const hp=api.sitePropsHTML({kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}},'default');
+  ok('场地属性-多边形顶点行数', (hp.match(/data-site-node-row=/g)||[]).length===4);
+  ok('场地属性-多边形含插入/删除顶点', hp.includes('data-site-node-add=') && hp.includes('data-site-node-del='));
+  ok('场地属性-扇形含张角', api.sitePropsHTML({kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}},'default').includes('data-site-field="sweep"'));
+  ok('场地属性-椭圆含两半径与旋转', (()=>{ const e=api.sitePropsHTML({kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}},'default'); return e.includes('data-site-field="rx"') && e.includes('data-site-field="ry"') && e.includes('data-site-field="angle"'); })());
+  /* 图片底图：显示摘要 + 校准入口按钮；工具模式下给引导语 */
+  const hi=api.sitePropsHTML({kind:'image',fileName:'plan.png',width:500,height:400,metersPerPixel:0.2,calibrated:true,transform:null},'default');
+  ok('底图属性-图片含名称像素比例', hi.includes('plan.png') && hi.includes('500×400 px') && hi.includes('0.20 m/px'));
+  ok('底图属性-图片含校准状态', hi.includes('已校准') && hi.includes('轴对齐'));
+  ok('底图属性-图片含校准入口按钮', hi.includes('id="siteOpenBtn"') && hi.includes('id="siteCalibBtn"') && hi.includes('id="siteAffineBtn"'));
+  ok('场地节点-图片底图给引导语', api.sitePropsHTML({kind:'image',fileName:'x.png'},'tool').includes('暂无场地节点可编辑'));
+  /* 无底图 */
+  const saved=api.state.background; api.state.background=null;
+  ok('场地属性-无底图提示', api.sitePropsHTML(null,'default').includes('尚未设置底图/场地'));
+  api.state.background=saved;
   api.resetState();
 }
 
