@@ -416,6 +416,52 @@ function drawScaleBar(c,v,height){
   c.beginPath(); c.moveTo(x,y); c.lineTo(x+len,y); c.moveTo(x,y-5); c.lineTo(x,y+5); c.moveTo(x+len,y-5); c.lineTo(x+len,y+5); c.stroke();
   c.fillStyle='#111827'; c.font='12px sans-serif'; c.fillText(fmt(step)+' '+state.settings.unit,x+len/2-14,y-9);
 }
+/**
+ * 逐对象标注条目（世界坐标锚点 + 屏幕偏移，画布与 SVG 导出共用，保证所见即所得）。
+ * 覆盖：点设备坐标；区域基点/半径/边长；折线节点坐标/边长/总长。
+ * 面积/周长使用图形中心的胶囊（见 drawAreaTag），不在此列出。
+ */
+function annotationItems(o,opt={}){
+  const out=[], S=state.settings, sel=!!opt.selected;
+  const push=(wx,wy,text,dx,dy,lenWorld)=>out.push({wx,wy,text,dx,dy,lenWorld:lenWorld||0});
+  if(!o) return out;
+  if(o.kind==='point'){
+    if(annotOn(o,'coord')) push(o.x,o.y,`X ${fmt(o.x)}  Y ${fmt(o.y)}`,14*pointIconScale(o)+4,-8);
+  }else if(o.kind==='rect'){
+    const tt=areaShapeType(o), sh=o.shape||{};
+    if(annotOn(o,'base')) push(o.x,o.y,`(${fmt(o.x)}, ${fmt(o.y)})`,10,-24);
+    if(annotOn(o,'radius')){
+      if(tt==='circle'||tt==='sector'){
+        const a0=(tt==='sector'?(Number(sh.a0)||0):0)*Math.PI/180, r=Number(sh.r)||0;
+        push(o.x+r*Math.cos(a0),o.y+r*Math.sin(a0),'R '+fmt(r)+' m',6,6);
+      }else if(tt==='ellipse'){
+        push(o.x+(Number(sh.rx)||0),o.y,'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry),6,6);
+      }
+    }
+    if(annotOn(o,'edge') && tt==='rect'){
+      const wp=rectPoints(o);
+      for(let k=0;k<4;k++){ const a=wp[k],b=wp[(k+1)%4], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
+    }
+  }else if(o.kind==='line'){
+    if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
+    if(S.showSegLen && sel && annotOn(o,'edge')){
+      const ps=o.points, n=ps.length, segN=o.closed?n:n-1;
+      for(let k=0;k<segN;k++){ const a=ps[k],b=ps[(k+1)%n], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
+    }
+    if(S.showSegLen && sel && !o.closed && annotOn(o,'perimeter') && o.points.length>=2){
+      const e=o.points[o.points.length-1]; push(e[0],e[1],'Σ '+fmt(objectLength(o))+' m',9,-9);
+    }
+  }
+  return out;
+}
+/** 绘制某对象的逐对象标注标签（屏幕固定字号；过短的段自动略去避免拥挤） */
+function drawObjectAnnotations(c,o,toS,v){
+  annotationItems(o,{selected:selectedIds.has(o.id)}).forEach(it=>{
+    if(it.lenWorld && it.lenWorld*v.zoom<26) return;
+    const s=toS([it.wx,it.wy]);
+    drawScreenTag(c,s[0]+it.dx,s[1]+it.dy,it.text);
+  });
+}
 function drawObject(c,o,v,toS,iconBoost,exportGain){
   const g=exportGain===undefined?iconBoost:exportGain;
   const type=getType(o.typeId), color=o.style.color||type.color||'#2563eb';
@@ -424,6 +470,7 @@ function drawObject(c,o,v,toS,iconBoost,exportGain){
   else if(o.kind==='line') drawLine(c,o,color,toS,v);
   else if(o.kind==='text') drawText(c,o,color,toS,v,g);
   else if(o.kind==='dimension') drawDimension(c,o,toS);
+  drawObjectAnnotations(c,o,toS,v);
 }
 function screenAngle(o){ return -o.angle*Math.PI/180; }
 /** 有物理尺寸的点设备：按世界坐标（米）渲染，缩放时与场地保持真实比例 */
@@ -500,18 +547,24 @@ function drawRect(c,o,color,toS,v,markerScale){
   c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineJoin='round'; c.stroke();
   const ce=shapeLabelCenter(o), s=toS(ce);
   if(o.name) drawLabel(c,o,s[0],s[1],color,toS,12*markerScale);
-  if(state.settings.showAreaTag) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o));
+  /* 面积/周长可分别开关（全局「图上显示面积」为总开关，逐对象开关为细控） */
+  const sa=state.settings.showAreaTag&&annotOn(o,'area'), sp=state.settings.showAreaTag&&annotOn(o,'perimeter');
+  if(sa||sp) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o),sa,sp);
 }
-/** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性） */
-function drawAreaTag(c,cx,cy,area,perimeter){
+/** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性）；面积与周长可分别关闭 */
+function drawAreaTag(c,cx,cy,area,perimeter,showArea=true,showPerim=true){
+  const lines=[];
+  if(showArea) lines.push(`面积 ${fmt(area)} ㎡`);
+  if(showPerim) lines.push(`周长 ${fmt(perimeter)} m`);
+  if(!lines.length) return;
   c.save();
   c.font='12px Consolas,Menlo,monospace'; c.textAlign='center'; c.textBaseline='middle';
-  const t1=`面积 ${fmt(area)} ㎡`, t2=`周长 ${fmt(perimeter)} m`;
-  const w=Math.max(c.measureText(t1).width,c.measureText(t2).width)+16, h=33;
+  const w=Math.max(...lines.map(t=>c.measureText(t).width))+16, lh=16, h=lines.length===1?24:33;
   c.fillStyle='rgba(255,255,255,.82)';
   c.beginPath(); c.roundRect?c.roundRect(cx-w/2,cy-h/2,w,h,5):c.rect(cx-w/2,cy-h/2,w,h); c.fill();
   c.strokeStyle='rgba(37,99,235,.35)'; c.lineWidth=1; c.stroke();
-  c.fillStyle='#1e3a8a'; c.fillText(t1,cx,cy-8); c.fillText(t2,cx,cy+8);
+  c.fillStyle='#1e3a8a';
+  lines.forEach((t,i)=>c.fillText(t,cx,cy-(lines.length-1)*8+i*16));
   c.restore();
 }
 function drawLine(c,o,color,toS,v){
@@ -523,28 +576,16 @@ function drawLine(c,o,color,toS,v){
   c.stroke(); c.restore();
   const mid=pts[Math.floor((pts.length-1)/2)];
   if(o.name && !o.closed) drawLabel(c,o,mid[0],mid[1]-8,color,toS);
-  /* 选中且开启“段长度”：每段中点标段长，末节点旁标总长（屏幕固定字号，不随缩放变） */
-  if(state.settings.showSegLen && selectedIds.has(o.id)) drawLineSegTags(c,o,toS);
-  /* 闭合区域：中心显示面积/周长（可开关） */
+  /* 段长度/总长标注由 annotationItems 统一绘制（受全局「段长度标注」与逐对象「边长/周长」开关约束） */
+  /* 闭合区域：中心显示面积/周长，两者可分别开关 */
   if(o.closed && state.settings.showAreaTag && o.points.length>=3){
-    const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
-    const s=toS([gx,gy]);
-    drawAreaTag(c,s[0],s[1],polygonArea(o.points),objectLength(o));
+    const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
+    if(sa||sp){
+      const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
+      const s=toS([gx,gy]);
+      drawAreaTag(c,s[0],s[1],polygonArea(o.points),objectLength(o),sa,sp);
+    }
   }
-}
-/** 折线/闭合区域段长度标注（屏幕像素坐标下绘制） */
-function drawLineSegTags(c,o,toS){
-  const ps=o.points, n=ps.length;
-  if(n<2) return;
-  const segN=o.closed?n:n-1, total=objectLength(o);
-  for(let k=0;k<segN;k++){
-    const a=ps[k], b=ps[(k+1)%n], len=dist(a,b);
-    if(len*state.viewport.zoom<26) continue;   // 屏幕上过短的段不标，避免拥挤
-    const s=toS([(a[0]+b[0])/2,(a[1]+b[1])/2]);
-    drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
-  }
-  const end=toS(ps[n-1]);
-  drawScreenTag(c,end[0]+9,end[1]-9,'Σ '+fmt(total)+' m');
 }
 function drawText(c,o,color,toS,v,markerScale){
   const s=toS([o.x,o.y]);

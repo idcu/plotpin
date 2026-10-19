@@ -69,6 +69,7 @@ function baseObject(kind, typeId, patch={}){
     layerId: 'layer.default', x:0, y:0, points:[], width:0, height:0, angle:0,
     phys:0,   /* 点设备物理尺寸(米，高级)：0=纯位置标识(屏幕固定图标)；>0=按世界比例渲染的覆盖图形 */
     iconSize:1, /* 点设备图标屏幕大小倍率（纯视觉，无物理意义）；与类型默认值、全局倍率连乘 */
+    annot:{},   /* 逐对象标注显示开关（点坐标/基点/半径/边长/周长/面积/节点坐标），未显式设置时按类型默认 */
     shape:null, /* 区域参数形状：circle{r}/ellipse{rx,ry}/sector{r,a0,a1}；null=矩形(用 width/height/angle) */
     text:'', closed:false, subtype:kind === 'dimension' ? 'distance' : '',
     style:{}, props:{}, visible:true, locked:false, z:state.objects.length,
@@ -138,4 +139,35 @@ function pointIconScale(o){
   const t=getType(o.typeId);
   const k=(Number(t.iconSize)||1)*(Number(o.iconSize)||1)*(Number(state.settings.markerScale)||1);
   return Math.min(8,Math.max(.2,k));
+}
+
+/* -------------------- 逐对象标注显示开关 -------------------- */
+/* 每个对象可单独配置在图上显示哪些标注；未显式设置的键按类型默认值（默认保持既有观感）。
+   点设备：点坐标；区域：基点坐标/半径/边长/周长/面积；折线：节点坐标/边长/周长/面积。 */
+const ANNOT_KEYS={
+  point:['coord'],
+  rect:['base','radius','edge','perimeter','area'],
+  line:['node','edge','perimeter','area']
+};
+const ANNOT_LABELS={ coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', perimeter:'周长', area:'面积', node:'节点坐标' };
+/* 默认值：区域与闭合折线的面积/周长沿用全局开关既有默认（开）；其余新增标注默认关闭 */
+const ANNOT_DEFAULTS={
+  point:{ coord:false },
+  rect:{ base:false, radius:false, edge:false, perimeter:true, area:true },
+  line:{ node:false, edge:true, perimeter:true, area:true }
+};
+/** 该对象（按 kind）支持的标注开关键列表 */
+function annotKeys(kind){ return ANNOT_KEYS[kind]||[]; }
+/** 某标注键的类型默认值（保持既有观感） */
+function annotDefault(o,key){ const d=(o&&ANNOT_DEFAULTS[o.kind])||{}; return d[key]===true; }
+/** 某对象某标注是否开启：显式布尔设置优先，否则取类型默认 */
+function annotOn(o,key){ const a=o&&o.annot; return (a&&typeof a[key]==='boolean')?a[key]:annotDefault(o,key); }
+/** 写入某标注开关（仅接受布尔值），返回是否变化 */
+function setAnnot(o,key,val){
+  if(!o||!annotKeys(o.kind).includes(key)) return false;
+  o.annot=o.annot||{};
+  const v=!!val;
+  const changed=o.annot[key]!==v;
+  o.annot[key]=v; o.updatedAt=nowISO();
+  return changed;
 }

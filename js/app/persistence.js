@@ -420,6 +420,12 @@ function sanitizeObjects(arr,layers,types){
       if(raw.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,finiteNumber(raw.style.strokeWidth,.1));
     }
     if(raw.props&&typeof raw.props==='object') Object.entries(raw.props).forEach(([k,v])=>{ if(['string','number','boolean'].includes(typeof v)) o.props[String(k).slice(0,40)]=v; });
+    /* 逐对象标注开关：仅保留该 kind 支持键的布尔值；非法/缺失时按类型默认（不写回） */
+    if(raw.annot&&typeof raw.annot==='object'){
+      const keys=annotKeys(kind), clean={};
+      keys.forEach(k=>{ if(typeof raw.annot[k]==='boolean') clean[k]=raw.annot[k]; });
+      o.annot=clean;
+    }
     out.push(o);
   });
   return out;

@@ -89,6 +89,10 @@
   .form-grid{display:grid;grid-template-columns:78px 1fr;gap:7px 8px;align-items:center}
   .form-grid label{color:#475467;font-size:12px}
   .form-grid .span2{grid-column:1/-1}
+  /* 逐对象「图上标注」开关组：整行铺满，复选框自动换行 */
+  .annot-chks{display:flex;flex-wrap:wrap;gap:4px 10px;padding:3px 0}
+  .annot-chk{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#475467;white-space:nowrap;cursor:pointer}
+  .annot-chk input{margin:0}
   .form-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
   .mini{padding:4px 7px;font-size:12px}
   .hint-text{font-size:11px;color:var(--muted);line-height:1.5}

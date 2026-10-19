@@ -109,6 +109,7 @@ code += `\n;globalThis.__api = {
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
+  annotKeys, annotOn, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
@@ -1988,6 +1989,96 @@ asyncSuites.push((async()=>{
   const saved=api.state.background; api.state.background=null;
   ok('场地属性-无底图提示', api.sitePropsHTML(null,'default').includes('尚未设置底图/场地'));
   api.state.background=saved;
+  api.resetState();
+}
+
+/* 40. 逐对象标注开关：默认值 / setAnnot / annotationItems / 面板 HTML / 迁移清洗 ---- */
+{
+  api.resetState();
+  /* 支持键与类型默认值（保持既有观感） */
+  eq('标注-点支持键', api.annotKeys('point'), ['coord']);
+  eq('标注-区域支持键', api.annotKeys('rect'), ['base','radius','edge','perimeter','area']);
+  eq('标注-折线支持键', api.annotKeys('line'), ['node','edge','perimeter','area']);
+  eq('标注-文字无键', api.annotKeys('text'), []);
+  eq('标注-尺寸标注无键', api.annotKeys('dimension'), []);
+
+  const pt=api.baseObject('point','point.marker',{x:3,y:4});
+  eq('标注-点坐标默认关', api.annotOn(pt,'coord'), false);
+  const rc=api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:6});
+  eq('标注-区域面积默认开', api.annotOn(rc,'area'), true);
+  eq('标注-区域周长默认开', api.annotOn(rc,'perimeter'), true);
+  eq('标注-区域基点默认关', api.annotOn(rc,'base'), false);
+  eq('标注-区域半径默认关', api.annotOn(rc,'radius'), false);
+  eq('标注-区域边长默认关', api.annotOn(rc,'edge'), false);
+  const ln=api.baseObject('line','line.custom',{points:[[0,0],[10,0],[10,10]],x:0,y:0});
+  eq('标注-折线节点默认关', api.annotOn(ln,'node'), false);
+  eq('标注-折线边长默认开', api.annotOn(ln,'edge'), true);
+
+  /* setAnnot：写入、同值无变化、非法键拒绝、显式关覆盖默认 */
+  eq('标注-写入返回变化', api.setAnnot(pt,'coord',true), true);
+  eq('标注-再写同值无变化', api.setAnnot(pt,'coord',true), false);
+  eq('标注-写入生效', api.annotOn(pt,'coord'), true);
+  eq('标注-非法键拒绝', api.setAnnot(pt,'base',true), false);
+  eq('标注-非法键未写入', api.annotOn(pt,'base'), false);
+  api.setAnnot(rc,'area',false);
+  eq('标注-显式关覆盖默认', api.annotOn(rc,'area'), false);
+
+  /* annotationItems：世界坐标锚点的逐对象标注条目 */
+  api.resetState();
+  const p2=api.baseObject('point','point.marker',{x:5,y:6});
+  eq('标注项-点坐标关时0条', api.annotationItems(p2).length, 0);
+  api.setAnnot(p2,'coord',true);
+  const pi=api.annotationItems(p2);
+  eq('标注项-点坐标开时1条', pi.length, 1);
+  ok('标注项-点坐标文本含 X/Y', pi[0].text.includes('X')&&pi[0].text.includes('Y'));
+
+  const r2=api.baseObject('rect','rect.area',{x:2,y:3,width:8,height:5});
+  eq('标注项-矩形默认0条(面积/周长为胶囊)', api.annotationItems(r2).length, 0);
+  api.setAnnot(r2,'base',true);
+  eq('标注项-矩形基点1条', api.annotationItems(r2).length, 1);
+  ok('标注项-矩形基点文本含坐标', api.annotationItems(r2)[0].text.includes('2.00'));
+  api.setAnnot(r2,'edge',true);
+  eq('标注项-矩形四边+基点=5条', api.annotationItems(r2).length, 5);
+
+  const c2=api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:7}});
+  api.setAnnot(c2,'radius',true);
+  eq('标注项-圆形半径1条', api.annotationItems(c2).length, 1);
+  ok('标注项-半径文本以 R 开头', api.annotationItems(c2)[0].text.startsWith('R '));
+  eq('标注项-圆形无边长项', api.annotationItems(c2).filter(it=>it.lenWorld).length, 0);
+
+  const l2=api.baseObject('line','line.custom',{points:[[0,0],[4,0],[4,3]],x:0,y:0});
+  eq('标注项-折叠线未选中默认0条', api.annotationItems(l2).length, 0);
+  eq('标注项-选中含2段长+总长', api.annotationItems(l2,{selected:true}).length, 3);
+  api.setAnnot(l2,'edge',false);
+  eq('标注项-关边长后仅总长', api.annotationItems(l2,{selected:true}).length, 1);
+  api.setAnnot(l2,'perimeter',false);
+  eq('标注项-关总长后0条', api.annotationItems(l2,{selected:true}).length, 0);
+  api.setAnnot(l2,'node',true);
+  eq('标注项-节点坐标3条', api.annotationItems(l2).length, 3);
+
+  /* 属性面板「图上标注」开关组 HTML */
+  ok('标注UI-点含点坐标开关', api.renderAnnotToggles(api.baseObject('point','point.marker',{})).includes('data-annot="coord"'));
+  const hRc=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,width:1,height:1}));
+  ok('标注UI-矩形含基点/边长/周长/面积无半径', ['base','edge','perimeter','area'].every(k=>hRc.includes(`data-annot="${k}"`)) && !hRc.includes('data-annot="radius"'));
+  const hCir=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:5}}));
+  ok('标注UI-圆形含半径不含边长', hCir.includes('data-annot="radius"') && !hCir.includes('data-annot="edge"'));
+  ok('标注UI-开关组跨满两列', hRc.includes('class="annot-chks span2"'));
+  const hLn=api.renderAnnotToggles(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]}));
+  ok('标注UI-折线含四个开关', ['node','edge','perimeter','area'].every(k=>hLn.includes(`data-annot="${k}"`)));
+  eq('标注UI-文字无开关组', api.renderAnnotToggles(api.baseObject('text','text.custom',{})), '');
+
+  /* 持久化迁移：仅保留该 kind 支持的布尔键，丢弃非法键/非本类型键 */
+  const m=api.migrateProject({schema:'offline-drawing-annotation/v1',objects:[
+    {kind:'point',name:'PT',x:1,y:2,annot:{coord:true,bogus:true,area:true}},
+    {kind:'rect',name:'RC',width:10,height:5,annot:{area:false,base:'yes'}},
+    {kind:'line',name:'LN',points:[[0,0],[1,0]],annot:{node:true,edge:false}}
+  ]});
+  const M=n=>m.objects.find(o=>o.name===n);
+  eq('标注迁移-点仅保留 coord', M('PT').annot, {coord:true});
+  eq('标注迁移-区域丢弃非布尔 base', M('RC').annot, {area:false});
+  eq('标注迁移-折线保留布尔键', M('LN').annot, {node:true,edge:false});
+  eq('标注迁移-点坐标生效', api.annotOn(M('PT'),'coord'), true);
+  eq('标注迁移-区域面积关生效', api.annotOn(M('RC'),'area'), false);
   api.resetState();
 }
 

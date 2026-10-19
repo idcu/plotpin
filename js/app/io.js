@@ -788,12 +788,17 @@ function buildSceneSvg(){
   }else{
     shapes.push(`<rect x="${X(0)}" y="${Y(d.h)}" width="${d.w*ppu}" height="${d.h*ppu}" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>`);
   }
-  /* SVG 面积/周长双行标签（与画布 drawAreaTag 语义一致；白描边保证任意底色可读） */
-  const areaTagSvg=(cx,cy,area,perim)=>{
-    const s1=`面积 ${fmt(area)} ㎡`, s2=`周长 ${fmt(perim)} m`;
-    return `<text x="${cx}" y="${cy-7}" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${s1}</text>`+
-      `<text x="${cx}" y="${cy+9}" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${s2}</text>`;
+  /* SVG 面积/周长双行标签（与画布 drawAreaTag 语义一致；白描边保证任意底色可读）；可分别关闭 */
+  const areaTagSvg=(cx,cy,area,perim,showArea=true,showPerim=true)=>{
+    const s1=showArea?`面积 ${fmt(area)} ㎡`:'', s2=showPerim?`周长 ${fmt(perim)} m`:'';
+    const line=(t,y)=>t?`<text x="${cx}" y="${y}" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${t}</text>`:'';
+    if(!s1&&!s2) return '';
+    if(s1&&s2) return line(s1,cy-7)+line(s2,cy+9);
+    return line(s1||s2,cy+4);
   };
+  /* 逐对象标注条目 → SVG 文本（与画布 drawObjectAnnotations 共用同一数据源，导出所见一致） */
+  const annotItemsSvg=(o)=>annotationItems(o,{selected:false}).map(it=>
+    `<text x="${X(it.wx)+it.dx}" y="${Y(it.wy)+it.dy+4}" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(it.text)}</text>`).join('');
   /* 屏幕固定像素的点设备图标（与 render.js drawPoint 的局部坐标一致，不随 ppu 缩放）；
      返回局部坐标 SVG 片段，由外层 <g scale> 包裹 */
   const svgPointIcon=(icon,color)=>{
@@ -827,16 +832,24 @@ function buildSceneSvg(){
       const pts=shapeWorldPoints(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       shapes.push(`<polygon points="${pts}" fill="${color}" fill-opacity="${styleVal(o,'fillAlpha',.15)}" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
       if(state.settings.showLabels&&o.name){ const ce=shapeLabelCenter(o); markers.push(`<text x="${X(ce[0])}" y="${Y(ce[1])}" text-anchor="middle" font-size="14" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`); }
-      if(state.settings.showAreaTag){ const ce=shapeLabelCenter(o); markers.push(areaTagSvg(X(ce[0]),Y(ce[1]),shapeArea(o),shapePerimeter(o))); }
+      if(state.settings.showAreaTag){
+        const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
+        if(sa||sp){ const ce=shapeLabelCenter(o); markers.push(areaTagSvg(X(ce[0]),Y(ce[1]),shapeArea(o),shapePerimeter(o),sa,sp)); }
+      }
+      markers.push(annotItemsSvg(o));
     }else if(o.kind==='line'&&o.points.length){
       /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致） */
       const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`);
       if(o.closed) pts.push(pts[0]);
       shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
       if(o.closed&&state.settings.showAreaTag&&o.points.length>=3){
-        const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
-        markers.push(areaTagSvg(X(gx),Y(gy),polygonArea(o.points),objectLength(o)));
+        const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
+        if(sa||sp){
+          const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
+          markers.push(areaTagSvg(X(gx),Y(gy),polygonArea(o.points),objectLength(o),sa,sp));
+        }
       }
+      markers.push(annotItemsSvg(o));
     }else if(o.kind==='point'){
       const x=X(o.x),y=Y(o.y), psh=t.scaleShape||'none';
       if((o.phys||0)>0&&psh!=='none'){
@@ -858,6 +871,7 @@ function buildSceneSvg(){
         const ly=(o.phys||0)>0?y-Math.max(13,(o.phys||0)/2*ppu+6):y-20*pointIconScale(o);
         markers.push(`<text x="${x}" y="${ly}" text-anchor="middle" font-size="12" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
       }
+      markers.push(annotItemsSvg(o));
     }else if(o.kind==='text'){
       markers.push(`<text x="${X(o.x)}" y="${Y(o.y)}" transform="rotate(${-o.angle} ${X(o.x)} ${Y(o.y)})" text-anchor="middle" font-size="${Math.max(10,o.height*ppu*.55)}" fill="${o.style.color||'#111'}">${esc(o.text||'文字')}</text>`);
     }else if(o.kind==='dimension'&&o.points.length>=2){

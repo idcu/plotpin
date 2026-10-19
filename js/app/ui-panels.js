@@ -76,6 +76,22 @@ function renderNodeEditor(o){
   /* span2：节点列表需跨满 form-grid 两列，否则会被压进 78px 的标签列导致坐标输入框仅剩几十像素 */
   return `<div class="node-list span2">${rows}${hint}</div>`;
 }
+/**
+ * 逐对象「图上标注」开关组（跨满两列）：点设备=点坐标；区域=基点/半径/边长/周长/面积；折线=节点/边长/周长/面积。
+ * 未显式设置的键按类型默认值；与全局总开关（段长度/图上面积）叠加生效。
+ * 区域按形状过滤无意义的开关：矩形只给「边长」，圆/椭圆/扇形只给「半径」。
+ */
+function annotToggleKeys(o){
+  const keys=annotKeys(o.kind);
+  if(o.kind==='rect') return areaShapeType(o)==='rect' ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge');
+  return keys;
+}
+function renderAnnotToggles(o){
+  const keys=annotToggleKeys(o);
+  if(!keys.length) return '';
+  const chks=keys.map(k=>`<label class="annot-chk" title="在图上显示「${ANNOT_LABELS[k]}」"><input type="checkbox" data-annot="${k}" ${annotOn(o,k)?'checked':''}> ${ANNOT_LABELS[k]}</label>`).join('');
+  return `<label class="span2">图上标注</label><div class="annot-chks span2">${chks}</div>`;
+}
 /* -------------------- 场地属性 / 场地节点编辑 -------------------- */
 /**
  * 场地/底图属性面板 HTML（纯函数，便于逻辑层自测）。
@@ -264,6 +280,7 @@ function renderProps(){
       ${row('填充色',`<input type="color" data-style="color" value="${o.style.color||t.color}"> <label style="display:inline"><input type="checkbox" data-style="noFill" ${styleVal(o,'fillAlpha',.15)==0?'checked':''}>透明</label>`)}
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
+      ${renderAnnotToggles(o)}
       <div class="hint-text span2" style="grid-column:1/-1">${stt==='rect'?'基点为矩形第一角点，也是旋转中心；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'}坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。</div>`;
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
@@ -272,6 +289,7 @@ function renderProps(){
       ${o.kind==='line'?row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`):''}
       ${o.closed?row('面积',`<b>${fmt(polygonArea(o.points))}</b> ㎡`):''}
       ${o.closed?row('周长',`<b>${fmt(objectLength(o))}</b> m（含闭合边）`):''}
+      ${renderAnnotToggles(o)}
       <label class="span2">节点</label>${renderNodeEditor(o)}`;
   }else if(o.kind==='point'){
     const psh=t.scaleShape||'none';
@@ -281,7 +299,8 @@ function renderProps(){
       : `<div class="hint-text span2" style="grid-column:1/-1">该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。</div>`;
     specific=`${row('X 坐标',num('x',fmt(o.x)))}${row('Y 坐标',num('y',fmt(o.y)))}${row('朝向角',num('angle',Math.round(o.angle),1))}
       ${row('图标大小',`<input type="range" min=".5" max="3" step=".05" data-field="iconSize" value="${Number(o.iconSize)||1}"><span class="hint-text">${(Number(o.iconSize)||1).toFixed(2)}×（顶栏还有全局点大小）</span>`)}
-      ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}${physHint}`;
+      ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}${physHint}
+      ${renderAnnotToggles(o)}`;
   }else if(o.kind==='text'){
     specific=`${row('文字',`<input type="text" data-field="text" value="${esc(o.text||'')}">`)}
       ${row('X 坐标',num('x',fmt(o.x)))}${row('Y 坐标',num('y',fmt(o.y)))}
@@ -332,6 +351,8 @@ function bindPropEvents(box,o){
   box.addEventListener('focusin',()=>pushHistory(),{once:true});
   const changed=()=>{ o.updatedAt=nowISO(); commitObjectEdit(); };
   box.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>applyField(el,o,changed)));
+  /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘 */
+  box.querySelectorAll('[data-annot]').forEach(el=>el.addEventListener('change',()=>{ if(setAnnot(o,el.dataset.annot,el.checked)) changed(); }));
   box.querySelectorAll('[data-style]').forEach(el=>el.addEventListener('input',()=>{
     const k=el.dataset.style; o.style=o.style||{};
     if(k==='noFill'){ o.style.fillAlpha=el.checked?0:.15; }
