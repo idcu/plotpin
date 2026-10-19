@@ -109,7 +109,9 @@ code += `\n;globalThis.__api = {
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
-  annotKeys, annotOn, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
+  annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
+  $, renderProps,
+  get selectedIds(){ return selectedIds; },
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
@@ -121,7 +123,7 @@ code += `\n;globalThis.__api = {
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
-  siteBoundaryPoints, siteShapeCenter, siteAreaPerimeter,
+  siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
   siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML
 };`;
@@ -1431,6 +1433,24 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   /* 球机图标分支 */
   st.objects.push(api.baseObject('point','point.dome',{name:'DOME',x:70,y:70}));
   ok('SVG-球机半圆图标', api.buildSceneSvg().includes('A8,8 0 0 1 8,0'));
+  /* 逐对象「编号」开关：关闭后 SVG 不再输出该对象的名称标签（与画布所见一致） */
+  const rcObj=st.objects.find(o=>o.name==='RC');
+  api.setAnnot(rcObj,'name',false);
+  ok('SVG-关闭编号后区域标签消失', !api.buildSceneSvg().includes('>RC<'));
+  api.setAnnot(rcObj,'name',true);
+  ok('SVG-编号开启时区域标签存在', api.buildSceneSvg().includes('>RC<'));
+  const camObj=st.objects.find(o=>o.name==='CAM');
+  api.setAnnot(camObj,'name',false);
+  ok('SVG-关闭编号后点设备标签消失', !api.buildSceneSvg().includes('>CAM<'));
+  /* 折线编号：开放与闭合折线都应输出（修复闭合折线不显示编号的缺陷） */
+  const lnOpen=api.baseObject('line','line.custom',{name:'LOPEN',x:10,y:10,points:[[10,10],[30,10]]});
+  const lnClosed=api.baseObject('line','line.custom',{name:'LCLOSED',x:40,y:40,points:[[40,40],[60,40],[60,60]],closed:true});
+  st.objects.push(lnOpen,lnClosed);
+  ok('SVG-开放折线输出编号', api.buildSceneSvg().includes('>LOPEN<'));
+  ok('SVG-闭合折线输出编号', api.buildSceneSvg().includes('>LCLOSED<'));
+  api.setAnnot(lnClosed,'name',false);
+  ok('SVG-关闭编号后闭合折线标签消失', !api.buildSceneSvg().includes('>LCLOSED<'));
+  ok('SVG-同组开放折线编号不受影响', api.buildSceneSvg().includes('>LOPEN<'));
 }
 
 /* 35. DXF 解析/生成往返 + 多页 PDF 结构 --------------------------------------- */
@@ -1996,9 +2016,9 @@ asyncSuites.push((async()=>{
 {
   api.resetState();
   /* 支持键与类型默认值（保持既有观感） */
-  eq('标注-点支持键', api.annotKeys('point'), ['coord']);
-  eq('标注-区域支持键', api.annotKeys('rect'), ['base','radius','edge','perimeter','area']);
-  eq('标注-折线支持键', api.annotKeys('line'), ['node','edge','perimeter','area']);
+  eq('标注-点支持键', api.annotKeys('point'), ['name','coord']);
+  eq('标注-区域支持键', api.annotKeys('rect'), ['name','base','radius','edge','vertex','perimeter','area']);
+  eq('标注-折线支持键', api.annotKeys('line'), ['name','node','edge','perimeter','area']);
   eq('标注-文字无键', api.annotKeys('text'), []);
   eq('标注-尺寸标注无键', api.annotKeys('dimension'), []);
 
@@ -2059,12 +2079,12 @@ asyncSuites.push((async()=>{
   /* 属性面板「图上标注」开关组 HTML */
   ok('标注UI-点含点坐标开关', api.renderAnnotToggles(api.baseObject('point','point.marker',{})).includes('data-annot="coord"'));
   const hRc=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,width:1,height:1}));
-  ok('标注UI-矩形含基点/边长/周长/面积无半径', ['base','edge','perimeter','area'].every(k=>hRc.includes(`data-annot="${k}"`)) && !hRc.includes('data-annot="radius"'));
+  ok('标注UI-矩形含编号/基点/边长/顶点/周长/面积无半径', ['name','base','edge','vertex','perimeter','area'].every(k=>hRc.includes(`data-annot="${k}"`)) && !hRc.includes('data-annot="radius"'));
   const hCir=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:5}}));
   ok('标注UI-圆形含半径不含边长', hCir.includes('data-annot="radius"') && !hCir.includes('data-annot="edge"'));
   ok('标注UI-开关组跨满两列', hRc.includes('class="annot-chks span2"'));
   const hLn=api.renderAnnotToggles(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]}));
-  ok('标注UI-折线含四个开关', ['node','edge','perimeter','area'].every(k=>hLn.includes(`data-annot="${k}"`)));
+  ok('标注UI-折线含五个开关', ['name','node','edge','perimeter','area'].every(k=>hLn.includes(`data-annot="${k}"`)));
   eq('标注UI-文字无开关组', api.renderAnnotToggles(api.baseObject('text','text.custom',{})), '');
 
   /* 持久化迁移：仅保留该 kind 支持的布尔键，丢弃非法键/非本类型键 */
@@ -2079,6 +2099,78 @@ asyncSuites.push((async()=>{
   eq('标注迁移-折线保留布尔键', M('LN').annot, {node:true,edge:false});
   eq('标注迁移-点坐标生效', api.annotOn(M('PT'),'coord'), true);
   eq('标注迁移-区域面积关生效', api.annotOn(M('RC'),'area'), false);
+
+  /* 41. 标注开关扩展：编号 / 顶点坐标 / 键名随类型变化 / 场地分级开关 ------- */
+  api.resetState();
+  api.state.settings.precision=2;
+  eq('标注-编号默认开(点)', api.annotOn(api.baseObject('point','point.marker',{}),'name'), true);
+  eq('标注-编号默认开(区域)', api.annotOn(api.baseObject('rect','rect.area',{x:0,y:0,width:1,height:1}),'name'), true);
+  eq('标注-编号默认开(折线)', api.annotOn(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]}),'name'), true);
+  eq('标注-区域顶点坐标默认关', api.annotOn(api.baseObject('rect','rect.area',{x:0,y:0,width:1,height:1}),'vertex'), false);
+
+  /* 键名随类型/形态变化：折线=段长、区域=边长；闭合折线节点即顶点坐标 */
+  eq('标注-键名:折线边长即段长', api.annotLabel(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]}),'edge'), '段长');
+  eq('标注-键名:区域边长', api.annotLabel(api.baseObject('rect','rect.area',{x:0,y:0,width:1,height:1}),'edge'), '边长');
+  eq('标注-键名:闭合折线节点即顶点', api.annotLabel(api.baseObject('line','line.custom',{points:[[0,0],[1,0],[1,1]],closed:true}),'node'), '顶点坐标');
+  eq('标注-键名:开放折线节点', api.annotLabel(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]}),'node'), '节点坐标');
+
+  /* 区域顶点坐标标注：矩形四角各 1 条；圆/椭圆/扇形无顶点 */
+  const rv=api.baseObject('rect','rect.area',{x:0,y:0,width:4,height:3});
+  eq('标注项-矩形顶点默认0条', api.annotationItems(rv).length, 0);
+  api.setAnnot(rv,'vertex',true);
+  eq('标注项-矩形顶点坐标4条', api.annotationItems(rv).length, 4);
+  ok('标注项-顶点坐标文本为括号坐标', api.annotationItems(rv)[0].text.startsWith('('));
+  const rvCircle=api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:5}});
+  api.setAnnot(rvCircle,'vertex',true);
+  eq('标注项-圆形无顶点项', api.annotationItems(rvCircle).length, 0);
+
+  /* 编号由 drawLabel/SVG 文本层渲染，不计入 annotationItems；显式关可覆盖默认 */
+  const pn=api.baseObject('point','point.marker',{name:'P',x:1,y:1});
+  eq('标注项-编号不计入条目', api.annotationItems(pn).length, 0);
+  api.setAnnot(pn,'name',false);
+  eq('标注-显式关编号', api.annotOn(pn,'name'), false);
+
+  /* 面板按键过滤：圆形不含边长/顶点；矩形不含半径 */
+  const hRc2=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,width:1,height:1}));
+  ok('标注UI-矩形含编号与顶点', hRc2.includes('data-annot="name"') && hRc2.includes('data-annot="vertex"'));
+  const hCir2=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:5}}));
+  ok('标注UI-圆形无顶点与边长', !hCir2.includes('data-annot="vertex"') && !hCir2.includes('data-annot="edge"'));
+  ok('标注UI-折线开关显示为段长', api.renderAnnotToggles(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]})).includes('段长'));
+
+  /* 场地标注分级开关：迁移默认与继承（周长自原「周长面积」拆出） */
+  eq('迁移-场地周长缺省继承面积(开)', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.sitePerimeter, true);
+  eq('迁移-场地基点默认关', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.siteBase, false);
+  eq('迁移-场地半径默认关', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.siteRadius, false);
+  eq('迁移-场地周长继承面积(关)', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{siteArea:false}}).settings.sitePerimeter, false);
+  const sm=api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{sitePerimeter:true,siteBase:true,siteRadius:true}}).settings;
+  eq('迁移-场地分级开关保留', [sm.sitePerimeter,sm.siteBase,sm.siteRadius], [true,true,true]);
+
+  /* 场地基点/半径取值的形状差异 */
+  eq('场地-圆基点即圆心', api.siteBasePoint({shape:{type:'circle',cx:3,cy:4,r:5}}), [3,4]);
+  eq('场地-矩形基点', api.siteBasePoint({shape:{type:'rect',x:1,y:2,w:5,h:5}}), [1,2]);
+  eq('场地-多边形无基点', api.siteBasePoint({shape:{type:'polygon',points:[[0,0],[1,0],[1,1]]}}), null);
+  eq('场地-圆半径文案', api.siteRadiusText({shape:{type:'circle',cx:0,cy:0,r:7}}), '7.00 m');
+  eq('场地-椭圆半径文案', api.siteRadiusText({shape:{type:'ellipse',rx:4,ry:3}}), 'Rx 4.00  Ry 3.00');
+  eq('场地-矩形无半径', api.siteRadiusText({shape:{type:'rect',x:0,y:0,w:1,h:1}}), '');
+
+  /* 属性面板接线：单选各类型对象时「图上标注」组按类型/形状正确呈现 */
+  api.resetState();
+  const selR=api.baseObject('rect','rect.area',{name:'R1',x:0,y:0,width:4,height:3});
+  api.state.objects=[selR]; api.selectedIds.add(selR.id);
+  api.renderProps();
+  const panelR=api.$('propPanel').innerHTML;
+  ok('属性面板-区域标注组含编号与顶点坐标', panelR.includes('data-annot="name"') && panelR.includes('data-annot="vertex"'));
+  ok('属性面板-区域无半径开关', !panelR.includes('data-annot="radius"') && panelR.includes('data-annot="edge"'));
+  const selC=api.baseObject('rect','rect.area',{name:'R2',x:0,y:0,shape:{type:'circle',r:5}});
+  api.state.objects=[selC]; api.selectedIds.clear(); api.selectedIds.add(selC.id);
+  api.renderProps();
+  const panelC=api.$('propPanel').innerHTML;
+  ok('属性面板-圆形含半径不含顶点/边长', panelC.includes('data-annot="radius"') && !panelC.includes('data-annot="vertex"') && !panelC.includes('data-annot="edge"'));
+  const selP=api.baseObject('point','point.marker',{name:'P1',x:1,y:1});
+  api.state.objects=[selP]; api.selectedIds.clear(); api.selectedIds.add(selP.id);
+  api.renderProps();
+  ok('属性面板-点设备含编号开关', api.$('propPanel').innerHTML.includes('data-annot="name"'));
+  api.selectedIds.clear();
   api.resetState();
 }
 

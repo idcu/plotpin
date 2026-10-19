@@ -831,7 +831,7 @@ function buildSceneSvg(){
     if(o.kind==='rect'){
       const pts=shapeWorldPoints(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       shapes.push(`<polygon points="${pts}" fill="${color}" fill-opacity="${styleVal(o,'fillAlpha',.15)}" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
-      if(state.settings.showLabels&&o.name){ const ce=shapeLabelCenter(o); markers.push(`<text x="${X(ce[0])}" y="${Y(ce[1])}" text-anchor="middle" font-size="14" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`); }
+      if(state.settings.showLabels&&o.name&&annotOn(o,'name')){ const ce=shapeLabelCenter(o); markers.push(`<text x="${X(ce[0])}" y="${Y(ce[1])}" text-anchor="middle" font-size="14" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`); }
       if(state.settings.showAreaTag){
         const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
         if(sa||sp){ const ce=shapeLabelCenter(o); markers.push(areaTagSvg(X(ce[0]),Y(ce[1]),shapeArea(o),shapePerimeter(o),sa,sp)); }
@@ -842,6 +842,18 @@ function buildSceneSvg(){
       const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`);
       if(o.closed) pts.push(pts[0]);
       shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
+      /* 编号与画布一致：开放折线取中点节点，闭合折线取质心（面积/周长胶囊可见时上移 30px 避让，避免重叠） */
+      if(state.settings.showLabels&&o.name&&annotOn(o,'name')){
+        if(o.closed){
+          const n=o.points.length;
+          const gx=o.points.reduce((s,p)=>s+p[0],0)/n, gy=o.points.reduce((s,p)=>s+p[1],0)/n;
+          const capShown=state.settings.showAreaTag&&n>=3&&(annotOn(o,'area')||annotOn(o,'perimeter'));
+          markers.push(`<text x="${X(gx)}" y="${Y(gy)-(capShown?30:0)}" text-anchor="middle" font-size="12" font-weight="bold" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
+        }else{
+          const mid=o.points[Math.floor((o.points.length-1)/2)];
+          markers.push(`<text x="${X(mid[0])}" y="${Y(mid[1])-8}" text-anchor="middle" font-size="12" font-weight="bold" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
+        }
+      }
       if(o.closed&&state.settings.showAreaTag&&o.points.length>=3){
         const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
         if(sa||sp){
@@ -867,7 +879,7 @@ function buildSceneSvg(){
         const k=pointIconScale(o), icon=t.icon||o.style.icon||'marker';
         markers.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle}) scale(${k})">${svgPointIcon(icon,color)}</g>`);
       }
-      if(state.settings.showLabels&&o.name){
+      if(state.settings.showLabels&&o.name&&annotOn(o,'name')){
         const ly=(o.phys||0)>0?y-Math.max(13,(o.phys||0)/2*ppu+6):y-20*pointIconScale(o);
         markers.push(`<text x="${x}" y="${ly}" text-anchor="middle" font-size="12" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
       }

@@ -77,19 +77,21 @@ function renderNodeEditor(o){
   return `<div class="node-list span2">${rows}${hint}</div>`;
 }
 /**
- * 逐对象「图上标注」开关组（跨满两列）：点设备=点坐标；区域=基点/半径/边长/周长/面积；折线=节点/边长/周长/面积。
- * 未显式设置的键按类型默认值；与全局总开关（段长度/图上面积）叠加生效。
- * 区域按形状过滤无意义的开关：矩形只给「边长」，圆/椭圆/扇形只给「半径」。
+ * 逐对象「图上标注」开关组（跨满两列）：点设备=编号/点坐标；区域=编号/基点/半径/边长/顶点/周长/面积；
+ * 折线=编号/节点(闭合即顶点)/段长/周长/面积。未显式设置的键按类型默认值；与全局总开关（段长度/图上面积）叠加生效。
+ * 区域按形状过滤无意义的开关：矩形给「边长/顶点坐标」不给「半径」；圆/椭圆/扇形给「半径」不给「边长/顶点坐标」。
  */
 function annotToggleKeys(o){
   const keys=annotKeys(o.kind);
-  if(o.kind==='rect') return areaShapeType(o)==='rect' ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge');
+  if(o.kind==='rect'){
+    return areaShapeType(o)==='rect' ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
+  }
   return keys;
 }
 function renderAnnotToggles(o){
   const keys=annotToggleKeys(o);
   if(!keys.length) return '';
-  const chks=keys.map(k=>`<label class="annot-chk" title="在图上显示「${ANNOT_LABELS[k]}」"><input type="checkbox" data-annot="${k}" ${annotOn(o,k)?'checked':''}> ${ANNOT_LABELS[k]}</label>`).join('');
+  const chks=keys.map(k=>`<label class="annot-chk" title="在图上显示「${annotLabel(o,k)}」"><input type="checkbox" data-annot="${k}" ${annotOn(o,k)?'checked':''}> ${annotLabel(o,k)}</label>`).join('');
   return `<label class="span2">图上标注</label><div class="annot-chks span2">${chks}</div>`;
 }
 /* -------------------- 场地属性 / 场地节点编辑 -------------------- */

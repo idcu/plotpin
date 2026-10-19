@@ -343,6 +343,20 @@ function siteShapeCenter(bg){
   if(pts&&pts.length) return [pts.reduce((s,p)=>s+p[0],0)/pts.length, pts.reduce((s,p)=>s+p[1],0)/pts.length];
   const d=siteDomainOf(bg); return [d.w/2,d.h/2];
 }
+/** 场地基点坐标：圆/椭圆/扇形取圆心；矩形取基点；多边形无基点（返回 null） */
+function siteBasePoint(bg){
+  const sh=(bg&&bg.shape)||{};
+  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
+  if(!sh.type||sh.type==='rect') return [Number(sh.x)||0,Number(sh.y)||0];
+  return null;
+}
+/** 场地半径文案：圆/扇形→R；椭圆→Rx/Ry；矩形/多边形无半径（返回空串） */
+function siteRadiusText(bg){
+  const sh=(bg&&bg.shape)||{};
+  if(sh.type==='circle'||sh.type==='sector') return fmt(sh.r)+' m';
+  if(sh.type==='ellipse') return 'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry);
+  return '';
+}
 /** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/圆/椭圆/扇形） */
 function siteAreaPerimeter(bg){
   const sh=(bg&&bg.shape)||{};
@@ -356,13 +370,14 @@ function siteAreaPerimeter(bg){
   return {area:shapeArea(o), perimeter:shapePerimeter(o)};
 }
 /**
- * 绘制矢量场地标注：边界节点世界坐标、相邻节点段长、场地周长/面积胶囊。
- * 由工程设置中「场地节点坐标 / 场地段长 / 场地周长面积」三个开关控制；屏幕固定字号，缩放不糊。
+ * 绘制矢量场地标注：边界节点世界坐标、相邻节点段长、基点/半径、周长/面积胶囊。
+ * 各项由工程设置中的独立开关控制（场地节点坐标 / 场地段长 / 场地基点坐标 / 场地半径 / 场地面积 / 场地周长）；
+ * 屏幕固定字号，缩放不糊。
  */
 function drawSiteAnnotations(c,v,toS){
   const bg=state.background, S=state.settings;
   if(!bg||bg.kind==='image') return;
-  if(!(S.siteNodes||S.siteSegLen||S.siteArea)) return;
+  if(!(S.siteNodes||S.siteSegLen||S.siteArea||S.sitePerimeter||S.siteBase||S.siteRadius)) return;
   const pts=siteBoundaryPoints(bg);
   if(pts&&pts.length>=2){
     const n=pts.length, closed=n>=3;
@@ -379,9 +394,20 @@ function drawSiteAnnotations(c,v,toS){
       pts.forEach(p=>{ const s=toS(p); drawScreenTag(c,s[0]+6,s[1]+6,'('+fmt(p[0])+', '+fmt(p[1])+')'); });
     }
   }
-  if(S.siteArea){
-    const ap=siteAreaPerimeter(bg), cs=toS(siteShapeCenter(bg));
-    drawAreaTag(c,cs[0],cs[1],ap.area,ap.perimeter);
+  /* 基点坐标与半径分别可开关：圆/椭圆/扇形有半径与圆心，矩形只有基点，多边形两者皆无 */
+  const cs=toS(siteShapeCenter(bg));
+  if(S.siteBase){
+    const b=siteBasePoint(bg);
+    if(b){ const s=toS(b); drawScreenTag(c,s[0]+7,s[1]-16,'('+fmt(b[0])+', '+fmt(b[1])+')'); }
+  }
+  if(S.siteRadius){
+    const rt=siteRadiusText(bg);
+    if(rt) drawScreenTag(c,cs[0]+7,cs[1]+22,'R '+rt);
+  }
+  /* 周长与面积分别可开关，胶囊组件同一处渲染 */
+  if(S.siteArea||S.sitePerimeter){
+    const ap=siteAreaPerimeter(bg);
+    drawAreaTag(c,cs[0],cs[1],ap.area,ap.perimeter,S.siteArea,S.sitePerimeter);
   }
 }
 function drawGrid(c,v,d,cssW,cssH,toS){
@@ -441,6 +467,9 @@ function annotationItems(o,opt={}){
     if(annotOn(o,'edge') && tt==='rect'){
       const wp=rectPoints(o);
       for(let k=0;k<4;k++){ const a=wp[k],b=wp[(k+1)%4], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
+    }
+    if(annotOn(o,'vertex') && tt==='rect'){
+      rectPoints(o).forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     }
   }else if(o.kind==='line'){
     if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
@@ -574,18 +603,19 @@ function drawLine(c,o,color,toS,v){
   c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
   if(o.closed){ c.closePath(); c.fillStyle=color; c.globalAlpha=.08; c.fill(); c.globalAlpha=1; }
   c.stroke(); c.restore();
-  const mid=pts[Math.floor((pts.length-1)/2)];
-  if(o.name && !o.closed) drawLabel(c,o,mid[0],mid[1]-8,color,toS);
-  /* 段长度/总长标注由 annotationItems 统一绘制（受全局「段长度标注」与逐对象「边长/周长」开关约束） */
-  /* 闭合区域：中心显示面积/周长，两者可分别开关 */
-  if(o.closed && state.settings.showAreaTag && o.points.length>=3){
+  if(!o.closed){
+    const mid=pts[Math.floor((pts.length-1)/2)];
+    if(o.name) drawLabel(c,o,mid[0],mid[1]-8,color,toS);
+  }else{
+    /* 闭合折线（多边形区域）：编号与中心面积/周长胶囊同一锚点，胶囊可见时上移避让，避免文字重叠 */
+    const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
+    const gs=toS([gx,gy]);
     const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-    if(sa||sp){
-      const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
-      const s=toS([gx,gy]);
-      drawAreaTag(c,s[0],s[1],polygonArea(o.points),objectLength(o),sa,sp);
-    }
+    const capShown=state.settings.showAreaTag&&o.points.length>=3&&(sa||sp);
+    if(o.name) drawLabel(c,o,gs[0],gs[1]-(capShown?30:0),color,toS);
+    if(capShown) drawAreaTag(c,gs[0],gs[1],polygonArea(o.points),objectLength(o),sa,sp);
   }
+  /* 段长度/总长标注由 annotationItems 统一绘制（受全局「段长度标注」与逐对象「边长/周长」开关约束） */
 }
 function drawText(c,o,color,toS,v,markerScale){
   const s=toS([o.x,o.y]);
@@ -645,7 +675,7 @@ function labelAtMid(c,a,b,text){
 }
 function centroidScreen(ps){ return [ps.reduce((s,p)=>s+p[0],0)/ps.length,ps.reduce((s,p)=>s+p[1],0)/ps.length]; }
 function drawLabel(c,o,x,y,color,toS,fontSize=12){
-  if(!state.settings.showLabels || !o.name) return;
+  if(!state.settings.showLabels || !o.name || !annotOn(o,'name')) return;
   c.save(); c.font='bold '+fontSize+'px "Microsoft YaHei",sans-serif'; c.textAlign='center'; c.textBaseline='middle';
   const tw=c.measureText(o.name).width;
   c.fillStyle='rgba(255,255,255,.82)'; c.fillRect(x-tw/2-4,y-9,tw+8,18);

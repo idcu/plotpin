@@ -34,7 +34,10 @@ function createInitialState(){
       showAreaTag:true,  /* 区域/闭合折线在图上显示面积 */
       siteNodes:true,    /* 矢量场地：边界节点世界坐标标注 */
       siteSegLen:true,   /* 矢量场地：相邻节点段长度标注 */
-      siteArea:true,     /* 矢量场地：周长与面积胶囊 */
+      siteBase:false,    /* 矢量场地：基点/圆心坐标标注 */
+      siteRadius:false,  /* 矢量场地：半径标注（圆/椭圆/扇形） */
+      siteArea:true,     /* 矢量场地：中心面积 */
+      sitePerimeter:true,/* 矢量场地：中心周长 */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     viewport: { zoom:1, panX:0, panY:0 },
     /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */
@@ -143,21 +146,27 @@ function pointIconScale(o){
 
 /* -------------------- 逐对象标注显示开关 -------------------- */
 /* 每个对象可单独配置在图上显示哪些标注；未显式设置的键按类型默认值（默认保持既有观感）。
-   点设备：点坐标；区域：基点坐标/半径/边长/周长/面积；折线：节点坐标/边长/周长/面积。 */
+   点设备：编号/点坐标；区域：编号/基点坐标/半径/边长/顶点坐标/周长/面积；折线：编号/节点坐标(闭合即顶点)/段长/周长/面积。 */
 const ANNOT_KEYS={
-  point:['coord'],
-  rect:['base','radius','edge','perimeter','area'],
-  line:['node','edge','perimeter','area']
+  point:['name','coord'],
+  rect:['name','base','radius','edge','vertex','perimeter','area'],
+  line:['name','node','edge','perimeter','area']
 };
-const ANNOT_LABELS={ coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', perimeter:'周长', area:'面积', node:'节点坐标' };
-/* 默认值：区域与闭合折线的面积/周长沿用全局开关既有默认（开）；其余新增标注默认关闭 */
+const ANNOT_LABELS={ name:'编号', coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', vertex:'顶点坐标', perimeter:'周长', area:'面积', node:'节点坐标' };
+/* 默认值：编号标签沿用全局「显示标签」既有观感（开）、区域/闭合折线的面积周长沿用全局开关默认（开）；其余新增标注默认关闭 */
 const ANNOT_DEFAULTS={
-  point:{ coord:false },
-  rect:{ base:false, radius:false, edge:false, perimeter:true, area:true },
-  line:{ node:false, edge:true, perimeter:true, area:true }
+  point:{ name:true, coord:false },
+  rect:{ name:true, base:false, radius:false, edge:false, vertex:false, perimeter:true, area:true },
+  line:{ name:true, node:false, edge:true, perimeter:true, area:true }
 };
 /** 该对象（按 kind）支持的标注开关键列表 */
 function annotKeys(kind){ return ANNOT_KEYS[kind]||[]; }
+/** 标注键的面板/提示显示名：同一键在不同类型下语义不同（折线「段长」/区域「边长」，闭合折线节点即「顶点坐标」） */
+function annotLabel(o,key){
+  if(key==='edge') return o&&o.kind==='line'?'段长':'边长';
+  if(key==='node') return o&&o.closed?'顶点坐标':'节点坐标';
+  return ANNOT_LABELS[key]||key;
+}
 /** 某标注键的类型默认值（保持既有观感） */
 function annotDefault(o,key){ const d=(o&&ANNOT_DEFAULTS[o.kind])||{}; return d[key]===true; }
 /** 某对象某标注是否开启：显式布尔设置优先，否则取类型默认 */
