@@ -34,7 +34,7 @@
     <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）">打印/PDF</button>
   </div>
   <div class="tb-group">
-    <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/多边形绘制矢量场地">底图/场地</button>
+    <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制矢量场地">底图/场地</button>
     <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素">比例尺</button>
     <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）">仿射校准</button>
     <button id="coverageBtn" title="统计摄像头/球机等点设备的视场对区域与闭合折线的覆盖率，并高亮盲区">覆盖率分析</button>
@@ -85,6 +85,7 @@
             <option value="circle">圆形</option>
             <option value="ellipse">椭圆</option>
             <option value="sector">扇形</option>
+            <option value="parallelogram">平行四边形</option>
           </select>
           类型
           <select id="rectType"></select>

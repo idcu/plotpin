@@ -79,12 +79,14 @@ function renderNodeEditor(o){
 /**
  * 逐对象「图上标注」开关组（跨满两列）：点设备=编号/点坐标；区域=编号/基点/半径/边长/顶点/周长/面积；
  * 折线=编号/节点(闭合即顶点)/段长/周长/面积（开放折线去掉面积）。未显式设置的键按类型默认值；与全局总开关（段长度/图上面积）叠加生效。
- * 区域按形状过滤无意义的开关：矩形给「边长/顶点坐标」不给「半径」；圆/椭圆/扇形给「半径」不给「边长/顶点坐标」。
+ * 区域按形状过滤无意义的开关：矩形/平行四边形给「边长/顶点坐标」不给「半径」；圆/椭圆/扇形给「半径」不给「边长/顶点坐标」。
  */
 function annotToggleKeys(o){
   const keys=annotKeys(o.kind);
   if(o.kind==='rect'){
-    return areaShapeType(o)==='rect' ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
+    const tt=areaShapeType(o);
+    /* 矩形/平行四边形：有边长与顶点坐标、无半径；圆/椭圆/扇形反之 */
+    return (tt==='rect'||tt==='parallelogram') ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
   }
   /* 开放折线无面积概念：不提供「面积」开关，避免出现勾选后无任何效果的无效配置 */
   if(o.kind==='line' && !o.closed) return keys.filter(k=>k!=='area');
@@ -108,7 +110,7 @@ function sitePropsHTML(bg, mode){
   const heading=tool?'场地节点':'场地属性';
   if(!bg) return `<div class="section"><h3>${esc(heading)}</h3><div class="prop-empty">尚未设置底图/场地，请点顶部「底图/场地」上传图片或绘制矢量场地。</div></div>`;
   if(bg.kind==='image'){
-    if(tool) return `<div class="section"><h3>场地节点 <span class="hint-text">图片底图</span></h3><div class="prop-empty">当前为图片底图，暂无场地节点可编辑。<br><br>请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/多边形矢量场地；图片底图请改用「仿射校准」。</div></div>`;
+    if(tool) return `<div class="section"><h3>场地节点 <span class="hint-text">图片底图</span></h3><div class="prop-empty">当前为图片底图，暂无场地节点可编辑。<br><br>请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/平行四边形/多边形矢量场地；图片底图请改用「仿射校准」。</div></div>`;
     return imagePropsHTML(bg, heading);
   }
   const sh=bg.shape||{};
@@ -140,6 +142,10 @@ function sitePropsHTML(bg, mode){
   }else if(sh.type==='sector'){
     params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}
       ${row('起始角',num('a0',Math.round(Number(sh.a0)||0),1))}${row('张角 (0–360)',num('sweep',Math.round(sectorSweep(sh)),1))}`;
+  }else if(sh.type==='parallelogram'){
+    params=`${row('基点 X',num('x',fv(sh.x)))}${row('基点 Y',num('y',fv(sh.y)))}
+      ${row('宽度 (m)',num('w',fv(sh.w,100)))}${row('高度 (m)',num('h',fv(sh.h,70)))}
+      ${row('倾角 (°)',num('skew',Math.round(Number(sh.skew)||0),1))}`;
   }else{
     params=`${row('基点 X',num('x',fv(sh.x)))}${row('基点 Y',num('y',fv(sh.y)))}
       ${row('宽度 (m)',num('w',fv(sh.w,100)))}${row('高度 (m)',num('h',fv(sh.h,70)))}`;
@@ -216,6 +222,7 @@ function applySiteField(field,v){
   if(field==='a0') sh.a0=normalizeAngle(n);
   else if(field==='angle') sh.angle=normalizeAngle(n);
   else if(field==='sweep') sh.a1=(Number(sh.a0)||0)+Math.min(360,Math.max(1,n));
+  else if(field==='skew') sh.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,n));
   else if(['w','h','r','rx','ry'].includes(field)) sh[field]=Math.max(.05,n);
   else if(['x','y','cx','cy'].includes(field)) sh[field]=n;
   return true;
@@ -259,15 +266,16 @@ function renderProps(){
   let specific='';
   if(o.kind==='rect'){
     const stt=areaShapeType(o), sh=o.shape||{};
-    const shapeSel=`<select data-field="shapeType">${AREA_SHAPE_TYPES.map(x=>`<option value="${x}" ${x===stt?'selected':''}>${({rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形（饼形）'})[x]}</option>`).join('')}</select>`;
-    /* 基点即渲染/命中/拖拽共用的锚点 (o.x,o.y)：矩形=第一角点(旋转中心)，圆/椭圆/扇形=圆心 */
-    const baseName=({rect:'基点',circle:'圆心',ellipse:'中心',sector:'圆心'})[stt];
+    const shapeSel=`<select data-field="shapeType">${AREA_SHAPE_TYPES.map(x=>`<option value="${x}" ${x===stt?'selected':''}>${({rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形（饼形）',parallelogram:'平行四边形'})[x]}</option>`).join('')}</select>`;
+    /* 基点即渲染/命中/拖拽共用的锚点 (o.x,o.y)：矩形/平行四边形=基点(左下角，旋转中心)，圆/椭圆/扇形=圆心 */
+    const baseName=({rect:'基点',circle:'圆心',ellipse:'中心',sector:'圆心',parallelogram:'基点'})[stt];
     const baseRows=`${row(baseName+' X',num('x',fmt(o.x)))}${row(baseName+' Y',num('y',fmt(o.y)))}`;
     let params='';
-    if(stt==='rect'){
+    if(stt==='rect'||stt==='parallelogram'){
       params=`${baseRows}
         ${row('宽度',num('width',fmt(o.width)))}${row('高度',num('height',fmt(o.height)))}
-        ${row('旋转角',num('angle',Math.round(o.angle),1))}`;
+        ${row('旋转角',num('angle',Math.round(o.angle),1))}
+        ${stt==='parallelogram'?row('倾角 (°)',num('shapeSkew',Math.round(parallelogramSkew(sh)),1)):''}`;
     }else if(stt==='circle'){
       params=`${baseRows}${row('半径 (m)',num('shapeR',fmt(sh.r)))}`;
     }else if(stt==='ellipse'){
@@ -285,7 +293,7 @@ function renderProps(){
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
-      <div class="hint-text span2" style="grid-column:1/-1">${stt==='rect'?'基点为矩形第一角点，也是旋转中心；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'}坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。</div>`;
+      <div class="hint-text span2" style="grid-column:1/-1">${stt==='rect'||stt==='parallelogram'?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'}坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。</div>`;
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
@@ -456,6 +464,9 @@ function applyField(el,o,changed){
     const sweep=Math.min(360,Math.max(1,Number(el.value)||90));
     o.shape.a1=(Number(o.shape.a0)||0)+sweep;
   }
+  else if(k==='shapeSkew'&&o.shape){
+    o.shape.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,Number(el.value)||0));
+  }
   else o[k]=el.value;
   if(k==='typeId'){ const t=getType(o.typeId); if(!o.style.color) o.style.color=t.color; }
   changed();
@@ -605,6 +616,7 @@ function areaParamText(o){
   if(tt==='circle') return `圆形 r=${fmt(sh.r)}m`;
   if(tt==='ellipse') return `椭圆 ${fmt(sh.rx*2)}×${fmt(sh.ry*2)}m / ${Math.round(o.angle)}°`;
   if(tt==='sector') return `扇形 r=${fmt(sh.r)}m / ${Math.round(sectorSweep(sh))}°`;
+  if(tt==='parallelogram') return `平行四边形 ${fmt(o.width)}×${fmt(o.height)}m / 倾角 ${Math.round(parallelogramSkew(sh))}°`;
   return `${fmt(o.width)}×${fmt(o.height)} / ${Math.round(o.angle)}°`;
 }
 function objectArea(o){

@@ -104,7 +104,9 @@ code += `\n;globalThis.__api = {
   siteDescription, worldDims,
   hitPhysicalPoint, siteKindName,
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter,
-  sectorSweep, sectorArcPoints, convertAreaShape, pointIconScale, areaParamText,
+  convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
+  PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
+  sectorSweep, sectorArcPoints, pointIconScale, areaParamText,
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
@@ -2325,6 +2327,138 @@ asyncSuites.push((async()=>{
   const c9=recCtx(); api.drawObject(c9,clC,{zoom:1},toS,1,1);
   ok('画布-闭合折线面积周长关后胶囊消失', !c9.texts.includes('面积 100.00 ㎡')&&!c9.texts.includes('周长 40.00 m'));
   ok('画布-闭合折线胶囊消失后编号回到中心', c9.texts.includes('CLC'));
+  api.resetState();
+}
+
+/* 44. 平行四边形：区域与矢量场地共用的参数形状 ------------------------------ */
+{
+  api.resetState();
+  api.state.settings.precision=2;
+  ok('平行四边形-已注册为区域形状', api.AREA_SHAPE_TYPES.includes('parallelogram'));
+  eq('平行四边形-默认倾角30°', api.PARALLELOGRAM_DEFAULT_SKEW, 30);
+  eq('平行四边形-倾角上限80°', api.PARALLELOGRAM_MAX_SKEW, 80);
+  eq('平行四边形-表格中文名', api.AREA_SHAPE_LABELS.parallelogram, '平行四边形');
+
+  /* 顶点：基点=左下角，上边右移 h·tanθ（错切不改变底与高） */
+  const pts=api.parallelogramPoints(0,0,10,6,30);
+  eq('平行四边形-四顶点', pts.length, 4);
+  eq('平行四边形-下边右角', pts[1], [10,0]);
+  approx('平行四边形-左上角X=h·tanθ', pts[3][0], 6*Math.tan(Math.PI/6), 1e-9);
+  approx('平行四边形-右上角X=w+h·tanθ', pts[2][0], 10+6*Math.tan(Math.PI/6), 1e-9);
+  approx('平行四边形-上下边等长', Math.hypot(pts[2][0]-pts[3][0],pts[2][1]-pts[3][1]), 10, 1e-9);
+
+  const o=api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:6,shape:{type:'parallelogram',skew:30}});
+  eq('平行四边形-形状类型', api.areaShapeType(o), 'parallelogram');
+  eq('平行四边形-面积=底×高', api.shapeArea(o), 60);
+  approx('平行四边形-周长=2(w+h/cosθ)', api.shapePerimeter(o), 2*(10+6/Math.cos(Math.PI/6)), 1e-9);
+  eq('平行四边形-渲染四顶点', api.shapeWorldPoints(o).length, 4);
+  approx('平行四边形-质心X含错切', api.shapeLabelCenter(o)[0], (2*10+2*6*Math.tan(Math.PI/6))/4, 1e-9);
+  ok('平行四边形-内部命中', api.shapeHit(o,[7,3]));
+  ok('平行四边形-左上外接盒角落不命中', !api.shapeHit(o,[0.2,5.5]));
+
+  const oRot=api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:6,angle:90,shape:{type:'parallelogram',skew:30}});
+  const pr=api.shapeWorldPoints(oRot);
+  approx('平行四边形-旋转后基点不动', Math.hypot(pr[0][0],pr[0][1]), 0, 1e-9);
+  approx('平行四边形-旋转90°后下边沿Y轴', pr[1][1], 10, 1e-9);
+
+  /* 形状互换：质心与面积保持不变（错切面积不变） */
+  const cv=api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:6});
+  const c0=api.shapeLabelCenter(cv), a0=api.shapeArea(cv);
+  api.convertAreaShape(cv,'parallelogram');
+  eq('互换-矩形→平行四边形', api.areaShapeType(cv), 'parallelogram');
+  eq('互换-面积不变', api.shapeArea(cv), a0);
+  approx('互换-质心X不变', api.shapeLabelCenter(cv)[0], c0[0], 1e-9);
+  approx('互换-质心Y不变', api.shapeLabelCenter(cv)[1], c0[1], 1e-9);
+  api.convertAreaShape(cv,'rect');
+  eq('互换-回矩形类型', api.areaShapeType(cv), 'rect');
+  approx('互换-回矩形宽度不变', cv.width, 10, 1e-9);
+  approx('互换-回矩形质心不变', api.shapeLabelCenter(cv)[1], c0[1], 1e-9);
+
+  const c2=api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:5}});
+  const ac=api.shapeArea(c2);
+  api.convertAreaShape(c2,'parallelogram');
+  approx('互换-圆形→平行四边形等面积', api.shapeArea(c2), ac, 1e-6);
+
+  /* 逐对象标注：四边+四顶点，无半径开关 */
+  api.resetState(); api.state.settings.precision=2;
+  const sv=api.baseObject('rect','rect.area',{name:'PAR',x:0,y:0,width:10,height:6,shape:{type:'parallelogram',skew:30}});
+  api.state.objects=[sv];
+  api.setAnnot(sv,'edge',true); api.setAnnot(sv,'vertex',true);
+  eq('标注项-平行四边形四边', api.annotationItems(sv).filter(it=>it.lenWorld).length, 4);
+  eq('标注项-平行四边形四顶点', api.annotationItems(sv).filter(it=>!it.lenWorld).length, 4);
+  const hP=api.renderAnnotToggles(sv);
+  ok('标注UI-平行四边形含边长/顶点无半径', hP.includes('data-annot="edge"')&&hP.includes('data-annot="vertex"')&&!hP.includes('data-annot="radius"'));
+  api.selectedIds.add(sv.id); api.renderProps();
+  ok('属性面板-平行四边形倾角输入', api.$('propPanel').innerHTML.includes('data-field="shapeSkew"'));
+  ok('属性面板-形状下拉含平行四边形', api.$('propPanel').innerHTML.includes('>平行四边形</option>'));
+
+  /* 属性面板接线：切换形状与倾角写入走 applyField（与真实输入事件同一入口） */
+  const pf=(f,v)=>({dataset:{field:f},value:v,checked:false});
+  const pv=api.baseObject('rect','rect.area',{x:0,y:0,width:8,height:4});
+  api.applyField(pf('shapeType','parallelogram'),pv,()=>{});
+  eq('面板接线-矩形切换为平行四边形', api.areaShapeType(pv),'parallelogram');
+  api.applyField(pf('shapeSkew',-45),pv,()=>{});
+  approx('面板接线-倾角写入-45°', api.parallelogramSkew(pv.shape), -45, 1e-9);
+  api.applyField(pf('shapeSkew',200),pv,()=>{});
+  approx('面板接线-倾角超限钳到80°', api.parallelogramSkew(pv.shape), 80, 1e-9);
+  api.applyField(pf('shapeType','rect'),pv,()=>{});
+  eq('面板接线-切回矩形', api.areaShapeType(pv),'rect');
+
+  /* SVG 导出：按四顶点多边形绘制 */
+  const svg=api.buildSceneSvg();
+  const poly=svg.match(/<polygon points="([^"]+)"/);
+  eq('SVG-平行四边形四顶点', poly?poly[1].trim().split(/\s+/).length:0, 4);
+  ok('SVG-平行四边形四角X互不相同（含错切）', !!poly&&new Set(poly[1].trim().split(/\s+/).map(s=>s.split(',')[0])).size===4);
+
+  /* 表格导出/导入：形状列 + 倾角参数往返 */
+  const row=api.objectRows().find(r=>r['编号']==='PAR');
+  eq('表格-平行四边形形状列', row['形状'], '平行四边形');
+  eq('表格-平行四边形倾角参数', row['形状参数'], '30');
+  eq('表格-平行四边形宽度', row['宽度'], '10.00');
+  const imp=api.baseObject('rect','rect.area',{x:0,y:0});
+  ok('表格导入-平行四边形成功', api.applyRowShape(imp,'平行四边形',{x:2,y:3,w:8,h:4,angle:45,params:[20]}));
+  eq('表格导入-类型', api.areaShapeType(imp), 'parallelogram');
+  approx('表格导入-倾角20°', api.parallelogramSkew(imp.shape), 20, 1e-9);
+  eq('表格导入-面积32', api.shapeArea(imp), 32);
+  approx('表格导入-旋转角45°', imp.angle, 45, 1e-9);
+
+  /* 工程迁移：尺寸保留（平行四边形尺寸存于 width/height）、倾角钳制 */
+  const m=api.migrateProject({schema:'offline-drawing-annotation/v1',objects:[
+    {kind:'rect',name:'PM',x:1,y:2,width:10,height:6,angle:15,shape:{type:'parallelogram',skew:120}}
+  ]});
+  const pm=m.objects.find(x=>x.name==='PM');
+  ok('迁移-平行四边形保留宽高', !!pm&&pm.width===10&&pm.height===6);
+  eq('迁移-倾角钳到80°', pm&&pm.shape&&pm.shape.skew, 80);
+  approx('迁移-保留旋转角', pm&&pm.angle, 15, 1e-9);
+
+  /* 矢量场地：边界/面积周长/基点/控制点/属性面板/SVG */
+  api.resetState();
+  const bg={kind:'parallelogram',shape:{type:'parallelogram',x:0,y:0,w:10,h:6,skew:30}};
+  const bp=api.siteBoundaryPoints(bg);
+  eq('场地-四界点', bp.length, 4);
+  approx('场地-左上界点X', bp[3][0], 6*Math.tan(Math.PI/6), 1e-9);
+  const sap=api.siteAreaPerimeter(bg);
+  eq('场地-面积=底×高', sap.area, 60);
+  approx('场地-周长公式', sap.perimeter, 2*(10+6/Math.cos(Math.PI/6)), 1e-9);
+  eq('场地-基点=左下角', api.siteBasePoint(bg), [0,0]);
+  eq('场地-无半径文案', api.siteRadiusText(bg), '');
+  const hs=api.siteHandleList(bg);
+  eq('场地-控制点=4角+倾角', hs.length, 5);
+  ok('场地-含倾角控制点', hs.some(h=>h.mode==='skew'));
+  ok('场地-属性含倾角输入', api.sitePropsHTML(bg).includes('data-site-field="skew"'));
+  ok('场地-属性显示种类', api.sitePropsHTML(bg).includes('平行四边形场地'));
+  const gb=api.siteBounds(bg);
+  approx('场地-包围盒宽含错切', gb.w, 10+6*Math.tan(Math.PI/6), 1e-9);
+  approx('场地-包围盒高', gb.h, 6, 1e-9);
+
+  api.state.background=bg; api.resetFrameRef(); api.state.objects=[];
+  const svgSite=api.buildSceneSvg();
+  ok('SVG-场地平行四边形多边形', /<polygon points="[^"]+" fill="#eef2f7"/.test(svgSite));
+
+  const m2=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'parallelogram',shape:{type:'parallelogram',x:1,y:2,w:10,h:6,skew:200}}});
+  eq('迁移-场地种类', m2.background.kind, 'parallelogram');
+  eq('迁移-场地倾角钳到80°', m2.background.shape.skew, 80);
+  approx('迁移-场地宽保留', m2.background.shape.w, 10, 1e-9);
   api.resetState();
 }
 

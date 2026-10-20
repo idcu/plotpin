@@ -19,7 +19,7 @@ $('settingsBtn').onclick=()=>{
       <label>场地周长</label><input id="setSitePerimeter" type="checkbox" ${state.settings.sitePerimeter?'checked':''} title="矢量场地中心显示周长">
       <label>对象捕捉</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）">
       <label>坐标精度</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
-      <label>场地/底图</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/多边形</div>
+      <label>场地/底图</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/平行四边形/多边形</div>
     </div>`,[
     {text:'取消',class:'',click:closeModal},{text:'保存',class:'primary',click:()=>{
       pushHistory();

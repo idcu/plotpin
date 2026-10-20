@@ -211,6 +211,10 @@ function segmentsIntersect(a,b,c,d){
   return ccw(a,c,d)!==ccw(b,c,d) && ccw(a,b,c)!==ccw(a,b,d);
 }
 function rectPoints(o){
+  if(o.shape&&o.shape.type==='parallelogram'){
+    return parallelogramPoints(o.x,o.y,o.width,o.height,o.shape.skew)
+      .map(p=>rotatePoint(p,[o.x,o.y],o.angle));
+  }
   const c0=[o.x,o.y], c1=[o.x+o.width,o.y], c2=[o.x+o.width,o.y+o.height], c3=[o.x,o.y+o.height];
   return [c0,c1,c2,c3].map(p=>rotatePoint(p,[o.x,o.y],o.angle));
 }
@@ -235,12 +239,24 @@ function objectBounds(o){
 function boundsIntersect(a,b){ return !(a.maxX<b.minX||b.maxX<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
 
 /* -------------------- 统一参数形状（区域与矢量场地共用） -------------------- */
-/* 区域对象：shape=null 为矩形（width/height/angle）；否则 circle/ellipse/sector，锚点 (x,y) */
-const AREA_SHAPE_TYPES=['rect','circle','ellipse','sector'];
+/* 区域对象：shape=null 为矩形（width/height/angle）；否则 circle/ellipse/sector/parallelogram，锚点 (x,y) */
+const AREA_SHAPE_TYPES=['rect','circle','ellipse','sector','parallelogram'];
 const SHAPE_SEGMENTS=72;
+/* 平行四边形倾角（°）：0=矩形，正值上边向右错切；限制 ±80° 避免退化为无限长边 */
+const PARALLELOGRAM_DEFAULT_SKEW=30;
+const PARALLELOGRAM_MAX_SKEW=80;
+function parallelogramSkew(sh){
+  const v=Number(sh&&sh.skew)||0;
+  return Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,v));
+}
+/** 平行四边形四角（世界坐标，未旋转）：基点=左下角，错切位移 off=高×tan(倾角) */
+function parallelogramPoints(x,y,w,h,skew){
+  const off=Math.max(0,h)*Math.tan(parallelogramSkew({skew})*Math.PI/180);
+  return [[x,y],[x+w,y],[x+w+off,y+h],[x+off,y+h]];
+}
 function areaShapeType(o){
   const t=o&&o.shape&&o.shape.type;
-  return (t==='circle'||t==='ellipse'||t==='sector')?t:'rect';
+  return (t==='circle'||t==='ellipse'||t==='sector'||t==='parallelogram')?t:'rect';
 }
 /** 扇形有效张角（0–360°）；a0/a1 为世界系绝对角度（Y 向上），相等时视为整圆 */
 function sectorSweep(sh){
@@ -260,7 +276,7 @@ function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){
 /** 区域形状 → 闭合世界多边形顶点（扇形首点为圆心）；渲染/包围盒/框选/SVG 共用 */
 function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
   const tt=areaShapeType(o);
-  if(tt==='rect') return rectPoints(o);
+  if(tt==='rect'||tt==='parallelogram') return rectPoints(o);
   const sh=o.shape;
   if(tt==='circle'){
     const r=Math.max(EPS,Number(sh.r)||0), pts=[];
@@ -281,7 +297,7 @@ function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
 /** 世界坐标命中（米） */
 function shapeHit(o,p){
   const tt=areaShapeType(o);
-  if(tt==='rect') return pointInPolygon(p,rectPoints(o));
+  if(tt==='rect'||tt==='parallelogram') return pointInPolygon(p,rectPoints(o));
   const sh=o.shape, dx=p[0]-o.x, dy=p[1]-o.y;
   if(tt==='circle') return Math.hypot(dx,dy)<=(Number(sh.r)||0);
   if(tt==='ellipse'){
@@ -300,7 +316,7 @@ function shapeHit(o,p){
 /** 面积（㎡），各形状精确公式 */
 function shapeArea(o){
   const tt=areaShapeType(o);
-  if(tt==='rect') return Math.max(0,o.width)*Math.max(0,o.height);
+  if(tt==='rect'||tt==='parallelogram') return Math.max(0,o.width)*Math.max(0,o.height);
   const sh=o.shape;
   if(tt==='circle'){ const r=Number(sh.r)||0; return Math.PI*r*r; }
   if(tt==='ellipse') return Math.PI*(Number(sh.rx)||0)*(Number(sh.ry)||0);
@@ -311,6 +327,12 @@ function shapeArea(o){
 function shapePerimeter(o){
   const tt=areaShapeType(o);
   if(tt==='rect') return Math.max(0,o.width)*2+Math.max(0,o.height)*2;
+  if(tt==='parallelogram'){
+    /* 错切不改变面积，但斜边长为 h/cos(倾角)：周长 = 2(w + h/cosθ) */
+    const w=Math.max(0,o.width), hh=Math.max(0,o.height);
+    const cs=Math.cos(parallelogramSkew(o.shape)*Math.PI/180);
+    return 2*(w+(cs<1e-6?0:hh/cs));
+  }
   const sh=o.shape;
   if(tt==='circle') return 2*Math.PI*sh.r;
   if(tt==='ellipse'){
@@ -326,12 +348,13 @@ function shapePerimeter(o){
 }
 /** 标签/变换中心：矩形取四角中心；圆/椭圆/扇形锚点即圆心 (x,y) */
 function shapeLabelCenter(o){
-  if(areaShapeType(o)==='rect') return objectCenter(o);
+  const tt=areaShapeType(o);
+  if(tt==='rect'||tt==='parallelogram') return objectCenter(o);
   return [o.x,o.y];
 }
 /**
- * 区域形状互换：保持中心不动，按等面积（矩形/圆/扇形）或外接轴（椭圆）换算参数。
- * 矩形⇄椭圆沿用原角度；圆/扇形无整体朝向（扇形角度在 a0/a1 中）。
+ * 区域形状互换：保持中心（质心）不动，按等面积（矩形/平行四边形/圆/扇形）或外接轴（椭圆）换算参数。
+ * 矩形⇄椭圆/平行四边形沿用原角度；圆/扇形无整体朝向（扇形角度在 a0/a1 中）。
  */
 function convertAreaShape(o,newType){
   const old=areaShapeType(o);
@@ -341,15 +364,29 @@ function convertAreaShape(o,newType){
   if(newType==='rect'){
     let bw,bh;
     if(old==='ellipse'){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
+    else if(old==='parallelogram'){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
     else { bw=bh=Math.sqrt(A); }
-    o.x=c[0]-bw/2; o.y=c[1]-bh/2; o.width=bw; o.height=bh; o.angle=0; o.shape=null;
+    o.x=c[0]-bw/2; o.y=c[1]-bh/2; o.width=bw; o.height=bh;
+    o.angle=old==='parallelogram'?oldAngle:0; o.shape=null;
+    return;
+  }
+  if(newType==='parallelogram'){
+    let bw,bh,ang=oldAngle;
+    if(old==='rect'||old==='parallelogram'){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
+    else if(old==='ellipse'){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
+    else { bw=bh=Math.sqrt(A); ang=0; }
+    const skew=old==='parallelogram'?parallelogramSkew(oldShape):PARALLELOGRAM_DEFAULT_SKEW;
+    const off=bh*Math.tan(skew*Math.PI/180);
+    /* 质心相对基点偏移 (w+off)/2, h/2：反推基点使质心落在原中心 */
+    o.x=c[0]-(bw+off)/2; o.y=c[1]-bh/2;
+    o.width=bw; o.height=bh; o.angle=ang; o.shape={type:'parallelogram',skew};
     return;
   }
   if(newType==='circle'){
     o.shape={type:'circle',r:Math.sqrt(A/Math.PI)};
   }else if(newType==='ellipse'){
     let rx,ry,ang=0;
-    if(old==='rect'){ rx=oldW/2; ry=oldH/2; ang=oldAngle; }
+    if(old==='rect'||old==='parallelogram'){ rx=oldW/2; ry=oldH/2; ang=oldAngle; }
     else if(old==='circle'){ rx=ry=Number(oldShape.r); }
     else { rx=ry=Number(oldShape.r); }
     o.angle=ang; o.shape={type:'ellipse',rx:Math.max(.05,rx),ry:Math.max(.05,ry)};
@@ -384,6 +421,11 @@ function siteDomainOf(bg){
   if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3){
     const xs=sh.points.map(p=>p[0]),ys=sh.points.map(p=>p[1]);
     return {w:Math.max(.01,Math.max(...xs,0)),h:Math.max(.01,Math.max(...ys,0))};
+  }
+  if(sh.type==='parallelogram'){
+    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
+    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+    return {w:Math.max(.01,Math.max(...xs)-Math.min(...xs)),h:Math.max(.01,Math.max(...ys)-Math.min(...ys))};
   }
   return {w:Math.max(.01,positiveNum(sh.w,100)),h:Math.max(.01,positiveNum(sh.h,70))};
 }
@@ -422,6 +464,11 @@ function siteBounds(bg){
     const xs=sh.points.map(p=>Number(p[0])||0), ys=sh.points.map(p=>Number(p[1])||0);
     return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
   }
+  if(sh.type==='parallelogram'){
+    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
+    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+    return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
+  }
   const w=positiveNum(sh.w,100), h=positiveNum(sh.h,70), x=Number(sh.x)||0, y=Number(sh.y)||0;
   return mk(x,y,x+w,y+h);
 }
@@ -452,7 +499,7 @@ function polygonShapeFromPoints(points){
   const minX=Math.min(...xs),minY=Math.min(...ys);
   return {type:'polygon',points:points.map(p=>[p[0]-minX,p[1]-minY])};
 }
-function siteKindName(k){ return ({image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',polygon:'多边形场地'})[k]||k; }
+function siteKindName(k){ return ({image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',parallelogram:'平行四边形场地',polygon:'多边形场地'})[k]||k; }
 function siteDescription(bg){
   bg=bg||state.background;
   const d=siteDomainOf(bg);
@@ -730,6 +777,14 @@ function migrateObjectsByAffine(objects,M){
         o.shape.r=Math.max(.05,(Number(o.shape.r)||0)*sx);
         o.shape.a0=(Number(o.shape.a0)||0)+theta;
         o.shape.a1=(Number(o.shape.a1)||0)+theta;
+      }else if(o.shape.type==='parallelogram'){
+        /* 平行四边形的底/高按变换后的两条主矢长度缩放；相似变换下倾角不变 */
+        const rad=origAng*Math.PI/180;
+        const ex=mapVec([Math.cos(rad),Math.sin(rad)]);
+        const ey=mapVec([-Math.sin(rad),Math.cos(rad)]);
+        o.width=Math.max(.05,(Number(o.width)||0)*Math.hypot(ex[0],ex[1]));
+        o.height=Math.max(.05,(Number(o.height)||0)*Math.hypot(ey[0],ey[1]));
+        o.angle=normalizeAngle(Math.atan2(ex[1],ex[0])*180/Math.PI);
       }
     }
     if(o.style&&o.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,Number(o.style.strokeWidth)*sx);

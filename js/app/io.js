@@ -8,7 +8,7 @@ $('newBtn').onclick=()=>showConfirm('新建将清空当前工程。已自动保�
 });
 $('importBtn').onclick=()=>$('fileInput').click();
 /* -------------------- 多工程库 -------------------- */
-const BG_KIND_LABELS={image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',polygon:'多边形场地'};
+const BG_KIND_LABELS={image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',parallelogram:'平行四边形场地',polygon:'多边形场地'};
 $('projBtn').onclick=openProjectLibrary;
 async function openProjectLibrary(){
   const projects=await listProjects();
@@ -245,6 +245,8 @@ function openSitePicker(){
        <button class="site-card" data-site="ellipse-num"><b>⬭ 椭圆场地（输入半径）</b><span class="hint-text">输入长/短轴半径（米）</span></button>
        <button class="site-card" data-site="ellipse-draw"><b>⬭ 椭圆场地（拖画）</b><span class="hint-text">拖出外接包围盒</span></button>
        <button class="site-card" data-site="sector-draw"><b>◔ 扇形场地（拖画）</b><span class="hint-text">拖出半径后输入起止角</span></button>
+       <button class="site-card" data-site="para-num"><b>▱ 平行四边形场地（输入尺寸）</b><span class="hint-text">输入 底边, 高, 倾角（米/度）</span></button>
+       <button class="site-card" data-site="para-draw"><b>▱ 平行四边形场地（拖画）</b><span class="hint-text">拖出底×高，生成后默认倾角 30°</span></button>
        <button class="site-card" data-site="polygon"><b>⬡ 多边形场地（描边）</b><span class="hint-text">沿边界逐点单击，双击/✓闭合；三角形同理</span></button>
      </div>
      <p class="hint-text">矢量场地直接以米为世界坐标，缩放时设备尺寸与场地保持真实比例。切换会替换当前底图/场地，已有标注对象保留（如需请重新对齐）。</p>`,
@@ -256,6 +258,17 @@ function openSitePicker(){
     if(act==='circle-draw'){ closeModal(); setTool('site-circle'); return; }
     if(act==='ellipse-draw'){ closeModal(); setTool('site-ellipse'); return; }
     if(act==='sector-draw'){ closeModal(); setTool('site-sector'); return; }
+    if(act==='para-draw'){ closeModal(); setTool('site-parallelogram'); return; }
+    if(act==='para-num'){
+      const v=await showPrompt({title:'平行四边形场地',label:'底边, 高, 倾角（米/度，用逗号分隔），例如 120,80,30',value:'120,80,30'});
+      if(v===null) return;
+      const m=v.split(/[,，x×*\s]+/).map(Number);
+      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast('请输入底边与高（均为正数），如 120,80,30','error');
+      const skew=Number.isFinite(m[2])?m[2]:PARALLELOGRAM_DEFAULT_SKEW;
+      closeModal();
+      applyVectorSite('parallelogram',{type:'parallelogram',x:0,y:0,w:m[0],h:m[1],skew});
+      return;
+    }
     if(act==='polygon'){ closeModal(); setTool('site-polygon'); return; }
     if(act==='ellipse-num'){
       const v=await showPrompt({title:'椭圆场地',label:'长轴半径, 短轴半径（米，用逗号分隔），例如 40,25',value:'40,25'});
@@ -343,8 +356,8 @@ async function importBackgroundFile(f){
 /* -------------------- 表格导入（CSV/TSV/XLSX → 对象更新/新增） -------------------- */
 const TABLE_KIND_BY_NAME={'点设备':'point','矩形/区域':'rect','线段/折线':'line','文字':'text','尺寸标注':'dimension'};
 /* 区域形状 / 标注子类型：表格中文 ↔ 模型枚举（导出导入共用同一映射） */
-const AREA_SHAPE_LABELS={rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形'};
-const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':'circle','椭圆':'ellipse','扇形':'sector'};
+const AREA_SHAPE_LABELS={rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形',parallelogram:'平行四边形'};
+const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':'circle','椭圆':'ellipse','扇形':'sector','平行四边形':'parallelogram'};
 const DIM_SUB_LABELS={ruler:'测距',distance:'两点距离',area:'面积',angle:'角度'};
 const DIM_SUB_BY_LABEL={'测距':'ruler','两点距离':'distance','距离':'distance','面积':'area','角度':'angle'};
 /* 节点坐标文本：节点间用分号、XY 间用逗号，如 "0,0;3.5,-2;10,4"（CSV 中整格自动加引号）；
@@ -385,6 +398,15 @@ function applyRowShape(o,label,v){
     let a1=Number.isFinite(v.params[1])?v.params[1]:a0+90;
     let sweep=((a1-a0)%360+360)%360; if(sweep===0) sweep=360;
     o.shape={type:'sector',r:v.w/2,a0,a1:a0+sweep}; o.width=0; o.height=0; o.angle=0; return true;
+  }
+  if(tt==='parallelogram'){
+    if(!(v.w>0)||!(v.h>0)) return false;
+    /* 形状参数 = 倾角（度）；缺省 30° */
+    const skew=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:PARALLELOGRAM_DEFAULT_SKEW);
+    o.shape={type:'parallelogram',skew:Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,skew))};
+    o.width=v.w; o.height=v.h; o.x=v.x; o.y=v.y;
+    o.angle=normalizeAngle(Number.isFinite(v.angle)?v.angle:0);
+    return true;
   }
   return false;
 }
@@ -452,6 +474,10 @@ function geomRoundingTol(cnd,ulp){
     if(tt==='rect'){
       areaTol=0.5*ulp*(Math.abs(cnd.width)+Math.abs(cnd.height))+ulp;
       lenTol=3*ulp;
+    }else if(tt==='parallelogram'){
+      /* 面积=底×高（同矩形）；周长含斜边 h/cosθ，倾角取整带来额外误差，放宽到 5ulp */
+      areaTol=0.5*ulp*(Math.abs(cnd.width)+Math.abs(cnd.height))+ulp;
+      lenTol=5*ulp;
     }else if(tt==='circle'){
       const r=sh.r||0;
       areaTol=Math.PI*(r*ulp+ulp*ulp)+ulp;   /* πr²，|Δr|≤ulp/2 */
@@ -706,6 +732,7 @@ function objectRows(){
       const tt=areaShapeType(o), sh=o.shape||{};
       shape=AREA_SHAPE_LABELS[tt]||'';
       if(tt==='rect'){ w=o.width; h=o.height; }
+      else if(tt==='parallelogram'){ w=o.width; h=o.height; shapeParam=String(Math.round(parallelogramSkew(sh))); }
       else if(tt==='circle'){ w=h=2*sh.r; }
       else if(tt==='ellipse'){ w=2*sh.rx; h=2*sh.ry; }
       else { w=h=2*sh.r; shapeParam=Math.round(Number(sh.a0)||0)+','+Math.round(Number(sh.a1)||0); }
@@ -782,6 +809,11 @@ function buildSceneSvg(){
     const a0=Number(sh.a0)||0;
     const p0=ex(a0), p1=ex(a0+sweep), large=sweep>180?1:0;
     shapes.push(`<path d="M${cx},${cy} L${p1[0]},${p1[1]} A${R},${R} 0 ${large} 1 ${p0[0]},${p0[1]} Z" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
+  }else if(state.background.shape?.type==='parallelogram'){
+    const sh=state.background.shape;
+    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,Number(sh.w)||0,Number(sh.h)||0,sh.skew)
+      .map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
+    shapes.push(`<polygon points="${pts}" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
   }else if(state.background.shape?.type==='polygon'&&state.background.shape?.points?.length){
     const pts=state.background.shape.points.map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
     shapes.push(`<polygon points="${pts}" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);

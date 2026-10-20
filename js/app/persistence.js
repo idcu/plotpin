@@ -255,8 +255,8 @@ function migrateProject(p){
   // 兼容旧档（无 kind）：有图片引用判为 image，否则按像素域推导为矩形矢量场地
   const hasImage=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
   const shapeKind=rawBg.shape?.type;
-  const inferred=['image','rect','circle','ellipse','sector','polygon'].includes(shapeKind)?shapeKind:'rect';
-  const kind=['image','rect','circle','ellipse','sector','polygon'].includes(rawBg.kind)
+  const inferred=['image','rect','circle','ellipse','sector','parallelogram','polygon'].includes(shapeKind)?shapeKind:'rect';
+  const kind=['image','rect','circle','ellipse','sector','parallelogram','polygon'].includes(rawBg.kind)
     ?rawBg.kind
     :(hasImage?'image':(inferred!=='rect'?inferred:'rect'));
   const legacyW=positiveNumber(rawBg.width,1000)*positiveNumber(rawBg.metersPerPixel,0.1);
@@ -321,6 +321,11 @@ function sanitizeShape(raw,kind,legacyW,legacyH){
     if(pts.length>=3) return {type:'polygon',points:pts.map(p=>[p[0],p[1]])};
     return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
+  if(kind==='parallelogram'){
+    return {type:'parallelogram',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),
+      w:positiveNumber(sh.w,positiveNum(legacyW,100)),h:positiveNumber(sh.h,positiveNum(legacyH,70)),
+      skew:Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,finiteNumber(sh.skew,PARALLELOGRAM_DEFAULT_SKEW)))};
+  }
   if(kind==='rect') return {type:'rect',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),w:positiveNumber(sh.w,positiveNum(legacyW,100)),h:positiveNumber(sh.h,positiveNum(legacyH,70))};
   return {type:'rect',x:0,y:0,w:100,h:70};
 }
@@ -378,6 +383,9 @@ function sanitizeAreaShape(raw){
     let sweep=((a1-a0)%360+360)%360; if(sweep===0) sweep=360;
     return {type:'sector',r,a0,a1:a0+sweep};
   }
+  if(raw.type==='parallelogram'){
+    return {type:'parallelogram',skew:Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,finiteNumber(raw.skew,PARALLELOGRAM_DEFAULT_SKEW)))};
+  }
   return null;
 }
 function sanitizeObjects(arr,layers,types){
@@ -402,7 +410,14 @@ function sanitizeObjects(arr,layers,types){
     if(kind==='rect'){
       const s=sanitizeAreaShape(raw.shape);
       if(s){
-        o.shape=s; o.width=0; o.height=0;
+        o.shape=s;
+        if(s.type==='parallelogram'){
+          /* 平行四边形的底/高仍存在 width/height（shape 只存倾角），不能清零 */
+          o.width=positiveNumber(raw.width,0); o.height=positiveNumber(raw.height,0);
+          if(o.width<=0||o.height<=0) return;
+        }else{
+          o.width=0; o.height=0;
+        }
       }else{
         o.shape=null;
         o.width=positiveNumber(raw.width,0); o.height=positiveNumber(raw.height,0);

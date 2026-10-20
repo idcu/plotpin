@@ -52,11 +52,16 @@ function getHandles(o){
   }
   return handles;
 }
-/** 区域形状控制点：矩形=4角+旋转；圆=半径端；椭圆=两轴端+旋转；扇形=两边端（半径+角度）+弧中点（半径） */
+/** 区域形状控制点：矩形/平行四边形=4角(+错切+旋转)；圆=半径端；椭圆=两轴端+旋转；扇形=两边端（半径+角度）+弧中点（半径） */
 function areaShapeHandles(o,handles){
   const tt=areaShapeType(o);
-  if(tt==='rect'){
-    rectPoints(o).forEach((p,i)=>handles.push({type:'rect',index:i,x:p[0],y:p[1]}));
+  if(tt==='rect'||tt==='parallelogram'){
+    const quad=rectPoints(o);
+    quad.forEach((p,i)=>handles.push({type:'rect',index:i,x:p[0],y:p[1]}));
+    if(tt==='parallelogram'){
+      /* 顶边中点：横向拖拽只改倾角，面积（底×高）保持不变 */
+      handles.push({type:'shapeHandle',mode:'skew',x:(quad[2][0]+quad[3][0])/2,y:(quad[2][1]+quad[3][1])/2});
+    }
     const c=objectCenter(o), a=(o.angle+90)*Math.PI/180, off=Math.max(.55,30/state.viewport.zoom);
     handles.push({type:'rotate',x:c[0]+Math.cos(a)*off,y:c[1]+Math.sin(a)*off});
     return;
@@ -269,6 +274,13 @@ function drawBackground(c,v,d,cssW,cssH,toS){
     c.beginPath(); c.moveTo(ce[0],ce[1]);
     c.arc(ce[0],ce[1],R,-Number(sh.a1||0)*Math.PI/180,-Number(sh.a0||0)*Math.PI/180,false); c.closePath(); c.fill();
     c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
+  }else if((bg.kind==='parallelogram'||bg.shape?.type==='parallelogram') && bg.shape){
+    const sh=bg.shape;
+    const w=Number(sh.w)||0, h=Number(sh.h)||0;
+    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,w,h,sh.skew).map(toS);
+    c.fillStyle='#eef2f7';
+    c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.fill();
+    c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
   }else if((bg.kind==='polygon'||bg.shape?.type==='polygon') && bg.shape?.points?.length>=3){
     const pts=bg.shape.points.map(toS);
     c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath();
@@ -325,10 +337,13 @@ function drawCoverage(c,v,d){
   c.restore();
 }
 /* -------------------- 矢量场地标注（节点坐标 / 段长 / 周长面积，可配置） -------------------- */
-/** 场地边界折点（世界坐标，Y 向上）：矩形→按域取四角；多边形→顶点；圆/椭圆/扇形无折点返回 null */
+/** 场地边界折点（世界坐标，Y 向上）：矩形/平行四边形→四角；多边形→顶点；圆/椭圆/扇形无折点返回 null */
 function siteBoundaryPoints(bg){
   const sh=(bg&&bg.shape)||{};
   if(sh.type==='polygon') return (sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
+  if(sh.type==='parallelogram'){
+    return parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
+  }
   if(!sh.type||sh.type==='rect'){
     const b=siteBounds(bg);
     return [[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]];
@@ -343,11 +358,11 @@ function siteShapeCenter(bg){
   if(pts&&pts.length) return [pts.reduce((s,p)=>s+p[0],0)/pts.length, pts.reduce((s,p)=>s+p[1],0)/pts.length];
   const d=siteDomainOf(bg); return [d.w/2,d.h/2];
 }
-/** 场地基点坐标：圆/椭圆/扇形取圆心；矩形取基点；多边形无基点（返回 null） */
+/** 场地基点坐标：圆/椭圆/扇形取圆心；矩形/平行四边形取基点；多边形无基点（返回 null） */
 function siteBasePoint(bg){
   const sh=(bg&&bg.shape)||{};
   if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
-  if(!sh.type||sh.type==='rect') return [Number(sh.x)||0,Number(sh.y)||0];
+  if(!sh.type||sh.type==='rect'||sh.type==='parallelogram') return [Number(sh.x)||0,Number(sh.y)||0];
   return null;
 }
 /** 场地半径文案：圆/扇形→R；椭圆→Rx/Ry；矩形/多边形无半径（返回空串） */
@@ -357,13 +372,18 @@ function siteRadiusText(bg){
   if(sh.type==='ellipse') return 'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry);
   return '';
 }
-/** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/圆/椭圆/扇形） */
+/** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/平行四边形/圆/椭圆/扇形） */
 function siteAreaPerimeter(bg){
   const sh=(bg&&bg.shape)||{};
   if(sh.type==='polygon'){
     const ps=(sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
     if(ps.length<3) return {area:0,perimeter:ps.length===2?polylineLength(ps):0};
     return {area:polygonArea(ps), perimeter:polylineLength(ps.concat([ps[0]]))};
+  }
+  if(sh.type==='parallelogram'){
+    const o={shape:{type:'parallelogram',skew:sh.skew},x:Number(sh.x)||0,y:Number(sh.y)||0,
+      width:positiveNum(sh.w,100),height:positiveNum(sh.h,70),angle:0};
+    return {area:shapeArea(o), perimeter:shapePerimeter(o)};
   }
   const d=siteDomainOf(bg);
   const o={shape:Object.assign({type:'rect'},sh), x:Number(sh.cx)||0, y:Number(sh.cy)||0, angle:Number(sh.angle)||0, width:d.w, height:d.h};
@@ -394,7 +414,7 @@ function drawSiteAnnotations(c,v,toS){
       pts.forEach(p=>{ const s=toS(p); drawScreenTag(c,s[0]+6,s[1]+6,'('+fmt(p[0])+', '+fmt(p[1])+')'); });
     }
   }
-  /* 基点坐标与半径分别可开关：圆/椭圆/扇形有半径与圆心，矩形只有基点，多边形两者皆无 */
+  /* 基点坐标与半径分别可开关：圆/椭圆/扇形有半径与圆心，矩形/平行四边形只有基点，多边形两者皆无 */
   const cs=toS(siteShapeCenter(bg));
   if(S.siteBase){
     const b=siteBasePoint(bg);
@@ -467,11 +487,11 @@ function annotationItems(o,opt={}){
         push(o.x+(Number(sh.rx)||0),o.y,'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry),6,6);
       }
     }
-    if(annotOn(o,'edge') && tt==='rect'){
+    if(annotOn(o,'edge') && (tt==='rect'||tt==='parallelogram')){
       const wp=rectPoints(o);
       for(let k=0;k<4;k++){ const a=wp[k],b=wp[(k+1)%4], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
     }
-    if(annotOn(o,'vertex') && tt==='rect'){
+    if(annotOn(o,'vertex') && (tt==='rect'||tt==='parallelogram')){
       rectPoints(o).forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     }
   }else if(o.kind==='line'){
@@ -571,7 +591,7 @@ function drawPoint(c,o,color,type,toS,markerScale,v){
   c.restore();
   drawLabel(c,o,s[0],s[1]-r-8,color,toS,12*k);
 }
-/** 区域统一渲染：矩形/圆/椭圆/扇形都走 shapeWorldPoints 同一条世界坐标路径 */
+/** 区域统一渲染：矩形/平行四边形/圆/椭圆/扇形都走 shapeWorldPoints 同一条世界坐标路径 */
 function drawRect(c,o,color,toS,v,markerScale){
   const pts=shapeWorldPoints(o).map(toS);
   c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath();
@@ -694,8 +714,8 @@ function drawSelection(c,v,toS){
       let b=objectBounds(o), p0=toS([b.minX,b.maxY]), p1=toS([b.maxX,b.minY]);
       c.save(); c.strokeStyle='#2563eb'; c.setLineDash([5,3]); c.lineWidth=1.4;
       c.strokeRect(p0[0],p1[1],p1[0]-p0[0],p0[1]-p1[1]); c.restore();
-      /* 圆/椭圆/扇形：基点=圆心，单独以 ⊕ 标出（矩形基点即角手柄，无需另画） */
-      if(o.kind==='rect'&&areaShapeType(o)!=='rect'){
+      /* 圆/椭圆/扇形：基点=圆心，单独以 ⊕ 标出（矩形/平行四边形基点即角手柄，无需另画） */
+      if(o.kind==='rect'&&!['rect','parallelogram'].includes(areaShapeType(o))){
         const bs=toS([o.x,o.y]);
         c.save(); c.strokeStyle='#2563eb'; c.lineWidth=1.6;
         c.beginPath(); c.rect(bs[0]-4,bs[1]-4,8,8); c.stroke();
@@ -712,9 +732,19 @@ function drawSelection(c,v,toS){
 function drawDraft(c,v,d,toS){
   if(!draft) return;
   c.save(); c.strokeStyle='#2563eb'; c.fillStyle='#2563eb'; c.lineWidth=2;
-  if((draft.kind==='rect'||draft.kind==='siteRect') && draft.start && draft.current){
-    const a=toS(draft.start), b=toS(draft.current);
-    c.globalAlpha=.25; c.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]); c.globalAlpha=1; c.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+  if((draft.kind==='rect'||draft.kind==='siteRect'||draft.kind==='areaParallelogram'||draft.kind==='siteParallelogram') && draft.start && draft.current){
+    if(draft.kind==='areaParallelogram'||draft.kind==='siteParallelogram'){
+      /* 平行四边形拖画：按默认倾角实时预览错切后的轮廓 */
+      const x=Math.min(draft.start[0],draft.current[0]), y=Math.min(draft.start[1],draft.current[1]);
+      const w=Math.abs(draft.start[0]-draft.current[0]), hh=Math.abs(draft.start[1]-draft.current[1]);
+      const pts=parallelogramPoints(x,y,w,hh,PARALLELOGRAM_DEFAULT_SKEW).map(toS);
+      c.globalAlpha=.25; c.beginPath();
+      pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.fill();
+      c.globalAlpha=1; c.stroke();
+    }else{
+      const a=toS(draft.start), b=toS(draft.current);
+      c.globalAlpha=.25; c.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]); c.globalAlpha=1; c.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+    }
   }else if((draft.kind==='siteCircle'||draft.kind==='areaCircle') && draft.start && draft.current){
     const ce=toS(draft.start), r=dist(draft.start,draft.current)*v.zoom;
     c.globalAlpha=.15; c.beginPath(); c.arc(ce[0],ce[1],r,0,Math.PI*2); c.fill(); c.globalAlpha=1; c.stroke();
@@ -754,7 +784,7 @@ function drawDraft(c,v,d,toS){
   /* 区域/场地拖画尺寸预览（标签在拖点旁） */
   if(state.settings.showSegLen && draft.start && draft.current){
     const a=draft.start,b=draft.current, s=toS(b);
-    if(draft.kind==='rect'||draft.kind==='siteRect') drawScreenTag(c,s[0]+10,s[1]-26,fmt(Math.abs(a[0]-b[0]))+' × '+fmt(Math.abs(a[1]-b[1]))+' m');
+    if(draft.kind==='rect'||draft.kind==='siteRect'||draft.kind==='areaParallelogram'||draft.kind==='siteParallelogram') drawScreenTag(c,s[0]+10,s[1]-26,fmt(Math.abs(a[0]-b[0]))+' × '+fmt(Math.abs(a[1]-b[1]))+' m'+(draft.kind.includes('Parallelogram')?'（底×高）':''));
     else if(draft.kind==='siteCircle'||draft.kind==='areaCircle') drawScreenTag(c,s[0]+10,s[1]-26,'r '+fmt(dist(a,b))+' m');
     else if(draft.kind==='siteEllipse'||draft.kind==='areaEllipse') drawScreenTag(c,s[0]+10,s[1]-26,fmt(Math.abs(a[0]-b[0]))+' × '+fmt(Math.abs(a[1]-b[1]))+' m（外接盒）');
     else if(draft.kind==='siteSector'||draft.kind==='areaSector') drawScreenTag(c,s[0]+10,s[1]-26,'r '+fmt(dist(a,b))+' m');
