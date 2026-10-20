@@ -7,10 +7,10 @@ $('settingsBtn').onclick=()=>{
       <label>网格间距</label><input id="setGrid" type="number" min="0.1" step="0.1" value="${state.settings.gridSize}">
       <label>启用捕捉</label><input id="setSnap" type="checkbox" ${state.settings.snap?'checked':''}>
       <label>显示网格</label><input id="setGridVisible" type="checkbox" ${state.settings.gridVisible?'checked':''}>
-      <label>显示标签</label><input id="setLabels" type="checkbox" ${state.settings.showLabels?'checked':''}>
+      <label>显示标签</label><input id="setLabels" type="checkbox" ${state.settings.showLabels?'checked':''} title="未单独设置「编号」开关的对象默认显示编号；已单独设置的对象始终按自身配置">
       <label>十字准星/坐标</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
-      <label>段长度标注</label><input id="setSegLen" type="checkbox" ${state.settings.showSegLen?'checked':''}>
-      <label>图上显示面积</label><input id="setAreaTag" type="checkbox" ${state.settings.showAreaTag?'checked':''} title="区域与闭合折线在图形中心显示面积/周长">
+      <label>段长度标注</label><input id="setSegLen" type="checkbox" ${state.settings.showSegLen?'checked':''} title="未单独设置「段长/周长」的折线默认显示；已单独设置的对象始终按自身配置">
+      <label>图上显示面积</label><input id="setAreaTag" type="checkbox" ${state.settings.showAreaTag?'checked':''} title="未单独设置「面积/周长」的区域与闭合折线默认显示；已单独设置的对象始终按自身配置">
       <label>场地节点坐标</label><input id="setSiteNodes" type="checkbox" ${state.settings.siteNodes?'checked':''} title="矢量场地边界各节点显示世界坐标（矩形/多边形）">
       <label>场地段长</label><input id="setSiteSegLen" type="checkbox" ${state.settings.siteSegLen?'checked':''} title="矢量场地相邻节点之间显示边长">
       <label>场地基点坐标</label><input id="setSiteBase" type="checkbox" ${state.settings.siteBase?'checked':''} title="矢量场地显示基点/圆心坐标">

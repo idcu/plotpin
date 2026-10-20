@@ -125,7 +125,8 @@ code += `\n;globalThis.__api = {
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
-  siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML
+  siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML,
+  drawObject, drawLabel, drawAreaTag
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -2188,6 +2189,142 @@ asyncSuites.push((async()=>{
   api.renderProps();
   ok('属性面板-点设备含编号开关', api.$('propPanel').innerHTML.includes('data-annot="name"'));
   api.selectedIds.clear();
+  api.resetState();
+}
+
+/* 42. 逐对象标注开关完全优先：全局总开关仅作未显式配置对象的缺省值 --------- */
+{
+  /* 编号：全局关 → 未配置对象隐藏；显式开 → 全局关也显示；显式关 → 全局开也隐藏 */
+  api.resetState();
+  api.state.settings.precision=2;
+  const ptQ=api.baseObject('point','point.marker',{name:'PQ',x:1,y:1});
+  const ptE=api.baseObject('point','point.marker',{name:'PE',x:2,y:2});
+  api.state.objects.push(ptQ,ptE);
+  api.state.settings.showLabels=false;
+  ok('优先-全局关标签时未配置对象编号隐藏', !api.buildSceneSvg().includes('>PQ<'));
+  api.setAnnot(ptQ,'name',true);
+  ok('优先-全局关标签但逐对象开编号仍显示', api.buildSceneSvg().includes('>PQ<'));
+  api.setAnnot(ptE,'name',false);
+  api.state.settings.showLabels=true;
+  ok('优先-全局开标签但逐对象关编号仍隐藏', !api.buildSceneSvg().includes('>PE<'));
+
+  /* 折线段长/总长：全局关 → 未配置对象隐藏；显式开 → 仍显示 */
+  const lnQ=api.baseObject('line','line.custom',{name:'LQ',x:0,y:0,points:[[0,0],[6,0],[6,8]]});
+  api.state.objects.push(lnQ);
+  api.state.settings.showSegLen=false;
+  const svgL0=api.buildSceneSvg();
+  ok('优先-全局关段长时未配置折线无段长/总长', !svgL0.includes('6.00 m')&&!svgL0.includes('8.00 m')&&!svgL0.includes('Σ 14.00 m'));
+  api.setAnnot(lnQ,'edge',true); api.setAnnot(lnQ,'perimeter',true);
+  const svgL1=api.buildSceneSvg();
+  ok('优先-全局关段长但逐对象开仍显示分段', svgL1.includes('6.00 m')&&svgL1.includes('8.00 m'));
+  ok('优先-全局关段长但逐对象开总长仍显示', svgL1.includes('Σ 14.00 m'));
+  api.state.settings.showSegLen=true;
+  api.setAnnot(lnQ,'edge',false); api.setAnnot(lnQ,'perimeter',false);
+  const svgL2=api.buildSceneSvg();
+  ok('优先-全局开段长但逐对象关仍隐藏段长/总长', !svgL2.includes('6.00 m')&&!svgL2.includes('Σ 14.00 m'));
+
+  /* 区域面积/周长：全局关 → 未配置无胶囊；显式开 → 显示；显式关面积只留周长 */
+  api.resetState();
+  api.state.settings.precision=2;
+  const rcQ=api.baseObject('rect','rect.area',{name:'RQ',x:0,y:0,width:10,height:6});
+  api.state.objects.push(rcQ);
+  api.state.settings.showAreaTag=false;
+  ok('优先-全局关面积时未配置区域无胶囊', !api.buildSceneSvg().includes('面积 60.00 ㎡'));
+  api.setAnnot(rcQ,'area',true);
+  ok('优先-全局关面积但逐对象开面积仍显示', api.buildSceneSvg().includes('面积 60.00 ㎡'));
+  api.setAnnot(rcQ,'perimeter',true);
+  api.setAnnot(rcQ,'area',false);
+  const svgR=api.buildSceneSvg();
+  ok('优先-逐对象关面积仅留周长', !svgR.includes('面积 60.00 ㎡')&&svgR.includes('周长 32.00 m'));
+  api.state.settings.showAreaTag=true;
+  ok('优先-全局开面积但逐对象关面积仍隐藏', !api.buildSceneSvg().includes('面积 60.00 ㎡'));
+
+  /* 闭合折线：面积/周长同样只按逐对象配置；与全局开关、选中状态均无关 */
+  api.resetState();
+  api.state.settings.precision=2;
+  const cl=api.baseObject('line','line.custom',{name:'CL',x:0,y:0,points:[[0,0],[10,0],[10,10],[0,10]],closed:true});
+  api.state.objects.push(cl);
+  api.state.settings.showAreaTag=false;
+  ok('优先-全局关面积时未配置闭合折线无胶囊', !api.buildSceneSvg().includes('面积 100.00 ㎡'));
+  api.setAnnot(cl,'area',true);
+  ok('优先-全局关面积但逐对象开闭合折线面积仍显示', api.buildSceneSvg().includes('面积 100.00 ㎡'));
+  api.setAnnot(cl,'area',false);
+  ok('优先-逐对象关面积后闭合折线面积隐藏', !api.buildSceneSvg().includes('面积 100.00 ㎡'));
+  api.state.settings.showAreaTag=true;
+  ok('优先-全局开面积仍按逐对象关隐藏', !api.buildSceneSvg().includes('面积 100.00 ㎡'));
+  api.setAnnot(cl,'perimeter',false);
+  ok('优先-面积周长均关后胶囊消失', !api.buildSceneSvg().includes('周长 40.00 m'));
+  api.resetState();
+}
+
+/* 43. 画布渲染链路：逐对象标注显隐与 SVG 一致（非选中态、受全局开关影响时仍按对象配置） ---- */
+{
+  /* 记录型 2D 上下文：只关心 fillText 文本，其余绘制调用一律吞掉 */
+  const recCtx=()=>{
+    const texts=[];
+    return new Proxy({}, {
+      get(t,p){
+        if(p==='then') return undefined;
+        if(p==='fillText') return s=>{ texts.push(String(s)); };
+        if(p==='measureText') return s=>({width:String(s).length*7});
+        if(p==='canvas') return {clientWidth:900,clientHeight:600};
+        if(p==='texts') return texts;
+        if(p in t) return t[p];
+        return ()=>{};
+      },
+      set(t,p,v){ t[p]=v; return true; }
+    });
+  };
+  const toS=p=>[p[0]*10,-p[1]*10];
+
+  api.resetState();
+  api.state.settings.precision=2;
+  const lnC=api.baseObject('line','line.custom',{name:'LC',x:0,y:0,points:[[0,0],[50,0],[50,120]]});
+  api.state.objects=[lnC];
+  const c1=recCtx(); api.drawObject(c1,lnC,{zoom:1},toS,1,1);
+  ok('画布-折线未选中仍显示编号', c1.texts.includes('LC'));
+  ok('画布-折线未选中仍显示分段长', c1.texts.includes('50.00 m')&&c1.texts.includes('120.00 m'));
+  ok('画布-折线未选中仍显示总长', c1.texts.includes('Σ 170.00 m'));
+  api.setAnnot(lnC,'edge',false);
+  const c2=recCtx(); api.drawObject(c2,lnC,{zoom:1},toS,1,1);
+  ok('画布-逐对象关段长后无分段文字', !c2.texts.includes('50.00 m')&&!c2.texts.includes('120.00 m'));
+  ok('画布-逐对象关段长后总长仍在', c2.texts.includes('Σ 170.00 m'));
+  api.setAnnot(lnC,'perimeter',false);
+  api.state.settings.showSegLen=false;
+  const c3=recCtx(); api.drawObject(c3,lnC,{zoom:1},toS,1,1);
+  ok('画布-全局关段长且逐对象关总长后无总长', !c3.texts.includes('Σ 170.00 m'));
+  api.setAnnot(lnC,'perimeter',true);
+  const c4=recCtx(); api.drawObject(c4,lnC,{zoom:1},toS,1,1);
+  ok('画布-全局关段长但逐对象开总长仍显示', c4.texts.includes('Σ 170.00 m'));
+
+  /* 区域面积/周长：逐对象开关独立于全局「图上显示面积」 */
+  api.resetState();
+  api.state.settings.precision=2;
+  const rcC=api.baseObject('rect','rect.area',{name:'RC',x:0,y:0,width:10,height:6});
+  api.state.objects=[rcC];
+  const c5=recCtx(); api.drawObject(c5,rcC,{zoom:1},toS,1,1);
+  ok('画布-区域默认显示面积+周长', c5.texts.includes('面积 60.00 ㎡')&&c5.texts.includes('周长 32.00 m'));
+  api.setAnnot(rcC,'area',false);
+  const c6=recCtx(); api.drawObject(c6,rcC,{zoom:1},toS,1,1);
+  ok('画布-逐对象关面积后仅剩周长', !c6.texts.includes('面积 60.00 ㎡')&&c6.texts.includes('周长 32.00 m'));
+  api.setAnnot(rcC,'perimeter',true);
+  api.state.settings.showAreaTag=false;
+  const c7=recCtx(); api.drawObject(c7,rcC,{zoom:1},toS,1,1);
+  ok('画布-全局关面积不影响逐对象开周长', c7.texts.includes('周长 32.00 m'));
+
+  /* 闭合折线：全局关面积时，逐对象仍开则照常显示 */
+  api.resetState();
+  api.state.settings.precision=2;
+  const clC=api.baseObject('line','line.custom',{name:'CLC',x:0,y:0,points:[[0,0],[10,0],[10,10],[0,10]],closed:true});
+  api.state.objects=[clC];
+  api.setAnnot(clC,'area',true); api.setAnnot(clC,'perimeter',true);
+  api.state.settings.showAreaTag=false;
+  const c8=recCtx(); api.drawObject(c8,clC,{zoom:1},toS,1,1);
+  ok('画布-闭合折线全局关面积仍按逐对象显示', c8.texts.includes('面积 100.00 ㎡')&&c8.texts.includes('周长 40.00 m'));
+  api.setAnnot(clC,'area',false); api.setAnnot(clC,'perimeter',false);
+  const c9=recCtx(); api.drawObject(c9,clC,{zoom:1},toS,1,1);
+  ok('画布-闭合折线面积周长关后胶囊消失', !c9.texts.includes('面积 100.00 ㎡')&&!c9.texts.includes('周长 40.00 m'));
+  ok('画布-闭合折线胶囊消失后编号回到中心', c9.texts.includes('CLC'));
   api.resetState();
 }
 

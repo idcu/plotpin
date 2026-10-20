@@ -30,8 +30,8 @@ function createInitialState(){
     meta: { id: uid('PRJ'), name: '未命名图纸工程', createdAt: now, updatedAt: now },
     settings: { unit:'m', precision:2, gridVisible:true, gridSize:1, snap:true, showLabels:true, markerScale:1,
       showCursor:true,   /* 鼠标十字准星与实时世界坐标 */
-      showSegLen:true,   /* 折线选中/绘制时显示段长度与总长 */
-      showAreaTag:true,  /* 区域/闭合折线在图上显示面积 */
+      showSegLen:true,   /* 全局缺省：未单独配置「段长」的对象显示段长与总长 */
+      showAreaTag:true,  /* 全局缺省：未单独配置「面积/周长」的区域或闭合折线显示面积与周长 */
       siteNodes:true,    /* 矢量场地：边界节点世界坐标标注 */
       siteSegLen:true,   /* 矢量场地：相邻节点段长度标注 */
       siteBase:false,    /* 矢量场地：基点/圆心坐标标注 */
@@ -169,8 +169,32 @@ function annotLabel(o,key){
 }
 /** 某标注键的类型默认值（保持既有观感） */
 function annotDefault(o,key){ const d=(o&&ANNOT_DEFAULTS[o.kind])||{}; return d[key]===true; }
-/** 某对象某标注是否开启：显式布尔设置优先，否则取类型默认 */
-function annotOn(o,key){ const a=o&&o.annot; return (a&&typeof a[key]==='boolean')?a[key]:annotDefault(o,key); }
+/**
+ * 全局总开关作为「未显式配置」对象的缺省值：
+ * 编号↔显示标签；折线段长↔段长度标注；折线/区域的周长面积↔图上显示面积。
+ * 返回 null 表示该键没有对应的全局开关（如基点/半径/顶点/节点/点坐标）。
+ */
+function annotGlobalDefault(o,key){
+  const S=state.settings||{};
+  if(key==='name') return S.showLabels!==false;
+  if(o&&o.kind==='line'){
+    if(key==='edge') return S.showSegLen!==false;
+    if(key==='perimeter') return (o.closed?S.showAreaTag!==false:S.showSegLen!==false);
+    if(key==='area') return S.showAreaTag!==false;
+  }
+  if(o&&o.kind==='rect'&&(key==='area'||key==='perimeter')) return S.showAreaTag!==false;
+  return null;
+}
+/**
+ * 某对象某标注是否开启。优先级：显式逐对象配置 > 对应全局总开关（仅作缺省） > 类型默认。
+ * 因此全局开关不会覆盖对象的显式配置——配置后无论全局如何切换、选中哪个对象，都按对象自身配置显示。
+ */
+function annotOn(o,key){
+  const a=o&&o.annot;
+  if(a&&typeof a[key]==='boolean') return a[key];
+  const g=annotGlobalDefault(o,key);
+  return g===null?annotDefault(o,key):g;
+}
 /** 写入某标注开关（仅接受布尔值），返回是否变化 */
 function setAnnot(o,key,val){
   if(!o||!annotKeys(o.kind).includes(key)) return false;

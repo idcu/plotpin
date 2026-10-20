@@ -445,8 +445,8 @@ function drawScaleBar(c,v,height){
 /**
  * 逐对象标注条目（世界坐标锚点 + 屏幕偏移，画布与 SVG 导出共用，保证所见即所得）。
  * 覆盖：点设备坐标；区域基点/半径/边长/顶点；折线节点坐标/段长/总长。
- * 显隐完全由逐对象「图上标注」开关（+ 全局总开关）决定，与对象是否被选中无关：
- * 配置后即使改选其他对象，该对象的标注仍按自身配置显示。
+ * 显隐完全由逐对象「图上标注」开关决定（全局总开关仅在对象未显式配置时作缺省），与对象是否被选中无关：
+ * 配置后即使改选其他对象、切换全局开关，该对象的标注仍按自身配置显示。
  * 面积/周长使用图形中心的胶囊（见 drawAreaTag），不在此列出。
  * opt 仅为调用方签名兼容保留（画布/SVG 均不再依赖选中态）。
  */
@@ -476,11 +476,11 @@ function annotationItems(o,opt={}){
     }
   }else if(o.kind==='line'){
     if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
-    if(S.showSegLen && annotOn(o,'edge')){
+    if(annotOn(o,'edge')){
       const ps=o.points, n=ps.length, segN=o.closed?n:n-1;
       for(let k=0;k<segN;k++){ const a=ps[k],b=ps[(k+1)%n], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
     }
-    if(S.showSegLen && !o.closed && annotOn(o,'perimeter') && o.points.length>=2){
+    if(!o.closed && annotOn(o,'perimeter') && o.points.length>=2){
       const e=o.points[o.points.length-1]; push(e[0],e[1],'Σ '+fmt(objectLength(o))+' m',9,-9);
     }
   }
@@ -579,8 +579,8 @@ function drawRect(c,o,color,toS,v,markerScale){
   c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineJoin='round'; c.stroke();
   const ce=shapeLabelCenter(o), s=toS(ce);
   if(o.name) drawLabel(c,o,s[0],s[1],color,toS,12*markerScale);
-  /* 面积/周长可分别开关（全局「图上显示面积」为总开关，逐对象开关为细控） */
-  const sa=state.settings.showAreaTag&&annotOn(o,'area'), sp=state.settings.showAreaTag&&annotOn(o,'perimeter');
+  /* 面积/周长分别由逐对象开关控制（全局「图上显示面积」仅作未配置对象的缺省值） */
+  const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
   if(sa||sp) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o),sa,sp);
 }
 /** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性）；面积与周长可分别关闭 */
@@ -614,11 +614,11 @@ function drawLine(c,o,color,toS,v){
     const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
     const gs=toS([gx,gy]);
     const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-    const capShown=state.settings.showAreaTag&&o.points.length>=3&&(sa||sp);
+    const capShown=o.points.length>=3&&(sa||sp);
     if(o.name) drawLabel(c,o,gs[0],gs[1]-(capShown?30:0),color,toS);
     if(capShown) drawAreaTag(c,gs[0],gs[1],polygonArea(o.points),objectLength(o),sa,sp);
   }
-  /* 段长度/总长标注由 annotationItems 统一绘制（受全局「段长度标注」与逐对象「段长/周长」开关约束，与是否选中无关） */
+  /* 段长度/总长标注由 annotationItems 统一绘制（逐对象「段长/周长」开关决定，与是否选中无关） */
 }
 function drawText(c,o,color,toS,v,markerScale){
   const s=toS([o.x,o.y]);
@@ -678,7 +678,8 @@ function labelAtMid(c,a,b,text){
 }
 function centroidScreen(ps){ return [ps.reduce((s,p)=>s+p[0],0)/ps.length,ps.reduce((s,p)=>s+p[1],0)/ps.length]; }
 function drawLabel(c,o,x,y,color,toS,fontSize=12){
-  if(!state.settings.showLabels || !o.name || !annotOn(o,'name')) return;
+  /* 编号显隐只由逐对象配置决定（全局「显示标签」仅作未配置对象的缺省值，见 annotOn） */
+  if(!o.name || !annotOn(o,'name')) return;
   c.save(); c.font='bold '+fontSize+'px "Microsoft YaHei",sans-serif'; c.textAlign='center'; c.textBaseline='middle';
   const tw=c.measureText(o.name).width;
   c.fillStyle='rgba(255,255,255,.82)'; c.fillRect(x-tw/2-4,y-9,tw+8,18);
