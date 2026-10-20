@@ -2067,12 +2067,13 @@ asyncSuites.push((async()=>{
   eq('标注项-圆形无边长项', api.annotationItems(c2).filter(it=>it.lenWorld).length, 0);
 
   const l2=api.baseObject('line','line.custom',{points:[[0,0],[4,0],[4,3]],x:0,y:0});
-  eq('标注项-折叠线未选中默认0条', api.annotationItems(l2).length, 0);
-  eq('标注项-选中含2段长+总长', api.annotationItems(l2,{selected:true}).length, 3);
+  /* 折线段长/周长标注按对象自身配置显示，与是否被选中无关（修复「改选其他对象后消失」） */
+  eq('标注项-折线未选中也含2段长+总长', api.annotationItems(l2).length, 3);
+  eq('标注项-折线选中与否条目一致', api.annotationItems(l2,{selected:true}).length, 3);
   api.setAnnot(l2,'edge',false);
-  eq('标注项-关边长后仅总长', api.annotationItems(l2,{selected:true}).length, 1);
+  eq('标注项-关段长后仅总长(未选中仍生效)', api.annotationItems(l2).length, 1);
   api.setAnnot(l2,'perimeter',false);
-  eq('标注项-关总长后0条', api.annotationItems(l2,{selected:true}).length, 0);
+  eq('标注项-关总长后0条', api.annotationItems(l2).length, 0);
   api.setAnnot(l2,'node',true);
   eq('标注项-节点坐标3条', api.annotationItems(l2).length, 3);
 
@@ -2084,7 +2085,7 @@ asyncSuites.push((async()=>{
   ok('标注UI-圆形含半径不含边长', hCir.includes('data-annot="radius"') && !hCir.includes('data-annot="edge"'));
   ok('标注UI-开关组跨满两列', hRc.includes('class="annot-chks span2"'));
   const hLn=api.renderAnnotToggles(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]}));
-  ok('标注UI-折线含五个开关', ['name','node','edge','perimeter','area'].every(k=>hLn.includes(`data-annot="${k}"`)));
+  ok('标注UI-开放折线含编号/节点/段长/周长无面积', ['name','node','edge','perimeter'].every(k=>hLn.includes(`data-annot="${k}"`)) && !hLn.includes('data-annot="area"'));
   eq('标注UI-文字无开关组', api.renderAnnotToggles(api.baseObject('text','text.custom',{})), '');
 
   /* 持久化迁移：仅保留该 kind 支持的布尔键，丢弃非法键/非本类型键 */
@@ -2136,6 +2137,22 @@ asyncSuites.push((async()=>{
   const hCir2=api.renderAnnotToggles(api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'circle',r:5}}));
   ok('标注UI-圆形无顶点与边长', !hCir2.includes('data-annot="vertex"') && !hCir2.includes('data-annot="edge"'));
   ok('标注UI-折线开关显示为段长', api.renderAnnotToggles(api.baseObject('line','line.custom',{points:[[0,0],[1,0]]})).includes('段长'));
+  ok('标注UI-闭合折线含面积开关', api.renderAnnotToggles(api.baseObject('line','line.custom',{points:[[0,0],[1,0],[1,1]],closed:true})).includes('data-annot="area"'));
+
+  /* 折线段长/周长：SVG 与画布同源输出，按逐对象配置显隐、与是否选中无关 */
+  api.resetState();
+  api.state.settings.precision=2;
+  const lnSvg=api.baseObject('line','line.custom',{name:'LS',x:0,y:0,points:[[0,0],[7,0],[7,24]]});
+  api.state.objects.push(lnSvg);
+  const lnS1=api.buildSceneSvg();
+  ok('SVG-折线按配置输出段长(7/24)', lnS1.includes('7.00 m')&&lnS1.includes('24.00 m'));
+  ok('SVG-折线按配置输出总长(Σ31)', lnS1.includes('Σ 31.00 m'));
+  api.setAnnot(lnSvg,'edge',false);
+  const lnS2=api.buildSceneSvg();
+  ok('SVG-关段长后段长文字消失', !lnS2.includes('7.00 m')&&!lnS2.includes('24.00 m'));
+  ok('SVG-关段长后总长仍在', lnS2.includes('Σ 31.00 m'));
+  api.setAnnot(lnSvg,'perimeter',false);
+  ok('SVG-关总长后总长消失', !api.buildSceneSvg().includes('Σ 31.00 m'));
 
   /* 场地标注分级开关：迁移默认与继承（周长自原「周长面积」拆出） */
   eq('迁移-场地周长缺省继承面积(开)', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.sitePerimeter, true);

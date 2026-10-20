@@ -78,7 +78,7 @@ function renderNodeEditor(o){
 }
 /**
  * 逐对象「图上标注」开关组（跨满两列）：点设备=编号/点坐标；区域=编号/基点/半径/边长/顶点/周长/面积；
- * 折线=编号/节点(闭合即顶点)/段长/周长/面积。未显式设置的键按类型默认值；与全局总开关（段长度/图上面积）叠加生效。
+ * 折线=编号/节点(闭合即顶点)/段长/周长/面积（开放折线去掉面积）。未显式设置的键按类型默认值；与全局总开关（段长度/图上面积）叠加生效。
  * 区域按形状过滤无意义的开关：矩形给「边长/顶点坐标」不给「半径」；圆/椭圆/扇形给「半径」不给「边长/顶点坐标」。
  */
 function annotToggleKeys(o){
@@ -86,6 +86,8 @@ function annotToggleKeys(o){
   if(o.kind==='rect'){
     return areaShapeType(o)==='rect' ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
   }
+  /* 开放折线无面积概念：不提供「面积」开关，避免出现勾选后无任何效果的无效配置 */
+  if(o.kind==='line' && !o.closed) return keys.filter(k=>k!=='area');
   return keys;
 }
 function renderAnnotToggles(o){

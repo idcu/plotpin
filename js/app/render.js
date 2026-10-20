@@ -444,11 +444,14 @@ function drawScaleBar(c,v,height){
 }
 /**
  * 逐对象标注条目（世界坐标锚点 + 屏幕偏移，画布与 SVG 导出共用，保证所见即所得）。
- * 覆盖：点设备坐标；区域基点/半径/边长；折线节点坐标/边长/总长。
+ * 覆盖：点设备坐标；区域基点/半径/边长/顶点；折线节点坐标/段长/总长。
+ * 显隐完全由逐对象「图上标注」开关（+ 全局总开关）决定，与对象是否被选中无关：
+ * 配置后即使改选其他对象，该对象的标注仍按自身配置显示。
  * 面积/周长使用图形中心的胶囊（见 drawAreaTag），不在此列出。
+ * opt 仅为调用方签名兼容保留（画布/SVG 均不再依赖选中态）。
  */
 function annotationItems(o,opt={}){
-  const out=[], S=state.settings, sel=!!opt.selected;
+  const out=[], S=state.settings;
   const push=(wx,wy,text,dx,dy,lenWorld)=>out.push({wx,wy,text,dx,dy,lenWorld:lenWorld||0});
   if(!o) return out;
   if(o.kind==='point'){
@@ -473,11 +476,11 @@ function annotationItems(o,opt={}){
     }
   }else if(o.kind==='line'){
     if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
-    if(S.showSegLen && sel && annotOn(o,'edge')){
+    if(S.showSegLen && annotOn(o,'edge')){
       const ps=o.points, n=ps.length, segN=o.closed?n:n-1;
       for(let k=0;k<segN;k++){ const a=ps[k],b=ps[(k+1)%n], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
     }
-    if(S.showSegLen && sel && !o.closed && annotOn(o,'perimeter') && o.points.length>=2){
+    if(S.showSegLen && !o.closed && annotOn(o,'perimeter') && o.points.length>=2){
       const e=o.points[o.points.length-1]; push(e[0],e[1],'Σ '+fmt(objectLength(o))+' m',9,-9);
     }
   }
@@ -615,7 +618,7 @@ function drawLine(c,o,color,toS,v){
     if(o.name) drawLabel(c,o,gs[0],gs[1]-(capShown?30:0),color,toS);
     if(capShown) drawAreaTag(c,gs[0],gs[1],polygonArea(o.points),objectLength(o),sa,sp);
   }
-  /* 段长度/总长标注由 annotationItems 统一绘制（受全局「段长度标注」与逐对象「边长/周长」开关约束） */
+  /* 段长度/总长标注由 annotationItems 统一绘制（受全局「段长度标注」与逐对象「段长/周长」开关约束，与是否选中无关） */
 }
 function drawText(c,o,color,toS,v,markerScale){
   const s=toS([o.x,o.y]);
