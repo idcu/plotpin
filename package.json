@@ -4,7 +4,11 @@
   "description": "图钉 PlotPin — 离线、零依赖、双击即用的通用图纸标注工具",
   "private": true,
   "scripts": {
-    "test": "node scripts/selftest.mjs"
+    "test": "node scripts/selftest.mjs",
+    "lint": "node scripts/check.mjs",
+    "badge": "node scripts/badge.mjs",
+    "bench": "node scripts/bench.mjs",
+    "ci": "node scripts/check.mjs"
   },
   "keywords": [
     "canvas",

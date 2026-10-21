@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-942%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-1008%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在任意底图（图片 / 矢量场地）上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -36,7 +36,9 @@
 - **编辑能力**：点选 / 框选 / 多选、移动、缩放、旋转、节点编辑、复制粘贴、图层显隐锁定、类型管理、网格吸附、撤销重做。
 - **精确绘图辅助（均可开关）**：**对象捕捉（OSNAP）**——端点□、中点△、圆心◎、象限点◇、垂足⊥、跨对象交点×、圆切点，按类型优先级自动吸附（画线、放设备、拖节点/角点均生效，可在设置关闭）；**Tab / Shift+Tab 循环锁定单一捕捉类型**（自动→端点→中点→圆心→象限点→交点→垂足→切点，底部徽标实时显示，点击徽标恢复自动）；画线时沿 45° 极轴或与上一段平行方向显示**橙色追踪虚线**；鼠标**十字准星 + 吸附后世界坐标**实时跟随（无需点击，鼠标一移动即更新，坐标栏同步显示当前捕捉类型）；折线绘制中/选中后显示**每段长度与累计总长**；区域拖画实时显示宽×高/半径；按住 **Shift** 画水平/垂直线（正交）、拖正方形/正圆、扇形 45° 方位吸附；属性面板编辑节点坐标时画布同步高亮；`F` 一键适应窗口。
 - **几何检查**：零尺寸、折线自相交、对象越界、物理尺寸异常等自动提示。
-- **视场覆盖率分析**：一键统计摄像头（扇形视场）/球机与圆形、方形点设备的视场对**区域与闭合折线**的覆盖率；画布叠加显示**已覆盖（绿）/ 盲区（红）**栅格，弹窗给出逐区域与合计的覆盖面积、盲区面积与覆盖百分比（栅格法估算，零依赖）。
+- **视场覆盖率分析**：一键统计摄像头（扇形视场）/球机与圆形、方形点设备的视场对**区域与闭合折线**的覆盖率；画布叠加显示**已覆盖（绿）/ 盲区（红）**栅格，弹窗给出逐区域与合计的覆盖面积、盲区面积与覆盖百分比（栅格法估算，零依赖）。栅格分辨率随缩放自适应，结果一次性写入 ImageData 后整块绘制；**盲区可导出为 GeoJSON 多边形**（逐行合并的矩形面，便于 GIS/CAD 复核）。
+- **性能与工程化**：画布采用**分层离屏缓存**——底图/网格/未选中对象冻结为静态层，拖拽时只重绘选中对象与交互层；配合**视口裁剪**，2000 对象下拖拽帧耗时约 1ms（`node scripts/bench.mjs` 提供阈值基准）。工程自带零依赖门禁：`node scripts/check.mjs` 校验语法、入口资源完整性、离线引用与断言数一致，`node scripts/badge.mjs` 自动同步 README 徽章，CI 配置见 `.github/workflows/ci.yml`。
+- **健壮性**：ZIP/XLSX/DXF/PDF 解析器均设**输入上限**（文件体积、条目/实体/行/页/对象数、解压总量与单流上限），畸形或超大文件给出明确中文错误而非卡死；启动时探测 IndexedDB / Service Worker / Blob 能力，缺失时**显式降级并提示**（localStorage 兜底），托管部署自动注册 Service Worker 离线缓存。
 - **底图仿射校准**：图片底图上依次点击已知点并输入其实地坐标 X,Y——2 点求**旋转 + 等比缩放**相似变换，≥3 点求**最小二乘完整仿射**（纠正底图倾斜与不等比缩放）；求解后底图按新映射旋转/缩放（含轻切变）渲染，既有标注随映射迁移并保持贴合底图同一像素点，SVG/PDF 导出同步对齐。
 - **本地自动保存**：工程存于 IndexedDB（底图按内容哈希去重），localStorage 兜底；刷新不丢。**多工程库**：顶栏「📁 工程库」可把当前图纸另存命名工程，随时打开/重命名/复制/删除，绑定后编辑自动同步到对应工程。
 - **导入导出**
@@ -137,7 +139,7 @@ npm test
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希与撤销栈可达性回收、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、静态资源引用完整性等纯逻辑模块，当前共 **942 项断言全部通过**。
+底图资产哈希与撤销栈可达性回收、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、静态资源引用完整性等纯逻辑模块，当前共 **1008 项断言全部通过**。
 
 ---
 
@@ -176,7 +178,8 @@ Place device markers on any base map (image or vector site), draw true-to-scale 
 - **Areas & polylines (geometry semantics)**: always in world coordinates (meters), true-to-scale. Areas support rectangle / circle / ellipse / sector with parameter handles and on-the-fly shape conversion (center-preserving, equal-area); triangles and arbitrary polygons come from closed polylines.
 - **Dimensions & text**: distance, area and angle annotations; scalable/rotatable world-size text.
 - **Editing**: single/rubber/multi select, move, resize, rotate, node editing, layers, custom types, grid snapping, undo/redo.
-- **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback.
+- **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback with explicit capability detection; Service Worker offline cache for hosted deployments.
+- **Engineering**: layered offscreen rendering cache + viewport culling, parser input limits for ZIP/XLSX/DXF/PDF, zero-dependency CI gate and render benchmark.
 - **Import / export**: JSON project (embedded map), hi-res PNG, vector SVG, CSV/TSV and real `.xlsx` (hand-written minimal OOXML + ZIP), print-to-PDF report; drag-and-drop import supported.
 
 ### Quick start
@@ -186,7 +189,9 @@ Double-click `index.html` — or serve the folder with any static file server. M
 ### Test
 
 ```bash
-node scripts/selftest.mjs   # 942 assertions, no dependencies
+node scripts/selftest.mjs   # 1008 assertions, no dependencies
+node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁
+node scripts/bench.mjs      # 渲染与覆盖率性能基准（阈值不达标则退出码 1）
 ```
 
 ### License

@@ -713,8 +713,12 @@ function refreshStorageUsage(){
 /* -------------------- 视场覆盖率分析 -------------------- */
 /** 分析摄像头/球机等点设备视场对区域与闭合折线的覆盖率，写入叠加层数据并弹出报告 */
 function runCoverageAnalysis(){
-  const res=analyzeCoverage(state);
+  /* 栅格分辨率随缩放自适应：放大时提高精度、缩小时降低开销；限制在 6000–36000 格/区域 */
+  const z=Number(state.viewport.zoom)||1;
+  const targetCells=Math.max(6000,Math.min(36000,Math.round(18000*Math.max(.5,Math.min(2,z/4)))));
+  const res=analyzeCoverage(state,{targetCells});
   coverageResult=res;
+  invalidateStatic();               /* 覆盖率叠加层属于静态层 */
   requestRender();
   const pct=x=>(x*100).toFixed(1)+'%';
   const head=`<div style="font-size:13px;line-height:1.9;margin-bottom:10px">
@@ -732,7 +736,8 @@ function runCoverageAnalysis(){
   const body=res.regions.length? head+rows+legend
     : head+`<div class="hint-text" style="padding:8px 0">当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。</div>`;
   openModal('视场覆盖率分析', body, [
-    {text:'清除叠加层',class:'',click:()=>{ coverageResult=null; closeModal(); requestRender(); }},
+    {text:'导出盲区 GeoJSON',class:'',click:exportBlindSpotsGeoJson},
+    {text:'清除叠加层',class:'',click:()=>{ coverageResult=null; invalidateStatic(); closeModal(); requestRender(); }},
     {text:'关闭',class:'primary',click:closeModal}
   ]);
 }

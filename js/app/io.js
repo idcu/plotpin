@@ -712,6 +712,22 @@ function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800);
 }
 function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
+/** 导出覆盖率盲区多边形（逐行合并的矩形面，GeoJSON FeatureCollection） */
+function exportBlindSpotsGeoJson(){
+  if(!coverageResult||!coverageResult.regions||!coverageResult.regions.length){
+    return toast('请先执行「覆盖率分析」','warn');
+  }
+  const rects=blindSpotRects(coverageResult);
+  if(!rects.length) return toast('当前没有盲区可导出','warn');
+  const features=rects.map((r,i)=>({
+    type:'Feature',
+    properties:{region:r.regionName,regionId:r.regionId,index:i+1},
+    geometry:{type:'Polygon',coordinates:[r.points.concat([r.points[0]])]}
+  }));
+  const fc={type:'FeatureCollection',features};
+  downloadBlob(new Blob([JSON.stringify(fc,null,2)],{type:'application/geo+json'}),safeName()+'-盲区.geojson');
+  toast('盲区多边形已导出：'+features.length+' 个面（合计 '+fmt(blindSpotArea(coverageResult))+' ㎡）','success');
+}
 async function exportJSON(){
   state.meta.updatedAt=nowISO();
   // 工程文件保持可移植：底图字节虽存于 IndexedDB，导出 JSON 时内嵌 dataURL 一并带走。

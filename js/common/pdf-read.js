@@ -9,6 +9,8 @@
   'use strict';
 
 const PT_TO_METER=0.0254/72;
+/* 读取上限：防止畸形/超大 PDF 与解压炸弹耗尽内存（测试可传入更小的 opt） */
+const PDF_LIMITS={maxBytes:50*1024*1024,maxPages:300,maxObjects:20000,maxInflateBytes:64*1024*1024};
 
 function bytesToBinary(bytes){
   let s=''; const CH=0x8000;
@@ -27,7 +29,11 @@ async function inflate(bytes){
   const tryStream=(data,format)=>new Promise((resolve,reject)=>{
     try{
       const st=new Blob([data]).stream().pipeThrough(new DecompressionStream(format));
-      new Response(st).arrayBuffer().then(b=>resolve(new Uint8Array(b))).catch(reject);
+      new Response(st).arrayBuffer().then(b=>{
+        if(b.byteLength>PDF_LIMITS.maxInflateBytes)
+          return reject(new Error('PDF 内嵌流解压后超过 '+(PDF_LIMITS.maxInflateBytes/1048576)+'MB 上限，疑似解压炸弹'));
+        resolve(new Uint8Array(b));
+      }).catch(reject);
     }catch(e){ reject(e); }
   });
   try{ return await tryStream(bytes,'deflate'); }catch(e){
@@ -328,14 +334,17 @@ function buildPng(w,h,rgb){
 }
 
 /* ---------------- 主入口 ---------------- */
-async function parsePdf(input){
+async function parsePdf(input,opt){
+  const L=Object.assign({},PDF_LIMITS,opt||{});
   const src=input instanceof Uint8Array?input
     :typeof input==='string'?binaryToBytes(input)
     :new Uint8Array(input);
+  if(src.length>L.maxBytes) throw new Error('PDF 过大（超过 '+(L.maxBytes/1048576)+'MB 上限），请拆分后导入');
   /* 基本校验 */
   if(String.fromCharCode(src[0],src[1],src[2],src[3])!=='%PDF') throw new Error('不是有效的 PDF 文件');
   const bin=bytesToBinary(src);
   const objs=scanObjects(bin);
+  if(objs.size>L.maxObjects) throw new Error('PDF 对象数超过上限 '+L.maxObjects+'，请拆分后导入');
 
   /* 页面集合 */
   const pages=[];
@@ -343,6 +352,7 @@ async function parsePdf(input){
     if(/\/Type\s*\/Page(?!s)/.test(o.dict)) pages.push({num,obj:o});
   }
   if(!pages.length) throw new Error('PDF 中未找到页面');
+  if(pages.length>L.maxPages) throw new Error('PDF 页数超过上限 '+L.maxPages+' 页，请拆分后导入');
   const merged={paths:[],texts:[],images:[]};
   let firstBox=null;
   for(const {num,obj} of pages){
@@ -419,5 +429,5 @@ async function parsePdf(input){
     unitMeter:PT_TO_METER};
 }
 
-global.PdfRead={ parsePdf, PT_TO_METER, tokenizeContent, looksLikeCidGarbage };
+global.PdfRead={ parsePdf, PT_TO_METER, tokenizeContent, looksLikeCidGarbage, LIMITS: PDF_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);

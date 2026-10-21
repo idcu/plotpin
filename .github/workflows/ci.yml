@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # 零依赖：无需 npm install
+      - name: 语法 / 入口 / 离线引用 / 断言数门禁
+        run: node scripts/check.mjs
+      - name: 逻辑层自测
+        run: node scripts/selftest.mjs
+      - name: 渲染基准（缓存帧 / 视口裁剪阈值）
+        run: node scripts/bench.mjs

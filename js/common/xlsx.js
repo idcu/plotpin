@@ -52,11 +52,16 @@ function xlsxColToIndex(ref){
   for(let i=0;i<s.length;i++) n=n*26+(s.charCodeAt(i)-64);
   return n-1;
 }
-function xlsxSheetToRows(xmlText,shared){
+/* ---- 读取上限：防止超大表格占用内存（测试可传入更小的 opt） ---- */
+const XLSX_LIMITS={maxRows:50000,maxCols:1000,maxSheets:50};
+function xlsxSheetToRows(xmlText,shared,opt){
+  const L=Object.assign({},XLSX_LIMITS,opt||{});
   const doc=XmlLite.parse(xmlText);
   const rowsEls=doc.getElementsByTagName('row'); const rows=[];
+  if(rowsEls.length>L.maxRows) throw new Error('表格行数超过上限 '+L.maxRows+' 行，请拆分后导入');
   for(let i=0;i<rowsEls.length;i++){
     const cells=rowsEls[i].getElementsByTagName('c'); const row=[];
+    if(cells.length>L.maxCols) throw new Error('表格列数超过上限 '+L.maxCols+' 列，请精简后导入');
     for(let j=0;j<cells.length;j++){
       const c=cells[j];
       const idx=c.getAttribute('r')?xlsxColToIndex(c.getAttribute('r')):row.length;
@@ -74,8 +79,9 @@ function xlsxSheetToRows(xmlText,shared){
   }
   return rows;
 }
-async function xlsxReadRows(arrayBuffer){
-  const entries=await zipReadEntries(arrayBuffer);
+async function xlsxReadRows(arrayBuffer,opt){
+  const L=Object.assign({},XLSX_LIMITS,opt||{});
+  const entries=await zipReadEntries(arrayBuffer,opt);
   let shared=[];
   if(entries['xl/sharedStrings.xml']){
     const doc=XmlLite.parse(decodeUtf8(entries['xl/sharedStrings.xml']));
@@ -99,15 +105,17 @@ async function xlsxReadRows(arrayBuffer){
     });
   }else if(entries['xl/worksheets/sheet1.xml']) sheets.push('xl/worksheets/sheet1.xml');
   if(!sheets.length) throw new Error('XLSX 中未找到工作表');
+  if(sheets.length>L.maxSheets) throw new Error('工作表数量超过上限 '+L.maxSheets+' 个，请拆分后导入');
   const known=h=>['编号','对象类型','X','Y','图层','业务类型'].some(k=>h.includes(k));
   const merged=[]; let used=0;
   sheets.forEach(path=>{
-    const rows=xlsxSheetToRows(decodeUtf8(entries[path]),shared);
+    const rows=xlsxSheetToRows(decodeUtf8(entries[path]),shared,opt);
     if(!rows.length) return;
     if(known(rows[0].map(x=>String(x||'').trim()))){ rows.forEach(r=>merged.push(r)); used++; }
   });
-  if(!used) xlsxSheetToRows(decodeUtf8(entries[sheets[0]]),shared).forEach(r=>merged.push(r));
+  if(merged.length>L.maxRows) throw new Error('合并后表格行数超过上限 '+L.maxRows+' 行，请拆分后导入');
+  if(!used) xlsxSheetToRows(decodeUtf8(entries[sheets[0]]),shared,opt).forEach(r=>merged.push(r));
   return merged;
 }
-  global.Xlsx = { build: buildXlsx, readRows: xlsxReadRows, colLetter: xlsxColLetter };
+  global.Xlsx = { build: buildXlsx, readRows: xlsxReadRows, colLetter: xlsxColLetter, LIMITS: XLSX_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);

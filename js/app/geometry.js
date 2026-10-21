@@ -601,19 +601,57 @@ function analyzeCoverage(st,opt){
   opt=opt||{};
   const target=Math.max(400,opt.targetCells||18000);
   const cameras=st.objects.filter(o=>isVisible(o)).map(cameraFootprint).filter(Boolean);
+  /* 摄像机参数预计算：半径平方 / 朝向单位向量 / half 角余弦平方；
+     包围盒用于廉价预筛，绝大多数格心离所有设备都很远 */
+  const cams=cameras.map(c=>{
+    const ang=(Number(c.angle)||0)*Math.PI/180, half=(c.fov?c.fov/2:0)*Math.PI/180;
+    return {cam:c, r2:c.r*c.r, cosA:Math.cos(ang), sinA:Math.sin(ang),
+      cosHalf:Math.cos(half), cosHalf2:Math.cos(half)*Math.cos(half),
+      half:c.fov?c.fov/2:180,
+      minX:c.x-c.r-EPS, maxX:c.x+c.r+EPS, minY:c.y-c.r-EPS, maxY:c.y+c.r+EPS};
+  });
   const ignored=st.objects.filter(o=>o.kind==='point'&&isVisible(o)&&!(Number(o.phys)>0)).length;
   const regions=regionPolygons(st).map(r=>{
     const bb=polygonBBox(r.points), area=polygonArea(r.points);
-    const cell=Math.max(.03,Math.min(2,Math.sqrt(bb.w*bb.h/target)));
+    /* 步长上限 10m：超大场地不因目标格数被硬钳到 2m 而产生数十万格 */
+    const cell=Math.max(.03,Math.min(10,Math.sqrt(bb.w*bb.h/target)));
     const nx=Math.max(1,Math.ceil(bb.w/cell)), ny=Math.max(1,Math.ceil(bb.h/cell));
-    /* 0=区内盲区 1=已覆盖 2=区外；边界格按面积误差随机偏移取心可减小系统偏差，这里用格心（统计已足够稳定） */
+    const poly=r.points, np=poly.length;
+    /* 0=区内盲区 1=已覆盖 2=区外 */
     const grid=new Uint8Array(nx*ny);
     let inside=0, covered=0;
     for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){
-      const p=[bb.minX+(i+.5)*cell, bb.minY+(j+.5)*cell];
-      if(!pointInPolygon(p,r.points)){ grid[j*nx+i]=2; continue; }
+      const x=bb.minX+(i+.5)*cell, y=bb.minY+(j+.5)*cell;
+      /* 内联射线法（不分配数组），与 pointInPolygon 等价 */
+      let inPoly=false;
+      for(let m=0,mj=np-1;m<np;mj=m++){
+        const xi=poly[m][0], yi=poly[m][1], xj=poly[mj][0], yj=poly[mj][1];
+        if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi)) inPoly=!inPoly;
+      }
+      if(!inPoly){ grid[j*nx+i]=2; continue; }
       inside++;
-      if(cameras.some(cam=>pointInFootprint(p,cam))){ grid[j*nx+i]=1; covered++; }
+      let hit=false;
+      for(let k=0;k<cams.length;k++){
+        const c=cams[k];
+        if(x<c.minX||x>c.maxX||y<c.minY||y>c.maxY) continue;
+        const dx=x-c.cam.x, dy=y-c.cam.y;
+        if(c.cam.kind==='square'){
+          const lx=dx*c.cosA+dy*c.sinA, ly=-dx*c.sinA+dy*c.cosA;
+          if(Math.abs(lx)<=c.cam.r+EPS && Math.abs(ly)<=c.cam.r+EPS){ hit=true; break; }
+          continue;
+        }
+        const d2=dx*dx+dy*dy;
+        if(d2>c.r2+EPS) continue;
+        if(c.cam.kind==='circle'||d2<=EPS){ hit=true; break; }
+        /* 扇形：|与朝向夹角| ≤ fov/2。half≤90° 用平方比较免开方；>90° 用点积与半径比较 */
+        const dot=dx*c.cosA+dy*c.sinA;
+        if(c.half<=90){
+          if(dot>=0 && dot*dot>=d2*c.cosHalf2){ hit=true; break; }
+        }else{
+          if(dot>=Math.sqrt(d2)*c.cosHalf){ hit=true; break; }
+        }
+      }
+      if(hit){ grid[j*nx+i]=1; covered++; }
     }
     const ratio=inside?covered/inside:0;
     return {id:r.id,name:r.name,area,coveredArea:area*ratio,blindArea:area*(1-ratio),
@@ -624,6 +662,38 @@ function analyzeCoverage(st,opt){
   return {regions,cameraCount:cameras.length,ignoredPoints:ignored,
     totalArea,totalCovered,totalBlind:totalArea-totalCovered,
     ratio:totalArea?totalCovered/totalArea:0};
+}
+/**
+ * 盲区多边形：逐行合并连续盲格为矩形面（世界坐标，闭合环）。
+ * 与栅格统计同源，面积求和严格等于 blindArea（到浮点误差），供 GeoJSON 导出。
+ */
+function blindSpotRects(res){
+  const out=[];
+  if(!res||!res.regions) return out;
+  for(const r of res.regions){
+    for(let j=0;j<r.ny;j++){
+      let start=-1;
+      for(let i=0;i<=r.nx;i++){
+        const blind=i<r.nx&&r.grid[j*r.nx+i]===0;
+        if(blind&&start<0) start=i;
+        if(!blind&&start>=0){
+          const x0=r.minX+start*r.cell, x1=r.minX+i*r.cell;
+          const y0=r.minY+j*r.cell, y1=y0+r.cell;
+          out.push({regionId:r.id,regionName:r.name,
+            points:[[x0,y0],[x1,y0],[x1,y1],[x0,y1]]});
+          start=-1;
+        }
+      }
+    }
+  }
+  return out;
+}
+/** 盲区多边形总面积（矩形并集，与栅格盲区面积一致） */
+function blindSpotArea(res){
+  return blindSpotRects(res).reduce((s,r)=>{
+    const a=r.points;
+    return s+Math.abs((a[1][0]-a[0][0])*(a[2][1]-a[1][1]));
+  },0);
 }
 
 /* ==================== 仿射校准：图像像素(y向下) ↔ 世界坐标(米,y向上) ==================== */

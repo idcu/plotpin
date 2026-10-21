@@ -111,8 +111,13 @@ function stripMtext(s){
 
 /* ---------------- 解析 ---------------- */
 const ENTITY_TYPES=['LINE','LWPOLYLINE','POLYLINE','VERTEX','SEQEND','CIRCLE','ARC','POINT','TEXT','MTEXT','ELLIPSE','SPLINE','INSERT','BLOCK','ENDBLK'];
-function parseDxf(text){
-  const lines=String(text||'').split(/\r?\n/);
+/* ---- 读取上限：文本长度与实体数（防止畸形/超大地形图拖垮页面） ---- */
+const DXF_LIMITS={maxChars:20*1024*1024,maxEntities:50000};
+function parseDxf(text,opt){
+  const L=Object.assign({},DXF_LIMITS,opt||{});
+  const src=String(text||'');
+  if(src.length>L.maxChars) throw new Error('DXF 文件过大（超过 '+(L.maxChars/1048576)+'MB 文本上限），请拆分或简化后导入');
+  const lines=src.split(/\r?\n/);
   let section='', insUnits=0;
   const entities=[];
   const blocks=new Map();
@@ -143,7 +148,10 @@ function parseDxf(text){
     if(poly && code===70){ poly.closed=(parseInt(val,10)&1)===1; i+=2; continue; }
     if(code===0){
       const typ=val.toUpperCase();
-      if(typ==='POLYLINE'){ poly={kind:'LWPOLYLINE',layer:'0',closed:false,vertices:[],points:[]}; entities.push(poly); i+=2; continue; }
+      if(typ==='POLYLINE'){
+        if(entities.length>=L.maxEntities) throw new Error('DXF 实体数超过上限 '+L.maxEntities+'，请拆分或简化后导入');
+        poly={kind:'LWPOLYLINE',layer:'0',closed:false,vertices:[],points:[]}; entities.push(poly); i+=2; continue;
+      }
       if(typ==='SEQEND'){ poly=null; i+=2; continue; }
       if(!ENTITY_TYPES.includes(typ)){ i+=2; continue; }
       const rec=readRecord(lines,i,typ);
@@ -151,6 +159,7 @@ function parseDxf(text){
       if(typ==='VERTEX'){ if(poly) poly.vertices.push({x:rec.r.x,y:rec.r.y,bulge:rec.r.bulge||0}); continue; }
       if(section==='BLOCKS' && blockName!==null){ blocks.get(blockName).push(rec.r); continue; }
       if(typ==='POLYLINE') continue;
+      if(entities.length>=L.maxEntities) throw new Error('DXF 实体数超过上限 '+L.maxEntities+'，请拆分或简化后导入');
       entities.push(rec.r);
     }else i+=2;
   }
@@ -361,5 +370,5 @@ function buildDxf(entities,layers,opt={}){
 }
 function escapeText(s){ return String(s??'').replace(/\r?\n/g,' '); }
 
-global.Dxf={ parseDxf, buildDxf, nearestAci, safeLayer, bulgeSegment, evalBSpline, sampleEllipse, stripMtext, UNIT_TO_METER };
+global.Dxf={ parseDxf, buildDxf, nearestAci, safeLayer, bulgeSegment, evalBSpline, sampleEllipse, stripMtext, UNIT_TO_METER, LIMITS: DXF_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);

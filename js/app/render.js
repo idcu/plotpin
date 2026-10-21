@@ -102,9 +102,87 @@ function requestRender(){
   renderQueued=true;
   requestAnimationFrame(()=>{ renderQueued=false; drawScene(ctx,state.viewport,wrap.clientWidth,wrap.clientHeight,{interactive:true,markerScale:1}); });
 }
+/* -------------------- 分层离屏缓存 --------------------
+ * 静态层：底图 / 网格 / 覆盖率 / 场地标注 / 坐标轴 / 未选中的可见对象（冻结为位图）。
+ * 动态层：选中对象 / 草稿 / 校准 / 选择框 / 光标 / 捕捉标记等交互元素。
+ * 拖拽时只重绘动态层，静态层按签名命中缓存；视口或场景变化时自动重建。
+ * 导出 / 打印走「直接全量绘制」路径，保证产物与旧行为一致。 */
+let staticCanvas=null, staticCtx=null, staticKey='', staticRev=0;
+/** 显式作废静态层：对象增删改、载入/撤销/重做、覆盖率结果变化时调用 */
+function invalidateStatic(){ staticRev++; staticKey=''; }
+/** 静态层缓存签名：任何影响静态层像素的输入都在此收敛 */
+function sceneStaticKey(v,cssW,cssH,d){
+  const bg=state.background||{};
+  return [v.zoom,v.panX,v.panY,cssW,cssH,dpr||1,staticRev,
+    d.minX,d.minY,d.maxX,d.maxY,
+    JSON.stringify(state.settings),
+    JSON.stringify(bg.shape||null),
+    bg.transform?JSON.stringify(bg.transform):'',
+    bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,bg.metersPerPixel||0,
+    bgImage?1:0,(bgDataUrl||'').length,
+    (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
+    Array.from(selectedIds).sort().join(','),
+    coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0'
+  ].join('|');
+}
+function ensureStaticLayer(cssW,cssH){
+  const k=dpr||1;
+  if(!staticCanvas){ staticCanvas=document.createElement('canvas'); staticCtx=staticCanvas.getContext('2d'); }
+  const w=Math.max(1,Math.round(cssW*k)), h=Math.max(1,Math.round(cssH*k));
+  if(staticCanvas.width!==w||staticCanvas.height!==h){ staticCanvas.width=w; staticCanvas.height=h; staticKey=''; }
+  staticCtx.setTransform(k,0,0,k,0,0);
+  return staticCtx;
+}
+/** 当前屏幕可见的世界矩形（外扩 padPx，避免标签/图标在边界处被裁掉） */
+function visibleWorldRect(v,d,cssW,cssH,padPx=48){
+  const a=s2w([-padPx,-padPx],v,d), b=s2w([cssW+padPx,cssH+padPx],v,d);
+  return {minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
+}
 function drawScene(c,v,cssW,cssH,opt={}){
   const d=worldDims();
   const toS=p=>w2s(p,v,d);
+  /* 交互帧使用分层缓存；导出/打印（markerScale≠1 或非交互）保持直接全量绘制 */
+  const cacheable=!!opt.interactive&&(opt.markerScale===undefined||opt.markerScale===1);
+  const exportGain=opt.markerScale||1;
+  const iconBoost=exportGain*(Number(state.settings.markerScale)||1);
+
+  if(cacheable){
+    const key=sceneStaticKey(v,cssW,cssH,d);
+    if(key!==staticKey){
+      const sc=ensureStaticLayer(cssW,cssH);
+      sc.clearRect(0,0,cssW,cssH);
+      drawBackground(sc,v,d,cssW,cssH,toS);
+      drawGrid(sc,v,d,cssW,cssH,toS);
+      drawCoverage(sc,v,d);
+      drawSiteAnnotations(sc,v,toS);
+      drawAxes(sc,v,toS,cssH);
+      const view=visibleWorldRect(v,d,cssW,cssH);
+      state.objects.filter(o=>isVisible(o)&&!selectedIds.has(o.id))
+        .sort((a,b)=>a.z-b.z)
+        .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
+      staticKey=key;
+    }
+    c.clearRect(0,0,cssW,cssH);
+    c.drawImage(staticCanvas,0,0,cssW,cssH);
+    /* 选中对象单独绘制：拖拽/编辑时它们每帧变化，避免反复重建静态层 */
+    const view=visibleWorldRect(v,d,cssW,cssH);
+    state.objects.filter(o=>isVisible(o)&&selectedIds.has(o.id))
+      .sort((a,b)=>a.z-b.z)
+      .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
+    drawDraft(c,v,d,toS);
+    drawCalibration(c,toS);
+    drawSelection(c,v,toS);
+    drawRubber(c);
+    drawCursorCross(c,v,d,cssW,cssH);
+    drawTrackLine(c,v,d,cssW,cssH,toS);
+    drawSiteHandles(c,v,toS);
+    drawNodeFocus(c,toS);
+    drawDragHud(c,toS);
+    drawOsnapMarker(c,toS);
+    return;
+  }
+
+  /* 直接绘制（导出 / 打印 / 离屏合成） */
   c.clearRect(0,0,cssW,cssH);
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   drawBackground(c,v,d,cssW,cssH,toS);
@@ -113,10 +191,8 @@ function drawScene(c,v,cssW,cssH,opt={}){
   drawSiteAnnotations(c,v,toS);
   drawAxes(c,v,toS,cssH);
   const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
-  /* exportGain=导出清晰度增益(交互为1)；iconBoost 再乘用户全局点大小倍率，仅作用于点设备图标 */
-  const exportGain=opt.markerScale||1;
-  const iconBoost=exportGain*(Number(state.settings.markerScale)||1);
-  visible.forEach(o=>drawObject(c,o,v,toS,iconBoost,exportGain));
+  const view=visibleWorldRect(v,d,cssW,cssH);
+  visible.forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
   drawDraft(c,v,d,toS);
   drawCalibration(c,toS);
   if(opt.interactive){
@@ -316,23 +392,45 @@ function drawImageBackground(c,v,d,bg){
 }
 /**
  * 视场覆盖率叠加层：按 analyzeCoverage 的逐区域栅格着色（绿=已覆盖 / 红=盲区），
- * 格心在区域外不绘制。叠加层数据由「覆盖率分析」写入 coverageResult，任何对象/底图变更后自动失效。
+ * 格心在区域外不绘制。栅格一次性写入 nx×ny 的 ImageData，绘制时整块 drawImage——
+ * 避免逐格 fillRect 在高分辨率下产生上万次绘制调用。
  */
+let coverageLayers=null, coverageLayersFor=null;
+function buildCoverageLayers(res){
+  if(coverageLayersFor===res&&coverageLayers) return coverageLayers;
+  const layers=[];
+  for(const r of res.regions){
+    const cv=document.createElement('canvas');
+    cv.width=r.nx; cv.height=r.ny;
+    const cc=cv.getContext('2d');
+    const img=cc.createImageData(r.nx,r.ny), data=img.data;
+    for(let j=0;j<r.ny;j++){
+      /* 世界 Y 向上、画布行 0 在顶部：网格第 j 行（自 minY 起算）对应画布第 ny-1-j 行 */
+      const row=(r.ny-1-j)*r.nx;
+      for(let i=0;i<r.nx;i++){
+        const g=r.grid[j*r.nx+i];
+        if(g===2) continue;                       /* 2=区域外，保持透明 */
+        const k=(row+i)*4;
+        if(g===1){ data[k]=34; data[k+1]=197; data[k+2]=94; data[k+3]=66; }
+        else { data[k]=239; data[k+1]=68; data[k+2]=68; data[k+3]=71; }
+      }
+    }
+    cc.putImageData(img,0,0);
+    layers.push({canvas:cv,r});
+  }
+  coverageLayers=layers; coverageLayersFor=res;
+  return layers;
+}
 function drawCoverage(c,v,d){
   const res=coverageResult;
   if(!res||!res.regions||!res.regions.length) return;
   const toS=p=>w2s(p,v,d);
-  c.save();
-  for(const r of res.regions){
-    for(let j=0;j<r.ny;j++){
-      for(let i=0;i<r.nx;i++){
-        const g=r.grid[j*r.nx+i];
-        if(g===2) continue;                       /* 2=区域外，不绘制 */
-        const s=toS([r.minX+i*r.cell, r.minY+(j+1)*r.cell]);   /* 世界格左上角 → 屏幕 */
-        c.fillStyle = g===1?'rgba(34,197,94,.26)':'rgba(239,68,68,.28)';
-        c.fillRect(s[0],s[1],r.cell*v.zoom+.6,r.cell*v.zoom+.6); /* +0.6 消除相邻格的细缝 */
-      }
-    }
+  const layers=buildCoverageLayers(res);
+  c.save(); c.imageSmoothingEnabled=false;
+  for(const {canvas,r} of layers){
+    if(!r.nx||!r.ny) continue;
+    const top=toS([r.minX,r.minY+r.ny*r.cell]);
+    c.drawImage(canvas,top[0],top[1],r.nx*r.cell*v.zoom,r.ny*r.cell*v.zoom);
   }
   c.restore();
 }

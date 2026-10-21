@@ -121,14 +121,15 @@ code += `\n;globalThis.__api = {
   PdfRead: globalThis.PdfRead,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
-  cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage,
+  cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
   siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML,
-  drawObject, drawLabel, drawAreaTag
+  drawObject, drawLabel, drawAreaTag,
+  invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -2015,7 +2016,7 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
-/* 40. 逐对象标注开关：默认值 / setAnnot / annotationItems / 面板 HTML / 迁移清洗 ---- */
+/* 43. 逐对象标注开关：默认值 / setAnnot / annotationItems / 面板 HTML / 迁移清洗 ---- */
 {
   api.resetState();
   /* 支持键与类型默认值（保持既有观感） */
@@ -2194,7 +2195,7 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
-/* 42. 逐对象标注开关完全优先：全局总开关仅作未显式配置对象的缺省值 --------- */
+/* 44. 逐对象标注开关完全优先：全局总开关仅作未显式配置对象的缺省值 --------- */
 {
   /* 编号：全局关 → 未配置对象隐藏；显式开 → 全局关也显示；显式关 → 全局开也隐藏 */
   api.resetState();
@@ -2259,7 +2260,7 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
-/* 43. 画布渲染链路：逐对象标注显隐与 SVG 一致（非选中态、受全局开关影响时仍按对象配置） ---- */
+/* 45. 画布渲染链路：逐对象标注显隐与 SVG 一致（非选中态、受全局开关影响时仍按对象配置） ---- */
 {
   /* 记录型 2D 上下文：只关心 fillText 文本，其余绘制调用一律吞掉 */
   const recCtx=()=>{
@@ -2330,7 +2331,7 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
-/* 44. 平行四边形：区域与矢量场地共用的参数形状 ------------------------------ */
+/* 46. 平行四边形：区域与矢量场地共用的参数形状 ------------------------------ */
 {
   api.resetState();
   api.state.settings.precision=2;
@@ -2461,6 +2462,177 @@ asyncSuites.push((async()=>{
   approx('迁移-场地宽保留', m2.background.shape.w, 10, 1e-9);
   api.resetState();
 }
+
+/* 47. 分层渲染：视口裁剪矩形与静态层缓存签名 -------------------------------- */
+{
+  api.resetState();
+  api.state.background={kind:'rect',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:1,calibrated:false,
+    shape:{type:'rect',x:0,y:0,w:100,h:70}};
+  api.resetFrameRef();
+  const v={zoom:1,panX:0,panY:0}, dims=api.worldDims();
+  const r=api.visibleWorldRect(v,dims,800,600,0);
+  eq('裁剪-视口左边界', r.minX, 0);
+  eq('裁剪-视口右边界', r.maxX, 800);
+  eq('裁剪-视口下边界', r.minY, -530);
+  eq('裁剪-视口上边界', r.maxY, 70);
+  const rPad=api.visibleWorldRect(v,dims,800,600,48);
+  eq('裁剪-外扩像素换算为世界', rPad.minX, -48);
+
+  const k1=api.sceneStaticKey(v,dims,800,600);
+  eq('缓存-同输入签名稳定', api.sceneStaticKey(v,dims,800,600), k1);
+  ok('缓存-视口变化使签名失效', api.sceneStaticKey({zoom:2,panX:0,panY:0},dims,800,600)!==k1);
+  api.invalidateStatic();
+  ok('缓存-显式作废使签名失效', api.sceneStaticKey(v,dims,800,600)!==k1);
+  const k2=api.sceneStaticKey(v,dims,800,600);
+  api.selectedIds.add('X1');
+  ok('缓存-选择集变化使签名失效', api.sceneStaticKey(v,dims,800,600)!==k2);
+  api.resetState();
+}
+
+/* 48. 覆盖率：分辨率参数与盲区多边形导出数据 -------------------------------- */
+{
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'B1',x:0,y:0,width:20,height:20}));
+  const coarse=api.analyzeCoverage(api.state,{targetCells:400});
+  const fine=api.analyzeCoverage(api.state,{targetCells:9000});
+  ok('覆盖精度-目标格数越大步长越小', fine.regions[0].cell < coarse.regions[0].cell);
+  ok('覆盖精度-步长下限0.03m', coarse.regions[0].cell >= .03);
+
+  const rects=api.blindSpotRects(coarse);
+  eq('盲区-全盲时每行合并为一个矩形', rects.length, coarse.regions[0].ny);
+  eq('盲区-矩形为四个顶点', rects[0].points.length, 4);
+  approx('盲区-多边形总面积=区域面积', api.blindSpotArea(coarse), 400, 1e-6);
+
+  api.state.objects.push(api.baseObject('point','point.dome',{name:'D',x:10,y:10,phys:1000}));
+  const full=api.analyzeCoverage(api.state,{targetCells:400});
+  eq('盲区-全覆盖时无盲区面', api.blindSpotRects(full).length, 0);
+  approx('盲区-全覆盖面积为0', api.blindSpotArea(full), 0, 1e-9);
+
+  api.state.objects[1]=api.baseObject('point','point.camera',{name:'C',x:10,y:10,phys:1000,angle:0});
+  const part=api.analyzeCoverage(api.state,{targetCells:4000});
+  const pr=part.regions[0];
+  const blindCells=pr.grid.reduce((s,g)=>s+(g===0?1:0),0);
+  approx('盲区-多边形面积=盲格数×格面积', api.blindSpotArea(part), blindCells*pr.cell*pr.cell, 1e-6);
+  ok('盲区-多边形面积与栅格盲区接近(<2%)', Math.abs(api.blindSpotArea(part)-part.totalBlind)<=part.totalBlind*.02);
+  ok('盲区-部分覆盖存在面', api.blindSpotRects(part).length>0);
+  api.resetState();
+}
+
+/* 49. 运行环境能力探测：file:// 与 IDB/SW/Blob 缺失时的显式降级 ---------------- */
+{
+  const fileEnv=api.detectCapabilities({protocol:'file:',indexedDB:{},serviceWorker:{},Blob:function(){},createObjectURL:true});
+  eq('能力-file模式识别', fileEnv.file, true);
+  eq('能力-file下SW不可用', fileEnv.sw, false);
+  eq('能力-file下IDB可用为ok', fileEnv.level, 'ok');
+  ok('能力-file给出离线模式说明', fileEnv.warnings.some(w=>w.includes('file://')));
+
+  const hosted=api.detectCapabilities({protocol:'https:',indexedDB:{},serviceWorker:{},Blob:function(){},createObjectURL:true});
+  eq('能力-托管模式SW可用', hosted.sw, true);
+  eq('能力-托管模式无file提示', hosted.warnings.some(w=>w.includes('file://')), false);
+
+  const degraded=api.detectCapabilities({protocol:'https:',indexedDB:null,serviceWorker:{}});
+  eq('能力-无IDB降级标记', degraded.level, 'degraded');
+  ok('能力-无IDB给出localStorage降级提示', degraded.warnings.some(w=>w.includes('localStorage')));
+
+  const noBlob=api.detectCapabilities({protocol:'file:',indexedDB:{},Blob:null,createObjectURL:true});
+  eq('能力-无Blob识别', noBlob.blob, false);
+  ok('能力-无Blob给出导入导出提示', noBlob.warnings.some(w=>w.includes('Blob')));
+}
+
+/* 50. 解析器加固：ZIP/XLSX/DXF/PDF 的输入上限与畸形样例 ---------------------- */
+asyncSuites.push((async()=>{
+  const rejects=async(name,promise,re)=>{
+    try{ await promise; ok(name+'（未抛错）',false); }
+    catch(e){ ok(name+(re?`（${e.message}）`:''),re?re.test(e.message):true); }
+  };
+
+  /* ---- ZIP ---- */
+  const zipOk=api.Zip.build([{name:'a.txt',text:'hello',},{name:'b/d.bin',bytes:new Uint8Array([1,2,3])}]);
+  ok('加固ZIP-正常包可读', Object.keys(await api.Zip.readEntries(zipOk)).length===2);
+  await rejects('加固ZIP-超过字节上限', api.Zip.readEntries(zipOk,{maxBytes:10}), /过大/);
+  await rejects('加固ZIP-条目数超限', api.Zip.readEntries(zipOk,{maxEntries:1}), /条目数/);
+  await rejects('加固ZIP-单文件解压上限', api.Zip.readEntries(zipOk,{maxEntryBytes:2}), /单文件/);
+  await rejects('加固ZIP-解压总量上限', api.Zip.readEntries(zipOk,{maxTotalBytes:3}), /总量/);
+  await rejects('加固ZIP-空缓冲', api.Zip.readEntries(new ArrayBuffer(0)), /ZIP 结构缺失|截断/);
+  await rejects('加固ZIP-随机字节', api.Zip.readEntries(new Uint8Array([1,2,3,4,5,6,7,8]).buffer), /ZIP 结构缺失|截断/);
+  /* ZIP64 标记（EOCD 条目数 0xFFFF） */
+  const zip64=zipOk.slice(0);
+  const z64=new Uint8Array(zip64);
+  for(let i=z64.length-22;i>=0;i--){
+    if(z64[i]===0x50&&z64[i+1]===0x4b&&z64[i+2]===0x05&&z64[i+3]===0x06){
+      new DataView(zip64).setUint16(i+10,0xFFFF,true); break;
+    }
+  }
+  await rejects('加固ZIP-ZIP64拒绝', api.Zip.readEntries(zip64), /ZIP64/);
+  /* 不支持的压缩方式（中央目录 method 改为 99） */
+  const badMethod=zipOk.slice(0), bm=new Uint8Array(badMethod);
+  for(let i=0;i<bm.length-4;i++){
+    if(bm[i]===0x50&&bm[i+1]===0x4b&&bm[i+2]===0x01&&bm[i+3]===0x02){ new DataView(badMethod).setUint16(i+10,99,true); break; }
+  }
+  await rejects('加固ZIP-不支持的压缩方式', api.Zip.readEntries(badMethod), /压缩方式/);
+  /* 中央目录偏移越界 → 统一转为「损坏或截断」 */
+  const badOffset=zipOk.slice(0), bo=new Uint8Array(badOffset);
+  for(let i=bo.length-22;i>=0;i--){
+    if(bo[i]===0x50&&bo[i+1]===0x4b&&bo[i+2]===0x05&&bo[i+3]===0x06){ new DataView(badOffset).setUint32(i+16,0xFFFFF000,true); break; }
+  }
+  await rejects('加固ZIP-中央目录越界', api.Zip.readEntries(badOffset), /损坏|截断/);
+  const zipDir=api.Zip.build([{name:'dir/',text:''},{name:'f.txt',text:'x'}]);
+  eq('加固ZIP-目录条目不计入文件', Object.keys(await api.Zip.readEntries(zipDir)).length, 1);
+
+  /* ---- XLSX ---- */
+  const table=[['编号','对象类型','X','Y'],['O1','点设备','1','2'],['O2','点设备','3','4'],['O3','点设备','5','6']];
+  const xlsxOk=api.Xlsx.build(table,'S');
+  eq('加固XLSX-正常读取行数', (await api.Xlsx.readRows(xlsxOk)).length, 4);
+  await rejects('加固XLSX-行数超限', api.Xlsx.readRows(xlsxOk,{maxRows:2}), /行数/);
+  await rejects('加固XLSX-列数超限', api.Xlsx.readRows(xlsxOk,{maxCols:2}), /列数/);
+  await rejects('加固XLSX-非ZIP输入', api.Xlsx.readRows(new Uint8Array([1,2,3,4])), /ZIP|XLSX/);
+  const zipNoSheet=api.Zip.build([{name:'hello.txt',text:'x'}]);
+  await rejects('加固XLSX-无工作表', api.Xlsx.readRows(zipNoSheet), /工作表/);
+  const badXml=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:'<worksheet><row><c r="A1"><v>1</v></c>'}]);
+  await rejects('加固XLSX-畸形XML', api.Xlsx.readRows(badXml), /./);
+  await rejects('加固XLSX-空缓冲', api.Xlsx.readRows(new ArrayBuffer(0)), /ZIP/);
+  const emptySheet=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:'<worksheet></worksheet>'}]);
+  eq('加固XLSX-空工作表返回空表', (await api.Xlsx.readRows(emptySheet)).length, 0);
+
+  /* ---- DXF ---- */
+  eq('加固DXF-空文本返回空实体', api.Dxf.parseDxf('').entities.length, 0);
+  eq('加固DXF-null返回空实体', api.Dxf.parseDxf(null).entities.length, 0);
+  eq('加固DXF-随机文本返回空实体', api.Dxf.parseDxf('not a dxf at all\n1\n2\n3').entities.length, 0);
+  const dxfLines=['0','SECTION','2','ENTITIES'];
+  for(let i=0;i<5;i++) dxfLines.push('0','LINE','8','0','10',''+i,'20','0','11',''+(i+1),'21','0');
+  dxfLines.push('0','ENDSEC','0','EOF');
+  const dxfOk=dxfLines.join('\n');
+  eq('加固DXF-正常解析5条线', api.Dxf.parseDxf(dxfOk).entities.length, 5);
+  let dxfErr=null; try{ api.Dxf.parseDxf(dxfOk,{maxChars:20}); }catch(e){ dxfErr=e; }
+  ok('加固DXF-文本长度超限', !!dxfErr&&/过大/.test(dxfErr.message));
+  dxfErr=null; try{ api.Dxf.parseDxf(dxfOk,{maxEntities:2}); }catch(e){ dxfErr=e; }
+  ok('加固DXF-实体数超限', !!dxfErr&&/实体数/.test(dxfErr.message));
+  eq('加固DXF-实体数恰好等于上限可通过', api.Dxf.parseDxf(dxfOk,{maxEntities:5}).entities.length, 5);
+  let truncatedOk=true; try{ api.Dxf.parseDxf(dxfOk.slice(0,Math.floor(dxfOk.length/2))); }catch(e){ truncatedOk=false; }
+  ok('加固DXF-截断文件友好降级', truncatedOk);
+
+  /* ---- PDF ---- */
+  const content='10 10 100 50 re S\n';
+  const obj=(n,body)=>n+' 0 obj\n'+body+'\nendobj\n';
+  let pdf='%PDF-1.4\n';
+  pdf+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  pdf+=obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  pdf+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+  pdf+=obj(4,'<< /Length '+content.length+' >>\nstream\n'+content+'endstream');
+  pdf+='%%EOF';
+  eq('加固PDF-正常页数', (await api.PdfRead.parsePdf(pdf)).paths.length>=1, true);
+  await rejects('加固PDF-非PDF输入', api.PdfRead.parsePdf('not a pdf'), /不是有效的 PDF/);
+  await rejects('加固PDF-空输入', api.PdfRead.parsePdf(new Uint8Array(0)), /不是有效的 PDF/);
+  await rejects('加固PDF-字节上限', api.PdfRead.parsePdf(pdf,{maxBytes:8}), /过大/);
+  await rejects('加固PDF-页数上限', api.PdfRead.parsePdf(pdf,{maxPages:0}), /页数/);
+  await rejects('加固PDF-对象数上限', api.PdfRead.parsePdf(pdf,{maxObjects:1}), /对象数/);
+  await rejects('加固PDF-无页面结构', api.PdfRead.parsePdf('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF'), /未找到页面/);
+  await rejects('加固PDF-截断内容流', api.PdfRead.parsePdf(pdf.slice(0,60)), /未找到页面|不是有效/);
+  /* 两页 PDF：页数上限 1 应拒绝；对象数恰好等于上限应通过 */
+  const two=pdf.replace('%%EOF',obj(5,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>')+'%%EOF');
+  await rejects('加固PDF-两页超过上限1', api.PdfRead.parsePdf(two,{maxPages:1}), /页数/);
+  eq('加固PDF-对象数恰好等于上限可通过', (await api.PdfRead.parsePdf(two,{maxObjects:5})).paths.length, 1);
+})());
 
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites);

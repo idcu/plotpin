@@ -41,6 +41,7 @@ function commitChange(message){
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
   coverageResult=null;               /* 对象变更后覆盖率叠加层失效，需重新分析 */
+  invalidateStatic();                /* 静态层（非选中对象）需要重建 */
   refreshUI(); scheduleSave(); requestRender();
   if(message) toast(message,'success');
 }
@@ -48,6 +49,7 @@ function commitObjectEdit(){
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
   coverageResult=null;
+  invalidateStatic();
   renderList(); renderLayers(); renderStats(); scheduleSave(); requestRender();
 }
 let dbPromise=null;
@@ -180,6 +182,43 @@ function persistableState(){
   if(copy.background && copy.background.dataUrl) delete copy.background.dataUrl;
   return copy;
 }
+/** 启动能力探测：file:// 下的 IndexedDB / Service Worker / Blob 可用性差异显式化（纯函数，便于自测） */
+function detectCapabilities(env){
+  env=env||{};
+  const file=env.protocol==='file:';
+  const idb=!!env.indexedDB;
+  const sw=!!env.serviceWorker&&!file;
+  const blob=!!env.Blob&&env.createObjectURL!==false;
+  const warnings=[];
+  if(!idb) warnings.push('IndexedDB 不可用：自动保存将降级为 localStorage（容量有限，建议定期导出 JSON 备份）');
+  if(file) warnings.push('file:// 模式：PWA 安装与 Service Worker 不可用，但双击打开即可完全离线使用');
+  if(!blob) warnings.push('Blob / URL.createObjectURL 不可用：图片导入与导出可能受限');
+  return {file,idb,sw,blob,warnings,level:idb?'ok':'degraded'};
+}
+/** 读取真实运行环境的能力 */
+function detectRuntimeCapabilities(){
+  return detectCapabilities({
+    protocol:(typeof location!=='undefined'&&location.protocol)||'',
+    indexedDB:(typeof indexedDB!=='undefined')?indexedDB:null,
+    serviceWorker:(typeof navigator!=='undefined'&&navigator.serviceWorker)||null,
+    Blob:(typeof Blob==='function')?Blob:null,
+    createObjectURL:typeof URL!=='undefined'&&typeof URL.createObjectURL==='function'
+  });
+}
+/** 设置面板中的一行环境摘要 */
+function capabilitySummary(){
+  const c=detectRuntimeCapabilities();
+  const idbText=c.idb?'IndexedDB 可用（自动保存 / 工程库 / 底图资产）':'IndexedDB 不可用（已降级 localStorage，容量有限）';
+  const mode=c.file?'file:// 双击离线模式':'托管模式'+(c.sw?'（Service Worker 离线缓存已启用）':'（Service Worker 不可用）');
+  return idbText+' ｜ '+mode;
+}
+let idbFallbackNotified=false;
+/** 首次真正降级到 localStorage 时提示一次，避免「静默失效」 */
+function notifyIdbFallback(){
+  if(idbFallbackNotified) return;
+  idbFallbackNotified=true;
+  try{ toast('IndexedDB 不可用：已降级为 localStorage 自动保存（容量有限，建议定期导出 JSON）','warn'); }catch(_){}
+}
 function scheduleSave(){
   $('saveState').textContent='待保存…';
   clearTimeout(saveTimer);
@@ -193,6 +232,7 @@ function scheduleSave(){
       $('saveState').textContent=(state.meta.projectId?'📁 已保存 ':'已自动保存 ')+new Date().toLocaleTimeString();
     }catch(e){
       try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
+      notifyIdbFallback();
       $('saveState').textContent='请手动导出';
     }
   },450);
@@ -460,6 +500,7 @@ function loadImageSrc(src){
 async function afterStateLoaded(fit=true){
   const seq=++bgLoadSeq;
   bgImage=null; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
+  invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
   resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
   /* 旧版底图资产 */refreshUI();
   if(fit) fitView();

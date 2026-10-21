@@ -66,36 +66,58 @@ function zipBuild(entries){
 }
 
 /* ---- ZIP 读取：stored 直读；method=8 走浏览器原生 DecompressionStream ---- */
+/* 输入上限：防止畸形/超大压缩包与解压炸弹耗尽内存（可在测试中传入更小的 opt） */
+const ZIP_LIMITS={maxBytes:50*1024*1024,maxEntries:2000,maxEntryBytes:64*1024*1024,maxTotalBytes:128*1024*1024};
 async function zipInflateRaw(bytes){
   if(typeof DecompressionStream==='undefined') throw new Error('当前浏览器不支持 DecompressionStream，无法读取压缩的 xlsx');
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
-async function zipReadEntries(arrayBuffer){
-  const bytes=new Uint8Array(arrayBuffer), dv=new DataView(arrayBuffer), len=bytes.length;
+async function zipReadEntries(arrayBuffer,opt){
+  const L=Object.assign({},ZIP_LIMITS,opt||{});
+  /* 允许传入 Uint8Array 或 ArrayBuffer（调用方习惯不一），统一按字节视图处理 */
+  const bytes=arrayBuffer instanceof Uint8Array?arrayBuffer:new Uint8Array(arrayBuffer);
+  const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength), len=bytes.length;
+  if(len>L.maxBytes) throw new Error('压缩包过大（超过 '+(L.maxBytes/1048576)+'MB 上限），请拆分后导入');
   let eocd=-1;
   for(let i=len-22;i>=Math.max(0,len-0xffff-22);i--){ if(dv.getUint32(i,true)===ZIP_SIG_EOCD){ eocd=i; break; } }
-  if(eocd<0) throw new Error('不是有效的 XLSX 文件（ZIP 结构缺失）');
+  if(eocd<0) throw new Error('不是有效的 XLSX 文件（ZIP 结构缺失或已截断）');
   const total=dv.getUint16(eocd+10,true); let offset=dv.getUint32(eocd+16,true);
+  if(total===0xFFFF) throw new Error('暂不支持 ZIP64 格式，请用 Excel/WPS 另存为普通 xlsx');
+  if(total>L.maxEntries) throw new Error('压缩包条目数超过上限 '+L.maxEntries+'（疑似异常文件）');
   const entries={};
-  for(let i=0;i<total;i++){
-    if(dv.getUint32(offset,true)!==ZIP_SIG_CEN) break;
-    const method=dv.getUint16(offset+10,true);
-    const compSize=dv.getUint32(offset+20,true);
-    const nameLen=dv.getUint16(offset+28,true), extraLen=dv.getUint16(offset+30,true), commentLen=dv.getUint16(offset+32,true);
-    const localOffset=dv.getUint32(offset+42,true);
-    const name=decodeUtf8(bytes.subarray(offset+46,offset+46+nameLen));
-    const lNameLen=dv.getUint16(localOffset+26,true), lExtraLen=dv.getUint16(localOffset+28,true);
-    const dataStart=localOffset+30+lNameLen+lExtraLen;
-    const raw=bytes.subarray(dataStart,dataStart+compSize);
-    if(!/\/$/.test(name)){
-      if(method===0) entries[name]=raw.slice();
-      else if(method===8) entries[name]=await zipInflateRaw(raw);
-      else throw new Error('不支持的 ZIP 压缩方式 method='+method);
+  let totalUncomp=0;
+  try{
+    for(let i=0;i<total;i++){
+      if(dv.getUint32(offset,true)!==ZIP_SIG_CEN) break;
+      const method=dv.getUint16(offset+10,true);
+      const compSize=dv.getUint32(offset+20,true);
+      const uncompSize=dv.getUint32(offset+24,true);
+      const nameLen=dv.getUint16(offset+28,true), extraLen=dv.getUint16(offset+30,true), commentLen=dv.getUint16(offset+32,true);
+      const localOffset=dv.getUint32(offset+42,true);
+      const name=decodeUtf8(bytes.subarray(offset+46,offset+46+nameLen));
+      if(uncompSize>L.maxEntryBytes)
+        throw new Error('压缩包内单文件解压后超过 '+(L.maxEntryBytes/1048576)+'MB 上限：'+name);
+      totalUncomp+=uncompSize;
+      if(totalUncomp>L.maxTotalBytes)
+        throw new Error('压缩包解压总量超过 '+(L.maxTotalBytes/1048576)+'MB 上限，疑似解压炸弹');
+      const lNameLen=dv.getUint16(localOffset+26,true), lExtraLen=dv.getUint16(localOffset+28,true);
+      const dataStart=localOffset+30+lNameLen+lExtraLen;
+      const raw=bytes.subarray(dataStart,dataStart+compSize);
+      if(!/\/$/.test(name)){
+        if(method===0) entries[name]=raw.slice();
+        else if(method===8) entries[name]=await zipInflateRaw(raw);
+        else throw new Error('不支持的 ZIP 压缩方式 method='+method);
+      }
+      offset+=46+nameLen+extraLen+commentLen;
     }
-    offset+=46+nameLen+extraLen+commentLen;
+  }catch(e){
+    /* 越界读取的错误可能来自宿主/沙箱不同 realm 的 RangeError，按名称与消息判定 */
+    if(e&&(e.name==='RangeError'||/outside the bounds|out of bounds|out of range/i.test(e.message||'')))
+      throw new Error('ZIP 结构损坏或截断，无法读取');
+    throw e;
   }
   return entries;
 }
-  global.Zip = { crc32, encodeUtf8, decodeUtf8, build: zipBuild, readEntries: zipReadEntries, inflateRaw: zipInflateRaw };
+  global.Zip = { crc32, encodeUtf8, decodeUtf8, build: zipBuild, readEntries: zipReadEntries, inflateRaw: zipInflateRaw, LIMITS: ZIP_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);
