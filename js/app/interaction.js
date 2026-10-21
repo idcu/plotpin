@@ -31,7 +31,8 @@ function setTool(tool){
     'site-sector':'绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消',
     'site-parallelogram':'绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）',
     'site-polygon':'绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消',
-    'site-node':'场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除'
+    'site-node':'场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除',
+    'guide':'参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出'
   };
   $('toolTitle').textContent=titles[tool]||'';
   refreshUI();
@@ -39,15 +40,16 @@ function setTool(tool){
 }
 let lastCanvasHandledAt=0, lastCanvasPointerUpAt=0;
 /**
- * 输入点的 Shift 精确约束（网格吸附之后调用）。预览(move)与落点(down)共用，保证所见即所点：
- *  - 折线/尺寸逐点录入：相对上一点正交（水平/垂直）
- *  - 拖折线节点：相对相邻节点正交（#0 用下一个，其余用上一个）
+ * 输入点的精确约束（网格吸附之后调用）。预览(move)与落点(down)共用，保证所见即所点：
+ *  - 折线/测距逐点录入：Shift=相对上一点正交；否则 参考边平行/垂直 → 上一段等距 → 极轴
+ *  - 拖折线节点：Shift=相对相邻节点正交
  *  - 矩形/椭圆包围盒拖画：Shift=正方形（椭圆即正圆）
  *  - 扇形拖画：Shift=方位角吸附 45° 整数倍
  */
 function constrainWorldPoint(wp,e){
-  if(!e.shiftKey) return wp;
+  const shift=!!e.shiftKey;
   if(drag?.type==='node'){
+    if(!shift) return wp;
     const o=state.objects.find(x=>x.id===drag.id);
     if(o && o.points && o.points.length>1){
       const i=drag.handle.index;
@@ -58,10 +60,23 @@ function constrainWorldPoint(wp,e){
   }
   if(!draft) return wp;
   if(draft.points && ['line','dimension'].includes(currentTool) && draft.points.length){
-    /* 测距链(ruler)与普通折线一样正交；角度/面积/两点距离标注不约束 */
+    /* 测距链(ruler)与普通折线一样约束；角度/面积/两点距离标注不约束 */
     if(currentTool==='dimension' && draft.subtype!=='ruler') return wp;
-    return orthoPoint(draft.points[draft.points.length-1],wp,true);
+    const last=draft.points[draft.points.length-1];
+    if(shift) return orthoPoint(last,wp,true);
+    const prev=draft.points.length>=2?draft.points[draft.points.length-2]:null;
+    const pv=prev?[last[0]-prev[0],last[1]-prev[1]]:null;
+    const prevLen=pv?Math.hypot(pv[0],pv[1]):0;
+    const refDir=refEdge?Math.atan2(refEdge.b[1]-refEdge.a[1],refEdge.b[0]-refEdge.a[0]):undefined;
+    const r=directionalSnap(last,wp,{
+      refDir,
+      prevDir:prevLen?Math.atan2(pv[1],pv[0]):undefined,
+      prevLen,
+      polarStep:state.settings.polar?(Number(state.settings.polarStep)||45):0
+    });
+    return r.p;
   }
+  if(!shift) return wp;
   if(draft.start && ['rect','siteRect','areaEllipse','siteEllipse','areaParallelogram','siteParallelogram'].includes(draft.kind)){
     return squareCorner(draft.start,wp,true);
   }
@@ -95,8 +110,33 @@ function updateOsnapChip(){
 $('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast('捕捉：自动（全部类型）'); requestRender(); } });
 /* 极轴/平行追踪提示：{from:[x,y], dir:[dx,dy]}（单位向量，世界坐标），render 画虚线 */
 let trackLine=null;
+let refEdge=null;      /* 鼠标附近的参考边（用于平行/垂直约束） */
+let guideDraft=null;   /* 参考线工具：两次点击定义一条无限长参考线 */
+function clearGuides(){ clearGuideLines(); guideDraft=null; }
 /**
- * 唯一的屏幕→最终世界落点解析：对象捕捉优先 → 其次网格吸附 → 最后 Shift 正交/正方形约束。
+ * 鼠标附近可作为平行/垂直基准的边（折线/矩形边 + 临时参考线）；只在逐点录入时启用。
+ * 使用 tol 屏幕像素换算世界距离，按距离取最近。
+ */
+function nearestReferenceEdge(raw,excl){
+  if(!draft||!draft.points||!draft.points.length) return null;
+  if(!(currentTool==='line'||(currentTool==='dimension'&&draft.subtype==='ruler'))) return null;
+  const tol=14/state.viewport.zoom;
+  let best=null,bd=tol;
+  const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
+  for(const e of collectSnapEdges(state,isVisible)){
+    if(excl&&excl.has(e.id)) continue;
+    if(!e.guide && (
+      Math.max(e.a[0],e.b[0])<box.minX||Math.min(e.a[0],e.b[0])>box.maxX||
+      Math.max(e.a[1],e.b[1])<box.minY||Math.min(e.a[1],e.b[1])>box.maxY)) continue;
+    const q=nearestPointOnSegment(raw,e.a,e.b);
+    const d=Math.hypot(raw[0]-q[0],raw[1]-q[1]);
+    if(d<bd){ bd=d; best=e; }
+  }
+  return best;
+}
+/**
+ * 唯一的屏幕→最终世界落点解析：对象捕捉优先 → 其次网格吸附 → 最后方向约束
+ * （Shift 正交 / 参考边平行·垂直 / 上一段等距 / 极轴追踪）。
  * pointerdown 与 pointermove 必须共用本函数，保证预览与落点完全一致。
  */
 function resolveWorldPoint(e){
@@ -107,42 +147,48 @@ function resolveWorldPoint(e){
     if(drag.originals) drag.originals.forEach((_,id)=>excl.add(id));
     if(drag.id) excl.add(drag.id);
   }
+  refEdge=nearestReferenceEdge(raw,excl);
   if(state.settings.osnap){
     const hit=findOsnap(state,raw,OSNAP_PX/state.viewport.zoom,excl,isVisible,osnapMode);
     if(hit){ activeOsnap=hit; trackLine=null; return hit.p; }
   }
   activeOsnap=null;
   const p=constrainWorldPoint(snapPoint(raw,e),e);
-  /* 画线录入中：极轴 0/45/90… 或与上一段平行的方向追踪（11px 角度容差内） */
+  /* 画线录入中：极轴/参考边平行·垂直/等距的方向追踪虚线 */
   trackLine=buildTrackLine(raw,p,e);
   return p;
 }
-/** 极轴/平行追踪：返回从 from 沿参考方向的单位向量，供 render 画虚线 */
+/** 极轴/参考边/等距追踪：返回从 from 沿参考方向单位向量，供 render 画虚线 */
 function buildTrackLine(raw,accepted,e){
-  if(!state.settings.osnap || !draft) return null;
+  if(!draft) return null;
   if(currentTool==='dimension' && draft.subtype!=='ruler') return null;
   const from=(draft&&draft.points&&draft.points.length)?draft.points[draft.points.length-1]:null;
   if(!from) return null;
   const v=[raw[0]-from[0],raw[1]-from[1]], len=Math.hypot(v[0],v[1]);
   if(len<EPS) return null;
-  const angDeg=Math.atan2(v[1],v[0])*180/Math.PI;
-  /* 优先与上一段平行（录入第 2 点起），其次 45° 极轴 */
-  let ref=null;
+  const ang=Math.atan2(v[1],v[0]);
+  const cands=[];
+  if(refEdge){
+    const ea=Math.atan2(refEdge.b[1]-refEdge.a[1],refEdge.b[0]-refEdge.a[0]);
+    cands.push([ea,5],[ea+Math.PI/2,5]);
+  }
   if(draft.points.length>=2){
-    const prev=[draft.points[draft.points.length-1],draft.points[draft.points.length-2]];
-    const pv=[prev[0][0]-prev[1][0],prev[0][1]-prev[1][1]], pl=Math.hypot(pv[0],pv[1]);
-    if(pl>EPS){
-      let pd=Math.atan2(pv[1],pv[0])*180/Math.PI-angDeg;
-      pd=((pd%180)+180)%180; if(pd>90)pd=180-pd;
-      if(pd<5) ref=Math.atan2(pv[1],pv[0]);
-    }
+    const prev=draft.points[draft.points.length-2];
+    const pv=[from[0]-prev[0],from[1]-prev[1]];
+    if(Math.hypot(pv[0],pv[1])>EPS) cands.push([Math.atan2(pv[1],pv[0]),5]);
   }
-  if(ref===null){
-    const nearest=Math.round(angDeg/45)*45;
-    if(Math.abs(((angDeg-nearest+540)%360)-180)<5) ref=nearest*Math.PI/180;
+  if(state.settings.polar){
+    const step=Number(state.settings.polarStep)||45;
+    cands.push([Math.round((ang*180/Math.PI)/step)*step*Math.PI/180,4]);
+  }else{
+    cands.push([Math.round((ang*180/Math.PI)/45)*45*Math.PI/180,5]);
   }
-  if(ref===null) return null;
-  return {from, dir:[Math.cos(ref),Math.sin(ref)]};
+  for(const [dir,tolDeg] of cands){
+    let d=ang-dir; d=Math.atan2(Math.sin(d),Math.cos(d));
+    if(Math.min(Math.abs(d),Math.abs(Math.abs(d)-Math.PI))<=tolDeg*Math.PI/180)
+      return {from, dir:[Math.cos(dir),Math.sin(dir)]};
+  }
+  return null;
 }
 /* -------------------- 触屏多指手势（捏合缩放 + 双指平移） -------------------- */
 const activePointers=new Map();
@@ -202,6 +248,15 @@ canvas.addEventListener('pointerdown',e=>{
       drag={type:'siteHandle',handle:h,start:wp,originalShape:deepClone(state.background.shape)};
     }
     return;
+  }
+  if(currentTool==='guide'){
+    if(!guideDraft){ guideDraft=[wp,wp]; toast('已记录参考线起点，再点一次确定方向'); }
+    else{
+      guideDraft[1]=wp;
+      if(addGuideLine(guideDraft[0],guideDraft[1])) toast('已添加参考线','success');
+      guideDraft=null;
+    }
+    requestRender(); return;
   }
   if(currentTool==='select'){
     const h=handleAt(wp,sp);
@@ -283,6 +338,7 @@ canvas.addEventListener('pointermove',e=>{
   }
   const wp=resolveWorldPoint(e);
   setCursorScreen(sp,true,wp,activeOsnap);
+  if(currentTool==='guide'&&guideDraft){ guideDraft[1]=wp; }
   $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit+(activeOsnap?'  ◈ '+OSNAP_LABELS[activeOsnap.type]:'');
   /* 空闲移动（无拖拽/草稿）也必须重绘：十字准星、世界坐标、捕捉标记随鼠标实时显示，
      不必等到点击；requestRender 内部按帧合并，重复调用无额外开销 */
@@ -896,6 +952,13 @@ window.addEventListener('keydown',e=>{
   if(e.key==='Tab'){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }
   if(e.key==='f'||e.key==='F'){ fitView(); return; }
+  /* 参考线：Shift+G 清除全部；Backspace 删除上一条（无草稿时） */
+  if(currentTool==='guide'||guideLines.length){
+    if(e.shiftKey&&e.key.toLowerCase()==='g'){ clearGuides(); toast('参考线已清除'); requestRender(); return; }
+    if(e.key==='Backspace'&&!draft){
+      if(removeLastGuideLine()){ toast('已删除上一条参考线'); e.preventDefault(); requestRender(); return; }
+    }
+  }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }

@@ -78,7 +78,8 @@ function collectSnapCandidates(st,vis){
   });
   return out;
 }
-/** 收集"可垂足/可交点"的线段边：折线含闭合边；非矩形区域以采样多边形近似 */
+/** 收集"可垂足/可交点"的线段边：折线含闭合边；非矩形区域以采样多边形近似；
+ *  末尾附加运行时临时参考线（无限长，按 ±1e6 扩展用于求交/垂足） */
 function collectSnapEdges(st,vis){
   const out=[];
   const add=(id,a,b)=>out.push({id,a:a.slice(),b:b.slice()});
@@ -95,7 +96,59 @@ function collectSnapEdges(st,vis){
       for(let k=0;k<4;k++) add(o.id,ps[k],ps[(k+1)%4]);
     }
   });
-  return out;
+  return out.concat(guideEdges());
+}
+/* -------------------- 临时参考线（运行时，不持久化） -------------------- */
+let guideLines=[];   /* [{a:[x,y], b:[x,y]}]：两点定义方向，按无限长参与捕捉 */
+function addGuideLine(a,b){
+  if(!a||!b||dist(a,b)<EPS) return false;
+  guideLines.push({a:[a[0],a[1]],b:[b[0],b[1]]});
+  return true;
+}
+function removeLastGuideLine(){ return guideLines.pop()||null; }
+function clearGuideLines(){ guideLines=[]; }
+function guideLineList(){ return guideLines.map(g=>({a:g.a.slice(),b:g.b.slice()})); }
+/** 参考线 → 捕捉边（±1e6 延展，使其与任意对象边可求交/求垂足） */
+function guideEdges(){
+  return guideLines.map((g,i)=>{
+    const dx=g.b[0]-g.a[0], dy=g.b[1]-g.a[1], L=Math.hypot(dx,dy)||1;
+    const ux=dx/L*1e6, uy=dy/L*1e6;
+    return {id:'__guide'+i, guide:true, a:[g.a[0]-ux,g.a[1]-uy], b:[g.a[0]+ux,g.a[1]+uy]};
+  });
+}
+/**
+ * 方向约束（纯函数）：在「平行 / 垂直 / 等距 / 极轴」容差内把 wp 钳到对应方向。
+ * 优先级：参考边平行 > 参考边垂直 > 上一段等距 > 极轴；返回 {p, mode}。
+ * opt: {refDir(弧度), prevDir(弧度), prevLen, polarStep(度, 0=关闭), tolDeg=4, polarTolDeg=3}
+ */
+function directionalSnap(last,wp,opt){
+  opt=opt||{};
+  const v=[wp[0]-last[0],wp[1]-last[1]], len=Math.hypot(v[0],v[1]);
+  if(len<EPS) return {p:[wp[0],wp[1]],mode:'none'};
+  const ang=Math.atan2(v[1],v[0]);
+  const tol=(opt.tolDeg===undefined?4:Number(opt.tolDeg))*Math.PI/180;
+  const near=(a,b,t)=>{
+    let d=a-b; d=Math.atan2(Math.sin(d),Math.cos(d));
+    return Math.min(Math.abs(d),Math.abs(Math.abs(d)-Math.PI))<=t;
+  };
+  const project=(dir)=>{
+    const u=[Math.cos(dir),Math.sin(dir)], dot=v[0]*u[0]+v[1]*u[1];
+    return [last[0]+u[0]*dot,last[1]+u[1]*dot];
+  };
+  if(Number.isFinite(opt.refDir)){
+    if(near(ang,opt.refDir,tol)) return {p:project(opt.refDir),mode:'parallel'};
+    if(near(ang,opt.refDir+Math.PI/2,tol)) return {p:project(opt.refDir+Math.PI/2),mode:'perpendicular'};
+  }
+  if(Number.isFinite(opt.prevDir)&&Number(opt.prevLen)>EPS&&near(ang,opt.prevDir,tol)){
+    return {p:[last[0]+Math.cos(ang)*opt.prevLen,last[1]+Math.sin(ang)*opt.prevLen],mode:'equal'};
+  }
+  if(Number(opt.polarStep)>0){
+    const step=Number(opt.polarStep), deg=ang*180/Math.PI;
+    const nearest=Math.round(deg/step)*step;
+    const pTol=(opt.polarTolDeg===undefined?3:Number(opt.polarTolDeg))*Math.PI/180;
+    if(near(ang,nearest*Math.PI/180,pTol)) return {p:project(nearest*Math.PI/180),mode:'polar'};
+  }
+  return {p:[wp[0],wp[1]],mode:'none'};
 }
 /** 收集正圆（支持精确切点；椭圆切点不启用）@returns [{id,c,r}] */
 function collectSnapCircles(st,vis){

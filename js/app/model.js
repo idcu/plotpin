@@ -38,6 +38,8 @@ function createInitialState(){
       siteRadius:false,  /* 矢量场地：半径标注（圆/椭圆/扇形） */
       siteArea:true,     /* 矢量场地：中心面积 */
       sitePerimeter:true,/* 矢量场地：中心周长 */
+      polar:false,       /* 极轴追踪：逐点录入时自动吸附到极轴角整数倍 */
+      polarStep:45,      /* 极轴角步长（15/30/45/90） */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     viewport: { zoom:1, panX:0, panY:0 },
     /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */

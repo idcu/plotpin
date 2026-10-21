@@ -133,6 +133,7 @@ code += `\n;globalThis.__api = {
   drawObject, drawLabel, drawAreaTag,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, persistableState,
+  directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -2795,6 +2796,61 @@ asyncSuites.push((async()=>{
   const ids=api.reachableBgAssetIds();
   ok('楼层-可达集合含非当前层底图', ids.includes('bg_floor3'));
   ok('楼层-可达集合含非当前层照片', ids.includes('bg_photo3'));
+  api.resetState();
+}
+
+/* 54. 方向约束（平行/垂直/等距/极轴）与临时参考线 ---------------------------- */
+{
+  const p=(wp,opt)=>api.directionalSnap([0,0],wp,opt);
+  let r=p([10,0.5],{refDir:0});
+  eq('约束-参考边平行模式', r.mode, 'parallel');
+  approx('约束-平行投影Y=0', r.p[1], 0, 1e-9);
+  approx('约束-平行投影X=10', r.p[0], 10, 1e-9);
+  r=p([0.5,10],{refDir:0});
+  eq('约束-参考边垂直模式', r.mode, 'perpendicular');
+  approx('约束-垂直投影X=0', r.p[0], 0, 1e-9);
+  approx('约束-垂直投影Y=10', r.p[1], 10, 1e-9);
+  r=p([-10,0.1],{refDir:0});
+  eq('约束-反向平行也吸附', r.mode, 'parallel');
+  approx('约束-反向平行X=-10', r.p[0], -10, 1e-9);
+  r=p([7,0.2],{prevDir:0,prevLen:5});
+  eq('约束-等距模式', r.mode, 'equal');
+  approx('约束-等距长度沿用上一段', Math.hypot(r.p[0],r.p[1]), 5, 1e-9);
+  r=p([10,0.4],{polarStep:45});
+  eq('约束-极轴模式', r.mode, 'polar');
+  approx('约束-极轴吸附到0°', r.p[1], 0, 1e-9);
+  r=p([10,10],{});
+  eq('约束-超出容差不吸附', r.mode, 'none');
+  r=p([0.1,10],{refDir:0,tolDeg:0.5});
+  eq('约束-容差可配置', r.mode, 'none');
+  r=p([0,10],{refDir:0,tolDeg:0.5});
+  eq('约束-垂直在严格容差内吸附', r.mode, 'perpendicular');
+
+  /* 临时参考线：添加/延展/参与捕捉/删除/清除 */
+  api.clearGuideLines();
+  ok('参考线-添加成功', api.addGuideLine([0,0],[0,10]));
+  eq('参考线-列表1条', api.guideLineList().length, 1);
+  ok('参考线-零长度拒绝', !api.addGuideLine([1,1],[1,1]));
+  const ge=api.guideEdges();
+  eq('参考线-生成1条捕捉边', ge.length, 1);
+  ok('参考线-按无限长延展', Math.hypot(ge[0].b[0]-ge[0].a[0],ge[0].b[1]-ge[0].a[1])>1e5);
+
+  api.resetState();
+  api.state.objects.push(api.baseObject('line','line.custom',{points:[[0,0],[10,0]],x:0,y:0}));
+  api.clearGuideLines(); api.addGuideLine([7,-5],[7,5]);
+  const edges=api.collectSnapEdges(api.state,()=>true);
+  ok('参考线-纳入捕捉边集合', edges.some(e=>e.guide));
+  const hit=api.findOsnap(api.state,[7,0.2],1,new Set(),()=>true,null);
+  ok('参考线-与对象边交点可捕捉', !!hit&&hit.type==='intersection'&&Math.hypot(hit.p[0]-7,hit.p[1])<1e-6);
+  ok('参考线-删除上一条', !!api.removeLastGuideLine());
+  eq('参考线-删除后为空', api.guideLineList().length, 0);
+
+  /* 设置默认与迁移 */
+  eq('设置-极轴追踪默认关', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.polar, false);
+  eq('设置-极轴步长默认45', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.polarStep, 45);
+  eq('设置-非法极轴步长回退45', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{polarStep:37}}).settings.polarStep, 45);
+  eq('设置-合法极轴步长保留', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{polar:true,polarStep:15}}).settings.polarStep, 15);
+  api.clearGuideLines();
   api.resetState();
 }
 

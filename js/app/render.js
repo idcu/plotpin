@@ -171,6 +171,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
       .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
     drawDraft(c,v,d,toS);
     drawCalibration(c,toS);
+    drawGuideLines(c,v,d,cssW,cssH,toS);
     drawSelection(c,v,toS);
     drawRubber(c);
     drawCursorCross(c,v,d,cssW,cssH);
@@ -196,6 +197,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   drawDraft(c,v,d,toS);
   drawCalibration(c,toS);
   if(opt.interactive){
+    drawGuideLines(c,v,d,cssW,cssH,toS);
     drawSelection(c,v,toS);
     drawRubber(c);
     drawCursorCross(c,v,d,cssW,cssH);
@@ -432,6 +434,22 @@ function drawCoverage(c,v,d){
     const top=toS([r.minX,r.minY+r.ny*r.cell]);
     c.drawImage(canvas,top[0],top[1],r.nx*r.cell*v.zoom,r.ny*r.cell*v.zoom);
   }
+  c.restore();
+}
+/* 临时参考线：品红虚线贯穿画布（运行时状态，不持久化；Shift+G 清除） */
+function drawGuideLines(c,v,d,cssW,cssH,toS){
+  const segs=guideLineList();
+  if(!segs.length&&!guideDraft) return;
+  c.save(); c.strokeStyle='rgba(217,70,239,.85)'; c.lineWidth=1.2; c.setLineDash([10,6]);
+  const draw=(a,b)=>{
+    const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);
+    if(L<EPS) return;
+    const ux=dx/L*1e6, uy=dy/L*1e6;
+    const p0=toS([a[0]-ux,a[1]-uy]), p1=toS([a[0]+ux,a[1]+uy]);
+    c.beginPath(); c.moveTo(p0[0],p0[1]); c.lineTo(p1[0],p1[1]); c.stroke();
+  };
+  segs.forEach(s=>draw(s.a,s.b));
+  if(guideDraft&&guideDraft.length===2) draw(guideDraft[0],guideDraft[1]);
   c.restore();
 }
 /* -------------------- 矢量场地标注（节点坐标 / 段长 / 周长面积，可配置） -------------------- */
