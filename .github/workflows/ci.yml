@@ -19,3 +19,5 @@ jobs:
         run: node scripts/selftest.mjs
       - name: 渲染基准（缓存帧 / 视口裁剪阈值）
         run: node scripts/bench.mjs
+      - name: 单文件发行包校验（无外部引用 + SHA256）
+        run: node scripts/build.mjs --check

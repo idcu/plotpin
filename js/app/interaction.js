@@ -9,6 +9,7 @@ function syncToolButtons(tool){
       if(b.dataset.tool==='dimension') on=$('dimensionType').value!=='ruler';
     }
     b.classList.toggle('active',on);
+    if(b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed',on?'true':'false');
   });
 }
 function setTool(tool){

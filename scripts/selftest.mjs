@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { deflateSync } from 'node:zlib';
+import { buildStandalone } from './pack-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -120,6 +121,7 @@ code += `\n;globalThis.__api = {
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
+  PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
@@ -2905,6 +2907,78 @@ asyncSuites.push((async()=>{
   let threw=false; try{ api.drawObject(rec,pt,{zoom:1},p=>p,1,1); }catch(e){ threw=true; }
   ok('图元-无Path2D环境降级不抛错', !threw);
   api.resetState();
+}
+
+/* 56. 单文件发行包：内联、去外链、图标 data URI、真实入口构建 --------------- */
+{
+  const sample='<html><head><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="a.css"></head><body><script src="a.js"></script><script src="b.js"></script></body></html>';
+  const files={'a.css':'body{color:red}','a.js':'console.log("a")','b.js':'const x="</script>";','icon.svg':'<svg/>','manifest.webmanifest':'{}'};
+  const out=buildStandalone(sample,p=>files[p]);
+  ok('打包-样式内联', out.includes('<style>')&&out.includes('body{color:red}'));
+  ok('打包-脚本顺序保留', out.indexOf('/* a.js */')<out.indexOf('/* b.js */'));
+  ok('打包-无脚本外链', !/<script\s+src=/.test(out));
+  ok('打包-manifest移除', !out.includes('manifest.webmanifest'));
+  ok('打包-图标转dataURI', out.includes('data:image/svg+xml;base64,'));
+  ok('打包-转义script闭合', out.includes('<\\/script'));
+
+  const real=buildStandalone(readFileSync(join(root,'index.html'),'utf8'),p=>readFileSync(join(root,p),'utf8'));
+  ok('打包-真实入口无外链脚本', !/<script\s+src=/.test(real));
+  ok('打包-真实入口无外链样式', !/<link\s+rel="stylesheet"/.test(real));
+  ok('打包-真实入口无manifest', !/rel="manifest"/.test(real));
+  ok('打包-真实入口包含核心脚本', real.includes('buildSceneSvg')&&real.includes('openFloorManager'));
+  ok('打包-体积合理(>100KB)', real.length>100000);
+}
+
+/* 57. 插件注册点：导出器 / 导入器注册、校验、查找与注销 -------------------- */
+{
+  const PP=api.PlotPin;
+  ok('插件-暴露全局 API 与版本', !!PP&&typeof PP.version==='string'&&PP.version.length>0);
+  eq('插件-初始无导出器', PP.listExporters().length, 0);
+  ok('插件-注册导出器', PP.registerExporter({id:'demo',label:'演示导出',ext:'.txt',mime:'text/plain',run(){}}));
+  eq('插件-导出器列表', PP.listExporters()[0].label, '演示导出');
+  eq('插件-导出扩展名规范化', PP.listExporters()[0].ext, 'txt');
+  ok('插件-按 id 查找导出器', !!PP.findExporter('demo'));
+  let e1=null; try{ PP.registerExporter({id:'demo',run(){}}); }catch(e){ e1=e; }
+  ok('插件-重复 id 拒绝', !!e1&&/已存在/.test(e1.message));
+  let e2=null; try{ PP.registerExporter({id:'x'}); }catch(e){ e2=e; }
+  ok('插件-缺少 run 拒绝', !!e2&&/run/.test(e2.message));
+
+  ok('插件-注册导入器', PP.registerImporter({ext:'.foo',label:'FOO',run(){}}));
+  ok('插件-按扩展名查找(大小写不敏感)', !!PP.findImporter('FOO'));
+  eq('插件-导入器扩展名规范化', PP.listImporters()[0].ext, 'foo');
+  let e3=null; try{ PP.registerImporter({ext:'foo',run(){}}); }catch(e){ e3=e; }
+  ok('插件-重复扩展名拒绝', !!e3&&/已存在/.test(e3.message));
+
+  ok('插件-注销导出器', PP.unregisterExporter('demo'));
+  eq('插件-导出器注销后为空', PP.listExporters().length, 0);
+  ok('插件-注销导入器', PP.unregisterImporter('FOO'));
+  eq('插件-导入器注销后为空', PP.listImporters().length, 0);
+}
+
+/* 58. 中英界面切换与无障碍标记 --------------------------------------------- */
+{
+  const I=api.I18N;
+  eq('i18n-默认中文', I.lang, 'zh');
+  eq('i18n-中文文案', I.t('new'), '新建');
+  eq('i18n-切换英文', I.setLang('en'), 'en');
+  eq('i18n-英文文案', I.t('new'), 'New');
+  eq('i18n-未知键回退键名', I.t('__missing__'), '__missing__');
+  eq('i18n-非法语言回退中文', I.setLang('fr'), 'zh');
+  ok('i18n-中英键集合一致', Object.keys(I.dict.zh).sort().join(',')===Object.keys(I.dict.en).sort().join(','));
+  ok('i18n-关键键英文齐全', ['new','projects','floors','import','export','settings','select','guide','exportLabels'].every(k=>I.dict.en[k]));
+  let applyOk=true; try{ I.apply(); }catch(e){ applyOk=false; }
+  ok('i18n-apply在最小DOM下不抛错', applyOk);
+
+  eq('i18n-迁移默认中文', api.migrateProject({schema:'offline-drawing-annotation/v1'}).settings.lang, 'zh');
+  eq('i18n-迁移保留英文', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{lang:'en'}}).settings.lang, 'en');
+  eq('i18n-迁移非法语言回退中文', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{lang:'fr'}}).settings.lang, 'zh');
+
+  ok('无障碍-画布 role=application', /<canvas[^>]*role="application"/.test(html));
+  ok('无障碍-工具栏 role=toolbar', /role="toolbar"/.test(html));
+  ok('无障碍-页签 role=tablist', /role="tablist"/.test(html));
+  ok('无障碍-toast aria-live', /aria-live="polite"/.test(html));
+  ok('i18n-入口 data-i18n 标记≥20', (html.match(/data-i18n="/g)||[]).length>=20);
+  I.setLang('zh');
 }
 
 /* ---------------- 结果汇总 ---------------- */

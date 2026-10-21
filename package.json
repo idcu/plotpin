@@ -1,6 +1,6 @@
 {
   "name": "plotpin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "图钉 PlotPin — 离线、零依赖、双击即用的通用图纸标注工具",
   "private": true,
   "scripts": {
@@ -8,6 +8,7 @@
     "lint": "node scripts/check.mjs",
     "badge": "node scripts/badge.mjs",
     "bench": "node scripts/bench.mjs",
+    "build": "node scripts/build.mjs",
     "ci": "node scripts/check.mjs"
   },
   "keywords": [

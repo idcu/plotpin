@@ -21,6 +21,7 @@ $('settingsBtn').onclick=()=>{
       <label>极轴追踪</label><input id="setPolar" type="checkbox" ${state.settings.polar?'checked':''} title="逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）">
       <label>极轴角</label><select id="setPolarStep" title="极轴追踪的角度步长">${[15,30,45,90].map(x=>`<option value="${x}" ${Number(state.settings.polarStep)===x?'selected':''}>${x}°</option>`).join('')}</select>
       <label>坐标精度</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
+      <label>界面语言</label><select id="setLang"><option value="zh" ${state.settings.lang!=='en'?'selected':''}>中文</option><option value="en" ${state.settings.lang==='en'?'selected':''}>English</option></select>
       <label>运行环境</label><div class="hint-text">${esc(capabilitySummary())}</div>
       <label>场地/底图</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/平行四边形/多边形</div>
     </div>`,[
@@ -35,6 +36,8 @@ $('settingsBtn').onclick=()=>{
       state.settings.osnap=$('setOsnap').checked;
       state.settings.polar=$('setPolar').checked;
       state.settings.polarStep=Number($('setPolarStep').value)||45;
+      state.settings.lang=$('setLang').value==='en'?'en':'zh';
+      I18N.setLang(state.settings.lang); I18N.apply(document);
       if(!state.settings.osnap) osnapMode=null;
       updateOsnapChip();
       state.settings.showAreaTag=$('setAreaTag').checked;

@@ -15,6 +15,8 @@
   button.danger{color:var(--danger);border-color:#fecaca;background:#fff}
   button.danger:hover{background:var(--danger-soft)}
   button:disabled{opacity:.45;cursor:not-allowed}
+  /* 键盘可达：所有可聚焦控件显示清晰焦点环 */
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
   input,select,textarea{border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;min-width:0}
   input[type=color]{padding:2px;height:30px;width:42px}
   input[type=checkbox],input[type=radio]{width:auto;margin:0 4px 0 0}

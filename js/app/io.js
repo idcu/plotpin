@@ -169,6 +169,11 @@ async function handleImportFile(f){
   if(ext==='dxf') return importDxfFile(f);
   if(ext==='pdf') return importPdfFile(f);
   if(/^image\//.test(f.type||'')||['png','jpg','jpeg','gif','webp','bmp','svg'].includes(ext)) return importBackgroundFile(f);
+  /* 第三方插件注册的导入器 */
+  if(typeof PlotPin!=='undefined'){
+    const imp=PlotPin.findImporter(ext);
+    if(imp) return importViaPlugin(imp,f);
+  }
   toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）','error');
 }
 
@@ -771,6 +776,7 @@ function applyTableImport(plan){
 /* -------------------- 导出 -------------------- */
 $('exportBtn').onclick=()=>{
   const kind=$('exportKind').value;
+  if(kind.startsWith('plugin:')){ if(typeof exportViaPlugin==='function') exportViaPlugin(kind.slice(7)); return; }
   if(kind==='json') exportJSON();
   if(kind==='png') exportPNG();
   if(kind==='svg') exportSVG();

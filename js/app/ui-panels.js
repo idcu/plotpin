@@ -1,7 +1,11 @@
 /* ui-panels.js —— 标签页、属性面板、对象清单、图层/类型管理、统计与存储占用 */
 /* -------------------- UI：标签页 / 工具栏 -------------------- */
 function switchTab(tab){
-  document.querySelectorAll('.side-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.querySelectorAll('.side-tab').forEach(b=>{
+    const on=b.dataset.tab===tab;
+    b.classList.toggle('active',on);
+    if(b.hasAttribute('role')) b.setAttribute('aria-selected',on?'true':'false');
+  });
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab));
   /* 窄屏切换属性/清单等标签时自动展开覆盖侧栏 */
   if(window.matchMedia('(max-width:860px)').matches) document.body.classList.add('sidebar-open');

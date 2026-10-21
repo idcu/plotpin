@@ -17,23 +17,23 @@
 <header class="topbar">
   <div class="brand">📌 图钉<span class="brand-en">PlotPin</span></div>
   <div class="tb-group">
-    <button id="newBtn" title="新建工程">新建</button>
-    <button id="projBtn" title="把当前工程存入工程库，或打开/管理本机多个工程">📁 工程库</button>
-    <button id="floorBtn" title="多楼层 / 多底图：每层独立底图与对象，可切换、重命名、删除">🏢 楼层</button>
-    <button id="importBtn" title="导入 JSON / DXF / CSV·TSV·XLSX；也可直接拖拽文件到画布">导入</button>
+    <button id="newBtn" title="新建工程" data-i18n="new">新建</button>
+    <button id="projBtn" title="把当前工程存入工程库，或打开/管理本机多个工程" data-i18n="projects">📁 工程库</button>
+    <button id="floorBtn" title="多楼层 / 多底图：每层独立底图与对象，可切换、重命名、删除" data-i18n="floors">🏢 楼层</button>
+    <button id="importBtn" title="导入 JSON / DXF / CSV·TSV·XLSX；也可直接拖拽文件到画布" data-i18n="import">导入</button>
     <select id="exportKind" title="选择导出格式">
-      <option value="json">JSON 工程</option>
-      <option value="png">PNG 高清图</option>
-      <option value="svg">SVG 矢量图</option>
-      <option value="pdf">PDF 矢量（图纸+清单）</option>
-      <option value="dxf">DXF（CAD 互通）</option>
-      <option value="csv">CSV 表格</option>
-      <option value="tsv">TSV 表格</option>
-      <option value="xlsx">Excel (.xlsx)</option>
-      <option value="labels">设备二维码标签 (HTML)</option>
+      <option value="json" data-i18n="exportJson">JSON 工程</option>
+      <option value="png" data-i18n="exportPng">PNG 高清图</option>
+      <option value="svg" data-i18n="exportSvg">SVG 矢量图</option>
+      <option value="pdf" data-i18n="exportPdf">PDF 矢量（图纸+清单）</option>
+      <option value="dxf" data-i18n="exportDxf">DXF（CAD 互通）</option>
+      <option value="csv" data-i18n="exportCsv">CSV 表格</option>
+      <option value="tsv" data-i18n="exportTsv">TSV 表格</option>
+      <option value="xlsx" data-i18n="exportXlsx">Excel (.xlsx)</option>
+      <option value="labels" data-i18n="exportLabels">设备二维码标签 (HTML)</option>
     </select>
-    <button id="exportBtn" class="primary">导出</button>
-    <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）">打印/PDF</button>
+    <button id="exportBtn" class="primary" data-i18n="export">导出</button>
+    <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）" data-i18n="print">打印/PDF</button>
   </div>
   <div class="tb-group">
     <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制矢量场地">底图/场地</button>
@@ -41,7 +41,7 @@
     <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）">仿射校准</button>
     <button id="coverageBtn" title="统计摄像头/球机等点设备的视场对区域与闭合折线的覆盖率，并高亮盲区">覆盖率分析</button>
     <button id="sidebarToggle" title="在窄屏显示/隐藏属性面板">☰ 面板</button>
-    <button id="settingsBtn" title="工程名称、网格、捕捉、精度等设置">设置</button>
+    <button id="settingsBtn" title="工程名称、网格、捕捉、精度等设置" data-i18n="settings">设置</button>
   </div>
   <div class="tb-group">
     <button id="undoBtn" title="撤销 (Ctrl+Z)">↶</button>
@@ -58,20 +58,20 @@
 </header>
 
 <div class="app-shell">
-  <aside class="tool-rail">
-    <button class="tool-btn active" data-tool="select"><span class="ico">↖</span><span>选择</span></button>
-    <button class="tool-btn" data-tool="pan"><span class="ico">✥</span><span>平移</span></button>
+  <aside class="tool-rail" role="toolbar" aria-label="绘图工具">
+    <button class="tool-btn active" data-tool="select" aria-pressed="true"><span class="ico">↖</span><span data-i18n="select">选择</span></button>
+    <button class="tool-btn" data-tool="pan" aria-pressed="false"><span class="ico">✥</span><span data-i18n="pan">平移</span></button>
     <div class="rail-sep"></div>
-    <button class="tool-btn" data-tool="point"><span class="ico">●</span><span>点设备</span></button>
-    <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span>区域</span></button>
-    <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span>折线</span></button>
-    <button class="tool-btn" data-tool="text"><span class="ico">T</span><span>文字</span></button>
-    <button class="tool-btn" data-tool="ruler" title="测距：沿路径逐点单击，双击结束（右键/Esc 取消）；实时显示每段长度与累计总长"><span class="ico">📏</span><span>测距</span></button>
-    <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span>标注</span></button>
-    <button class="tool-btn" data-tool="site-node" title="场地节点：拖拽画布上的控制点调整矢量场地形状，或在属性面板精确输入坐标/参数"><span class="ico">⊗</span><span>场地节点</span></button>
-    <button class="tool-btn" data-tool="guide" title="参考线：两次点击定义无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部"><span class="ico">╱</span><span>参考线</span></button>
+    <button class="tool-btn" data-tool="point" aria-pressed="false"><span class="ico">●</span><span data-i18n="point">点设备</span></button>
+    <button class="tool-btn" data-tool="rect" aria-pressed="false"><span class="ico">▭</span><span data-i18n="area">区域</span></button>
+    <button class="tool-btn" data-tool="line" aria-pressed="false"><span class="ico">╱</span><span data-i18n="line">折线</span></button>
+    <button class="tool-btn" data-tool="text" aria-pressed="false"><span class="ico">T</span><span data-i18n="text">文字</span></button>
+    <button class="tool-btn" data-tool="ruler" title="测距：沿路径逐点单击，双击结束（右键/Esc 取消）；实时显示每段长度与累计总长" aria-pressed="false"><span class="ico">📏</span><span data-i18n="ruler">测距</span></button>
+    <button class="tool-btn" data-tool="dimension" aria-pressed="false"><span class="ico">⌁</span><span data-i18n="dimension">标注</span></button>
+    <button class="tool-btn" data-tool="site-node" title="场地节点：拖拽画布上的控制点调整矢量场地形状，或在属性面板精确输入坐标/参数" aria-pressed="false"><span class="ico">⊗</span><span data-i18n="siteNode">场地节点</span></button>
+    <button class="tool-btn" data-tool="guide" title="参考线：两次点击定义无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部" aria-pressed="false"><span class="ico">╱</span><span data-i18n="guide">参考线</span></button>
     <div class="rail-sep"></div>
-    <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注"><span class="ico">✓</span><span>完成</span></button>
+    <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注" data-i18n="finish">完成</button>
   </aside>
 
   <main class="canvas-wrap" id="canvasWrap">
@@ -116,11 +116,11 @@
   </main>
 
   <aside class="sidebar">
-    <div class="side-tabs">
-      <button class="side-tab active" data-tab="props">属性</button>
-      <button class="side-tab" data-tab="list">清单</button>
-      <button class="side-tab" data-tab="layers">图层/类型</button>
-      <button class="side-tab" data-tab="stats">统计</button>
+    <div class="side-tabs" role="tablist" aria-label="侧栏页签">
+      <button class="side-tab active" data-tab="props" role="tab" aria-selected="true" data-i18n="tabProps">属性</button>
+      <button class="side-tab" data-tab="list" role="tab" aria-selected="false" data-i18n="tabList">清单</button>
+      <button class="side-tab" data-tab="layers" role="tab" aria-selected="false" data-i18n="tabLayers">图层/类型</button>
+      <button class="side-tab" data-tab="stats" role="tab" aria-selected="false" data-i18n="tabStats">统计</button>
     </div>
 
     <section class="tab-pane active" id="tab-props">
@@ -215,7 +215,7 @@
 </div>
 
 <div id="report"></div>
-<div class="toast-wrap" id="toastWrap"></div>
+<div class="toast-wrap" id="toastWrap" aria-live="polite" aria-atomic="true"></div>
 
 <script src="js/common/dsv.js"></script>
 <script src="js/common/xml-lite.js"></script>
@@ -224,6 +224,7 @@
 <script src="js/common/dxf.js"></script>
 <script src="js/common/pdf.js"></script>
 <script src="js/common/pdf-read.js"></script>
+<script src="js/common/i18n.js"></script>
 <script src="js/common/content-assets.js"></script>
 <script src="js/common/qr.js"></script>
 <script src="js/common/symbols.js"></script>
@@ -237,6 +238,7 @@
 <script src="js/app/ui-panels.js"></script>
 <script src="js/app/ui-shell.js"></script>
 <script src="js/app/io.js"></script>
+<script src="js/app/plugins.js"></script>
 <script src="js/app/app.js"></script>
 </body>
 </html>

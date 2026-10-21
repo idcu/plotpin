@@ -322,7 +322,7 @@ function scheduleSave(){
       await idbPut(snapshot);
       /* 绑定到工程库的工程：同名键同步更新，工程库内容即最新（失败静默，不影响草稿） */
       if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(()=>{});
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag,siteNodes:state.settings.siteNodes,siteSegLen:state.settings.siteSegLen,siteBase:state.settings.siteBase,siteRadius:state.settings.siteRadius,siteArea:state.settings.siteArea,sitePerimeter:state.settings.sitePerimeter,polar:state.settings.polar,polarStep:state.settings.polarStep}));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag,siteNodes:state.settings.siteNodes,siteSegLen:state.settings.siteSegLen,siteBase:state.settings.siteBase,siteRadius:state.settings.siteRadius,siteArea:state.settings.siteArea,sitePerimeter:state.settings.sitePerimeter,polar:state.settings.polar,polarStep:state.settings.polarStep,lang:state.settings.lang}));
       $('saveState').textContent=(state.meta.projectId?'📁 已保存 ':'已自动保存 ')+new Date().toLocaleTimeString();
     }catch(e){
       try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
@@ -418,6 +418,7 @@ function migrateProject(p){
   settings.siteRadius=!!settings.siteRadius;
   settings.polar=!!settings.polar;
   settings.polarStep=[15,30,45,90].includes(Number(settings.polarStep))?Number(settings.polarStep):45;
+  settings.lang=settings.lang==='en'?'en':'zh';
   const rawBg=typeof p.background==='object'&&p.background?p.background:{};
   const background=sanitizeBackground(rawBg);
   const viewport=sanitizeViewport(p.viewport);
