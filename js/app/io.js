@@ -10,6 +10,63 @@ $('importBtn').onclick=()=>$('fileInput').click();
 /* -------------------- 多工程库 -------------------- */
 const BG_KIND_LABELS={image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',parallelogram:'平行四边形场地',polygon:'多边形场地'};
 $('projBtn').onclick=openProjectLibrary;
+$('floorBtn').onclick=openFloorManager;
+/**
+ * 楼层管理：列出全部楼层（当前层标记、对象数、底图类型），支持新增/切换/重命名/删除。
+ * 每层独立底图与对象；图层与对象类型全局共用。
+ */
+function openFloorManager(){
+  syncActiveFloor();
+  const floors=state.floors||[];
+  const rows=floors.map(f=>{
+    const active=f.id===state.activeFloorId;
+    const n=floorObjectCount(f);
+    const kind=active?state.background.kind:(f.background&&f.background.kind);
+    const label=BG_KIND_LABELS[kind]||'矩形场地';
+    return `<div class="proj-row${active?' bound':''}" data-floor="${esc(f.id)}">
+      <div class="proj-info"><b>${esc(f.name)}</b>${active?'<span class="proj-tag">当前楼层</span>':''}
+        <span class="hint-text">${n} 个对象 · ${esc(label)}</span></div>
+      <div class="proj-ops">
+        <button data-fop="switch" ${active?'disabled':''}>切换</button>
+        <button data-fop="rename">重命名</button>
+        <button data-fop="del" class="danger" ${floors.length<=1?'disabled':''}>删除</button>
+      </div></div>`;
+  }).join('');
+  const total=floors.reduce((s,f)=>s+floorObjectCount(f),0);
+  openModal('楼层 / 多底图',
+    `<div class="proj-current">当前楼层：<b>${esc(currentFloorName())}</b>　共 ${floors.length} 层 · ${total} 个对象</div>
+     <div style="margin:8px 0"><button class="primary" id="floorAdd">＋ 新增楼层（空白场地）</button></div>
+     <div class="proj-list">${rows}</div>
+     <p class="hint-text">每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。</p>`,
+    [{text:'关闭',click:closeModal}]);
+  $('floorAdd').onclick=async()=>{
+    const v=await showPrompt({title:'新增楼层',label:'楼层名称',value:'F'+(floors.length+1)});
+    if(v===null) return;
+    const id=await addFloor(v);
+    if(id){ closeModal(); openFloorManager(); toast('已新增楼层：'+currentFloorName(),'success'); }
+  };
+  document.querySelectorAll('.proj-row[data-floor]').forEach(row=>{
+    row.querySelectorAll('button[data-fop]').forEach(btn=>btn.onclick=async()=>{
+      const id=row.dataset.floor, op=btn.dataset.fop;
+      try{
+        if(op==='switch'){
+          closeModal();
+          if(await switchFloor(id)) toast('已切换到楼层：'+currentFloorName(),'success');
+        }else if(op==='rename'){
+          const f=floors.find(x=>x.id===id);
+          const v=await showPrompt({title:'重命名楼层',label:'楼层名称',value:f?f.name:''});
+          if(v===null) return;
+          if(renameFloor(id,v)){ closeModal(); openFloorManager(); }
+        }else if(op==='del'){
+          const f=floors.find(x=>x.id===id);
+          const ok=await showConfirm('确定删除楼层「'+(f?f.name:id)+'」及其全部对象？此操作可撤销。');
+          if(!ok) return;
+          if(await deleteFloor(id)){ closeModal(); openFloorManager(); toast('楼层已删除'); }
+        }
+      }catch(e){ toast('楼层操作失败：'+e.message,'error'); }
+    });
+  });
+}
 async function openProjectLibrary(){
   const projects=await listProjects();
   const rows=projects.map(p=>{
@@ -804,6 +861,16 @@ async function exportJSON(){
     try{
       const rec=await assetGet(id);
       if(rec) o.props.photoDataUrl=bytesToDataUrl(rec.bytes,rec.mime||'image/jpeg');
+    }catch(_){}
+  }
+  /* 非当前楼层的底图也内嵌，保证多楼层工程跨设备可移植 */
+  for(const f of copy.floors||[]){
+    if(f.id===copy.activeFloorId) continue;
+    const bg=f.background;
+    if(!bg||!bg.assetId) continue;
+    try{
+      const rec=await assetGet(bg.assetId);
+      if(rec) bg.dataUrl=bytesToDataUrl(rec.bytes,rec.mime||'image/png');
     }catch(_){}
   }
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');

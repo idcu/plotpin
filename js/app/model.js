@@ -46,16 +46,25 @@ function createInitialState(){
       shape:{type:'rect', w:100, h:70} },
     layers: [{ id:'layer.default', name:'默认图层', visible:true, locked:false }],
     objectTypes: deepClone(BUILTIN_TYPES),
-    objects: []
+    objects: [],
+    /* 多楼层/多底图：floors 保存全部楼层元数据；非当前楼层额外持有 background/objects/viewport。
+       当前楼层的可编辑数据始终是顶层 state.background / state.objects（切换与保存时同步）。 */
+    floors: [{ id:'floor.default', name:'1F' }],
+    activeFloorId: 'floor.default'
   };
 }
 function uid(prefix='O'){
   return prefix + '_' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,7).toUpperCase();
 }
 function nextObjectId(){
-  let n = state.objects.length + 1;
-  const used = new Set(state.objects.map(o => o.name));
-  while (used.has('O' + String(n).padStart(4,'0'))) n++;
+  /* 编号跨楼层唯一：统计当前层 + 非当前层的既有编号 */
+  const used=new Set(state.objects.map(o=>o.name));
+  (state.floors||[]).forEach(f=>{
+    if(f.id===state.activeFloorId) return;
+    (f.objects||[]).forEach(o=>{ if(o&&o.name) used.add(o.name); });
+  });
+  let n=used.size+1;
+  while(used.has('O' + String(n).padStart(4,'0'))) n++;
   return 'O' + String(n).padStart(4,'0');
 }
 function deepClone(v){ return JSON.parse(JSON.stringify(v)); }

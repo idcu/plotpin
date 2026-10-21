@@ -131,7 +131,8 @@ code += `\n;globalThis.__api = {
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
   siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag,
-  invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities
+  invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
+  syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, persistableState,
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -2731,6 +2732,69 @@ asyncSuites.push((async()=>{
   const panel=api.$('propPanel').innerHTML;
   ok('台账-面板含型号/IP/责任人输入', panel.includes('data-field="propModel"')&&panel.includes('data-field="propIp"')&&panel.includes('data-field="propOwner"'));
   ok('台账-面板含照片上传控件', panel.includes('data-photo-input'));
+  api.resetState();
+}
+
+/* 53. 多楼层 / 多底图：数据切换、持久化裁剪、迁移与资产可达 ------------------ */
+{
+  const st=api.resetState();
+  eq('楼层-默认一层', st.floors.length, 1);
+  eq('楼层-默认活动层', st.activeFloorId, 'floor.default');
+  eq('楼层-默认名称', api.currentFloorName(), '1F');
+
+  st.objects.push(api.baseObject('point','point.marker',{name:'A',x:1,y:1}));
+  api.syncActiveFloor();
+  eq('楼层-同步对象到当前层条目', st.floors[0].objects.length, 1);
+  eq('楼层-当前层对象计数', api.floorObjectCount(st.floors[0]), 1);
+
+  const init=api.createInitialState();
+  st.floors.push({id:'floor.F2',name:'2F',background:init.background,
+    objects:[api.baseObject('point','point.marker',{name:'B',x:2,y:2})],viewport:{zoom:2,panX:10,panY:20}});
+  ok('楼层-切换成功', api.switchFloorData('floor.F2'));
+  eq('楼层-切换后活动层', st.activeFloorId, 'floor.F2');
+  eq('楼层-切换后对象属于目标层', st.objects[0].name, 'B');
+  eq('楼层-切换后名称', api.currentFloorName(), '2F');
+  eq('楼层-切换后视口恢复', st.viewport.zoom, 2);
+  ok('楼层-切回成功', api.switchFloorData('floor.default'));
+  eq('楼层-切回对象完好', st.objects[0].name, 'A');
+  eq('楼层-切回名称', api.currentFloorName(), '1F');
+  ok('楼层-切到当前层返回false', !api.switchFloorData('floor.default'));
+  ok('楼层-切到不存在层返回false', !api.switchFloorData('missing'));
+
+  /* 持久化：当前层数据在顶层，楼层条目里不重复；非当前层保留完整数据 */
+  api.syncActiveFloor();
+  const snap=api.persistableState();
+  const activeEntry=snap.floors.find(f=>f.id===snap.activeFloorId);
+  ok('持久化-当前层条目不重复存数据', activeEntry&&activeEntry.background===undefined&&activeEntry.objects===undefined);
+  const otherEntry=snap.floors.find(f=>f.id==='floor.F2');
+  ok('持久化-非当前层保留对象', !!otherEntry&&Array.isArray(otherEntry.objects)&&otherEntry.objects.length===1);
+  eq('持久化-顶层对象为当前层', snap.objects.length, 1);
+
+  /* 迁移：多楼层工程；活动层取顶层，非活动层各自清洗 */
+  const m=api.migrateProject({schema:'offline-drawing-annotation/v1',
+    background:{kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:70}},
+    objects:[{kind:'point',name:'A',x:1,y:1}],
+    activeFloorId:'f2',
+    floors:[
+      {id:'f1',name:'1F',background:{kind:'circle',shape:{type:'circle',cx:0,cy:0,r:5}},objects:[{kind:'point',name:'B',x:2,y:2}]},
+      {id:'f2',name:'2F'}
+    ]});
+  eq('迁移-楼层数', m.floors.length, 2);
+  eq('迁移-活动层', m.activeFloorId, 'f2');
+  eq('迁移-顶层对象属于活动层', m.objects[0].name, 'A');
+  const f1=m.floors.find(f=>f.id==='f1');
+  ok('迁移-非活动层保留对象', !!f1&&f1.objects[0].name==='B');
+  eq('迁移-非活动层背景类型', f1&&f1.background.kind, 'circle');
+  const legacy=api.migrateProject({schema:'offline-drawing-annotation/v1',objects:[]});
+  eq('迁移-旧档补默认楼层', legacy.floors.length, 1);
+  eq('迁移-旧档默认层名', legacy.floors[0].name, '1F');
+
+  /* 资产可达：非当前楼层底图与照片都纳入保留集合（migrateProject 已替换全局 state） */
+  api.state.floors.push({id:'floor.F3',name:'3F',background:{kind:'image',assetId:'bg_floor3',shape:{type:'rect',w:1,h:1}},
+    objects:[{props:{photoId:'bg_photo3'}}]});
+  const ids=api.reachableBgAssetIds();
+  ok('楼层-可达集合含非当前层底图', ids.includes('bg_floor3'));
+  ok('楼层-可达集合含非当前层照片', ids.includes('bg_photo3'));
   api.resetState();
 }
 

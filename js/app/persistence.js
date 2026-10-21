@@ -4,10 +4,15 @@
  *  资产垃圾回收只能删这个集合之外的资产，否则撤销到旧背景时二进制已丢失（评估报告 5.2） */
 function reachableBgAssetIds(){
   const ids=new Set();
+  const addPhoto=o=>{ const pid=o&&o.props&&o.props.photoId; if(pid) ids.add(pid); };
   const add=s=>{
     if(!s) return;
     const id=s.background&&s.background.assetId; if(id) ids.add(id);
-    (s.objects||[]).forEach(o=>{ const pid=o&&o.props&&o.props.photoId; if(pid) ids.add(pid); });
+    (s.floors||[]).forEach(f=>{
+      const fid=f&&f.background&&f.background.assetId; if(fid) ids.add(fid);
+      (f&&f.objects||[]).forEach(addPhoto);
+    });
+    (s.objects||[]).forEach(addPhoto);
   };
   add(state);
   (history.past||[]).forEach(add);
@@ -180,10 +185,16 @@ async function assetPrune(keepIds){ return (await bgAssetsReady).prune(keepIds);
 const dataUrlToBytes = ContentAssets.dataUrlToBytes;
 const bytesToDataUrl = ContentAssets.bytesToDataUrl;
 
-/** 工程落盘副本：底图字节在 assets 库，dataUrl 仅运行时存在，绝不写回工程记录 */
+/** 工程落盘副本：底图字节在 assets 库，dataUrl 仅运行时存在，绝不写回工程记录；
+ *  当前楼层数据保留在顶层，其余楼层携带各自 background/objects（均为已清洗的可序列化结构）。 */
 function persistableState(){
+  syncActiveFloor();
   const copy=deepClone(state);
   if(copy.background && copy.background.dataUrl) delete copy.background.dataUrl;
+  (copy.floors||[]).forEach(f=>{
+    if(f.id===copy.activeFloorId){ delete f.background; delete f.objects; delete f.viewport; return; }
+    if(f.background&&f.background.dataUrl) delete f.background.dataUrl;
+  });
   return copy;
 }
 /** 启动能力探测：file:// 下的 IndexedDB / Service Worker / Blob 可用性差异显式化（纯函数，便于自测） */
@@ -223,6 +234,85 @@ function notifyIdbFallback(){
   idbFallbackNotified=true;
   try{ toast('IndexedDB 不可用：已降级为 localStorage 自动保存（容量有限，建议定期导出 JSON）','warn'); }catch(_){}
 }
+/* -------------------- 多楼层 / 多底图 -------------------- */
+/** 当前楼层元数据 */
+function currentFloor(){
+  return (state.floors||[]).find(f=>f.id===state.activeFloorId)||null;
+}
+function currentFloorName(){ const f=currentFloor(); return f?f.name:'1F'; }
+function floorObjectCount(f){
+  return f&&f.id===state.activeFloorId?state.objects.length:(f&&Array.isArray(f.objects)?f.objects.length:0);
+}
+/** 把当前可编辑数据写回当前楼层条目（切换/保存/统计前调用） */
+function syncActiveFloor(){
+  const f=currentFloor();
+  if(!f) return;
+  f.background=state.background;
+  f.objects=state.objects;
+  f.viewport=state.viewport;
+}
+/** 纯数据切换（不触达 DOM/底图加载，便于自测）：成功返回 true */
+function switchFloorData(id){
+  if(!Array.isArray(state.floors)||id===state.activeFloorId) return false;
+  const target=state.floors.find(f=>f.id===id);
+  if(!target||!target.background||!Array.isArray(target.objects)) return false;
+  syncActiveFloor();
+  state.background=target.background;
+  state.objects=target.objects;
+  state.viewport=target.viewport||state.viewport;
+  state.activeFloorId=id;
+  selectedIds.clear();
+  coverageResult=null;
+  invalidateStatic();
+  resetFrameRef();
+  return true;
+}
+/** 切换楼层（含底图加载、视图适配、面板刷新） */
+async function switchFloor(id){
+  if(!switchFloorData(id)) return false;
+  await afterStateLoaded(false);
+  fitView(); requestRender(); renderProps();
+  return true;
+}
+/** 新增楼层：空白矢量场地；当前楼层数据先写回再创建 */
+async function addFloor(name){
+  syncActiveFloor();
+  pushHistory();
+  const n=(state.floors||[]).length+1;
+  const nm=(String(name||'').trim()||('F'+n)).slice(0,40);
+  const init=createInitialState();
+  const id='floor_'+uid('F');
+  state.floors.push({id,name:nm,background:init.background,objects:[],viewport:init.viewport});
+  const ok=await switchFloor(id);
+  return ok?id:null;
+}
+/** 删除楼层：至少保留一层；删除当前楼层时自动切到第一层 */
+async function deleteFloor(id){
+  if((state.floors||[]).length<=1) return false;
+  const idx=state.floors.findIndex(f=>f.id===id);
+  if(idx<0) return false;
+  syncActiveFloor(); pushHistory();
+  state.floors.splice(idx,1);
+  if(id===state.activeFloorId){
+    const target=state.floors[0];
+    state.background=target.background;
+    state.objects=target.objects;
+    state.viewport=target.viewport||state.viewport;
+    state.activeFloorId=target.id;
+    selectedIds.clear(); coverageResult=null; invalidateStatic(); resetFrameRef();
+    await afterStateLoaded(false); fitView();
+  }else commitChange('已删除楼层');
+  return true;
+}
+/** 重命名楼层 */
+function renameFloor(id,name){
+  const f=(state.floors||[]).find(x=>x.id===id);
+  const nm=String(name||'').trim().slice(0,40);
+  if(!f||!nm||nm===f.name) return false;
+  pushHistory(); f.name=nm; commitChange('楼层已重命名');
+  return true;
+}
+
 function scheduleSave(){
   $('saveState').textContent='待保存…';
   clearTimeout(saveTimer);
@@ -290,6 +380,20 @@ async function ensureObjectPhotoAssets(st){
     }catch(_){ /* 保留 dataUrl，照片仍可在当前会话查看 */ }
   }
 }
+/** 多楼层：非当前楼层背景的内嵌 dataUrl → 资产库 */
+async function ensureFloorBackgroundAssets(st){
+  for(const f of (st&&st.floors)||[]){
+    if(!f||f.id===st.activeFloorId) continue;
+    const bg=f.background;
+    if(!bg||!bg.dataUrl) continue;
+    try{
+      const bin=dataUrlToBytes(bg.dataUrl);
+      bg.assetId=assetIdFor(bin.bytes);
+      await assetPut(bg.assetId,{bytes:bin.bytes,mime:bin.mime});
+      delete bg.dataUrl;
+    }catch(_){}
+  }
+}
 function migrateProject(p){
   const base=createInitialState();
   const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
@@ -313,6 +417,36 @@ function migrateProject(p){
   settings.siteBase=!!settings.siteBase;
   settings.siteRadius=!!settings.siteRadius;
   const rawBg=typeof p.background==='object'&&p.background?p.background:{};
+  const background=sanitizeBackground(rawBg);
+  const viewport=sanitizeViewport(p.viewport);
+  const layers=sanitizeLayers(p.layers);
+  const objectTypes=mergeTypes(p.objectTypes);
+  const objects=sanitizeObjects(p.objects,layers,objectTypes);
+  /* 楼层：当前楼层数据取顶层 background/objects；其余楼层各自清洗并保留 */
+  const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
+  const floors=[]; const seenFloor=new Set();
+  rawFloors.forEach((f,i)=>{
+    const id=safeId(f.id||('FLOOR'+(i+1)),'FLOOR');
+    if(seenFloor.has(id)) return;
+    seenFloor.add(id);
+    const name=(String(f.name||('F'+(i+1))).trim()||('F'+(i+1))).slice(0,40);
+    const entry={id,name};
+    if(f.id!==p.activeFloorId){
+      entry.background=sanitizeBackground(f.background||{});
+      entry.objects=sanitizeObjects(f.objects||[],layers,objectTypes);
+      entry.viewport=sanitizeViewport(f.viewport);
+    }
+    floors.push(entry);
+  });
+  if(!floors.length) floors.push({id:'floor.default',name:'1F'});
+  let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
+  if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F'});
+  state=Object.assign(base,p,{meta,settings,background,viewport,layers,objectTypes,objects,floors,activeFloorId});
+  return state;
+}
+/** 背景清洗（顶层与多楼层共用同一规则） */
+function sanitizeBackground(rawBg){
+  rawBg=typeof rawBg==='object'&&rawBg?rawBg:{};
   // 兼容旧档（无 kind）：有图片引用判为 image，否则按像素域推导为矩形矢量场地
   const hasImage=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
   const shapeKind=rawBg.shape?.type;
@@ -322,7 +456,8 @@ function migrateProject(p){
     :(hasImage?'image':(inferred!=='rect'?inferred:'rect'));
   const legacyW=positiveNumber(rawBg.width,1000)*positiveNumber(rawBg.metersPerPixel,0.1);
   const legacyH=positiveNumber(rawBg.height,700)*positiveNumber(rawBg.metersPerPixel,0.1);
-  const background=Object.assign(base.background,rawBg,{
+  const base=createInitialState().background;
+  return Object.assign(base,rawBg,{
     kind,
     shape:sanitizeShape(rawBg.shape,kind,legacyW,legacyH),
     width:positiveNumber(rawBg.width,1000),
@@ -333,16 +468,14 @@ function migrateProject(p){
     dataUrl:typeof rawBg.dataUrl==='string'?rawBg.dataUrl:'',
     fileName:typeof rawBg.fileName==='string'?rawBg.fileName:'',
     calibrated:!!rawBg.calibrated,
-    transform:validImageTransform(rawBg.transform)   /* 仿射校准系数；非法/缺失时为 null（回退缺省轴对齐） */
+    transform:validImageTransform(rawBg.transform)
   });
-  const viewport=Object.assign(base.viewport,typeof p.viewport==='object'&&p.viewport?p.viewport:{});
-  viewport.zoom=Math.min(200,Math.max(.02,positiveNumber(viewport.zoom,base.viewport.zoom)));
-  viewport.panX=finiteNumber(viewport.panX,0); viewport.panY=finiteNumber(viewport.panY,0);
-  const layers=sanitizeLayers(p.layers);
-  const objectTypes=mergeTypes(p.objectTypes);
-  const objects=sanitizeObjects(p.objects,layers,objectTypes);
-  state=Object.assign(base,p,{meta,settings,background,viewport,layers,objectTypes,objects});
-  return state;
+}
+function sanitizeViewport(raw){
+  const v=Object.assign(createInitialState().viewport,raw&&typeof raw==='object'?raw:{});
+  v.zoom=Math.min(200,Math.max(.02,positiveNumber(v.zoom,1)));
+  v.panX=finiteNumber(v.panX,0); v.panY=finiteNumber(v.panY,0);
+  return v;
 }
 function finiteNumber(v,fallback){ const n=Number(v); return Number.isFinite(n)?n:fallback; }
 function positiveNumber(v,fallback){ const n=Number(v); return Number.isFinite(n)&&n>0?n:fallback; }
@@ -524,6 +657,7 @@ async function afterStateLoaded(fit=true){
   invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
   resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
   await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
+  await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
   /* 旧版底图资产 */refreshUI();
   if(fit) fitView();
   requestRender();
