@@ -118,10 +118,12 @@ code += `\n;globalThis.__api = {
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
-  PdfRead: globalThis.PdfRead,
+  PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
+  applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
   cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
+  optimizeCameraPlacement,
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
@@ -1146,7 +1148,8 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const D1=api.baseObject('dimension','dimension.distance',{name:'D1',subtype:'distance',points:[[0,0],[5,0]],x:0,y:0});
   st.objects.push(L1,L2,D1);
   const C=api.TABLE_COLUMNS;
-  const row=m=>{ const o={}; m.forEach((v,i)=>{ if(v!=='')o[C[i]]=v; }); return C.map(k=>o[k]??''); };
+  /* 台账新增的 4 列（型号/安装高度/IP/责任人）插在「图层」之后；旧用例按旧列序书写，这里自动补空位 */
+  const row=m=>{ const cells=m.slice(); cells.splice(5,0,'','','',''); const o={}; cells.forEach((v,i)=>{ if(v!=='')o[C[i]]=v; }); return C.map(k=>o[k]??''); };
   const H=C.slice();
   const rL1=row(['L1','','线段/折线','','','','','','','','','','是','','0,0;20,0;20,10;0,10']);
   const rL2=row(['L2','','线段/折线','','','25','35']);                       /* 仅改基点：整体平移 */
@@ -2633,6 +2636,103 @@ asyncSuites.push((async()=>{
   await rejects('加固PDF-两页超过上限1', api.PdfRead.parsePdf(two,{maxPages:1}), /页数/);
   eq('加固PDF-对象数恰好等于上限可通过', (await api.PdfRead.parsePdf(two,{maxObjects:5})).paths.length, 1);
 })());
+
+/* 51. 布点优化：贪心覆盖最大化、增益递减、目标/台数上限 ---------------------- */
+{
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'A',x:0,y:0,width:100,height:100}));
+  const opt=api.optimizeCameraPlacement(api.state,{phys:40,fov:360,targetRatio:.9,maxAdd:3,grid:8,targetCells:2500});
+  eq('布点-初始覆盖率为0', opt.beforeRatio, 0);
+  ok('布点-给出至少一台建议', opt.suggestions.length>=1);
+  ok('布点-单台增益大于0', opt.suggestions[0].gain>0);
+  ok('布点-不超过最大新增台数', opt.suggestions.length<=3);
+  ok('布点-覆盖率单调不降', opt.suggestions.every((s,i)=>i===0||s.ratioAfter>=opt.suggestions[i-1].ratioAfter));
+  ok('布点-最终覆盖率提升', opt.afterRatio>opt.beforeRatio);
+  eq('布点-全向视场朝向为0', opt.suggestions[0].angle, 0);
+  ok('布点-建议点位为有限坐标', Number.isFinite(opt.suggestions[0].x)&&Number.isFinite(opt.suggestions[0].y));
+
+  const one=api.optimizeCameraPlacement(api.state,{phys:40,fov:360,targetRatio:.99,maxAdd:1,grid:6,targetCells:1500});
+  eq('布点-最多新增1台生效', one.suggestions.length, 1);
+
+  /* 已全覆盖：不再给建议且标记达标 */
+  api.resetState();
+  api.state.objects.push(
+    api.baseObject('rect','rect.area',{name:'B',x:0,y:0,width:10,height:10}),
+    api.baseObject('point','point.dome',{name:'D',x:5,y:5,phys:1000})
+  );
+  const full=api.optimizeCameraPlacement(api.state,{phys:40,fov:360,targetRatio:.9,maxAdd:3});
+  eq('布点-已达标不再建议', full.suggestions.length, 0);
+  eq('布点-已达标标记', full.reached, true);
+  approx('布点-已全覆盖比例≈1', full.beforeRatio, 1, 1e-6);
+
+  /* 扇形：朝向在 [0,360) 内 */
+  const sec=api.optimizeCameraPlacement(api.state,{phys:60,fov:90,targetRatio:.5,maxAdd:1,grid:6,targetCells:1500});
+  ok('布点-扇形朝向合法', sec.suggestions.length===0||(sec.suggestions[0].angle>=0&&sec.suggestions[0].angle<360));
+
+  api.resetState();
+  const none=api.optimizeCameraPlacement(api.state,{});
+  eq('布点-无区域返回空结果', none.empty, true);
+  eq('布点-无区域无建议', none.suggestions.length, 0);
+}
+
+/* 52. 设备台账扩展字段 + 零依赖二维码编码器 -------------------------------- */
+{
+  const q=api.Qr;
+  eq('QR-矩阵尺寸29', q.SIZE, 29);
+  eq('QR-最大载荷42字节', q.MAX_BYTES, 42);
+  eq('QR-格式信息M掩码0=0x5412', q._internals.formatBits(0), 0x5412);
+  const data=Array.from({length:44},(_,i)=>(i*7)&255);
+  const ec=q._internals.rsEc(data);
+  eq('QR-纠错码字26个', ec.length, 26);
+  let synOk=true;
+  for(let i=0;i<26;i++){
+    let s=0;
+    for(const b of data.concat(ec)) s=q._internals.gfMul(s,q._internals.EXP[i])^b;
+    if(s!==0){ synOk=false; break; }
+  }
+  ok('QR-Reed-Solomon 26个综合式全为0', synOk);
+
+  const r=q.encodeText('PLOTPIN:P0001');
+  eq('QR-编码尺寸', r.size, 29);
+  ok('QR-掩码在0..7', r.mask>=0&&r.mask<=7);
+  const corner=(r0,c0)=>{ for(let i=0;i<7;i++){ if(!r.modules[r0][c0+i]||!r.modules[r0+6][c0+i]||!r.modules[r0+i][c0]||!r.modules[r0+i][c0+6]) return false; } return true; };
+  ok('QR-左上定位图形', corner(0,0));
+  ok('QR-右上定位图形', corner(0,22));
+  ok('QR-左下定位图形', corner(22,0));
+  ok('QR-定时图形交替', r.modules[6][8]===1&&r.modules[6][9]===0&&r.modules[8][6]===1&&r.modules[9][6]===0);
+  ok('QR-固定暗模块为黑', r.modules[21][8]===1);
+  let tooLong=false;
+  try{ q.encodeText('x'.repeat(43)); }catch(e){ tooLong=/过长/.test(e.message); }
+  ok('QR-超过42字节拒绝', tooLong);
+  eq('QR-UTF8字节长度', q.byteLength('P0001'), 5);
+  ok('QR-中文按UTF8多字节计', q.byteLength('设备')>2);
+
+  /* 台账字段：props 写入 / 导出列 / 空单元格不覆盖 / 照片资产可达 */
+  api.resetState();
+  const pt=api.baseObject('point','point.marker',{name:'L1',x:1,y:2});
+  api.state.objects=[pt];
+  const baseRow=api.objectRows().find(x=>x['编号']==='L1');
+  ok('台账-包含型号/安装高度/IP/责任人列', ['型号','安装高度','IP','责任人'].every(k=>Object.prototype.hasOwnProperty.call(baseRow,k)));
+  api.applyLedgerCells(pt,col=>({型号:'CAM-2',安装高度:'3.5',IP:'10.0.0.8',责任人:'张三'}[col]??''));
+  eq('台账-型号写入props', pt.props.model, 'CAM-2');
+  eq('台账-安装高度数值化', pt.props.mountHeight, 3.5);
+  eq('台账-IP写入props', pt.props.ip, '10.0.0.8');
+  eq('台账-责任人写入props', pt.props.owner, '张三');
+  const row2=api.objectRows().find(x=>x['编号']==='L1');
+  eq('台账-导出型号', row2['型号'], 'CAM-2');
+  eq('台账-导出安装高度', row2['安装高度'], 3.5);
+  eq('台账-导出IP', row2['IP'], '10.0.0.8');
+  api.applyLedgerCells(pt,()=> '');
+  eq('台账-空单元格不覆盖既有值', pt.props.model, 'CAM-2');
+
+  pt.props.photoId='bg_photo';
+  ok('台账-照片资产纳入可达集合', api.reachableBgAssetIds().includes('bg_photo'));
+  api.selectedIds.add(pt.id); api.renderProps();
+  const panel=api.$('propPanel').innerHTML;
+  ok('台账-面板含型号/IP/责任人输入', panel.includes('data-field="propModel"')&&panel.includes('data-field="propIp"')&&panel.includes('data-field="propOwner"'));
+  ok('台账-面板含照片上传控件', panel.includes('data-photo-input'));
+  api.resetState();
+}
 
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites);

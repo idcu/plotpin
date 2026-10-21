@@ -411,6 +411,19 @@ function applyRowShape(o,label,v){
   return false;
 }
 function tableNum(v){ const n=Number(String(v??'').trim()); return Number.isFinite(n)&&String(v??'').trim()!==''?n:NaN; }
+/** 设备台账扩展字段（型号/安装高度/IP/责任人）→ o.props，导出与导入共用同一映射 */
+const LEDGER_FIELDS=[['型号','model'],['安装高度','mountHeight'],['IP','ip'],['责任人','owner']];
+function applyLedgerCells(o,c){
+  LEDGER_FIELDS.forEach(([col,key])=>{
+    const raw=c(col);
+    if(raw==='') return;
+    o.props=o.props||{};
+    if(key==='mountHeight'){
+      const n=tableNum(raw);
+      if(Number.isFinite(n)) o.props[key]=Math.max(0,n);
+    }else o.props[key]=raw;
+  });
+}
 function tableBool(v){ return /^(是|true|1|y|yes)$/i.test(String(v??'').trim()); }
 function parseShapeParams(text){
   return String(text??'').split(/[,，\s]+/).filter(s=>s.trim()!=='').map(Number);
@@ -665,6 +678,7 @@ function applyTableImport(plan){
     const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
     const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
     const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
+    applyLedgerCells(o,c);
     o.updatedAt=nowISO(); updated++;
   });
   plan.creates.forEach(cr=>{
@@ -690,6 +704,7 @@ function applyTableImport(plan){
     const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
     const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
     const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
+    applyLedgerCells(o,c);
     state.objects.push(o); created++;
   });
   selectedIds.clear();
@@ -707,11 +722,58 @@ $('exportBtn').onclick=()=>{
   if(kind==='csv') exportDelimited(',','csv','text/csv;charset=utf-8');
   if(kind==='tsv') exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8');
   if(kind==='xlsx') exportXlsx();
+  if(kind==='labels') exportLabelSheet();
 };
 function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800);
 }
 function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
+/** 二维码 SVG：一个 path 画全部暗模块（29×29 版式，crispEdges 保证打印锐利） */
+function qrSvg(text,px=96){
+  const qr=Qr.encodeText(text);
+  let d='';
+  for(let r=0;r<qr.size;r++) for(let c=0;c<qr.size;c++){
+    if(qr.modules[r][c]) d+=`M${c} ${r}h1v1h-1z`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${qr.size} ${qr.size}" width="${px}" height="${px}" shape-rendering="crispEdges"><rect width="${qr.size}" height="${qr.size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+/**
+ * 设备二维码标签：每个可见点设备一张，扫码得到 `PLOTPIN:编号`，可在工程内搜索编号定位。
+ * 离线生成可打印 HTML（A4 三列），不依赖任何外部资源。
+ */
+function exportLabelSheet(){
+  const pts=state.objects.filter(o=>o.kind==='point'&&isVisible(o));
+  if(!pts.length) return toast('当前没有可见的点设备','warn');
+  const cards=pts.map(o=>{
+    const t=getType(o.typeId);
+    const base='PLOTPIN:'+(o.name||o.id);
+    const payload=Qr.byteLength(base)<=Qr.MAX_BYTES?base:'PLOTPIN:'+o.id;
+    let svg;
+    try{ svg=qrSvg(payload); }
+    catch(e){ svg=`<div style="color:#b91c1c;font-size:12px">${esc(e.message)}</div>`; }
+    const line=(label,val)=>val!==undefined&&val!==''?`<div>${label}：${esc(val)}</div>`:'';
+    return `<div class="label"><div class="qr">${svg}</div><div class="meta">
+      <b>${esc(o.name||'')}</b>
+      <div>${esc(t.name)}</div>
+      ${line('型号',o.props.model)}${line('IP',o.props.ip)}
+      ${line('安装高度',o.props.mountHeight!==undefined?o.props.mountHeight+' m':'')}
+      ${line('责任人',o.props.owner)}
+      <div class="code">${esc(payload)}</div></div></div>`;
+  }).join('');
+  const html=`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${esc(safeName())} · 设备标签</title>
+<style>body{font-family:"Microsoft YaHei",Arial,sans-serif;margin:16px;color:#111827}
+.sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.label{border:1px dashed #94a3b8;border-radius:6px;padding:8px;display:flex;gap:8px;align-items:center;break-inside:avoid}
+.qr svg{display:block;width:96px;height:96px}
+.meta{font-size:12px;line-height:1.55;min-width:0}.meta b{font-size:14px}
+.code{font-family:Consolas,Menlo,monospace;color:#475569;word-break:break-all;font-size:11px}
+@media print{body{margin:8mm}.label{border-style:solid}}</style></head>
+<body><h3>${esc(state.meta.name||'图纸工程')} · 设备二维码标签（共 ${pts.length} 台）</h3>
+<p style="font-size:12px;color:#475569">扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。</p>
+<div class="sheet">${cards}</div></body></html>`;
+  downloadBlob(new Blob([html],{type:'text/html;charset=utf-8'}),safeName()+'-设备标签.html');
+  toast('已导出 '+pts.length+' 张设备二维码标签（可打印）','success');
+}
 /** 导出覆盖率盲区多边形（逐行合并的矩形面，GeoJSON FeatureCollection） */
 function exportBlindSpotsGeoJson(){
   if(!coverageResult||!coverageResult.regions||!coverageResult.regions.length){
@@ -735,10 +797,19 @@ async function exportJSON(){
   const copy=persistableState();
   copy.meta.updatedAt=state.meta.updatedAt;
   if(bgDataUrl) copy.background.dataUrl=bgDataUrl;
+  /* 设备照片同样内嵌 dataUrl，跨设备导入后由 ensureObjectPhotoAssets 转回资产库 */
+  for(const o of copy.objects||[]){
+    const id=o.props&&o.props.photoId;
+    if(!id) continue;
+    try{
+      const rec=await assetGet(id);
+      if(rec) o.props.photoDataUrl=bytesToDataUrl(rec.bytes,rec.mime||'image/jpeg');
+    }catch(_){}
+  }
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
-  toast('JSON 工程已导出（含底图）','success');
+  toast('JSON 工程已导出（含底图与设备照片）','success');
 }
-const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','X','Y','角度','宽度','高度','形状','形状参数','闭合','标注类型','节点坐标','节点数','长度','面积','显示','锁定','备注','更新时间'];
+const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','X','Y','角度','宽度','高度','形状','形状参数','闭合','标注类型','节点坐标','节点数','长度','面积','显示','锁定','备注','更新时间'];
 function objectRows(){
   return state.objects.map(o=>{
     const t=getType(o.typeId),l=layerOf(o);
@@ -755,6 +826,7 @@ function objectRows(){
     }
     return {
       编号:o.name,名称:o.text||'',对象类型:kindName(o.kind),业务类型:t.name,图层:l.name,
+      型号:o.props.model||'',安装高度:o.props.mountHeight!==undefined?o.props.mountHeight:'',IP:o.props.ip||'',责任人:o.props.owner||'',
       X:fmt(o.x),Y:fmt(o.y),角度:ang,宽度:w?fmt(w):'',高度:h?fmt(h):'',
       形状:shape,'形状参数':shapeParam,
       闭合:o.kind==='line'?(o.closed?'是':'否'):'',

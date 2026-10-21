@@ -310,6 +310,10 @@ function renderProps(){
       ? `<div class="hint-text span2" style="grid-column:1/-1">该类型按「${POINT_SCALE_SHAPES[psh]}」渲染：填 0 为纯位置图标；填${psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'}（米）后随底图真实比例缩放${psh==='sector'?'，张角 '+(''+(t.fov||90))+'°，朝向随朝向角':''}</div>`
       : `<div class="hint-text span2" style="grid-column:1/-1">该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。</div>`;
     specific=`${row('X 坐标',num('x',fmt(o.x)))}${row('Y 坐标',num('y',fmt(o.y)))}${row('朝向角',num('angle',Math.round(o.angle),1))}
+      ${row('型号',txt('propModel',o.props.model))}${row('安装高度 (m)',num('propMountHeight',o.props.mountHeight===undefined?'':o.props.mountHeight))}
+      ${row('IP',txt('propIp',o.props.ip))}${row('责任人',txt('propOwner',o.props.owner))}
+      ${row('照片',`<input type="file" accept="image/*" data-photo-input><button type="button" class="icon-btn danger" data-photo-clear title="移除照片" ${o.props.photoId?'':'disabled'}>×</button>`)}
+      ${o.props.photoId?`<div class="span2" style="grid-column:1/-1"><img data-photo-img="${esc(o.props.photoId)}" alt="设备照片" style="max-width:100%;max-height:160px;border-radius:4px;border:1px solid #334155"></div>`:''}
       ${row('图标大小',`<input type="range" min=".5" max="3" step=".05" data-field="iconSize" value="${Number(o.iconSize)||1}"><span class="hint-text">${(Number(o.iconSize)||1).toFixed(2)}×（顶栏还有全局点大小）</span>`)}
       ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}${physHint}
       ${renderAnnotToggles(o)}`;
@@ -416,6 +420,29 @@ function bindPropEvents(box,o){
   box.querySelectorAll('[data-prop-del]').forEach(btn=>btn.onclick=()=>{
     const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; delete o.props[k]; commitChange();
   });
+  /* 设备照片：复用内容寻址资产库（与底图同一 storage），照片随撤销栈可达集合保留 */
+  box.querySelectorAll('[data-photo-input]').forEach(inp=>inp.addEventListener('change',async()=>{
+    const f=inp.files&&inp.files[0]; if(!f) return;
+    if(!isEditable(o)) return toast('对象或图层已锁定','warn');
+    try{
+      const bytes=new Uint8Array(await f.arrayBuffer());
+      const id=assetIdFor(bytes);
+      await assetPut(id,{bytes,mime:f.type||'image/jpeg'});
+      pushHistory(); o.props=o.props||{}; o.props.photoId=id; commitObjectEdit(); renderProps();
+      toast('照片已附加','success');
+    }catch(e){ toast('照片保存失败：'+e.message,'error'); }
+  }));
+  box.querySelectorAll('[data-photo-clear]').forEach(btn=>btn.onclick=()=>{
+    if(!isEditable(o)) return toast('对象或图层已锁定','warn');
+    if(!o.props.photoId) return;
+    pushHistory(); delete o.props.photoId; commitObjectEdit(); renderProps();
+  });
+  box.querySelectorAll('[data-photo-img]').forEach(async img=>{
+    try{
+      const rec=await assetGet(img.dataset.photoImg);
+      if(rec) img.src=bytesToDataUrl(rec.bytes,rec.mime||'image/jpeg');
+    }catch(_){}
+  });
   if(!isEditable(o)) box.querySelectorAll('input,select,textarea,button:not(.danger)').forEach(el=>{ el.disabled=true; });
 }
 /** 节点行 HTML5 拖拽排序：仅抓手可拖，落到目标行=移动到该位置 */
@@ -466,6 +493,16 @@ function applyField(el,o,changed){
   }
   else if(k==='shapeSkew'&&o.shape){
     o.shape.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,Number(el.value)||0));
+  }
+  else if(k==='propModel'||k==='propIp'||k==='propOwner'){
+    o.props=o.props||{};
+    const key=k.slice(4).toLowerCase(), v=String(el.value||'').trim();
+    if(v) o.props[key]=v; else delete o.props[key];
+  }
+  else if(k==='propMountHeight'){
+    o.props=o.props||{};
+    const n=Number(el.value);
+    if(el.value!==''&&Number.isFinite(n)) o.props.mountHeight=Math.max(0,n); else delete o.props.mountHeight;
   }
   else o[k]=el.value;
   if(k==='typeId'){ const t=getType(o.typeId); if(!o.style.color) o.style.color=t.color; }
@@ -736,10 +773,49 @@ function runCoverageAnalysis(){
   const body=res.regions.length? head+rows+legend
     : head+`<div class="hint-text" style="padding:8px 0">当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。</div>`;
   openModal('视场覆盖率分析', body, [
+    {text:'布点优化…',class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
     {text:'导出盲区 GeoJSON',class:'',click:exportBlindSpotsGeoJson},
     {text:'清除叠加层',class:'',click:()=>{ coverageResult=null; invalidateStatic(); closeModal(); requestRender(); }},
     {text:'关闭',class:'primary',click:closeModal}
   ]);
+}
+/**
+ * 布点优化：输入视场参数与目标覆盖率，贪心给出新增点位建议及「加一台能提升多少」。
+ * 应用建议后自动重跑覆盖率分析，形成闭环。
+ */
+async function runPlacementOptimization(){
+  const v=await showPrompt({title:'布点优化',label:'视场半径(m), 张角(°), 目标覆盖率(%), 最多新增台数（如 120,90,90,5）',value:'120,90,90,5'});
+  if(v===null) return;
+  const m=v.split(/[,，\s]+/).map(Number);
+  const phys=m[0]>0?m[0]:120, fov=m[1]>0?m[1]:90;
+  const targetRatio=Math.max(.1,Math.min(1,(m[2]>0?m[2]:90)/100));
+  const maxAdd=Math.max(1,Math.min(50,m[3]>0?m[3]:5));
+  const res=optimizeCameraPlacement(state,{phys,fov,targetRatio,maxAdd});
+  if(res.empty){ toast('没有可用于布点的区域：请先绘制区域或闭合折线','warn'); return; }
+  const pct=x=>(x*100).toFixed(1)+'%';
+  const rows=res.suggestions.map((s,i)=>`<tr>
+    <td>${i+1}</td><td>${fmt(s.x)}, ${fmt(s.y)}</td><td>${Math.round(s.angle)}°</td>
+    <td>${fmt(s.gain)} ㎡（${pct(s.gainRatio)}）</td><td>${pct(s.ratioAfter)}</td></tr>`).join('');
+  const body=`<div style="font-size:13px;line-height:1.9;margin-bottom:10px">
+      当前覆盖 <b>${pct(res.beforeRatio)}</b> → 预计 <b>${pct(res.afterRatio)}</b>（目标 ${pct(res.targetRatio)}）${res.reached?'，<b style="color:#16a34a">已达标</b>':'，仍未达标'}
+      <br><span class="hint-text">视场半径 ${fmt(res.phys)} m ｜ 张角 ${res.fov}° ｜ 仅在「区域/闭合折线」内统计；建议点位可位于场地边界外（立杆/壁挂）</span></div>
+    ${rows?`<div class="scroll"><table><thead><tr><th>#</th><th>建议位置 X, Y (m)</th><th>朝向</th><th>新增覆盖</th><th>累计覆盖</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      :'<p class="hint-text">当前已达标，无需新增点位。</p>'}`;
+  const buttons=[{text:'关闭',class:'',click:closeModal}];
+  if(res.suggestions.length){
+    buttons.unshift({text:`应用建议（新增 ${res.suggestions.length} 台）`,class:'primary',click:()=>{
+      pushHistory();
+      const typeId=defaultTypeId('point')==='point.marker'?'point.camera':defaultTypeId('point');
+      res.suggestions.forEach(s=>{
+        const o=baseObject('point',state.objectTypes.some(t=>t.id==='point.camera')?'point.camera':typeId,
+          {x:Math.round(s.x*100)/100,y:Math.round(s.y*100)/100,angle:s.angle,phys:s.phys});
+        state.objects.push(o);
+      });
+      closeModal(); commitChange('已按建议新增 '+res.suggestions.length+' 台摄像头');
+      runCoverageAnalysis();
+    }});
+  }
+  openModal('布点优化（贪心覆盖最大化）',body,buttons);
 }
 
 /* -------------------- 统一刷新 -------------------- */

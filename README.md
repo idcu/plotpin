@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-1008%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-1050%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在任意底图（图片 / 矢量场地）上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -139,7 +139,7 @@ npm test
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希与撤销栈可达性回收、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、静态资源引用完整性等纯逻辑模块，当前共 **1008 项断言全部通过**。
+底图资产哈希与撤销栈可达性回收、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、静态资源引用完整性等纯逻辑模块，当前共 **1050 项断言全部通过**。
 
 ---
 
@@ -189,7 +189,7 @@ Double-click `index.html` — or serve the folder with any static file server. M
 ### Test
 
 ```bash
-node scripts/selftest.mjs   # 1008 assertions, no dependencies
+node scripts/selftest.mjs   # 1050 assertions, no dependencies
 node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁
 node scripts/bench.mjs      # 渲染与覆盖率性能基准（阈值不达标则退出码 1）
 ```

@@ -695,6 +695,98 @@ function blindSpotArea(res){
     return s+Math.abs((a[1][0]-a[0][0])*(a[2][1]-a[1][1]));
   },0);
 }
+/**
+ * 布点优化（贪心覆盖最大化）：在区域外接网格上枚举候选位置与朝向，
+ * 每轮选择「新增覆盖面积」最大的点，直到达到目标覆盖率 / 新增台数上限 / 无增益。
+ * 纯函数，基于 analyzeCoverage 栅格；返回建议点位与前后覆盖率。
+ * opt: {phys=120, fov=90, targetRatio=.9, maxAdd=5, grid=14, angles=12, targetCells=6000}
+ */
+function optimizeCameraPlacement(st,opt){
+  opt=opt||{};
+  const phys=Math.max(.1,Number(opt.phys)||120);
+  const fov=Math.min(360,Math.max(10,Number(opt.fov)||90));
+  const targetRatio=Math.max(0,Math.min(1,opt.targetRatio===undefined ? .9 : Number(opt.targetRatio)));
+  const maxAdd=Math.max(0,Math.min(50,Number(opt.maxAdd)||5));
+  const gridN=Math.max(4,Math.min(40,Number(opt.grid)||14));
+  const angleStep=Math.max(10,Math.min(90,360/Math.max(1,Number(opt.angles)||12)));
+  const res=analyzeCoverage(st,{targetCells:Math.max(2000,Number(opt.targetCells)||6000)});
+  const regions=res.regions;
+  if(!regions.length) return {beforeRatio:0,afterRatio:0,suggestions:[],reached:false,empty:true};
+
+  const insideArea=regions.reduce((s,r)=>s+(r.grid.reduce((n,g)=>n+(g!==2?1:0),0))*r.cell*r.cell,0);
+  if(insideArea<=0) return {beforeRatio:0,afterRatio:0,suggestions:[],reached:false,empty:true};
+  /* 每区域的「已覆盖」掩码（只区分 1/0）；2=区域外保持 0 且不参与增益 */
+  const covered=regions.map(r=>{
+    const c=new Uint8Array(r.grid.length);
+    for(let i=0;i<r.grid.length;i++) c[i]=r.grid[i]===1?1:0;
+    return c;
+  });
+  let coveredArea=regions.reduce((s,r)=>s+(r.grid.reduce((n,g)=>n+(g===1?1:0),0))*r.cell*r.cell,0);
+  const ratioNow=()=>insideArea?coveredArea/insideArea:0;
+
+  /* 候选位置：所有区域并集包围盒上的规则网格（允许略在区域外，符合壁挂/立杆布点） */
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  regions.forEach(r=>{ minX=Math.min(minX,r.minX); minY=Math.min(minY,r.minY);
+    maxX=Math.max(maxX,r.minX+r.nx*r.cell); maxY=Math.max(maxY,r.minY+r.ny*r.cell); });
+  const positions=[];
+  for(let j=0;j<=gridN;j++) for(let i=0;i<=gridN;i++){
+    positions.push([minX+(maxX-minX)*i/gridN,minY+(maxY-minY)*j/gridN]);
+  }
+  const angles=fov>=360?[0]:Array.from({length:Math.round(360/angleStep)},(_,i)=>Math.round(i*angleStep));
+  const mkCam=(x,y,angle)=>({kind:fov>=360?'circle':'sector',x,y,r:phys,fov,angle});
+
+  /* 单个候选的新增覆盖面积：只遍历其外接圆覆盖到的格子 */
+  const gainOf=(x,y,angle)=>{
+    const cam=mkCam(x,y,angle), r=phys;
+    let gain=0;
+    for(let ri=0;ri<regions.length;ri++){
+      const reg=regions[ri];
+      if(x+r<reg.minX||x-r>reg.minX+reg.nx*reg.cell||y+r<reg.minY||y-r>reg.minY+reg.ny*reg.cell) continue;
+      const i0=Math.max(0,Math.floor((x-r-reg.minX)/reg.cell)), i1=Math.min(reg.nx-1,Math.ceil((x+r-reg.minX)/reg.cell));
+      const j0=Math.max(0,Math.floor((y-r-reg.minY)/reg.cell)), j1=Math.min(reg.ny-1,Math.ceil((y+r-reg.minY)/reg.cell));
+      for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+        const idx=j*reg.nx+i;
+        if(reg.grid[idx]!==0||covered[ri][idx]) continue;   /* 只对「区内且未覆盖」格计增益 */
+        const px=reg.minX+(i+.5)*reg.cell, py=reg.minY+(j+.5)*reg.cell;
+        if(pointInFootprint([px,py],cam)) gain+=reg.cell*reg.cell;
+      }
+    }
+    return gain;
+  };
+  const markCovered=(x,y,angle)=>{
+    const cam=mkCam(x,y,angle), r=phys;
+    for(let ri=0;ri<regions.length;ri++){
+      const reg=regions[ri];
+      if(x+r<reg.minX||x-r>reg.minX+reg.nx*reg.cell||y+r<reg.minY||y-r>reg.minY+reg.ny*reg.cell) continue;
+      const i0=Math.max(0,Math.floor((x-r-reg.minX)/reg.cell)), i1=Math.min(reg.nx-1,Math.ceil((x+r-reg.minX)/reg.cell));
+      const j0=Math.max(0,Math.floor((y-r-reg.minY)/reg.cell)), j1=Math.min(reg.ny-1,Math.ceil((y+r-reg.minY)/reg.cell));
+      for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+        const idx=j*reg.nx+i;
+        if(reg.grid[idx]!==0||covered[ri][idx]) continue;
+        const px=reg.minX+(i+.5)*reg.cell, py=reg.minY+(j+.5)*reg.cell;
+        if(pointInFootprint([px,py],cam)) covered[ri][idx]=1;
+      }
+    }
+  };
+
+  const beforeRatio=ratioNow();
+  const suggestions=[];
+  for(let step=0;step<maxAdd;step++){
+    if(ratioNow()>=targetRatio-1e-9) break;
+    let best=null;
+    for(const [x,y] of positions) for(const angle of angles){
+      const g=gainOf(x,y,angle);
+      if(!best||g>best.gain) best={x,y,angle,gain:g};
+    }
+    if(!best||best.gain<=0) break;
+    markCovered(best.x,best.y,best.angle);
+    coveredArea+=best.gain;
+    suggestions.push({x:best.x,y:best.y,angle:best.angle,phys,fov,
+      gain:best.gain,gainRatio:best.gain/insideArea,ratioAfter:ratioNow()});
+  }
+  return {beforeRatio,afterRatio:ratioNow(),suggestions,reached:ratioNow()>=targetRatio-1e-9,
+    targetRatio,phys,fov,insideArea};
+}
 
 /* ==================== 仿射校准：图像像素(y向下) ↔ 世界坐标(米,y向上) ==================== */
 /** 图片底图缺省仿射：px→m，X=a u+b v+c，Y=d u+e v+f（像素 v 向下，故 e 为负） */

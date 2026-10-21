@@ -1,10 +1,14 @@
 /* persistence.js —— 历史栈、IndexedDB 工程库、底图资产桥接、自动保存、迁移清洗、底图装载 */
 /* -------------------- 历史 / 保存 -------------------- */
-/** 当前工程与撤销/重做栈中所有仍被引用的底图资产 ID（快照可达集合）。
- *  底图垃圾回收只能删这个集合之外的资产，否则撤销到旧背景时二进制已丢失（评估报告 5.2） */
+/** 当前工程与撤销/重做栈中所有仍被引用的底图与设备照片资产 ID（快照可达集合）。
+ *  资产垃圾回收只能删这个集合之外的资产，否则撤销到旧背景时二进制已丢失（评估报告 5.2） */
 function reachableBgAssetIds(){
   const ids=new Set();
-  const add=s=>{ const id=s&&s.background&&s.background.assetId; if(id) ids.add(id); };
+  const add=s=>{
+    if(!s) return;
+    const id=s.background&&s.background.assetId; if(id) ids.add(id);
+    (s.objects||[]).forEach(o=>{ const pid=o&&o.props&&o.props.photoId; if(pid) ids.add(pid); });
+  };
   add(state);
   (history.past||[]).forEach(add);
   (history.future||[]).forEach(add);
@@ -269,6 +273,23 @@ async function ensureBackgroundAsset(st){
     delete bg.dataUrl;
   }catch(e){ /* 保留 dataUrl，渲染层兼容该退化形态 */ }
 }
+/**
+ * JSON 工程内嵌的设备照片（dataUrl）→ 内容寻址资产库，并记录 photoId。
+ * 与底图同样策略：IDB 不可用时保留 dataUrl（面板仍可显示），导入不失败。
+ */
+async function ensureObjectPhotoAssets(st){
+  for(const o of (st&&st.objects)||[]){
+    const du=o&&o.props&&o.props.photoDataUrl;
+    if(!du) continue;
+    try{
+      const bin=dataUrlToBytes(du);
+      const id=assetIdFor(bin.bytes);
+      await assetPut(id,{bytes:bin.bytes,mime:bin.mime||'image/jpeg'});
+      o.props.photoId=id;
+      delete o.props.photoDataUrl;
+    }catch(_){ /* 保留 dataUrl，照片仍可在当前会话查看 */ }
+  }
+}
 function migrateProject(p){
   const base=createInitialState();
   const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
@@ -502,6 +523,7 @@ async function afterStateLoaded(fit=true){
   bgImage=null; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
   invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
   resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
+  await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
   /* 旧版底图资产 */refreshUI();
   if(fit) fitView();
   requestRender();
