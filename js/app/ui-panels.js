@@ -646,6 +646,21 @@ $('addTypeBtn').onclick=async()=>{
   $('newTypeName').value=''; commitChange('已新增类型'); populateSelects();
 };
 
+$('importSymBtn').onclick=()=>$('symFileInput').click();
+$('symFileInput').addEventListener('change',async e=>{
+  const f=e.target.files[0]; e.target.value='';
+  if(!f) return;
+  try{
+    const parsed=parseSvgSymbol(await f.text());
+    const name=(f.name||'SVG 图元').replace(/\.svg$/i,'').slice(0,30)||'SVG 图元';
+    pushHistory();
+    state.objectTypes.push({id:uid('sym'),kind:'point',name,color:'#7c3aed',icon:'symbol',
+      scaleShape:'none',builtin:false,symbol:parsed.paths,symbolViewBox:parsed.vb});
+    commitChange('已导入 SVG 图元：'+name);
+    populateSelects(); renderTypes();
+  }catch(err){ toast('SVG 导入失败：'+err.message,'error'); }
+});
+
 /* -------------------- 统计 / 校验 -------------------- */
 /** 清单/报告中区域形状的参数摘要 */
 function areaParamText(o){

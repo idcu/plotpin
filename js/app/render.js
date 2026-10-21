@@ -671,11 +671,33 @@ function drawPhysicalPoint(c,o,color,type,toS,v,markerScale){
   c.restore();
   drawLabel(c,o,s[0],s[1]-Math.max(13,R/2+6),color,toS,12*markerScale);
 }
+/** 行业图元/SVG 图元：按 24×24（或自定义 viewBox）归一化到屏幕图标尺寸 */
+function drawPointSymbol(c,type,color,s,a,k){
+  const vb=type.symbolViewBox||{x:0,y:0,w:24,h:24};
+  const fs=k*0.9*24/Math.max(vb.w,vb.h);
+  c.save(); c.translate(s[0],s[1]); c.rotate(a); c.scale(fs,fs);
+  c.translate(-(vb.x+vb.w/2),-(vb.y+vb.h/2));
+  c.strokeStyle=color; c.fillStyle=color; c.lineWidth=1.7; c.lineJoin='round'; c.lineCap='round';
+  if(typeof Path2D==='function'){
+    for(const p of type.symbol){
+      try{ const path=new Path2D(p.d); if(p.fill) c.fill(path); else c.stroke(path); }catch(_){}
+    }
+  }else{
+    /* 无 Path2D 的降级环境：画一个菱形占位，避免整帧渲染失败 */
+    c.beginPath(); c.moveTo(-9,0); c.lineTo(0,-9); c.lineTo(9,0); c.lineTo(0,9); c.closePath(); c.stroke();
+  }
+  c.restore();
+}
 function drawPoint(c,o,color,type,toS,markerScale,v){
   if((o.phys||0)>0 && (type.scaleShape&&type.scaleShape!=='none')) return drawPhysicalPoint(c,o,color,type,toS,v,markerScale);
   /* 屏幕固定图标：导出增益 × 全局倍率 × 类型默认 × 对象覆盖；缩放画布不改变图标视觉大小 */
   const k=markerScale*(Number(type.iconSize)||1)*(Number(o.iconSize)||1);
   const s=toS([o.x,o.y]), r=11*k, a=screenAngle(o);
+  if(type.symbol&&type.symbol.length){
+    drawPointSymbol(c,type,color,s,a,k);
+    drawLabel(c,o,s[0],s[1]-r-8,color,toS,12*k);
+    return;
+  }
   c.save(); c.translate(s[0],s[1]); c.rotate(a); c.scale(k,k);
   c.lineWidth=2; c.strokeStyle=color; c.fillStyle=color;
   const icon=type.icon||o.style.icon||'marker';

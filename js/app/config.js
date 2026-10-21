@@ -28,6 +28,12 @@ const BUILTIN_TYPES = [
   {id:'point.charger', kind:'point', name:'充电桩', color:'#0f766e', icon:'charger', scaleShape:'square', builtin:true},
   {id:'point.warning', kind:'point', name:'警示点', color:'#f59e0b', icon:'warning', scaleShape:'none', builtin:true},
   {id:'point.custom', kind:'point', name:'自定义点', color:'#7c3aed', icon:'custom', scaleShape:'none', builtin:true},
+  /* 行业标准图元：来自 symbols.js 的 64 个 24×24 线性图标（安防/弱电/停车/消防/通用） */
+  ...((typeof SYMBOL_LIBRARY!=='undefined'?SYMBOL_LIBRARY:[]).map(sym=>({
+    id:sym.id, kind:'point', name:sym.name, color:'#1e293b', icon:'symbol', scaleShape:'none',
+    builtin:true, symbol:sym.paths.map(p=>typeof p==='string'?{d:p,fill:false}:p),
+    symbolViewBox:sym.views, category:sym.cat
+  }))),
   {id:'rect.area', kind:'rect', name:'普通区域', color:'#2563eb', icon:'rect', builtin:true, defaultStyle:{fillAlpha:.13,strokeWidth:.12}},
   {id:'rect.parking', kind:'rect', name:'车位区域', color:'#16a34a', icon:'rect', builtin:true, defaultStyle:{fillAlpha:.18,strokeWidth:.12}},
   {id:'rect.building', kind:'rect', name:'建筑/遮挡', color:'#6b7280', icon:'rect', builtin:true, defaultStyle:{fillAlpha:.28,strokeWidth:.12}},

@@ -988,7 +988,7 @@ function buildSceneSvg(){
     `<text x="${X(it.wx)+it.dx}" y="${Y(it.wy)+it.dy+4}" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(it.text)}</text>`).join('');
   /* 屏幕固定像素的点设备图标（与 render.js drawPoint 的局部坐标一致，不随 ppu 缩放）；
      返回局部坐标 SVG 片段，由外层 <g scale> 包裹 */
-  const svgPointIcon=(icon,color)=>{
+  const svgPointIcon=(icon,color,type)=>{
     let body='';
     if(icon==='camera'){
       body=`<rect x="-6" y="-5" width="12" height="10" fill="#fff" stroke="${color}" stroke-width="2"/>`+
@@ -1008,6 +1008,12 @@ function buildSceneSvg(){
       body=`<path d="M0,-11 L11,9 L-11,9 Z" fill="${color}"/><text x="0" y="3" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">!</text>`;
     }else if(icon==='custom'){
       body=`<path d="M0,-10 L10,0 L0,10 L-10,0 Z" fill="${color}"/>`;
+    }else if(icon==='symbol'){
+      /* 行业/自定义 SVG 图元：24 单位坐标系（或自定义 viewBox）居中缩放到图标尺寸 */
+      const vb=type&&type.symbolViewBox||{x:0,y:0,w:24,h:24};
+      const fs=0.9*24/Math.max(vb.w,vb.h);
+      const paths=(type&&type.symbol||[]).map(p=>`<path d="${esc(p.d)}" fill="${p.fill?color:'none'}" stroke="${p.fill?'none':color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+      body=`<g transform="translate(${-(vb.x+vb.w/2)*fs} ${-(vb.y+vb.h/2)*fs}) scale(${fs})">${paths}</g>`;
     }else{
       body=`<circle cx="0" cy="0" r="7" fill="#fff" stroke="${color}" stroke-width="2"/><circle cx="0" cy="0" r="3.5" fill="${color}"/>`;
     }
@@ -1062,7 +1068,7 @@ function buildSceneSvg(){
         shapes.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle})">${body}<circle r="3.2" fill="${color}"/></g>`);
       }else{
         const k=pointIconScale(o), icon=t.icon||o.style.icon||'marker';
-        markers.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle}) scale(${k})">${svgPointIcon(icon,color)}</g>`);
+        markers.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle}) scale(${k})">${svgPointIcon(icon,color,t)}</g>`);
       }
       if(o.name&&annotOn(o,'name')){
         const ly=(o.phys||0)>0?y-Math.max(13,(o.phys||0)/2*ppu+6):y-20*pointIconScale(o);

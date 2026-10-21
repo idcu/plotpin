@@ -119,6 +119,7 @@ code += `\n;globalThis.__api = {
   buildSceneSvg,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
+  SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
@@ -2851,6 +2852,58 @@ asyncSuites.push((async()=>{
   eq('设置-非法极轴步长回退45', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{polarStep:37}}).settings.polarStep, 45);
   eq('设置-合法极轴步长保留', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{polar:true,polarStep:15}}).settings.polarStep, 15);
   api.clearGuideLines();
+  api.resetState();
+}
+
+/* 55. 行业图元库与自定义 SVG 导入 ------------------------------------------- */
+{
+  const lib=api.SYMBOL_LIBRARY;
+  ok('图元库-数量≥60', lib.length>=60);
+  eq('图元库-id唯一', new Set(lib.map(s=>s.id)).size, lib.length);
+  eq('图元库-名称唯一', new Set(lib.map(s=>s.name)).size, lib.length);
+  ok('图元库-每条都有路径', lib.every(s=>Array.isArray(s.paths)&&s.paths.length>0));
+  ok('图元库-覆盖安防/弱电/停车/消防', ['安防','弱电','停车','消防'].every(cat=>lib.some(s=>s.cat===cat)));
+  eq('图元库-全部注册为内置点类型', api.BUILTIN_TYPES.filter(t=>t.kind==='point'&&t.symbol&&t.symbol.length).length, lib.length);
+
+  /* SVG 导入：path/circle/rect/polygon/line + viewBox + 安全与上限 */
+  const parsed=api.parseSvgSymbol('<svg viewBox="0 0 48 32"><path d="M0 0L10 10" fill="none"/><circle cx="5" cy="6" r="2"/><rect x="1" y="2" width="3" height="4"/><polygon points="0,0 1,0 1,1"/><line x1="0" y1="0" x2="2" y2="2"/></svg>');
+  eq('SVG导入-viewBox解析', parsed.vb, {x:0,y:0,w:48,h:32});
+  eq('SVG导入-五类图元路径数', parsed.paths.length, 5);
+  ok('SVG导入-圆形转路径', parsed.paths[1].d.includes('a2 2'));
+  ok('SVG导入-矩形转路径', parsed.paths[2].d.includes('h3v4'));
+  ok('SVG导入-多边形闭合', parsed.paths[3].d.endsWith('Z'));
+  let err=null; try{ api.parseSvgSymbol('<svg></svg>'); }catch(e){ err=e; }
+  ok('SVG导入-无图形拒绝', !!err&&/未找到/.test(err.message));
+  err=null; try{ api.parseSvgSymbol('<svg><script>alert(1)</script><path d="M0 0L1 1"/></svg>'); }catch(e){ err=e; }
+  ok('SVG导入-含脚本拒绝', !!err&&/脚本/.test(err.message));
+  const many=Array.from({length:201},()=>'<path d="M0 0L1 1"/>').join('');
+  err=null; try{ api.parseSvgSymbol('<svg>'+many+'</svg>'); }catch(e){ err=e; }
+  ok('SVG导入-路径数上限200', !!err&&/最多 200/.test(err.message));
+
+  /* 迁移保留自定义图元几何 */
+  const m=api.migrateProject({schema:'offline-drawing-annotation/v1',
+    objectTypes:[{id:'sym.test',kind:'point',name:'测试图元',color:'#123456',icon:'symbol',
+      symbol:[{d:'M0 0L10 10',fill:false}],symbolViewBox:{x:0,y:0,w:48,h:32}}],objects:[]});
+  const tt=m.objectTypes.find(t=>t.id==='sym.test');
+  ok('图元-迁移保留路径', !!tt&&tt.symbol.length===1&&tt.symbol[0].d==='M0 0L10 10');
+  eq('图元-迁移保留viewBox', tt&&tt.symbolViewBox.w, 48);
+
+  /* 属性面板列出行业图元；SVG 导出使用同一路径；无 Path2D 环境降级不抛错 */
+  api.resetState();
+  const pt=api.baseObject('point',lib[0].id,{name:'SYM',x:1,y:1});
+  api.state.objects=[pt]; api.selectedIds.add(pt.id); api.renderProps();
+  ok('图元-属性面板类型下拉含行业图元', api.$('propPanel').innerHTML.includes('枪机摄像头'));
+  const svg=api.buildSceneSvg();
+  ok('图元-SVG导出包含图元路径', svg.includes('M3 9h11v6H3z')&&svg.includes('stroke-linecap="round"'));
+  const rec=new Proxy({},{get(t,p){
+    if(p==='then') return undefined;
+    if(p==='measureText') return ()=>({width:10});
+    if(p==='canvas') return {clientWidth:900,clientHeight:600};
+    if(p in t) return t[p];
+    return ()=>{};
+  },set(t,p,v){ t[p]=v; return true; }});
+  let threw=false; try{ api.drawObject(rec,pt,{zoom:1},p=>p,1,1); }catch(e){ threw=true; }
+  ok('图元-无Path2D环境降级不抛错', !threw);
   api.resetState();
 }
 

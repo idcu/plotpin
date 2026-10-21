@@ -191,6 +191,8 @@
           <label title="该类型点设备的默认图标屏幕大小倍率（仅显示醒目程度，非实际尺寸）" data-icon-row="point">图标大小</label>
           <input type="number" min="0.5" max="5" step="0.1" value="1" id="newTypeIconSize" data-icon-row="point" title="默认图标大小（屏幕倍率）">
           <button class="primary span2" id="addTypeBtn">新增类型</button>
+          <button class="span2" id="importSymBtn" title="导入自定义 SVG 图元：提取 path/circle/rect/polygon/line/polyline，自动进入类型列表">导入 SVG 图元…</button>
+          <input type="file" id="symFileInput" accept=".svg,image/svg+xml" style="display:none">
         </div>
       </div>
     </section>
@@ -224,6 +226,7 @@
 <script src="js/common/pdf-read.js"></script>
 <script src="js/common/content-assets.js"></script>
 <script src="js/common/qr.js"></script>
+<script src="js/common/symbols.js"></script>
 <script src="js/app/config.js"></script>
 <script src="js/app/model.js"></script>
 <script src="js/app/geometry.js"></script>

@@ -550,6 +550,17 @@ function mergeTypes(saved){
         const fov=finiteNumber(t.fov,NaN);
         if(t.scaleShape==='sector'&&fov>=10&&fov<=360) savedType.fov=Math.round(fov);
       }
+      /* 自定义 SVG 图元：仅保留几何路径与 viewBox（已去掉脚本/样式） */
+      const paths=(Array.isArray(t.symbol)?t.symbol:[])
+        .filter(p=>p&&typeof p.d==='string'&&p.d.length<=5000)
+        .slice(0,200)
+        .map(p=>({d:p.d,fill:!!p.fill}));
+      if(paths.length){
+        savedType.symbol=paths;
+        const vb=t.symbolViewBox;
+        if(vb&&['x','y','w','h'].every(k=>Number.isFinite(Number(vb[k])))&&Number(vb.w)>0&&Number(vb.h)>0)
+          savedType.symbolViewBox={x:Number(vb.x),y:Number(vb.y),w:Number(vb.w),h:Number(vb.h)};
+      }
     }
     if(t.defaultStyle&&typeof t.defaultStyle==='object') savedType.defaultStyle={
       fillAlpha:Math.min(1,Math.max(0,finiteNumber(t.defaultStyle.fillAlpha,.15))),
