@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-1316%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-1348%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在任意底图（图片 / 矢量场地）上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -46,7 +46,7 @@
 - **健壮性**：ZIP/XLSX/DXF/PDF 解析器均设**输入上限**（文件体积、条目/实体/行/页/对象数、解压总量与单流上限），畸形或超大文件给出明确中文错误而非卡死；启动时探测 IndexedDB / Service Worker / Blob 能力，缺失时**显式降级并提示**（localStorage 兜底），托管部署自动注册 Service Worker 离线缓存。
 - **单文件发行包**：`npm run build` 生成 `dist/plotpin-standalone.html` 与 `dist/SHA256SUMS.txt`——全部 JS/CSS/图标内联、无任何外链，双击即用；CI 会校验产物无外链并输出 SHA256。
 - **插件注册点**：全局 `PlotPin` API 可注册**自定义设备/区域/折线类型**（立即进入类型下拉并随工程保存）、**导出器**（自动出现在导出下拉）与**导入器**（接管自定义扩展名）；插件可读取实时工程状态 `PlotPin.state`，导入器上下文提供 `ctx.state` / `ctx.commitChange`。示例见 `plugins/sample-exporter.js`；插件为同源纯 JS，安装即信任。
-- **中英界面与无障碍**：设置中可切换中文 / English（顶栏、工具栏、页签、导出选项等静态界面）；画布 `role=application`、工具栏/页签 ARIA 状态、提示区 `aria-live`、全控件键盘焦点环，配合既有快捷键核心流程可全键盘完成。
+- **中英界面与无障碍**：设置中可切换中文 / English（顶栏、工具栏、页签、HUD、清单/图层、设置面板与通用确认按钮，含 ARIA 标签与占位符）；画布 `role=application`、工具栏/页签 ARIA 状态、提示区 `aria-live`。弹窗为 `role=dialog` + `aria-modal`，打开时自动聚焦、Tab 在弹窗内循环、Esc 关闭并还原焦点；页签支持方向键 / Home / End，画布内 Tab 切换捕捉、**F6** 在顶栏/工具栏/侧栏间循环焦点，清单/图层/类型等图标按钮均有可读标签。
 - **底图仿射校准**：图片底图上依次点击已知点并输入其实地坐标 X,Y——2 点求**旋转 + 等比缩放**相似变换，≥3 点求**最小二乘完整仿射**（纠正底图倾斜与不等比缩放）；求解后底图按新映射旋转/缩放（含轻切变）渲染，既有标注随映射迁移并保持贴合底图同一像素点，SVG/PDF 导出同步对齐。
 - **本地自动保存**：工程存于 IndexedDB（底图按内容哈希去重），localStorage 兜底；刷新不丢。**多工程库**：顶栏「📁 工程库」可把当前图纸另存命名工程，随时打开/重命名/复制/删除，绑定后编辑自动同步到对应工程。
 - **离线协作（LWW 合并）**：工程库中「⇄ 合并他人工程…」选择对方导出的 JSON，即可把双方离线编辑合并回一份：对象按 id 与 `updatedAt` **较新者胜出**（同时间戳用内容签名确定兜底），删除通过**墓碑**传播且较新的编辑可让对象复活；楼层、图层与自定义类型按 id 取并集，活动楼层与本地设置保持不变。合并幂等、结果确定，无需服务器；**实时协同仍需另行接入传输层**。
@@ -148,7 +148,7 @@ npm test
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希与撤销栈可达性回收、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、静态资源引用完整性等纯逻辑模块，当前共 **1316 项断言全部通过**。
+底图资产哈希与撤销栈可达性回收、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、静态资源引用完整性等纯逻辑模块，当前共 **1348 项断言全部通过**。
 
 ---
 
@@ -236,7 +236,7 @@ PlotPin.registerImporter({
 ### Test
 
 ```bash
-node scripts/selftest.mjs   # 1316 assertions, no dependencies
+node scripts/selftest.mjs   # 1348 assertions, no dependencies
 node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁
 node scripts/bench.mjs      # 渲染与覆盖率性能基准（阈值不达标则退出码 1）
 node scripts/build.mjs --check   # 单文件发行包校验（无外链 + SHA256）

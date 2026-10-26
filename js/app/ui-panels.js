@@ -5,12 +5,30 @@ function switchTab(tab){
     const on=b.dataset.tab===tab;
     b.classList.toggle('active',on);
     if(b.hasAttribute('role')) b.setAttribute('aria-selected',on?'true':'false');
+    b.tabIndex=on?0:-1;
   });
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab));
   /* 窄屏切换属性/清单等标签时自动展开覆盖侧栏 */
   if(window.matchMedia('(max-width:860px)').matches) document.body.classList.add('sidebar-open');
 }
-document.querySelectorAll('.side-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+/** ARIA tablist 方向键：返回目标页签下标，非导航键返回 -1（纯函数便于自测） */
+function tabTargetIndex(current,total,key){
+  if(current<0||!total) return -1;
+  if(key==='ArrowLeft') return (current+total-1)%total;
+  if(key==='ArrowRight') return (current+1)%total;
+  if(key==='Home') return 0;
+  if(key==='End') return total-1;
+  return -1;
+}
+document.querySelectorAll('.side-tab').forEach(b=>b.addEventListener('click',()=>{ switchTab(b.dataset.tab); b.focus(); }));
+document.querySelectorAll('.side-tabs').forEach(list=>list.addEventListener('keydown',e=>{
+  const tabs=Array.from(list.querySelectorAll('.side-tab'));
+  const from=tabs.indexOf(document.activeElement);
+  const to=tabTargetIndex(from,tabs.length,e.key);
+  if(to<0) return;
+  e.preventDefault();
+  tabs[to].focus(); switchTab(tabs[to].dataset.tab);
+}));
 /* 窄屏侧栏覆盖层：☰ 开关；点画布遮罩区域关闭 */
 $('sidebarToggle').addEventListener('click',()=>document.body.classList.toggle('sidebar-open'));
 wrap.addEventListener('pointerdown',()=>{ if(document.body.classList.contains('sidebar-open')&&window.matchMedia('(max-width:860px)').matches) document.body.classList.remove('sidebar-open'); });
@@ -49,10 +67,11 @@ function populateSelects(){
   fill($('pointType'),typesOfKind('point'),'','point.marker');
   fill($('rectType'),typesOfKind('rect'),'','rect.area');
   fill($('lineType'),typesOfKind('line'),'','line.boundary');
-  fill($('filterLayer'),state.layers,'全部图层','');
+  fill($('filterLayer'),state.layers,I18N.t('allLayers'),'');
   fill($('batchLayer'),state.layers,'',state.layers[0]?.id||'');
   const oldKind=$('filterKind').value;
-  $('filterKind').innerHTML=['全部对象','点设备','矩形/区域','线段/折线','文字','尺寸标注'].map((x,i)=>`<option value="${i?['','point','rect','line','text','dimension'][i]:''}">${x}</option>`).join('');
+  const kindLabels=[I18N.t('allObjects'),I18N.t('filterPoint'),I18N.t('filterArea'),I18N.t('filterLine'),I18N.t('filterText'),I18N.t('filterDimension')];
+  $('filterKind').innerHTML=kindLabels.map((x,i)=>`<option value="${i?['','point','rect','line','text','dimension'][i]:''}">${esc(x)}</option>`).join('');
   $('filterKind').value=oldKind;
 }
 
@@ -545,8 +564,8 @@ function renderList(){
       <td><input type="checkbox" data-row-select="${esc(o.id)}" ${selectedIds.has(o.id)?'checked':''}></td>
       <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</td>
       <td>${esc(l.name)}</td><td>${fmt(o.x)}</td><td>${fmt(o.y)}</td><td>${param}</td>
-      <td><button class="icon-btn" data-toggle-visible="${o.id}">${o.visible?'👁':'–'}</button></td>
-      <td><button class="icon-btn" data-toggle-lock="${o.id}">${o.locked?'🔒':'○'}</button></td>
+      <td><button class="icon-btn" data-toggle-visible="${o.id}" aria-label="${esc(I18N.t('ariaObjVisible')+'：'+o.name)}">${o.visible?'👁':'–'}</button></td>
+      <td><button class="icon-btn" data-toggle-lock="${o.id}" aria-label="${esc(I18N.t('ariaObjLock')+'：'+o.name)}">${o.locked?'🔒':'○'}</button></td>
     </tr>`;
   }).join('');
   $('objectTbody').querySelectorAll('tr[data-id]').forEach(tr=>tr.addEventListener('click',e=>{
@@ -588,11 +607,11 @@ function renderLayers(){
   $('layerList').innerHTML=state.layers.map(l=>{
     const count=state.objects.filter(o=>o.layerId===l.id).length;
     return `<div class="layer-row">
-      <div class="meta"><div class="name">${esc(l.name)}</div><div class="sub">${count} 个对象</div></div>
-      <button class="icon-btn" data-layer-visible="${l.id}" title="显隐">${l.visible?'👁':'–'}</button>
-      <button class="icon-btn" data-layer-lock="${l.id}" title="锁定">${l.locked?'🔒':'○'}</button>
-      <button class="icon-btn" data-layer-rename="${l.id}" title="重命名">✎</button>
-      <button class="icon-btn danger" data-layer-delete="${l.id}" title="删除">×</button>
+      <div class="meta"><div class="name">${esc(l.name)}</div><div class="sub">${count} ${esc(I18N.t('objectsUnit'))}</div></div>
+      <button class="icon-btn" data-layer-visible="${l.id}" title="显隐" aria-label="${esc(I18N.t('ariaLayerVisible')+'：'+l.name)}">${l.visible?'👁':'–'}</button>
+      <button class="icon-btn" data-layer-lock="${l.id}" title="锁定" aria-label="${esc(I18N.t('ariaLayerLock')+'：'+l.name)}">${l.locked?'🔒':'○'}</button>
+      <button class="icon-btn" data-layer-rename="${l.id}" title="重命名" aria-label="${esc(I18N.t('ariaLayerRename')+'：'+l.name)}">✎</button>
+      <button class="icon-btn danger" data-layer-delete="${l.id}" title="删除" aria-label="${esc(I18N.t('ariaLayerDelete')+'：'+l.name)}">×</button>
     </div>`;
   }).join('');
   $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerVisible); pushHistory(); l.visible=!l.visible; commitChange(); });
@@ -613,15 +632,15 @@ $('addLayerBtn').onclick=()=>{
   pushHistory(); state.layers.push({id:uid('layer'),name,visible:true,locked:false}); $('newLayerName').value=''; commitChange('已新增图层');
 };
 function renderTypes(){
-  const groups={point:'点设备',rect:'矩形/区域',line:'线段/折线'};
+  const groups={point:I18N.t('point'),rect:I18N.t('filterArea'),line:I18N.t('filterLine')};
   $('typeList').innerHTML=Object.entries(groups).map(([kind,label])=>`
     <h3>${label}</h3>
     ${typesOfKind(kind).map(t=>`<div class="type-row">
-      <div class="meta"><div class="name"><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</div><div class="sub">${t.builtin?'内置':'自定义'} · ${t.icon||''}${kind==='point'?' · '+(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none)+' · 图标 '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
-      ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="默认图标大小（屏幕倍率）" value="${Number(t.iconSize)||1}" data-type-iconsize="${t.id}" style="width:52px">`:''}
-      <input type="color" value="${t.color}" data-type-color="${t.id}" ${t.builtin?'disabled':''}>
-      <button class="icon-btn" data-type-rename="${t.id}" ${t.builtin?'disabled':''}>✎</button>
-      <button class="icon-btn danger" data-type-delete="${t.id}" ${t.builtin?'disabled':''}>×</button>
+      <div class="meta"><div class="name"><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${t.icon||''}${kind==='point'?' · '+(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none)+' · 图标 '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
+      ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="默认图标大小（屏幕倍率）" value="${Number(t.iconSize)||1}" data-type-iconsize="${t.id}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
+      <input type="color" value="${t.color}" data-type-color="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+t.name)}">
+      <button class="icon-btn" data-type-rename="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+t.name)}">✎</button>
+      <button class="icon-btn danger" data-type-delete="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+t.name)}">×</button>
     </div>`).join('')}`).join('');
   $('typeList').querySelectorAll('[data-type-color]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeColor); pushHistory(); t.color=i.value; commitChange(); });
   $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.iconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });

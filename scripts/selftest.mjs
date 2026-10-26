@@ -113,7 +113,7 @@ code += `\n;globalThis.__api = {
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
   annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
-  $, renderProps,
+  $, renderProps, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
@@ -3045,6 +3045,52 @@ asyncSuites.push((async()=>{
   ok('无障碍-页签 role=tablist', /role="tablist"/.test(html));
   ok('无障碍-toast aria-live', /aria-live="polite"/.test(html));
   ok('i18n-入口 data-i18n 标记≥20', (html.match(/data-i18n="/g)||[]).length>=20);
+  ok('i18n-入口 ARIA 翻译标记≥5', (html.match(/data-i18n-aria-label="/g)||[]).length>=5);
+  ok('i18n-入口占位符翻译标记≥2', (html.match(/data-i18n-placeholder="/g)||[]).length>=2);
+  ok('i18n-新增 ARIA 文案中文', I.dict.zh.ariaTools === '绘图工具' && I.dict.zh.ariaCanvas.includes('绘图画布'));
+  ok('i18n-新增 ARIA 文案英文', I.dict.en.ariaTools === 'Drawing tools' && I.dict.en.ariaExport === 'Choose export format');
+  ok('i18n-通用按钮中英齐全', ['cancel','ok','close','save'].every(k => I.dict.zh[k] && I.dict.en[k]));
+  ok('i18n-设置面板标签中英齐全', ['settingsTitle','projectName','gridSpacing','languageLabel','runtimeSetting'].every(k => I.dict.zh[k] && I.dict.en[k]));
+  eq('i18n-英文确定按钮', I.setLang('en') && I.t('ok'), 'OK');
+  I.setLang('zh');
+  eq('i18n-中文取消按钮', I.t('cancel'), '取消');
+
+  /* 模态框语义：dialog + aria-modal + 标题关联 + Tab 焦点容器 */
+  ok('无障碍-模态框 role=dialog', /id="modalBox"[^>]*role="dialog"/.test(html));
+  ok('无障碍-模态框 aria-modal', /id="modalBox"[^>]*aria-modal="true"/.test(html));
+  ok('无障碍-模态框标题关联', /id="modalBox"[^>]*aria-labelledby="modalTitle"/.test(html));
+  ok('无障碍-模态框可编程聚焦', /id="modalBox"[^>]*tabindex="-1"/.test(html));
+
+  /* ARIA tablist：每个页签有关联面板，每个面板有标签来源 */
+  const tabBtns=[...html.matchAll(/<button[^>]*class="side-tab[^"]*"[^>]*>/g)].map(m=>m[0]);
+  eq('无障碍-页签按钮数', tabBtns.length, 4);
+  ok('无障碍-页签均有 aria-controls', tabBtns.every(s=>/aria-controls="tab-/.test(s)));
+  ok('无障碍-页签均有 roving tabindex', tabBtns.every(s=>/tabindex="(?:0|-1)"/.test(s)));
+  const tabPanels=[...html.matchAll(/<section[^>]*class="tab-pane[^"]*"[^>]*>/g)].map(m=>m[0]);
+  eq('无障碍-页签面板数', tabPanels.length, 4);
+  ok('无障碍-面板均为 tabpanel', tabPanels.every(s=>/role="tabpanel"/.test(s)));
+  ok('无障碍-面板均有 aria-labelledby', tabPanels.every(s=>/aria-labelledby="tabBtn-/.test(s)));
+
+  eq('页签键盘-右移', api.tabTargetIndex(0,4,'ArrowRight'), 1);
+  eq('页签键盘-右移循环', api.tabTargetIndex(3,4,'ArrowRight'), 0);
+  eq('页签键盘-左移循环', api.tabTargetIndex(0,4,'ArrowLeft'), 3);
+  eq('页签键盘-Home', api.tabTargetIndex(2,4,'Home'), 0);
+  eq('页签键盘-End', api.tabTargetIndex(1,4,'End'), 3);
+  eq('页签键盘-非导航键', api.tabTargetIndex(1,4,'Enter'), -1);
+  eq('页签键盘-无页签', api.tabTargetIndex(-1,0,'ArrowRight'), -1);
+
+  /* 画布快捷键只在画布/文档体聚焦时生效，避免劫持按钮与表单 */
+  eq('键盘策略-空标签视为画布', api.isCanvasShortcutTarget(''), true);
+  eq('键盘策略-canvas', api.isCanvasShortcutTarget('canvas'), true);
+  eq('键盘策略-body', api.isCanvasShortcutTarget('body'), true);
+  eq('键盘策略-input 不劫持', api.isCanvasShortcutTarget('input'), false);
+  eq('键盘策略-button 不劫持', api.isCanvasShortcutTarget('button'), false);
+  eq('键盘策略-select 不劫持', api.isCanvasShortcutTarget('select'), false);
+
+  /* 弹窗键盘策略：Escape 返回已处理且不抛错（DOM 桩环境） */
+  let modalEsc=false;
+  try{ modalEsc=api.modalKeydown({key:'Escape',preventDefault(){}}); }catch(e){ modalEsc=false; }
+  ok('弹窗键盘-Escape 可关闭', modalEsc === true);
   I.setLang('zh');
 }
 

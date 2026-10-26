@@ -929,7 +929,8 @@ function openShortcutsHelp(){
     ['Shift（画线/标注/拖节点时）','约束为水平/垂直线（正交）'],
     ['Shift（拖矩形/椭圆/扇形时）','正方形 / 正圆 / 45°方位吸附'],
     ['对象捕捉','自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪'],
-    ['Tab / Shift+Tab','循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动'],
+    ['Tab / Shift+Tab','画布聚焦时循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动'],
+    ['F6','在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）'],
     ['空格 + 拖拽','临时平移画布'],
     ['方向键','移动选中对象（Shift ×10 倍步距）'],['F','适应窗口（显示整张场地）'],
     ['滚轮 / 右键拖拽','缩放 / 平移画布'],
@@ -947,14 +948,35 @@ function reorderSelected(delta){
 }
 
 /* -------------------- 键盘 -------------------- */
+/** 画布级快捷键（Tab 捕捉、空格平移、方向键移动）仅在画布/文档体聚焦时生效，
+ *  避免抢走顶栏、工具栏、页签等控件的标准键盘操作 */
+function isCanvasShortcutTarget(tag){
+  return !tag||tag==='canvas'||tag==='body'||tag==='html';
+}
+let keyboardRegion=-1;
+/** F6：在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点，提供离开画布 Tab 捕捉的键盘通道 */
+function cycleKeyboardRegion(){
+  const regions=[
+    () => document.querySelector('.topbar button'),
+    () => document.querySelector('.tool-rail .tool-btn'),
+    () => document.querySelector('.side-tabs .side-tab')
+  ];
+  keyboardRegion=(keyboardRegion+1)%regions.length;
+  const el=regions[keyboardRegion]();
+  if(el&&typeof el.focus==='function') el.focus();
+}
 window.addEventListener('keydown',e=>{
+  if(e.defaultPrevented) return;
   const tag=(document.activeElement?.tagName||'').toLowerCase();
   const typing=['input','select','textarea'].includes(tag);
+  const onCanvas=isCanvasShortcutTarget(tag);
+  /* 弹窗优先：Esc 在输入框内也能关闭；Tab 在弹窗内循环；其余快捷键不穿透遮罩 */
+  if($('modalBackdrop').classList.contains('show')){ modalKeydown(e); return; }
+  if(typing) return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
-  if(typing) return;
-  if($('modalBackdrop').classList.contains('show')){ if(e.key==='Escape') closeModal(); return; }
-  if(e.key==='Tab'){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
+  if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
+  if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }
   if(e.key==='f'||e.key==='F'){ fitView(); return; }
   /* 参考线：Shift+G 清除全部；Backspace 删除上一条（无草稿时） */
@@ -972,17 +994,17 @@ window.addEventListener('keydown',e=>{
     if(cancelActiveDrag()){ requestRender(); return; }   /* 拖拽中 Esc：恢复到按下前，不动选择集 */
     draft=null; selectedIds.clear(); setTool('select'); refreshUI(); return;
   }
-  if(e.key==='Enter'&&(currentTool==='affine'||(draft&&draft.points))){ finishDraft(); return; }
-  if(e.key==='Backspace'&&draft?.points?.length){ draft.points.pop(); requestRender(); return; }
-  if(e.code==='Space'){ e.preventDefault(); spaceDown=true; document.body.classList.add('panning'); canvas.style.cursor='grabbing'; return; }
-  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)&&selectedIds.size){
+  if(e.key==='Enter'&&onCanvas&&(currentTool==='affine'||(draft&&draft.points))){ finishDraft(); return; }
+  if(e.key==='Backspace'&&onCanvas&&draft?.points?.length){ draft.points.pop(); requestRender(); return; }
+  if(e.code==='Space'&&onCanvas){ e.preventDefault(); spaceDown=true; document.body.classList.add('panning'); canvas.style.cursor='grabbing'; return; }
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)&&selectedIds.size&&onCanvas){
     const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return;
     e.preventDefault(); const step=(state.settings.gridSize||1)*(e.shiftKey?10:1);
     const d={ArrowUp:[0,step],ArrowDown:[0,-step],ArrowLeft:[-step,0],ArrowRight:[step,0]}[e.key];
     pushHistory(); items.forEach(o=>{o.x+=d[0];o.y+=d[1];if(o.points)o.points=o.points.map(p=>[p[0]+d[0],p[1]+d[1]]);}); commitChange();
   }
 });
-window.addEventListener('keyup',e=>{ if(e.code==='Space'){ spaceDown=false; document.body.classList.remove('panning'); document.body.className='tool-'+currentTool; } });
+window.addEventListener('keyup',e=>{ if(e.code==='Space'&&spaceDown){ spaceDown=false; document.body.classList.remove('panning'); document.body.className='tool-'+currentTool; } });
 
 /* 关闭/刷新页面前强制落盘：IndexedDB 事务尽力触发，localStorage 同步兜底，杜绝最后编辑丢失 */
 function flushBeforeUnload(){
