@@ -29,10 +29,17 @@ function walk(dir) {
 const jsFiles = walk(join(root, 'js'));
 /* 工程脚本（开发工具）只需语法校验，不参与入口引用检查 */
 const toolFiles = readdirSync(join(root, 'scripts')).filter(n => n.endsWith('.mjs')).map(n => join(root, 'scripts', n));
-for (const f of [...jsFiles, ...toolFiles]) {
+/* Service Worker 必须在站点根目录：放在 js/ 下默认 scope 仅 /js/，无法接管 index.html 与全站离线缓存 */
+const swFile = join(root, 'sw.js');
+if (!existsSync(swFile)) errors.push('Service Worker 缺失：sw.js 必须位于站点根目录');
+for (const f of [...jsFiles, ...toolFiles, ...(existsSync(swFile) ? [swFile] : [])]) {
   const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   if (r.status !== 0) errors.push(`语法错误：${relative(root, f)}\n${(r.stderr || '').trim()}`);
 }
+const appSrc = readFileSync(join(root, 'js', 'app', 'app.js'), 'utf8');
+const swReg = appSrc.match(/serviceWorker\.register\(\s*['"]([^'"]+)['"]/);
+if (!swReg) errors.push('app.js 中未找到 Service Worker 注册调用');
+else if (swReg[1].replace(/^\.\//, '') !== 'sw.js') errors.push(`Service Worker 注册路径应指向根目录 sw.js（当前：${swReg[1]}）`);
 
 /* 2/3. 入口引用与资源存在性 */
 const scriptRefs = [...html.matchAll(/<script\s+src="([^"]+)"><\/script>/g)].map(m => m[1]);
@@ -44,7 +51,6 @@ for (const ref of new Set([...scriptRefs, ...assetRefs])) {
 const scriptSet = new Set(scriptRefs);
 for (const f of jsFiles) {
   const rel = relative(root, f).replace(/\\/g, '/');
-  if (rel === 'js/sw.js') continue;               /* Service Worker 由 register 注册，非入口脚本 */
   if (!scriptSet.has(rel)) errors.push(`脚本未被 index.html 引用：${rel}`);
 }
 
