@@ -292,6 +292,9 @@ async function deleteFloor(id){
   const idx=state.floors.findIndex(f=>f.id===id);
   if(idx<0) return false;
   syncActiveFloor(); pushHistory();
+  const doomed=state.floors[idx];
+  markTombstone(id,'floor');
+  (doomed.objects||[]).forEach(o=>{ if(o&&o.id) markTombstone(o.id,'object'); });
   state.floors.splice(idx,1);
   if(id===state.activeFloorId){
     const target=state.floors[0];
@@ -425,6 +428,7 @@ function migrateProject(p){
   const layers=sanitizeLayers(p.layers);
   const objectTypes=mergeTypes(p.objectTypes);
   const objects=sanitizeObjects(p.objects,layers,objectTypes);
+  const tombstones=sanitizeTombstones(p.tombstones);
   /* 楼层：当前楼层数据取顶层 background/objects；其余楼层各自清洗并保留 */
   const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
   const floors=[]; const seenFloor=new Set();
@@ -444,8 +448,64 @@ function migrateProject(p){
   if(!floors.length) floors.push({id:'floor.default',name:'1F'});
   let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
   if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F'});
-  state=Object.assign(base,p,{meta,settings,background,viewport,layers,objectTypes,objects,floors,activeFloorId});
+  state=Object.assign(base,p,{meta,settings,background,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
   return state;
+}
+/** 删除墓碑清洗：按 (kind,id) 去重取最晚删除时间；非法/无时间的条目丢弃，并限制总量 */
+const TOMBSTONE_LIMIT=2000;
+function sanitizeTombstones(arr){
+  const latest=new Map();
+  (Array.isArray(arr)?arr:[]).forEach(raw=>{
+    if(!raw||typeof raw!=='object'||!raw.id) return;
+    const kind=raw.kind==='floor'?'floor':'object';
+    const id=safeId(raw.id,'DEL');
+    const deletedAt=typeof raw.deletedAt==='string'?raw.deletedAt.trim():'';
+    if(!deletedAt||!Number.isFinite(Date.parse(deletedAt))) return;
+    const key=kind+':'+id;
+    if(!latest.has(key)||deletedAt>latest.get(key).deletedAt) latest.set(key,{id,kind,deletedAt});
+  });
+  return Array.from(latest.values())
+    .sort((a,b)=>a.deletedAt===b.deletedAt?String(a.kind+a.id).localeCompare(String(b.kind+b.id)):b.deletedAt.localeCompare(a.deletedAt))
+    .slice(0,TOMBSTONE_LIMIT);
+}
+/** 记录一次删除（对象或楼层）；重复删除同一目标时刷新删除时间 */
+function markTombstone(id,kind='object'){
+  if(!id) return null;
+  state.tombstones=Array.isArray(state.tombstones)?state.tombstones:[];
+  const k=kind==='floor'?'floor':'object';
+  const at=nowISO();
+  const hit=state.tombstones.find(t=>t&&t.id===String(id)&&(t.kind||'object')===k);
+  if(hit) hit.deletedAt=at;
+  else state.tombstones.push({id:String(id),deletedAt:at,kind:k});
+  if(state.tombstones.length>TOMBSTONE_LIMIT){
+    state.tombstones=sanitizeTombstones(state.tombstones);
+  }
+  return at;
+}
+/** 合并他人工程 JSON（离线 LWW）：读取→清洗→按 id/更新时间合并→替换现场。
+ *  schema 不符或结构损坏时抛错，由调用方提示；合并无变化时不写历史栈。 */
+async function mergeProjectJSON(raw){
+  if(!raw||typeof raw!=='object') throw new Error('不是有效的工程 JSON');
+  if(raw.schema!==SCHEMA) throw new Error('schema 不匹配，不是本工具的工程文件');
+  syncActiveFloor();
+  const currentRaw=persistableState();
+  const cur=state;
+  const incomingRaw=mergeBlankMissingTimestamps(deepClone(raw));
+  let incoming;
+  try{ incoming=migrateProject(incomingRaw); }
+  finally{ state=cur; }
+  const {project,stats}=mergeProjectData(currentRaw,deepClone(incoming));
+  /* 对象/楼层之外（图层、类型、墓碑）也可能有变化：用规范化序列化判断是否需要落盘 */
+  if(mergeStable(project)===mergeStable(currentRaw)) return stats;
+  pushHistory();
+  state=migrateProject(project);
+  /* 合并不接管对方的工程库绑定：只有本地已绑定才继续绑定 */
+  state.meta.projectId=(currentRaw.meta&&currentRaw.meta.projectId)||'';
+  selectedIds.clear(); draft=null;
+  await afterStateLoaded(false);
+  scheduleSave();
+  refreshUI(); requestRender();
+  return stats;
 }
 /** 背景清洗（顶层与多楼层共用同一规则） */
 function sanitizeBackground(rawBg){

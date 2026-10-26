@@ -53,7 +53,10 @@ function createInitialState(){
     /* 多楼层/多底图：floors 保存全部楼层元数据；非当前楼层额外持有 background/objects/viewport。
        当前楼层的可编辑数据始终是顶层 state.background / state.objects（切换与保存时同步）。 */
     floors: [{ id:'floor.default', name:'1F' }],
-    activeFloorId: 'floor.default'
+    activeFloorId: 'floor.default',
+    /* 删除墓碑（离线 LWW 合并用）：{id, deletedAt, kind:'object'|'floor'}。
+       对象被删除后保留删除时间，合并他人工程时用于判定「删除」与「较新编辑」谁生效。 */
+    tombstones: []
   };
 }
 function uid(prefix='O'){

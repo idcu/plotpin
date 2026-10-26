@@ -885,8 +885,12 @@ function deleteSelected(){
   if(!deletable.length) return toast('没有可删除的选中对象（可能位于锁定图层）','warn');
   showConfirm(`确定删除选中的 ${deletable.length} 个对象吗？`).then(ok=>{
     if(!ok) return;
+    pushHistory();
     const ids=new Set(deletable.map(o=>o.id));
-    pushHistory(); state.objects=state.objects.filter(o=>!ids.has(o.id)); deletable.forEach(o=>selectedIds.delete(o.id)); commitChange('已删除对象');
+    deletable.forEach(o=>markTombstone(o.id,'object'));
+    state.objects=state.objects.filter(o=>!ids.has(o.id));
+    deletable.forEach(o=>selectedIds.delete(o.id));
+    commitChange('已删除对象');
   });
 }
 function duplicateSelected(){

@@ -85,14 +85,35 @@ async function openProjectLibrary(){
   const boundName=state.meta.projectId?(state.meta.name||'当前工程'):'';
   openModal('工程库（保存在本机浏览器）',
     `<div class="proj-current">当前草稿：<b>${esc(state.meta.name)}</b>${boundName?' · 已绑定工程库':''}　对象 ${state.objects.length} 个</div>
-     <div style="margin:8px 0"><button class="primary" id="projSaveAs">💾 把当前图纸另存到工程库</button></div>
+     <div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap">
+       <button class="primary" id="projSaveAs">💾 把当前图纸另存到工程库</button>
+       <button id="projMerge">⇄ 合并他人工程…</button>
+     </div>
      <div class="proj-list">${rows}</div>
-     <p class="hint-text">工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。</p>`,
+     <p class="hint-text">工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。<br>
+       离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。</p>`,
     [{text:'关闭',click:closeModal}]);
   $('projSaveAs').onclick=async()=>{
     const v=await showPrompt({title:'另存到工程库',label:'工程名称',value:state.meta.name||'未命名图纸工程'});
     if(v===null) return;
     await saveProjectAs(v); toast('已存入工程库','success'); closeModal(); openProjectLibrary();
+  };
+  $('projMerge').onclick=()=>{
+    const input=document.createElement('input');
+    input.type='file'; input.accept='.json,application/json';
+    input.onchange=async()=>{
+      const f=input.files&&input.files[0];
+      if(!f) return;
+      try{
+        const stats=await mergeProjectJSON(JSON.parse(await f.text()));
+        closeModal();
+        const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded;
+        const conflict=stats.conflicts?`；冲突 ${stats.conflicts} 项按较新版本保留`:'';
+        toast(`合并完成：新增 ${stats.added} · 更新 ${stats.updated} · 删除 ${stats.deleted} · 新增楼层 ${stats.floorsAdded}${conflict}`,
+          changed?'success':'warn');
+      }catch(e){ toast('合并失败：'+e.message,'error'); }
+    };
+    input.click();
   };
   document.querySelectorAll('.proj-row').forEach(row=>{
     row.querySelectorAll('button[data-op]').forEach(btn=>btn.addEventListener('click',async()=>{

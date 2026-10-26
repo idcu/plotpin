@@ -137,6 +137,7 @@ code += `\n;globalThis.__api = {
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, persistableState,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
+  mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON,
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -2979,6 +2980,317 @@ asyncSuites.push((async()=>{
   ok('无障碍-toast aria-live', /aria-live="polite"/.test(html));
   ok('i18n-入口 data-i18n 标记≥20', (html.match(/data-i18n="/g)||[]).length>=20);
   I.setLang('zh');
+}
+
+/* 59. 离线协作：工程级 LWW 合并与删除墓碑 -------------------------------- */
+{
+  const T1 = '2026-10-01T01:00:00.000Z';
+  const T2 = '2026-10-01T02:00:00.000Z';
+  const T3 = '2026-10-01T03:00:00.000Z';
+  const P = (objects, extra = {}) => Object.assign({
+    schema: 'offline-drawing-annotation/v1',
+    meta: { name: '本地工程', projectId: 'PRJ_LOCAL', createdAt: T1, updatedAt: T1 },
+    settings: { unit: 'm', snap: true },
+    background: { kind: 'rect', shape: { type: 'rect', w: 10, h: 10 } },
+    viewport: { zoom: 1, panX: 0, panY: 0 },
+    layers: [{ id: 'layer.default', name: '默认图层', visible: true, locked: false }],
+    objectTypes: [{ id: 'custom.type', kind: 'point', name: '本地类型', color: '#123456', icon: 'custom' }],
+    objects,
+    floors: [{ id: 'floor.default', name: '1F' }],
+    activeFloorId: 'floor.default',
+    tombstones: []
+  }, extra);
+  const O = (id, ts, x = 1) => ({
+    id, name: String(id), kind: 'point', typeId: 'point.marker', layerId: 'layer.default',
+    x, y: 0, updatedAt: ts, createdAt: ts, style: {}, props: {}, visible: true, locked: false, z: 0
+  });
+  const M = (a, b) => api.mergeProjectData(a, b);
+  const ids = p => (p.objects || []).map(o => o.id).join(',');
+  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0 };
+
+  const m1 = M(P([]), P([O('A', T1)]));
+  eq('合并-新增对象数量', m1.project.objects.length, 1);
+  eq('合并-新增统计', m1.stats.added, 1);
+  eq('合并-新增顺序', ids(m1.project), 'A');
+  eq('合并-新增不记更新', m1.stats.updated, 0);
+
+  const m2 = M(P([O('A', T1)]), P([]));
+  eq('合并-仅本地对象保留', ids(m2.project), 'A');
+  eq('合并-仅本地无新增统计', m2.stats.added, 0);
+
+  const m3 = M(P([O('A', T1, 1)]), P([O('A', T2, 2)]));
+  eq('合并-较新编辑胜出', m3.project.objects[0].x, 2);
+  eq('合并-更新统计', m3.stats.updated, 1);
+  eq('合并-冲突统计', m3.stats.conflicts, 1);
+  eq('合并-删除统计为零', m3.stats.deleted, 0);
+
+  const m4 = M(P([O('A', T2, 2)]), P([O('A', T1, 1)]));
+  eq('合并-旧版本不覆盖新版本', m4.project.objects[0].x, 2);
+  eq('合并-本地胜出不计更新', m4.stats.updated, 0);
+  eq('合并-仍计一次冲突', m4.stats.conflicts, 1);
+
+  const m5 = M(P([O('A', T1, 1)]), P([O('A', T1, 1)]));
+  eq('合并-相同内容零统计', m5.stats, zero);
+  eq('合并-相同内容保留对象', ids(m5.project), 'A');
+  const m5z = M(P([O('A', T1, 1)]), P([Object.assign(O('A', T1, 1), { z: 5 })]));
+  eq('合并-仅叠放顺序不同不算冲突', m5z.stats.conflicts, 0);
+  eq('合并-仅叠放顺序不同保留本地', m5z.project.objects[0].z, 0);
+
+  const m6 = M(P([O('A', T1, 1)]), P([O('A', T1, 2)]));
+  const m6r = M(P([O('A', T1, 2)]), P([O('A', T1, 1)]));
+  eq('合并-同时间戳字典序兜底', m6.project.objects[0].x, 2);
+  eq('合并-同时间戳双向一致', m6r.project.objects[0].x, 2);
+  eq('合并-同时间戳记更新', m6.stats.updated, 1);
+
+  const m7 = M(P([O('A', T1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
+  eq('合并-删除墓碑胜过旧对象', m7.project.objects.length, 0);
+  eq('合并-删除统计', m7.stats.deleted, 1);
+  eq('合并-删除不记冲突', m7.stats.conflicts, 0);
+
+  const m8 = M(P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }), P([O('A', T1)]));
+  eq('合并-入站旧对象被本地墓碑压制', m8.project.objects.length, 0);
+  eq('合并-入站压制不计新增', m8.stats.added, 0);
+
+  const m9 = M(P([O('A', T2)]), P([], { tombstones: [{ id: 'A', deletedAt: T1, kind: 'object' }] }));
+  eq('合并-较新编辑可复活对象', ids(m9.project), 'A');
+  ok('合并-复活后清理过期墓碑', !(m9.project.tombstones || []).some(t => t.id === 'A'));
+
+  const m10 = M(P([O('A', T1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
+  ok('合并-删除墓碑写入结果', (m10.project.tombstones || []).some(t => t.id === 'A' && t.kind === 'object'));
+
+  const srcA = P([O('A', T1)]);
+  const srcB = P([O('A', T2, 5), O('B', T2)]);
+  const m11 = M(srcA, srcB);
+  const m11b = M(m11.project, srcB);
+  eq('合并-幂等统计归零', m11b.stats, zero);
+  eq('合并-幂等工程一致', JSON.stringify(m11b.project), JSON.stringify(m11.project));
+  eq('合并-重复合并顺序不变', ids(m11.project), 'A,B');
+
+  const d1 = M(P([O('A', T1)]), P([O('A', T2, 9), O('B', T2)]));
+  const d2 = M(P([O('A', T1)]), P([O('A', T2, 9), O('B', T2)]));
+  eq('合并-确定性输出一致', JSON.stringify(d1.project), JSON.stringify(d2.project));
+  const dRev = M(P([O('A', T2, 9), O('B', T2)]), P([O('A', T1)]));
+  eq('合并-双向对象内容一致', JSON.stringify(dRev.project.objects), JSON.stringify(d1.project.objects));
+
+  const fB = P([], {
+    floors: [
+      { id: 'floor.default', name: '1F' },
+      { id: 'floor.F2', name: '2F', background: { kind: 'circle', shape: { type: 'circle', cx: 0, cy: 0, r: 3 } }, viewport: { zoom: 2, panX: 1, panY: 2 }, objects: [O('F2OBJ', T1)] }
+    ]
+  });
+  const mf = M(P([]), fB);
+  eq('合并-新增楼层数量', mf.project.floors.length, 2);
+  eq('合并-新增楼层统计', mf.stats.floorsAdded, 1);
+  eq('合并-新增楼层对象统计', mf.stats.added, 1);
+  eq('合并-新楼层对象随楼层保存', mf.project.floors[1].objects.length, 1);
+  eq('合并-新楼层底图保留', mf.project.floors[1].background.kind, 'circle');
+
+  const fMetaA = P([], {
+    floors: [
+      { id: 'floor.default', name: '1F' },
+      { id: 'floor.F2', name: '二层', updatedAt: T1, background: { kind: 'circle', shape: { type: 'circle', cx: 0, cy: 0, r: 1 } }, objects: [] }
+    ]
+  });
+  const fMetaB = P([], {
+    floors: [
+      { id: 'floor.default', name: '1F' },
+      { id: 'floor.F2', name: '二号层', updatedAt: T2, background: { kind: 'polygon', shape: { type: 'polygon', points: [[0, 0], [1, 0], [0, 1]] } }, objects: [] }
+    ]
+  });
+  const mf2 = M(fMetaA, fMetaB);
+  eq('合并-楼层名称较新者胜', mf2.project.floors[1].name, '二号层');
+  eq('合并-楼层底图随较新者', mf2.project.floors[1].background.kind, 'polygon');
+  eq('合并-既有楼层不计新增', mf2.stats.floorsAdded, 0);
+
+  const fObjA = P([], { floors: [{ id: 'floor.default', name: '1F' }, { id: 'floor.F2', name: '2F', objects: [O('X1', T1)] }] });
+  const fObjB = P([], { floors: [{ id: 'floor.default', name: '1F' }, { id: 'floor.F2', name: '2F', objects: [O('X2', T2)] }] });
+  const mf3 = M(fObjA, fObjB);
+  eq('合并-楼层内对象并集', mf3.project.floors[1].objects.map(o => o.id).join(','), 'X1,X2');
+
+  const fDelA = P([], {
+    floors: [
+      { id: 'floor.default', name: '1F' },
+      { id: 'floor.F2', name: '2F', objects: [O('X1', T1), O('X2', T1)] }
+    ]
+  });
+  const fDelB = P([], { tombstones: [{ id: 'floor.F2', deletedAt: T2, kind: 'floor' }] });
+  const mf4 = M(fDelA, fDelB);
+  eq('合并-楼层墓碑删除整层', mf4.project.floors.length, 1);
+  eq('合并-楼层删除统计对象数', mf4.stats.deleted, 2);
+  ok('合并-楼层墓碑写入结果', (mf4.project.tombstones || []).some(t => t.id === 'floor.F2' && t.kind === 'floor'));
+
+  const fRevA = P([], { floors: [{ id: 'floor.default', name: '1F' }, { id: 'floor.F2', name: '2F', objects: [O('X1', T3)] }] });
+  const fRevB = P([], { tombstones: [{ id: 'floor.F2', deletedAt: T2, kind: 'floor' }] });
+  const mf5 = M(fRevA, fRevB);
+  eq('合并-较新楼层编辑胜过删除', mf5.project.floors.length, 2);
+  ok('合并-楼层复活后清理过期墓碑', !(mf5.project.tombstones || []).some(t => t.id === 'floor.F2'));
+
+  const fNewB = P([], {
+    floors: [
+      { id: 'floor.default', name: '1F' },
+      { id: 'floor.F3', name: '3F', background: { kind: 'rect', shape: { type: 'rect', w: 5, h: 5 } }, objects: [O('X3', T1)] }
+    ],
+    tombstones: [{ id: 'floor.F3', deletedAt: T2, kind: 'floor' }]
+  });
+  const mf6 = M(P([]), fNewB);
+  eq('合并-入站楼层先删后不新增', mf6.project.floors.length, 1);
+  eq('合并-被墓碑楼层不计新增', mf6.stats.floorsAdded, 0);
+  eq('合并-被墓碑楼层对象不计新增', mf6.stats.added, 0);
+
+  const actA = P([O('A', T1)], {
+    floors: [{ id: 'floor.default', name: '1F' }, { id: 'floor.F2', name: '2F', objects: [] }],
+    activeFloorId: 'floor.F2'
+  });
+  const actB = P([O('B', T2)], {
+    floors: [{ id: 'floor.default', name: '1F' }, { id: 'floor.F2', name: '2F', objects: [] }],
+    activeFloorId: 'floor.F2'
+  });
+  const ma = M(actA, actB);
+  eq('合并-本地活动楼层保留', ma.project.activeFloorId, 'floor.F2');
+  eq('合并-活动楼层对象进入顶层', ids(ma.project), 'A,B');
+  eq('合并-活动楼层顶层底图来自本地', ma.project.background.kind, 'rect');
+  eq('合并-非活动楼层仅存元数据', ma.project.floors[1].objects, undefined);
+
+  const actDelB = P([], { tombstones: [{ id: 'floor.F2', deletedAt: T2, kind: 'floor' }] });
+  const ma2 = M(actA, actDelB);
+  eq('合并-活动楼层被删回退首层', ma2.project.activeFloorId, 'floor.default');
+  eq('合并-活动楼层删除统计', ma2.stats.deleted, 1);
+
+  const ord = M(P([O('A1', T1), O('A2', T1)]), P([O('A2', T2, 9), O('B3', T2)]));
+  eq('合并-本地对象顺序在前', ids(ord.project), 'A1,A2,B3');
+  eq('合并-z按顺序重排', ord.project.objects.map(o => o.z), [0, 1, 2]);
+  eq('合并-更新对象位置保留', ord.project.objects[1].x, 9);
+
+  const layA = P([], { layers: [{ id: 'layer.default', name: '默认图层' }, { id: 'layerA', name: 'A层' }] });
+  const layB = P([], { layers: [{ id: 'layer.default', name: '默认图层' }, { id: 'layerA', name: 'B层' }, { id: 'layerC', name: 'C层' }] });
+  const ml = M(layA, layB);
+  eq('合并-图层并集数量', ml.project.layers.length, 3);
+  eq('合并-同 id 图层本地优先', ml.project.layers.find(l => l.id === 'layerA').name, 'A层');
+  ok('合并-新图层追加', ml.project.layers.some(l => l.id === 'layerC'));
+
+  const typA = P([], { objectTypes: [{ id: 'custom.type', kind: 'point', name: '本地类型' }] });
+  const typB = P([], { objectTypes: [{ id: 'custom.type', kind: 'point', name: '他人类型' }, { id: 'other.type', kind: 'line', name: '新增类型' }] });
+  const mt = M(typA, typB);
+  eq('合并-类型并集数量', mt.project.objectTypes.length, 2);
+  eq('合并-同 id 类型本地优先', mt.project.objectTypes.find(t => t.id === 'custom.type').name, '本地类型');
+  ok('合并-新类型追加', mt.project.objectTypes.some(t => t.id === 'other.type'));
+
+  const metaA = P([], { meta: { name: '本地工程', projectId: 'PRJ_LOCAL', updatedAt: T2 }, settings: { unit: 'm', gridSize: 2 } });
+  const metaB = P([], { meta: { name: '他人工程', projectId: 'PRJ_OTHER', updatedAt: T1 }, settings: { unit: 'm', gridSize: 9 } });
+  const mm2 = M(metaA, metaB);
+  eq('合并-工程名保留本地', mm2.project.meta.name, '本地工程');
+  eq('合并-工程绑定保留本地', mm2.project.meta.projectId, 'PRJ_LOCAL');
+  eq('合并-工程更新时间取较新', mm2.project.meta.updatedAt, T2);
+  eq('合并-设置保留本地', mm2.project.settings.gridSize, 2);
+
+  const mEmpty = M(P([]), P([], { tombstones: [{ id: 'floor.default', deletedAt: T2, kind: 'floor' }] }));
+  eq('合并-至少保留一个楼层', mEmpty.project.floors.length, 1);
+  eq('合并-回退楼层为默认层', mEmpty.project.activeFloorId, 'floor.default');
+
+  const mBad = M({ objects: 'x', floors: [null, {}, { id: 'f', objects: [null, { foo: 1 }] }], tombstones: 'bad' }, null);
+  eq('合并-非法对象数组忽略', mBad.project.objects.length, 0);
+  eq('合并-非法楼层数据仍可合并', mBad.project.floors.length >= 1, true);
+  const mNull = M(null, null);
+  eq('合并-空输入不抛错且保留一层', mNull.project.floors.length, 1);
+
+  const mNum = M(P([O(123, T1)]), P([]));
+  eq('合并-数字 id 归一为字符串', String(mNum.project.objects[0].id), '123');
+
+  const mTombOrder = M(P([], { tombstones: [{ id: 'Z', deletedAt: T1, kind: 'object' }, { id: 'A', deletedAt: T1, kind: 'object' }] }), P([]));
+  eq('合并-墓碑按 kind+id 排序', mTombOrder.project.tombstones.map(t => t.id).join(','), 'A,Z');
+  const mTombLatest = M(P([], { tombstones: [{ id: 'A', deletedAt: T1, kind: 'object' }, { id: 'A', deletedAt: T3, kind: 'object' }] }), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
+  eq('合并-重复墓碑取最晚', mTombLatest.project.tombstones.length, 1);
+  eq('合并-墓碑最晚时间', mTombLatest.project.tombstones[0].deletedAt, T3);
+  const mTombBad = M(P([], { tombstones: [{ id: 'A', deletedAt: '' }, { id: 'B', deletedAt: 'not-a-date' }, { id: 'C' }, null] }), P([]));
+  eq('合并-非法墓碑忽略', (mTombBad.project.tombstones || []).length, 0);
+
+  /* 状态字段 / 墓碑清洗 / 迁移 / 持久化 */
+  eq('墓碑-初始工程为空', api.createInitialState().tombstones, []);
+  api.resetState();
+  const tRec = api.markTombstone('OBJ_A', 'object');
+  eq('墓碑-记录对象删除', api.state.tombstones.length, 1);
+  eq('墓碑-记录对象 id', api.state.tombstones[0].id, 'OBJ_A');
+  const tRec2 = api.markTombstone('OBJ_A', 'object');
+  eq('墓碑-重复删除仍一条', api.state.tombstones.length, 1);
+  ok('墓碑-重复删除刷新时间', tRec2 >= tRec);
+  api.markTombstone('floor.F2', 'floor');
+  eq('墓碑-楼层类型独立计数', api.state.tombstones.filter(t => t.kind === 'floor').length, 1);
+  api.markTombstone('');
+  eq('墓碑-忽略空 id', api.state.tombstones.length, 2);
+
+  const cleaned = api.sanitizeTombstones([
+    { id: 'A', deletedAt: T1, kind: 'object' },
+    { id: 'A', deletedAt: T3, kind: 'object' },
+    { id: 'F', deletedAt: T2, kind: 'floor' },
+    { id: 'X', deletedAt: '' },
+    { id: 'Y', deletedAt: 'not-a-date' },
+    null, { foo: 1 }
+  ]);
+  eq('墓碑清洗-去重与过滤', cleaned.length, 2);
+  eq('墓碑清洗-取最晚删除时间', cleaned[0].id, 'A');
+  eq('墓碑清洗-楼层墓碑保留', cleaned.some(t => t.id === 'F' && t.kind === 'floor'), true);
+  const huge = api.sanitizeTombstones(Array.from({ length: api.TOMBSTONE_LIMIT + 100 }, (_, i) => ({ id: 'T' + i, deletedAt: T1 })));
+  eq('墓碑清洗-总量上限', huge.length, api.TOMBSTONE_LIMIT);
+
+  const migT = api.migrateProject({ schema: 'offline-drawing-annotation/v1', tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] });
+  eq('迁移-保留删除墓碑', migT.tombstones.length, 1);
+  eq('迁移-缺省墓碑为空', api.migrateProject({ schema: 'offline-drawing-annotation/v1' }).tombstones.length, 0);
+  api.resetState();
+  api.state.tombstones = [{ id: 'A', deletedAt: T1, kind: 'object' }];
+  eq('持久化-携带删除墓碑', api.persistableState().tombstones.length, 1);
+
+  /* 应用层入口：schema 校验、无可合并变化、实际合并与删除传播 */
+  api.resetState();
+  api.state.meta.projectId = 'PRJ_LOCAL';
+  let errNull = null;
+  try { await api.mergeProjectJSON(null); } catch (e) { errNull = e; }
+  ok('合并入口-空输入拒绝', !!errNull);
+  let errSchema = null;
+  try { await api.mergeProjectJSON({ schema: 'wrong' }); } catch (e) { errSchema = e; }
+  ok('合并入口-schema 校验', !!errSchema && /schema/.test(errSchema.message));
+  const histBefore = api.history.past.length;
+  const noStats = await api.mergeProjectJSON(api.persistableState());
+  eq('合并入口-自身工程无变化', noStats, zero);
+  eq('合并入口-无变化不写历史栈', api.history.past.length, histBefore);
+
+  const incoming = P([O('OBJ_MERGE', T2)], {
+    meta: { name: '他人工程', projectId: 'PRJ_OTHER', createdAt: T1, updatedAt: T2 }
+  });
+  const yesStats = await api.mergeProjectJSON(incoming);
+  eq('合并入口-新增统计', yesStats.added, 1);
+  eq('合并入口-新对象进入现场', api.state.objects.length, 1);
+  eq('合并入口-新对象 id', api.state.objects[0].id, 'OBJ_MERGE');
+  eq('合并入口-历史栈增加', api.history.past.length, histBefore + 1);
+  eq('合并入口-不接管他人工程绑定', api.state.meta.projectId, 'PRJ_LOCAL');
+  eq('合并入口-工程名保持本地', api.state.meta.name, '未命名图纸工程');
+
+  const legacyObj = O('OBJ_MERGE', T1, 99);
+  delete legacyObj.updatedAt;
+  const legacyStats = await api.mergeProjectJSON(P([legacyObj], { meta: { name: '他人工程', updatedAt: T1 } }));
+  eq('合并入口-缺失更新时间的旧对象不覆盖本地', api.state.objects[0].x, 1);
+  eq('合并入口-旧对象不计更新', legacyStats.updated, 0);
+  eq('合并入口-旧对象计冲突', legacyStats.conflicts, 1);
+
+  const delStats = await api.mergeProjectJSON(P([], {
+    meta: { name: '他人工程', updatedAt: T1 },
+    tombstones: [{ id: 'OBJ_MERGE', deletedAt: T3, kind: 'object' }]
+  }));
+  eq('合并入口-删除墓碑生效', api.state.objects.length, 0);
+  eq('合并入口-删除统计', delStats.deleted, 1);
+  ok('合并入口-墓碑写入现场', api.state.tombstones.some(t => t.id === 'OBJ_MERGE' && t.kind === 'object'));
+
+  const floorStats = await api.mergeProjectJSON(P([], {
+    meta: { name: '他人工程', updatedAt: T1 },
+    floors: [
+      { id: 'floor.default', name: '1F' },
+      { id: 'floor.F9', name: '9F', background: { kind: 'rect', shape: { type: 'rect', w: 20, h: 20 } }, viewport: { zoom: 1, panX: 0, panY: 0 }, objects: [O('OBJ_F9', T2)] }
+    ]
+  }));
+  eq('合并入口-新增楼层', api.state.floors.length, 2);
+  eq('合并入口-楼层统计', floorStats.floorsAdded, 1);
+  eq('合并入口-楼层对象已装载', api.state.floors.find(f => f.id === 'floor.F9').objects.length, 1);
+  eq('合并入口-当前层不变', api.state.activeFloorId, 'floor.default');
+  api.resetState();
 }
 
 /* ---------------- 结果汇总 ---------------- */
