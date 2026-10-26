@@ -122,6 +122,7 @@ code += `\n;globalThis.__api = {
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
+  exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
@@ -2954,6 +2955,71 @@ asyncSuites.push((async()=>{
   eq('插件-导出器注销后为空', PP.listExporters().length, 0);
   ok('插件-注销导入器', PP.unregisterImporter('FOO'));
   eq('插件-导入器注销后为空', PP.listImporters().length, 0);
+
+  /* 自定义设备类型注册（P2-3 插件化补齐） */
+  const typeBase=api.BUILTIN_TYPES.length;
+  eq('插件-初始无插件类型', PP.listPluginTypes().length, 0);
+  ok('插件-注册自定义设备类型', PP.registerObjectType({
+    id:'plugin.ptz', kind:'point', name:'全景相机', color:'#0ea5e9', icon:'custom',
+    scaleShape:'sector', fov:360, iconSize:1.5,
+    symbol:[{d:'M0 0h24v24H0z', fill:false}], symbolViewBox:{x:0,y:0,w:24,h:24},
+    defaultStyle:{fillAlpha:.2,strokeWidth:.08}
+  }));
+  const pt=PP.listPluginTypes()[0];
+  eq('插件-类型写入内置表', api.BUILTIN_TYPES.filter(t=>t.id==='plugin.ptz').length, 1);
+  eq('插件-类型写入当前工程', api.state.objectTypes.filter(t=>t.id==='plugin.ptz').length, 1);
+  ok('插件-类型标记为非内置', pt&&pt.builtin===false&&pt.plugin===true);
+  eq('插件-扇形视场规范化', pt.fov, 360);
+  eq('插件-图元路径保留', pt.symbol.length, 1);
+  eq('插件-图元 viewBox 保留', pt.symbolViewBox.w, 24);
+  approx('插件-默认样式填充', pt.defaultStyle.fillAlpha, .2, 1e-9);
+  ok('插件-新工程自带插件类型', api.createInitialState().objectTypes.some(t=>t.id==='plugin.ptz'));
+  const withPlugin=api.migrateProject({schema:'offline-drawing-annotation/v1'});
+  ok('插件-载入工程自带插件类型', withPlugin.objectTypes.some(t=>t.id==='plugin.ptz'));
+  api.resetState();
+
+  const throws=f=>{ try{ f(); return false; }catch(e){ return true; } };
+  ok('插件-拒绝缺少 kind', throws(()=>PP.registerObjectType({id:'plugin.bad1',name:'X'})));
+  ok('插件-拒绝非法类型 id', throws(()=>PP.registerObjectType({id:'bad id!',kind:'point',name:'X'})));
+  ok('插件-拒绝非法 scaleShape', throws(()=>PP.registerObjectType({id:'plugin.bad2',kind:'point',name:'X',scaleShape:'cone'})));
+  ok('插件-拒绝非法 fov', throws(()=>PP.registerObjectType({id:'plugin.bad3',kind:'point',name:'X',scaleShape:'sector',fov:5})));
+  ok('插件-拒绝超量图元路径', throws(()=>PP.registerObjectType({id:'plugin.bad4',kind:'point',name:'X',symbol:Array.from({length:201},()=>({d:'M0 0'}))})));
+  ok('插件-拒绝重复类型 id', throws(()=>PP.registerObjectType({id:'plugin.ptz',kind:'point',name:'重复'})));
+
+  ok('插件-注册自定义区域类型', PP.registerObjectType({id:'plugin.zone',kind:'rect',name:'警戒区域',color:'#f97316'}));
+  const zt=PP.listPluginTypes().find(t=>t.id==='plugin.zone');
+  ok('插件-区域类型带默认样式', !!zt&&zt.defaultStyle.fillAlpha===.15&&zt.defaultStyle.strokeWidth===.1);
+  ok('插件-区域类型进入当前工程', api.state.objectTypes.some(t=>t.id==='plugin.zone'));
+
+  api.resetState();
+  ok('插件-可读取实时工程状态', PP.state===api.state);
+  let exportCtx=null;
+  PP.registerExporter({id:'ctx',label:'上下文',ext:'txt',run(ctx){ exportCtx=ctx; }});
+  api.exportViaPlugin('ctx');
+  ok('插件-导出上下文有状态快照', !!exportCtx&&Array.isArray(exportCtx.state.objects));
+  ok('插件-导出上下文有实时状态', !!exportCtx&&exportCtx.liveState===api.state);
+  eq('插件-导出上下文工程名', exportCtx&&exportCtx.projectName, api.state.meta.name);
+  PP.unregisterExporter('ctx');
+  let importCtx=null;
+  PP.registerImporter({ext:'ctx',label:'CTX',run(ctx){ importCtx=ctx; }});
+  api.importViaPlugin(PP.findImporter('CTX'),{name:'x.ctx'});
+  ok('插件-导入上下文含实时状态', !!importCtx&&importCtx.state===api.state);
+  ok('插件-导入上下文含提交函数', !!importCtx&&typeof importCtx.commitChange==='function');
+  PP.unregisterImporter('ctx');
+
+  api.resetState();
+  api.state.objects=[api.baseObject('point','plugin.ptz',{name:'P',x:1,y:1})];
+  ok('插件-使用中的类型拒绝注销', !PP.unregisterObjectType('plugin.ptz'));
+  ok('插件-使用中的类型仍保留', api.state.objectTypes.some(t=>t.id==='plugin.ptz'));
+  api.resetState();
+  ok('插件-未使用时可注销类型', PP.unregisterObjectType('plugin.ptz'));
+  eq('插件-注销后内置表移除', api.BUILTIN_TYPES.filter(t=>t.id==='plugin.ptz').length, 0);
+  eq('插件-注销后当前工程移除', api.state.objectTypes.filter(t=>t.id==='plugin.ptz').length, 0);
+  ok('插件-内置类型不可注销', !PP.unregisterObjectType('point.marker'));
+  ok('插件-注销第二个插件类型', PP.unregisterObjectType('plugin.zone'));
+  eq('插件-内置类型表恢复原长度', api.BUILTIN_TYPES.length, typeBase);
+  eq('插件-插件类型表清空', PP.listPluginTypes().length, 0);
+  api.resetState();
 }
 
 /* 58. 中英界面切换与无障碍标记 --------------------------------------------- */
