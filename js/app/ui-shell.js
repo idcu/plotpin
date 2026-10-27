@@ -38,7 +38,7 @@ $('settingsBtn').onclick=()=>{
       state.settings.polar=$('setPolar').checked;
       state.settings.polarStep=Number($('setPolarStep').value)||45;
       state.settings.lang=$('setLang').value==='en'?'en':'zh';
-      I18N.setLang(state.settings.lang); I18N.apply(document); refreshUI();
+      I18N.setLang(state.settings.lang); I18N.apply(document); refreshUI(); refreshI18nRuntimeText();
       if(!state.settings.osnap) osnapMode=null;
       updateOsnapChip();
       state.settings.showAreaTag=$('setAreaTag').checked;
@@ -72,7 +72,7 @@ function openModal(title,body,buttons=[]){
     const active=document.activeElement;
     modalReturnFocus=active&&typeof active.focus==='function'?active:null;
   }
-  $('modalTitle').textContent=title; $('modalBody').innerHTML=body;
+  $('modalTitle').textContent=L(title); $('modalBody').innerHTML=body;
   $('modalFooter').innerHTML='';
   buttons.forEach(b=>{ const btn=document.createElement('button'); btn.textContent=b.text; btn.className=b.class||''; btn.onclick=b.click; $('modalFooter').appendChild(btn); });
   $('modalBackdrop').classList.add('show');
@@ -101,7 +101,7 @@ $('modalBackdrop').addEventListener('click',e=>{ if(e.target.id==='modalBackdrop
 function showConfirm(message){
   const T=I18N.t;
   return new Promise(resolve=>{
-    openModal(T('confirmTitle'),`<p style="line-height:1.7;margin:0">${esc(message)}</p>`,[
+    openModal(T('confirmTitle'),`<p style="line-height:1.7;margin:0">${esc(L(message))}</p>`,[
       {text:T('cancel'),click:()=>{closeModal();resolve(false);}},
       {text:T('ok'),class:'primary',click:()=>{closeModal();resolve(true);}}
     ]);
@@ -110,15 +110,40 @@ function showConfirm(message){
 function showPrompt({title,label,value=''}){
   const T=I18N.t;
   return new Promise(resolve=>{
-    openModal(title,`<label style="font-weight:600;display:block;margin-bottom:7px">${esc(label)}</label><input id="promptInput" style="width:100%" value="${esc(value)}">`,[
+    openModal(L(title),`<label style="font-weight:600;display:block;margin-bottom:7px">${esc(L(label))}</label><input id="promptInput" style="width:100%" value="${esc(value)}">`,[
       {text:T('cancel'),click:()=>{closeModal();resolve(null);}},
       {text:T('ok'),class:'primary',click:()=>{const v=$('promptInput').value.trim();closeModal();resolve(v);}}
     ]);
     setTimeout(()=>{ $('promptInput')?.focus(); $('promptInput')?.select(); },30);
   });
 }
+/** 语言切换后刷新坐标前缀与保存状态文案，避免顶栏残留旧语言 */
+function refreshI18nRuntimeText(){
+  const coord=$('coordText');
+  if(coord){
+    const old=I18N.lang==='en'?'鼠标：':'Cursor: ';
+    const next=L('鼠标：');
+    if(coord.textContent.startsWith(old)) coord.textContent=next+coord.textContent.slice(old.length);
+  }
+  const save=$('saveState');
+  if(save){
+    let t=save.textContent;
+    t=t.replace(/^📁\s*已保存\s*/, '📁 '+L('已保存')+' ')
+      .replace(/^📁\s*Saved\s*/, '📁 '+L('已保存')+' ')
+      .replace(/^已自动保存\s*/, L('已自动保存')+' ')
+      .replace(/^Auto-saved\s*/, L('已自动保存')+' ')
+      .replace(/^待保存…$/, L('待保存…'))
+      .replace(/^Saving…$/, L('待保存…'))
+      .replace(/^未保存$/, L('未保存'))
+      .replace(/^Unsaved$/, L('未保存'))
+      .replace(/^请手动导出$/, L('请手动导出'))
+      .replace(/^Export manually$/, L('请手动导出'));
+    save.textContent=t;
+  }
+  updateToolTitle();
+}
 function toast(msg,type=''){
-  const el=document.createElement('div'); el.className='toast '+type; el.textContent=msg;
+  const el=document.createElement('div'); el.className='toast '+type; el.textContent=L(msg);
   $('toastWrap').appendChild(el); setTimeout(()=>el.remove(),2600);
 }
 function esc(s){

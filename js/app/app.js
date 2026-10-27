@@ -8,6 +8,7 @@
   /* 界面语言先于首屏渲染：动态面板/ARIA 标签也按当前语言生成 */
   I18N.setLang(state.settings.lang);
   I18N.apply(document);
+  refreshI18nRuntimeText();
   afterStateLoaded(!state.viewport.zoom || state.viewport.zoom===1);
   resizeCanvas();
   if(state.viewport.zoom===1) fitView();

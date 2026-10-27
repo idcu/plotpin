@@ -1,7 +1,7 @@
 /* sw.js —— 托管（http/https）部署时的离线缓存层
  * file:// 双击模式本身就是完全离线的，浏览器不允许该协议注册 Service Worker，故不注册。
  * 缓存清单从 index.html 动态解析，新增脚本无需手工维护。 */
-const CACHE = 'plotpin-v1';
+const CACHE = 'plotpin-v2';
 
 async function precache() {
   const cache = await caches.open(CACHE);
@@ -31,13 +31,17 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  /* 网络优先：在线时始终拿到最新脚本/页面（避免旧缓存卡住升级），离线再回退缓存。
+     同时尊重 query 版本参数；仅导航离线回退时忽略 query，保证任意入口 URL 都能打开。 */
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req).then(res => {
+    fetch(req).then(res => {
       if (res.ok) {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));
       }
       return res;
-    }).catch(() => hit))
+    }).catch(() =>
+      caches.match(req).then(hit => hit || (req.mode === 'navigate' ? caches.match(req, { ignoreSearch: true }) : undefined))
+    )
   );
 });

@@ -317,7 +317,7 @@ function renameFloor(id,name){
 }
 
 function scheduleSave(){
-  $('saveState').textContent='待保存…';
+  $('saveState').textContent=L('待保存…');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{
     try{
@@ -326,11 +326,11 @@ function scheduleSave(){
       /* 绑定到工程库的工程：同名键同步更新，工程库内容即最新（失败静默，不影响草稿） */
       if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(()=>{});
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag,siteNodes:state.settings.siteNodes,siteSegLen:state.settings.siteSegLen,siteBase:state.settings.siteBase,siteRadius:state.settings.siteRadius,siteArea:state.settings.siteArea,sitePerimeter:state.settings.sitePerimeter,polar:state.settings.polar,polarStep:state.settings.polarStep,lang:state.settings.lang}));
-      $('saveState').textContent=(state.meta.projectId?'📁 已保存 ':'已自动保存 ')+new Date().toLocaleTimeString();
+      $('saveState').textContent=(state.meta.projectId?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString();
     }catch(e){
       try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
       notifyIdbFallback();
-      $('saveState').textContent='请手动导出';
+      $('saveState').textContent=L('请手动导出');
     }
   },450);
 }

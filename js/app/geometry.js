@@ -556,15 +556,15 @@ function siteKindName(k){ return ({image:'图片底图',rect:'矩形场地',circ
 function siteDescription(bg){
   bg=bg||state.background;
   const d=siteDomainOf(bg);
-  if(bg.kind==='image') return `图片底图：${bg.fileName||'未命名'} ${bg.width}×${bg.height}px ｜ ${fmt(bg.metersPerPixel)} m/px${bg.calibrated?'（已校准）':'（未校准）'} ｜ 实地 ${fmt(d.w)}×${fmt(d.h)} m`;
-  if(bg.kind==='circle') return `圆形场地：半径 ${fmt(bg.shape.r)} m ｜ 占地 ${fmt(d.w)}×${fmt(d.h)} m`;
+  if(bg.kind==='image') return `${L('图片底图：')}${bg.fileName||L('未命名')} ${bg.width}×${bg.height}px ｜ ${fmt(bg.metersPerPixel)} m/px${bg.calibrated?L('（已校准）'):L('（未校准）')} ｜ ${L('实地')} ${fmt(d.w)}×${fmt(d.h)} m`;
+  if(bg.kind==='circle') return `${L('圆形场地：')}${L('半径')} ${fmt(bg.shape.r)} m ｜ ${L('占地')} ${fmt(d.w)}×${fmt(d.h)} m`;
   if(bg.kind==='ellipse'){
     const sh=bg.shape, rot=Number(sh.angle)||0;
-    return `椭圆场地：半径 ${fmt(sh.rx)}×${fmt(sh.ry)} m${rot?` ｜ 旋转 ${Math.round(rot)}°`:''} ｜ 外接 ${fmt(d.w)}×${fmt(d.h)} m`;
+    return `${L('椭圆场地：')}${L('半径')} ${fmt(sh.rx)}×${fmt(sh.ry)} m${rot?` ｜ ${L('旋转')} ${Math.round(rot)}°`:''} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`;
   }
-  if(bg.kind==='sector') return `扇形场地：半径 ${fmt(bg.shape.r)} m ｜ ${Math.round(sectorSweep(bg.shape))}° 扇区 ｜ 外接 ${fmt(d.w)}×${fmt(d.h)} m`;
-  if(bg.kind==='polygon') return `多边形场地：${bg.shape.points.length} 条边 ｜ 外接 ${fmt(d.w)}×${fmt(d.h)} m`;
-  return `矩形场地：${fmt(d.w)}×${fmt(d.h)} m（世界坐标，无需比例尺校准）`;
+  if(bg.kind==='sector') return `${L('扇形场地：')}${L('半径')} ${fmt(bg.shape.r)} m ｜ ${Math.round(sectorSweep(bg.shape))}° ${L('扇区')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`;
+  if(bg.kind==='polygon') return `${L('多边形场地：')}${bg.shape.points.length} ${L('条边')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`;
+  return `${L('矩形场地：')}${fmt(d.w)}×${fmt(d.h)} m${L('（世界坐标，无需比例尺校准）')}`;
 }
 
 /* -------------------- 点设备物理尺寸命中（世界坐标） -------------------- */

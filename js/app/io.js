@@ -1,6 +1,6 @@
 /* io.js —— 文件导入路由、底图导入压缩、表格导入预览、全部导出器、打印报告 */
 /* -------------------- 文件：新建 / 底图 / 导入 -------------------- */
-$('newBtn').onclick=()=>showConfirm('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？').then(ok=>{
+$('newBtn').onclick=()=>showConfirm(L('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？')).then(ok=>{
   if(!ok)return;
   state=createInitialState(); selectedIds.clear(); history={past:[],future:[]};
   assetPrune([]).catch(()=>{});
@@ -24,26 +24,26 @@ function openFloorManager(){
     const kind=active?state.background.kind:(f.background&&f.background.kind);
     const label=BG_KIND_LABELS[kind]||'矩形场地';
     return `<div class="proj-row${active?' bound':''}" data-floor="${esc(f.id)}">
-      <div class="proj-info"><b>${esc(f.name)}</b>${active?'<span class="proj-tag">当前楼层</span>':''}
-        <span class="hint-text">${n} 个对象 · ${esc(label)}</span></div>
+      <div class="proj-info"><b>${esc(f.name)}</b>${active?`<span class="proj-tag">${esc(L('当前楼层'))}</span>`:''}
+        <span class="hint-text">${n} ${esc(L('个对象'))} · ${esc(L(label))}</span></div>
       <div class="proj-ops">
-        <button data-fop="switch" ${active?'disabled':''}>切换</button>
-        <button data-fop="rename">重命名</button>
-        <button data-fop="del" class="danger" ${floors.length<=1?'disabled':''}>删除</button>
+        <button data-fop="switch" ${active?'disabled':''}>${esc(L('切换'))}</button>
+        <button data-fop="rename">${esc(L('重命名'))}</button>
+        <button data-fop="del" class="danger" ${floors.length<=1?'disabled':''}>${esc(L('删除'))}</button>
       </div></div>`;
   }).join('');
   const total=floors.reduce((s,f)=>s+floorObjectCount(f),0);
-  openModal('楼层 / 多底图',
-    `<div class="proj-current">当前楼层：<b>${esc(currentFloorName())}</b>　共 ${floors.length} 层 · ${total} 个对象</div>
-     <div style="margin:8px 0"><button class="primary" id="floorAdd">＋ 新增楼层（空白场地）</button></div>
+  openModal(L('楼层 / 多底图'),
+    `<div class="proj-current">${esc(L('当前楼层：'))}<b>${esc(currentFloorName())}</b>　${esc(L('共'))} ${floors.length} ${esc(L('层'))} · ${total} ${esc(L('个对象'))}</div>
+     <div style="margin:8px 0"><button class="primary" id="floorAdd">＋ ${esc(L('新增楼层（空白场地）'))}</button></div>
      <div class="proj-list">${rows}</div>
-     <p class="hint-text">每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。</p>`,
-    [{text:'关闭',click:closeModal}]);
+     <p class="hint-text">${esc(L('每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。'))}</p>`,
+    [{text:L('关闭'),click:closeModal}]);
   $('floorAdd').onclick=async()=>{
-    const v=await showPrompt({title:'新增楼层',label:'楼层名称',value:'F'+(floors.length+1)});
+    const v=await showPrompt({title:L('新增楼层'),label:L('楼层名称'),value:'F'+(floors.length+1)});
     if(v===null) return;
     const id=await addFloor(v);
-    if(id){ closeModal(); openFloorManager(); toast('已新增楼层：'+currentFloorName(),'success'); }
+    if(id){ closeModal(); openFloorManager(); toast(L('已新增楼层：')+currentFloorName(),'success'); }
   };
   document.querySelectorAll('.proj-row[data-floor]').forEach(row=>{
     row.querySelectorAll('button[data-fop]').forEach(btn=>btn.onclick=async()=>{
@@ -51,19 +51,19 @@ function openFloorManager(){
       try{
         if(op==='switch'){
           closeModal();
-          if(await switchFloor(id)) toast('已切换到楼层：'+currentFloorName(),'success');
+          if(await switchFloor(id)) toast(L('已切换到楼层：')+currentFloorName(),'success');
         }else if(op==='rename'){
           const f=floors.find(x=>x.id===id);
-          const v=await showPrompt({title:'重命名楼层',label:'楼层名称',value:f?f.name:''});
+          const v=await showPrompt({title:L('重命名楼层'),label:L('楼层名称'),value:f?f.name:''});
           if(v===null) return;
           if(renameFloor(id,v)){ closeModal(); openFloorManager(); }
         }else if(op==='del'){
           const f=floors.find(x=>x.id===id);
-          const ok=await showConfirm('确定删除楼层「'+(f?f.name:id)+'」及其全部对象？此操作可撤销。');
+          const ok=await showConfirm(L('确定删除楼层「')+(f?f.name:id)+L('」及其全部对象？此操作可撤销。'));
           if(!ok) return;
-          if(await deleteFloor(id)){ closeModal(); openFloorManager(); toast('楼层已删除'); }
+          if(await deleteFloor(id)){ closeModal(); openFloorManager(); toast(L('楼层已删除')); }
         }
-      }catch(e){ toast('楼层操作失败：'+e.message,'error'); }
+      }catch(e){ toast(L('楼层操作失败：')+e.message,'error'); }
     });
   });
 }
@@ -73,30 +73,30 @@ async function openProjectLibrary(){
     const dt=p.updatedAt?new Date(p.updatedAt).toLocaleString():'';
     const bg=BG_KIND_LABELS[p.bgKind]||p.bgKind;
     return `<div class="proj-row${p.bound?' bound':''}" data-id="${esc(p.id)}">
-      <div class="proj-info"><b>${esc(p.name)}</b>${p.bound?'<span class="proj-tag">当前打开</span>':''}
-        <span class="hint-text">${p.objectCount} 个对象 · ${esc(bg)} · ${esc(dt)}</span></div>
+      <div class="proj-info"><b>${esc(p.name)}</b>${p.bound?`<span class="proj-tag">${esc(L('当前打开'))}</span>`:''}
+        <span class="hint-text">${p.objectCount} ${esc(L('个对象'))} · ${esc(L(bg))} · ${esc(dt)}</span></div>
       <div class="proj-ops">
-        <button data-op="open" ${p.bound?'disabled':''}>打开</button>
-        <button data-op="rename">重命名</button>
-        <button data-op="copy">复制</button>
-        <button data-op="del" class="danger">删除</button>
+        <button data-op="open" ${p.bound?'disabled':''}>${esc(L('打开'))}</button>
+        <button data-op="rename">${esc(L('重命名'))}</button>
+        <button data-op="copy">${esc(L('复制'))}</button>
+        <button data-op="del" class="danger">${esc(L('删除'))}</button>
       </div></div>`;
-  }).join('')||'<p class="hint-text">工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。</p>';
-  const boundName=state.meta.projectId?(state.meta.name||'当前工程'):'';
-  openModal('工程库（保存在本机浏览器）',
-    `<div class="proj-current">当前草稿：<b>${esc(state.meta.name)}</b>${boundName?' · 已绑定工程库':''}　对象 ${state.objects.length} 个</div>
+  }).join('')||`<p class="hint-text">${esc(L('工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。'))}</p>`;
+  const boundName=state.meta.projectId?(state.meta.name||L('当前工程')):'';
+  openModal(L('工程库（保存在本机浏览器）'),
+    `<div class="proj-current">${esc(L('当前草稿：'))}<b>${esc(state.meta.name)}</b>${boundName?` · ${esc(L('已绑定工程库'))}`:''}　${esc(L('对象'))} ${state.objects.length} ${esc(L('个'))}</div>
      <div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap">
-       <button class="primary" id="projSaveAs">💾 把当前图纸另存到工程库</button>
-       <button id="projMerge">⇄ 合并他人工程…</button>
+       <button class="primary" id="projSaveAs">💾 ${esc(L('把当前图纸另存到工程库'))}</button>
+       <button id="projMerge">⇄ ${esc(L('合并他人工程…'))}</button>
      </div>
      <div class="proj-list">${rows}</div>
-     <p class="hint-text">工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。<br>
-       离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。</p>`,
-    [{text:'关闭',click:closeModal}]);
+     <p class="hint-text">${esc(L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。'))}<br>
+       ${esc(L('离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。'))}</p>`,
+    [{text:L('关闭'),click:closeModal}]);
   $('projSaveAs').onclick=async()=>{
-    const v=await showPrompt({title:'另存到工程库',label:'工程名称',value:state.meta.name||'未命名图纸工程'});
+    const v=await showPrompt({title:L('另存到工程库'),label:L('工程名称'),value:state.meta.name||L('未命名图纸工程')});
     if(v===null) return;
-    await saveProjectAs(v); toast('已存入工程库','success'); closeModal(); openProjectLibrary();
+    await saveProjectAs(v); toast(L('已存入工程库'),'success'); closeModal(); openProjectLibrary();
   };
   $('projMerge').onclick=()=>{
     const input=document.createElement('input');
@@ -108,10 +108,10 @@ async function openProjectLibrary(){
         const stats=await mergeProjectJSON(JSON.parse(await f.text()));
         closeModal();
         const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded;
-        const conflict=stats.conflicts?`；冲突 ${stats.conflicts} 项按较新版本保留`:'';
-        toast(`合并完成：新增 ${stats.added} · 更新 ${stats.updated} · 删除 ${stats.deleted} · 新增楼层 ${stats.floorsAdded}${conflict}`,
+        const conflict=stats.conflicts?`；${L('冲突')} ${stats.conflicts} ${L('项按较新版本保留')}`:'';
+        toast(`${L('合并完成：')}${L('新增')} ${stats.added} · ${L('更新')} ${stats.updated} · ${L('删除')} ${stats.deleted} · ${L('新增楼层')} ${stats.floorsAdded}${conflict}`,
           changed?'success':'warn');
-      }catch(e){ toast('合并失败：'+e.message,'error'); }
+      }catch(e){ toast(L('合并失败：')+e.message,'error'); }
     };
     input.click();
   };
@@ -120,21 +120,21 @@ async function openProjectLibrary(){
       const id=row.dataset.id, op=btn.dataset.op;
       try{
         if(op==='open'){
-          closeModal(); await openProjectById(id); toast('已打开工程：'+(state.meta.name||''),'success');
+          closeModal(); await openProjectById(id); toast(L('已打开工程：')+(state.meta.name||''),'success');
         }else if(op==='rename'){
           const cur=projects.find(p=>p.id===id);
-          const v=await showPrompt({title:'重命名工程',label:'工程名称',value:cur?.name||''});
+          const v=await showPrompt({title:L('重命名工程'),label:L('工程名称'),value:cur?.name||''});
           if(v===null) return;
-          await renameProjectById(id,v); toast('已重命名','success'); openProjectLibrary();
+          await renameProjectById(id,v); toast(L('已重命名'),'success'); openProjectLibrary();
         }else if(op==='copy'){
-          await duplicateProjectById(id); toast('已复制一份到工程库','success'); openProjectLibrary();
+          await duplicateProjectById(id); toast(L('已复制一份到工程库'),'success'); openProjectLibrary();
         }else if(op==='del'){
           const cur=projects.find(p=>p.id===id);
-          const ok=await showConfirm('确定删除工程「'+(cur?.name||id)+'」？此操作不可撤销（不影响已导出的文件）。');
+          const ok=await showConfirm(L('确定删除工程「')+(cur?.name||id)+L('」？此操作不可撤销（不影响已导出的文件）。'));
           if(!ok) return;
-          await deleteProjectById(id); toast('工程已删除'); openProjectLibrary();
+          await deleteProjectById(id); toast(L('工程已删除')); openProjectLibrary();
         }
-      }catch(e){ toast('操作失败：'+e.message,'error'); }
+      }catch(e){ toast(L('操作失败：')+e.message,'error'); }
     }));
   });
 }
@@ -317,23 +317,23 @@ async function importPdfFile(f){
 
 /* -------------------- 底图/场地：选择弹窗与矢量场地应用 -------------------- */
 function openSitePicker(){
-  openModal('底图 / 场地',
-    `<div class="site-current"><b>当前：</b>${esc(siteDescription())}</div>
+  openModal(L('底图 / 场地'),
+    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(siteDescription())}</div>
      <div class="site-pick">
-       <button class="site-card" data-site="image"><b>🖼 上传图片底图</b><span class="hint-text">PNG/JPG/WebP/BMP；再用「比例尺」校准米/像素</span></button>
-       <button class="site-card" data-site="rect-num"><b>▭ 矩形场地（输入尺寸）</b><span class="hint-text">直接输入长×宽（米）</span></button>
-       <button class="site-card" data-site="rect-draw"><b>▭ 矩形场地（拖画）</b><span class="hint-text">在画布上拖出对角</span></button>
-       <button class="site-card" data-site="circle-num"><b>● 圆形场地（输入半径）</b><span class="hint-text">按半径（米）生成</span></button>
-       <button class="site-card" data-site="circle-draw"><b>● 圆形场地（拖画）</b><span class="hint-text">拖出半径长度</span></button>
-       <button class="site-card" data-site="ellipse-num"><b>⬭ 椭圆场地（输入半径）</b><span class="hint-text">输入长/短轴半径（米）</span></button>
-       <button class="site-card" data-site="ellipse-draw"><b>⬭ 椭圆场地（拖画）</b><span class="hint-text">拖出外接包围盒</span></button>
-       <button class="site-card" data-site="sector-draw"><b>◔ 扇形场地（拖画）</b><span class="hint-text">拖出半径后输入起止角</span></button>
-       <button class="site-card" data-site="para-num"><b>▱ 平行四边形场地（输入尺寸）</b><span class="hint-text">输入 底边, 高, 倾角（米/度）</span></button>
-       <button class="site-card" data-site="para-draw"><b>▱ 平行四边形场地（拖画）</b><span class="hint-text">拖出底×高，生成后默认倾角 30°</span></button>
-       <button class="site-card" data-site="polygon"><b>⬡ 多边形场地（描边）</b><span class="hint-text">沿边界逐点单击，双击/✓闭合；三角形同理</span></button>
+       <button class="site-card" data-site="image"><b>🖼 ${esc(L('上传图片底图'))}</b><span class="hint-text">${esc(L('PNG/JPG/WebP/BMP；再用「比例尺」校准米/像素'))}</span></button>
+       <button class="site-card" data-site="rect-num"><b>▭ ${esc(L('矩形场地（输入尺寸）'))}</b><span class="hint-text">${esc(L('直接输入长×宽（米）'))}</span></button>
+       <button class="site-card" data-site="rect-draw"><b>▭ ${esc(L('矩形场地（拖画）'))}</b><span class="hint-text">${esc(L('在画布上拖出对角'))}</span></button>
+       <button class="site-card" data-site="circle-num"><b>● ${esc(L('圆形场地（输入半径）'))}</b><span class="hint-text">${esc(L('按半径（米）生成'))}</span></button>
+       <button class="site-card" data-site="circle-draw"><b>● ${esc(L('圆形场地（拖画）'))}</b><span class="hint-text">${esc(L('拖出半径长度'))}</span></button>
+       <button class="site-card" data-site="ellipse-num"><b>⬭ ${esc(L('椭圆场地（输入半径）'))}</b><span class="hint-text">${esc(L('输入长/短轴半径（米）'))}</span></button>
+       <button class="site-card" data-site="ellipse-draw"><b>⬭ ${esc(L('椭圆场地（拖画）'))}</b><span class="hint-text">${esc(L('拖出外接包围盒'))}</span></button>
+       <button class="site-card" data-site="sector-draw"><b>◔ ${esc(L('扇形场地（拖画）'))}</b><span class="hint-text">${esc(L('拖出半径后输入起止角'))}</span></button>
+       <button class="site-card" data-site="para-num"><b>▱ ${esc(L('平行四边形场地（输入尺寸）'))}</b><span class="hint-text">${esc(L('输入 底边, 高, 倾角（米/度）'))}</span></button>
+       <button class="site-card" data-site="para-draw"><b>▱ ${esc(L('平行四边形场地（拖画）'))}</b><span class="hint-text">${esc(L('拖出底×高，生成后默认倾角 30°'))}</span></button>
+       <button class="site-card" data-site="polygon"><b>⬡ ${esc(L('多边形场地（描边）'))}</b><span class="hint-text">${esc(L('沿边界逐点单击，双击/✓闭合；三角形同理'))}</span></button>
      </div>
-     <p class="hint-text">矢量场地直接以米为世界坐标，缩放时设备尺寸与场地保持真实比例。切换会替换当前底图/场地，已有标注对象保留（如需请重新对齐）。</p>`,
-    [{text:'关闭',click:closeModal}]);
+     <p class="hint-text">${esc(L('矢量场地直接以米为世界坐标，缩放时设备尺寸与场地保持真实比例。切换会替换当前底图/场地，已有标注对象保留（如需请重新对齐）。'))}</p>`,
+    [{text:L('关闭'),click:closeModal}]);
   $('modalBody').querySelectorAll('[data-site]').forEach(btn=>btn.onclick=async()=>{
     const act=btn.dataset.site;
     if(act==='image'){ closeModal(); $('bgInput').click(); return; }
@@ -343,10 +343,10 @@ function openSitePicker(){
     if(act==='sector-draw'){ closeModal(); setTool('site-sector'); return; }
     if(act==='para-draw'){ closeModal(); setTool('site-parallelogram'); return; }
     if(act==='para-num'){
-      const v=await showPrompt({title:'平行四边形场地',label:'底边, 高, 倾角（米/度，用逗号分隔），例如 120,80,30',value:'120,80,30'});
+      const v=await showPrompt({title:L('平行四边形场地'),label:L('底边, 高, 倾角（米/度，用逗号分隔），例如 120,80,30'),value:'120,80,30'});
       if(v===null) return;
       const m=v.split(/[,，x×*\s]+/).map(Number);
-      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast('请输入底边与高（均为正数），如 120,80,30','error');
+      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast(L('请输入底边与高（均为正数），如 120,80,30'),'error');
       const skew=Number.isFinite(m[2])?m[2]:PARALLELOGRAM_DEFAULT_SKEW;
       closeModal();
       applyVectorSite('parallelogram',{type:'parallelogram',x:0,y:0,w:m[0],h:m[1],skew});
@@ -354,26 +354,26 @@ function openSitePicker(){
     }
     if(act==='polygon'){ closeModal(); setTool('site-polygon'); return; }
     if(act==='ellipse-num'){
-      const v=await showPrompt({title:'椭圆场地',label:'长轴半径, 短轴半径（米，用逗号分隔），例如 40,25',value:'40,25'});
+      const v=await showPrompt({title:L('椭圆场地'),label:L('长轴半径, 短轴半径（米，用逗号分隔），例如 40,25'),value:'40,25'});
       if(v===null) return;
       const m=v.split(/[,，x×*\s]+/).map(Number);
-      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast('请输入两个正数半径，如 40,25','error');
+      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast(L('请输入两个正数半径，如 40,25'),'error');
       closeModal();
       applyVectorSite('ellipse',{type:'ellipse',cx:m[0],cy:m[1],rx:m[0],ry:m[1],angle:0});
       return;
     }
     if(act==='rect-num'){
-      const v=await showPrompt({title:'矩形场地',label:'长 × 宽（米，用逗号或 x 分隔），例如 120,80',value:fmt(siteDomainOf().w)+','+fmt(siteDomainOf().h)});
+      const v=await showPrompt({title:L('矩形场地'),label:L('长 × 宽（米，用逗号或 x 分隔），例如 120,80'),value:fmt(siteDomainOf().w)+','+fmt(siteDomainOf().h)});
       if(v===null) return;
       const m=v.split(/[,，x×*\s]+/).map(Number);
-      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast('请输入两个正数，如 120,80','error');
+      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast(L('请输入两个正数，如 120,80'),'error');
       closeModal(); applyVectorSite('rect',{type:'rect',w:m[0],h:m[1]});
       return;
     }
     if(act==='circle-num'){
-      const v=await showPrompt({title:'圆形场地',label:'半径（米）',value:'30'});
+      const v=await showPrompt({title:L('圆形场地'),label:L('半径（米）'),value:'30'});
       const r=Number(v);
-      if(!(r>0)) return toast('请输入正数半径','error');
+      if(!(r>0)) return toast(L('请输入正数半径'),'error');
       closeModal(); applyVectorSite('circle',circleShapeFrom([0,0],r));
     }
   });
@@ -385,7 +385,7 @@ function applyVectorSite(kind,shape){
   Object.assign(state.background,{kind,shape,assetId:'',fileName:'',calibrated:false,transform:null});
   bgImage=null; bgDataUrl=''; selectedIds.clear();
   if(oldId) assetPrune([]).catch(()=>{});
-  fitView(); commitChange('已设置为'+siteKindName(kind)); setTool('select');
+  fitView(); commitChange(L('已设置为')+L(siteKindName(kind))); setTool('select');
 }
 
 /* -------------------- 底图导入：字节入资产库 + 大图自动压缩 -------------------- */
@@ -689,19 +689,19 @@ function rowsToObjectsPlan(rows){
 }
 function showTableImportPreview(fileName,plan){
   if(!plan.updates.length&&!plan.creates.length&&plan.warnings.length){
-    openModal('无法导入：'+fileName,'<div class="issue">'+plan.warnings.slice(0,10).map(esc).join('</div><div class="issue">')+'</div>',
-      [{text:'知道了',class:'primary',click:closeModal}]);
+    openModal(L('无法导入：')+fileName,'<div class="issue">'+plan.warnings.slice(0,10).map(esc).join('</div><div class="issue">')+'</div>',
+      [{text:L('知道了'),class:'primary',click:closeModal}]);
     return;
   }
   const warnHtml=plan.warnings.length
     ? '<div style="max-height:190px;overflow:auto;margin:10px 0">'+plan.warnings.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join('')+
-      (plan.warnings.length>50?'<p class="hint-text">其余 '+(plan.warnings.length-50)+' 条提示略</p>':'')+'</div>'
-    : '<div class="ok-banner">全部行均可导入。</div>';
-  openModal('表格导入预览：'+fileName,
-    '<p style="line-height:1.7">将按「编号」匹配对象并更新属性：<b>'+plan.updates.length+'</b> 项更新、<b>'+plan.creates.length+'</b> 项新增。</p>'+
-    '<p class="hint-text">可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；新对象支持点设备 / 矩形·圆·椭圆·扇形区域 / 折线（含闭合）/ 测距等标注（需「节点坐标」列）。<b>长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。</b>建议导入前先导出 JSON 备份。</p>'+warnHtml,
-    [{text:'取消',click:closeModal},
-     {text:'合并导入',class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
+      (plan.warnings.length>50?'<p class="hint-text">'+esc(L('其余提示略'))+' '+(plan.warnings.length-50)+'</p>':'')+'</div>'
+    : `<div class="ok-banner">${esc(L('全部行均可导入。'))}</div>`;
+  openModal(L('表格导入预览：')+fileName,
+    '<p style="line-height:1.7">'+esc(L('将按「编号」匹配对象并更新属性：'))+'<b>'+plan.updates.length+'</b> '+esc(L('项更新、'))+'<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>'+
+    '<p class="hint-text">'+esc(L('可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；新对象支持点设备 / 矩形·圆·椭圆·扇形区域 / 折线（含闭合）/ 测距等标注（需「节点坐标」列）。'))+'<b>'+esc(L('长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。'))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
+    [{text:L('取消'),click:closeModal},
+     {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }
 function applyTableImport(plan){
   pushHistory();
@@ -835,7 +835,7 @@ function exportLabelSheet(){
     let svg;
     try{ svg=qrSvg(payload); }
     catch(e){ svg=`<div style="color:#b91c1c;font-size:12px">${esc(e.message)}</div>`; }
-    const line=(label,val)=>val!==undefined&&val!==''?`<div>${label}：${esc(val)}</div>`:'';
+    const line=(label,val)=>val!==undefined&&val!==''?`<div>${esc(L(label))}：${esc(val)}</div>`:'';
     return `<div class="label"><div class="qr">${svg}</div><div class="meta">
       <b>${esc(o.name||'')}</b>
       <div>${esc(t.name)}</div>
@@ -844,7 +844,7 @@ function exportLabelSheet(){
       ${line('责任人',o.props.owner)}
       <div class="code">${esc(payload)}</div></div></div>`;
   }).join('');
-  const html=`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${esc(safeName())} · 设备标签</title>
+  const html=`<!doctype html><html lang="${I18N.lang==='en'?'en':'zh-CN'}"><head><meta charset="utf-8"><title>${esc(safeName())} · ${esc(L('设备标签'))}</title>
 <style>body{font-family:"Microsoft YaHei",Arial,sans-serif;margin:16px;color:#111827}
 .sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .label{border:1px dashed #94a3b8;border-radius:6px;padding:8px;display:flex;gap:8px;align-items:center;break-inside:avoid}
@@ -852,10 +852,10 @@ function exportLabelSheet(){
 .meta{font-size:12px;line-height:1.55;min-width:0}.meta b{font-size:14px}
 .code{font-family:Consolas,Menlo,monospace;color:#475569;word-break:break-all;font-size:11px}
 @media print{body{margin:8mm}.label{border-style:solid}}</style></head>
-<body><h3>${esc(state.meta.name||'图纸工程')} · 设备二维码标签（共 ${pts.length} 台）</h3>
-<p style="font-size:12px;color:#475569">扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。</p>
+<body><h3>${esc(state.meta.name||L('图纸工程'))} · ${esc(L('设备二维码标签'))}（${esc(L('共'))} ${pts.length} ${esc(L('台'))}）</h3>
+<p style="font-size:12px;color:#475569">${esc(L('扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。'))}</p>
 <div class="sheet">${cards}</div></body></html>`;
-  downloadBlob(new Blob([html],{type:'text/html;charset=utf-8'}),safeName()+'-设备标签.html');
+  downloadBlob(new Blob([html],{type:'text/html;charset=utf-8'}),safeName()+'-'+L('设备标签')+'.html');
   toast('已导出 '+pts.length+' 张设备二维码标签（可打印）','success');
 }
 /** 导出覆盖率盲区多边形（逐行合并的矩形面，GeoJSON FeatureCollection） */
@@ -1204,15 +1204,15 @@ async function renderPdfListPages(){
     const c=document.createElement('canvas'); c.width=W; c.height=H;
     const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,W,H);
     g.fillStyle='#111827'; g.font='bold 26px Microsoft YaHei,Arial'; g.textBaseline='alphabetic';
-    g.fillText(state.meta.name+' — 对象清单',margin,margin+8);
+    g.fillText(state.meta.name+' — '+L('对象清单'),margin,margin+8);
     g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
-    g.fillText('共 '+rows.length+' 个对象 · 第 '+(pi+1)+' / '+total+' 页 · '+new Date().toLocaleString(),margin,margin+34);
+    g.fillText(L('共')+' '+rows.length+' '+L('个对象')+' · '+L('第')+' '+(pi+1)+' / '+total+' '+L('页')+' · '+new Date().toLocaleString(),margin,margin+34);
     let y=margin+70;
     g.fillStyle='#f1f5f9'; g.fillRect(margin,y,W-margin*2,headH);
     g.strokeStyle='#cbd5e1'; g.lineWidth=1; g.strokeRect(margin,y,W-margin*2,headH);
     g.fillStyle='#111827'; g.font='bold 14px Microsoft YaHei,Arial';
     let x=margin+8;
-    PDF_COLS.forEach(([name,w])=>{ g.fillText(name,x,y+26); x+=w; });
+    PDF_COLS.forEach(([name,w])=>{ g.fillText(L(name),x,y+26); x+=w; });
     y+=headH;
     const list=chunks[pi]||[];
     g.font='13px Consolas,Microsoft YaHei,Arial';
@@ -1222,7 +1222,7 @@ async function renderPdfListPages(){
       g.fillStyle='#1f2937';
       x=margin+8;
       const param=r['形状']!==''&&r['形状']!=='矩形'?r['形状']+(r['形状参数']?' '+r['形状参数']:''):(r['形状']==='矩形'?'矩形':(r['闭合']==='是'?'闭合':'')+(r['标注类型']?' '+r['标注类型']:''));
-      const vals=[r['编号'],r['名称'],r['对象类型'],r['业务类型'],r['图层'],r['X'],r['Y'],param,r['长度'],r['面积']];
+      const vals=[r['编号'],r['名称'],L(r['对象类型']),r['业务类型'],r['图层'],r['X'],r['Y'],param,r['长度'],r['面积']];
       PDF_COLS.forEach(([name,w],i)=>{ let s=String(vals[i]??''); if(g.measureText(s).width>w-14) s=s.slice(0,10)+'…'; g.fillText(s,x,y+20); x+=w; });
       y+=rowH;
     });
@@ -1246,21 +1246,21 @@ $('printBtn').onclick=()=>{
   const cols=['编号','对象类型','业务类型','图层','X','Y','参数'];
   $('report').innerHTML=`
     <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
-      <h1 style="margin:0 0 8px">${esc(state.meta.name)} - 图纸标注报告</h1>
-      <div style="color:#555;margin-bottom:14px">生成时间：${new Date().toLocaleString()} ｜ ${esc(siteDescription())}</div>
+      <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
+      <div style="color:#555;margin-bottom:14px">${esc(L('生成时间：'))}${new Date().toLocaleString()} ｜ ${esc(siteDescription())}</div>
       <img src="${img}" style="width:100%;max-height:58vh;object-fit:contain;border:1px solid #ccc">
-      <h2>统计摘要</h2>
-      <p>对象总数：${state.objects.length} ｜ 点设备：${state.objects.filter(o=>o.kind==='point').length} ｜ 区域：${state.objects.filter(o=>o.kind==='rect').length} ｜ 折线：${state.objects.filter(o=>o.kind==='line').length}</p>
-      <p>几何检查：${issues.length?issues.length+' 项提示':'未发现明显问题'}</p>
+      <h2>${esc(L('统计摘要'))}</h2>
+      <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${state.objects.filter(o=>o.kind==='point').length} ｜ ${esc(L('区域：'))}${state.objects.filter(o=>o.kind==='rect').length} ｜ ${esc(L('折线：'))}${state.objects.filter(o=>o.kind==='line').length}</p>
+      <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
       ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
     </div>
     <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
-      <h2>对象清单</h2>
+      <h2>${esc(L('对象清单'))}</h2>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr>${cols.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${c}</th>`).join('')}</tr></thead>
-        <tbody>${rows.slice(0,180).map(r=>`<tr>${cols.map(c=>`<td style="border:1px solid #ccc;padding:4px">${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
+        <thead><tr>${cols.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${esc(L(c))}</th>`).join('')}</tr></thead>
+        <tbody>${rows.slice(0,180).map(r=>`<tr>${cols.map(c=>`<td style="border:1px solid #ccc;padding:4px">${esc(c==='对象类型'?L(r[c]):r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
       </table>
-      ${rows.length>180?`<p style="color:#666">清单超过 180 行，已在打印版截断；完整数据请导出 JSON/CSV。</p>`:''}
+      ${rows.length>180?`<p style="color:#666">${esc(L('清单超过 180 行，已在打印版截断；完整数据请导出 JSON/CSV。'))}</p>`:''}
     </div>`;
   window.print();
 };

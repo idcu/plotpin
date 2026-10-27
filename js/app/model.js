@@ -99,6 +99,19 @@ function baseObject(kind, typeId, patch={}){
 function getType(typeId){
   return state.objectTypes.find(t => t.id === typeId) || state.objectTypes.find(t => t.kind === 'point') || {name:'未知',color:'#666',icon:'marker'};
 }
+/** 是否为内置类型：载入工程时清洗会把 builtin 标成 false，需按 id 回到内置表判断 */
+function isBuiltinType(t){
+  if(!t) return false;
+  if(t.builtin) return true;
+  try{ return Array.isArray(BUILTIN_TYPES)&&BUILTIN_TYPES.some(b=>b.id===t.id); }
+  catch(_){ return false; }
+}
+/** 类型显示名：内置类型随界面语言切换，用户自定义类型始终保留原名 */
+function typeDisplayName(t){
+  if(!t) return '';
+  const n=t.name||'';
+  return isBuiltinType(t) && typeof L==='function' ? L(n) : n;
+}
 function typesOfKind(kind){ return state.objectTypes.filter(t => t.kind === kind); }
 function layerOf(o){ return state.layers.find(l => l.id === o.layerId) || state.layers[0]; }
 function styleVal(o, key, fallback){

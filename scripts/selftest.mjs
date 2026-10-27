@@ -113,7 +113,8 @@ code += `\n;globalThis.__api = {
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
   annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
-  $, renderProps, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
+  typeDisplayName, populateSelects,
+  $, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
   objectRows, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
@@ -3055,11 +3056,55 @@ asyncSuites.push((async()=>{
   ok('i18n-入口占位符翻译标记≥2', (html.match(/data-i18n-placeholder="/g)||[]).length>=2);
   ok('i18n-新增 ARIA 文案中文', I.dict.zh.ariaTools === '绘图工具' && I.dict.zh.ariaCanvas.includes('绘图画布'));
   ok('i18n-新增 ARIA 文案英文', I.dict.en.ariaTools === 'Drawing tools' && I.dict.en.ariaExport === 'Choose export format');
+  ok('i18n-顶栏功能按钮中英齐全', ['baseSite','scaleBtn','affineBtn','coverageBtn','panelToggle','fitBtn'].every(k => I.dict.zh[k] && I.dict.en[k]));
+  ok('i18n-类型面板选项中英齐全', ['iconCamera','scaleNone','scaleSector','typeNamePlaceholder'].every(k => I.dict.zh[k] && I.dict.en[k]));
+  ok('i18n-入口顶栏按钮已标记翻译', /id="bgBtn"[^>]*data-i18n="baseSite"/.test(html) && /id="coverageBtn"[^>]*data-i18n="coverageBtn"/.test(html));
+  ok('i18n-入口类型形状选项已标记翻译', /value="sector"[^>]*data-i18n="scaleSector"/.test(html));
   ok('i18n-通用按钮中英齐全', ['cancel','ok','close','save'].every(k => I.dict.zh[k] && I.dict.en[k]));
   ok('i18n-设置面板标签中英齐全', ['settingsTitle','projectName','gridSpacing','languageLabel','runtimeSetting'].every(k => I.dict.zh[k] && I.dict.en[k]));
   eq('i18n-英文确定按钮', I.setLang('en') && I.t('ok'), 'OK');
   I.setLang('zh');
   eq('i18n-中文取消按钮', I.t('cancel'), '取消');
+
+  /* 动态业务文案：中文原文键 + 英文短语表 */
+  ok('i18n-动态短语表规模', Object.keys(I.phrases).length >= 180);
+  ok('i18n-动态短语英文无中文残留', Object.values(I.phrases).every(v => typeof v === 'string' && !/[\u4e00-\u9fff]/.test(v)));
+  I.setLang('en');
+  eq('i18n-动态词组宽度', I.p('宽度'), 'Width');
+  eq('i18n-动态词组关闭', I.p('关闭'), 'Close');
+  eq('i18n-动态词组未收录回退原文', I.p('__未收录词组__'), '__未收录词组__');
+  eq('i18n-动态模板粘贴', I.p('已粘贴 3 个对象'), 'Pasted 3 objects');
+  eq('i18n-动态模板表格导入', I.p('表格导入完成：更新 2 项，新增 1 项'), 'Table import complete: 2 updated, 1 created');
+  eq('i18n-捕捉类型英文', I.p('端点') + ' / ' + I.p('切点'), 'endpoint / tangent');
+  eq('i18n-捕捉提示英文', I.p('捕捉：自动（全部类型）'), 'Snap: Auto (all types)');
+  api.resetState();
+  const rectForI18n=api.baseObject('rect','rect.area',{x:1,y:2,width:10,height:5});
+  api.state.objects=[rectForI18n]; api.selectedIds.add(rectForI18n.id); api.renderProps();
+  const propEn=api.$('propPanel').innerHTML;
+  ok('i18n-英文属性面板标题', propEn.includes('Object properties'));
+  ok('i18n-英文属性面板字段', propEn.includes('Width') && propEn.includes('Height') && propEn.includes('Shape'));
+  ok('i18n-英文属性面板无核心中文', !propEn.includes('对象属性') && !propEn.includes('宽度') && !propEn.includes('填充色'));
+  const pointForI18n=api.baseObject('point','point.marker',{x:1,y:2});
+  api.state.objects=[pointForI18n]; api.selectedIds.clear(); api.selectedIds.add(pointForI18n.id); api.renderProps();
+  const pointEn=api.$('propPanel').innerHTML;
+  ok('i18n-英文点设备面板', pointEn.includes('Object properties') && pointEn.includes('Heading') && pointEn.includes('Model') && pointEn.includes('Owner') && pointEn.includes('Custom properties'));
+  ok('i18n-英文点设备面板无核心中文', !pointEn.includes('对象属性') && !pointEn.includes('朝向角') && !pointEn.includes('责任人'));
+  ok('i18n-内置类型名英文显示', api.typeDisplayName(api.state.objectTypes.find(t=>t.id==='point.camera')) === 'Camera' || api.typeDisplayName(api.state.objectTypes.find(t=>t.id==='point.marker')) === 'Generic marker');
+  const savedBuiltin=Object.assign({},api.state.objectTypes.find(t=>t.id==='point.camera'),{builtin:false});
+  eq('i18n-载入后内置类型仍按英文显示', api.typeDisplayName(savedBuiltin), 'Camera');
+  eq('i18n-用户自定义同名类型保持原名', api.typeDisplayName({id:'custom.mine',kind:'point',name:'摄像头',builtin:false}), '摄像头');
+  /* 下拉框直接用 typeDisplayName，避免载入工程 builtin:false 时回退中文 */
+  api.state.objectTypes=[savedBuiltin,{id:'point.marker',kind:'point',name:'通用标记',builtin:false}];
+  api.populateSelects();
+  const opts=api.$('pointType').innerHTML;
+  ok('i18n-点类型下拉英文', opts.includes('Camera') && opts.includes('Generic marker') && !opts.includes('摄像头'));
+  const siteEn=api.sitePropsHTML(api.state.background,'default');
+  ok('i18n-英文场地面板', siteEn.includes('Site properties') && siteEn.includes('Area') && siteEn.includes('Perimeter') && siteEn.includes('Width (m)') && siteEn.includes('Height (m)'));
+  api.renderStats();
+  const statsEn=api.$('statsPanel').innerHTML;
+  ok('i18n-英文统计面板', statsEn.includes('Project info') && statsEn.includes('Geometry check') && statsEn.includes('Local storage'));
+  I.setLang('zh');
+  api.resetState();
 
   /* 模态框语义：dialog + aria-modal + 标题关联 + Tab 焦点容器 */
   ok('无障碍-模态框 role=dialog', /id="modalBox"[^>]*role="dialog"/.test(html));

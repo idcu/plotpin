@@ -12,6 +12,22 @@ function syncToolButtons(tool){
     if(b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed',on?'true':'false');
   });
 }
+const TOOL_TITLES={
+  select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
+  rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）',
+  text:'文字：单击输入文字内容',dimension:'尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
+  affine:'仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；按 Enter 或左侧 ✓ 求解，右键/Esc 取消',
+  'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
+  'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
+  'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
+  'site-sector':'绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消',
+  'site-parallelogram':'绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）',
+  'site-polygon':'绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消',
+  'site-node':'场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除',
+  'guide':'参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出'
+};
+/** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
+function updateToolTitle(){ $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||''); }
 function setTool(tool){
   /* 独立「测距」按钮 = 标注工具的 ruler 子模式：复用 dimension 全部交互，仅入口更醒目；
      点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
@@ -21,21 +37,7 @@ function setTool(tool){
   lastCanvasHandledAt=0; lastCanvasPointerUpAt=0;
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   syncToolButtons(tool);
-  const titles={
-    select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
-    rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）',
-    text:'文字：单击输入文字内容',dimension:'尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
-    affine:'仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；按 Enter 或左侧 ✓ 求解，右键/Esc 取消',
-    'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
-    'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
-    'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
-    'site-sector':'绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消',
-    'site-parallelogram':'绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）',
-    'site-polygon':'绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消',
-    'site-node':'场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除',
-    'guide':'参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出'
-  };
-  $('toolTitle').textContent=titles[tool]||'';
+  updateToolTitle();
   refreshUI();
   requestRender();
 }
@@ -97,7 +99,7 @@ function cycleOsnapMode(back){
   const i=OSNAP_CYCLE.indexOf(osnapMode);
   osnapMode=OSNAP_CYCLE[(i+(back?-1:1)+OSNAP_CYCLE.length)%OSNAP_CYCLE.length];
   updateOsnapChip();
-  toast(osnapMode?('捕捉已锁定：'+OSNAP_LABELS[osnapMode]+'（Tab 切换，循环回自动）'):'捕捉：自动（全部类型）');
+  toast(osnapMode?(L('捕捉已锁定：')+L(OSNAP_LABELS[osnapMode])+L('（Tab 切换，循环回自动）')):L('捕捉：自动（全部类型）'));
   requestRender();
 }
 function updateOsnapChip(){
@@ -105,10 +107,10 @@ function updateOsnapChip(){
   if(!chip) return;
   if(!state.settings.osnap){ chip.hidden=true; return; }
   chip.hidden=false;
-  chip.textContent=osnapMode?('◈ 捕捉：'+OSNAP_LABELS[osnapMode]+' ✕'):'◈ 捕捉：自动';
+  chip.textContent=osnapMode?(L('◈ 捕捉：')+L(OSNAP_LABELS[osnapMode])+' ✕'):L('◈ 捕捉：自动');
   chip.classList.toggle('locked',!!osnapMode);
 }
-$('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast('捕捉：自动（全部类型）'); requestRender(); } });
+$('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast(L('捕捉：自动（全部类型）')); requestRender(); } });
 /* 极轴/平行追踪提示：{from:[x,y], dir:[dx,dy]}（单位向量，世界坐标），render 画虚线 */
 let trackLine=null;
 let refEdge=null;      /* 鼠标附近的参考边（用于平行/垂直约束） */
@@ -313,12 +315,12 @@ canvas.addEventListener('pointerdown',e=>{
     return;
   }
   if(currentTool==='text'){
-    showPrompt({title:'添加文字',label:'文字内容',value:'标注文字'}).then(text=>{
+    showPrompt({title:L('添加文字'),label:L('文字内容'),value:L('标注文字')}).then(text=>{
       if(text===null) return;
       pushHistory();
       const o=baseObject('text',null,{x:wp[0],y:wp[1],text,height:2.2,style:{color:'#111827'}});
       o.typeId='text.builtin'; if(!state.objectTypes.some(t=>t.id===o.typeId)) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
-      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加文字'); switchTab('props');
+      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange(L('已添加文字')); switchTab('props');
     });
   }
 });
@@ -340,7 +342,7 @@ canvas.addEventListener('pointermove',e=>{
   const wp=resolveWorldPoint(e);
   setCursorScreen(sp,true,wp,activeOsnap);
   if(currentTool==='guide'&&guideDraft){ guideDraft[1]=wp; }
-  $('coordText').textContent='鼠标：'+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit+(activeOsnap?'  ◈ '+OSNAP_LABELS[activeOsnap.type]:'');
+  $('coordText').textContent=L('鼠标：')+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit+(activeOsnap?'  ◈ '+OSNAP_LABELS[activeOsnap.type]:'');
   /* 空闲移动（无拖拽/草稿）也必须重绘：十字准星、世界坐标、捕捉标记随鼠标实时显示，
      不必等到点击；requestRender 内部按帧合并，重复调用无额外开销 */
   requestRender();
@@ -796,11 +798,11 @@ async function finishSiteDraft(){
   }else if(d.kind==='siteSector'){
     const r=dist(d.start,d.current);
     if(r<.5){ toast('半径过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
-    const v=await showPrompt({title:'扇形场地角度',label:'起始角, 张角（度，用逗号分隔），例如 0,90',value:'0,90'});
+    const v=await showPrompt({title:L('扇形场地角度'),label:L('起始角, 张角（度，用逗号分隔），例如 0,90'),value:'0,90'});
     if(v===null){ setTool('select'); return; }
     const m=v.split(/[,，\s]+/).map(Number);
     const a0=Number.isFinite(m[0])?m[0]:0, sweep=Number.isFinite(m[1])?m[1]:90;
-    if(!(sweep>0)||sweep>360){ toast('张角需在 0–360° 之间','error'); setTool('select'); return; }
+    if(!(sweep>0)||sweep>360){ toast(L('张角需在 0–360° 之间'),'error'); setTool('select'); return; }
     applyVectorSite('sector',sectorShapeFrom(d.start,r,a0,a0+sweep));
   }else if(d.kind==='sitePolygon'){
     const ps=d.points.slice();
@@ -814,7 +816,7 @@ async function finishSiteDraft(){
 async function finishCalibration(){
   const old=dist(calibPoints[0],calibPoints[1]);
   if(old<EPS){ calibPoints=[]; return; }
-  const value=await showPrompt({title:'比例尺校准',label:'两点之间的实际距离（米）',value:fmt(old)});
+  const value=await showPrompt({title:L('比例尺校准'),label:L('两点之间的实际距离（米）'),value:fmt(old)});
   if(value===null||Number.isNaN(Number(value))||Number(value)<=0){ calibPoints=[]; setTool('select'); return; }
   pushHistory();
   const factor=Number(value)/old;
@@ -823,7 +825,7 @@ async function finishCalibration(){
      校准两点间的新世界距离 = 旧距离×factor = 输入值，校准语义同时成立。 */
   state.background.metersPerPixel*=factor; state.background.calibrated=true;
   scaleWorldAround([0,0],factor);
-  calibPoints=[]; fitView(); commitChange('比例尺已校准'); setTool('select');
+  calibPoints=[]; fitView(); commitChange(L('比例尺已校准')); setTool('select');
 }
 function scaleWorldAround(center,factor){
   const mapP=p=>[center[0]+(p[0]-center[0])*factor,center[1]+(p[1]-center[1])*factor];
@@ -848,15 +850,15 @@ async function pickAffinePoint(e){
   if(bg.kind!=='image'){ toast('仿射校准仅适用于图片底图','warn'); return; }
   const wp=pointerWorld(e);
   const px=bgWorldToPixel(bg,wp);
-  const v=await showPrompt({title:'仿射校准 · 第 '+(affinePairs.length+1)+' 点',
-    label:`该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 (${px[0].toFixed(1)}, ${px[1].toFixed(1)})`,
+  const v=await showPrompt({title:L('仿射校准 · 第 ')+(affinePairs.length+1)+L(' 点'),
+    label:L('该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ')+`(${px[0].toFixed(1)}, ${px[1].toFixed(1)})`,
     value:fmt(wp[0])+','+fmt(wp[1])});
   if(v===null) return;
   const m=String(v).split(/[,，\s]+/).map(Number);
-  if(!Number.isFinite(m[0])||!Number.isFinite(m[1])){ toast('坐标无效，请输入 X,Y','error'); return; }
+  if(!Number.isFinite(m[0])||!Number.isFinite(m[1])){ toast(L('坐标无效，请输入 X,Y'),'error'); return; }
   affinePairs.push({u:px[0],v:px[1],x:m[0],y:m[1]});
   requestRender();
-  toast(affinePairs.length>=2?('已记录 '+affinePairs.length+' 个点，Enter/✓ 求解'):'已记录 1 个点，继续点击下一已知点');
+  toast(affinePairs.length>=2?(L('已记录')+' '+affinePairs.length+' '+L('个点，Enter/✓ 求解')):L('已记录 1 个点，继续点击下一已知点'));
 }
 /** 求解仿射并把「旧世界→新世界」映射迁移到所有既有对象，再落地新的 bg.transform */
 async function finishAffine(){
@@ -883,7 +885,7 @@ async function finishAffine(){
 function deleteSelected(){
   const deletable=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!deletable.length) return toast('没有可删除的选中对象（可能位于锁定图层）','warn');
-  showConfirm(`确定删除选中的 ${deletable.length} 个对象吗？`).then(ok=>{
+  showConfirm(`${L('确定删除选中的')} ${deletable.length} ${L('个对象吗？')}`).then(ok=>{
     if(!ok) return;
     pushHistory();
     const ids=new Set(deletable.map(o=>o.id));
@@ -937,8 +939,8 @@ function openShortcutsHelp(){
     ['触屏单指 / 双指','单指绘制与移动；双指捏合缩放、双指拖动平移'],
     ['拖拽文件到画布','导入 JSON / DXF / CSV·TSV·XLSX 表格或底图图片'],['?','显示本帮助']
   ];
-  openModal('快捷键帮助','<div class="help-grid">'+rows.map(r=>'<span class="kbd">'+esc(r[0])+'</span><span>'+esc(r[1])+'</span>').join('')+'</div>',
-    [{text:'知道了',class:'primary',click:closeModal}]);
+  openModal(L('快捷键帮助'),'<div class="help-grid">'+rows.map(r=>'<span class="kbd">'+esc(r[0])+'</span><span>'+esc(L(r[1]))+'</span>').join('')+'</div>',
+    [{text:L('知道了'),class:'primary',click:closeModal}]);
 }
 function reorderSelected(delta){
   if(selectedIds.size!==1) return;

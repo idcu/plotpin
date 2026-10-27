@@ -61,7 +61,7 @@ $('filterLayer').addEventListener('change',renderList);
 function populateSelects(){
   const fill=(sel,items,include='',fallback='')=>{
     const old=sel.value;
-    sel.innerHTML=(include?`<option value="">${include}</option>`:'')+items.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    sel.innerHTML=(include?`<option value="">${include}</option>`:'')+items.map(x=>`<option value="${esc(x.id)}">${esc(typeDisplayName(x))}</option>`).join('');
     sel.value=old && items.some(x=>x.id===old) ? old : fallback;
   };
   fill($('pointType'),typesOfKind('point'),'','point.marker');
@@ -83,19 +83,19 @@ function renderNodeEditor(o){
   const n=(o.points||[]).length;
   const rows=(o.points||[]).map((p,i)=>`
     <div class="node-row" data-node-row="${i}" ${canEdit?'':''}>
-      ${canEdit?`<span class="node-grip" draggable="true" data-node-grip="${i}" title="拖拽调整节点顺序">⠿</span>`:'<span class="node-idx">#</span>'}
+      ${canEdit?`<span class="node-grip" draggable="true" data-node-grip="${i}" title="${esc(L('拖拽调整节点顺序'))}">⠿</span>`:'<span class="node-idx">#</span>'}
       <span class="node-idx">${i+1}</span>
-      <input type="number" step="0.1" title="节点 X（米，可为负）" data-node-axis="x" data-node-index="${i}" value="${fmt(p[0])}">
-      <input type="number" step="0.1" title="节点 Y（米，可为负）" data-node-axis="y" data-node-index="${i}" value="${fmt(p[1])}">
-      ${canEdit?`<button type="button" class="icon-btn" data-node-up="${i}" title="上移节点" ${i===0?'disabled':''}>↑</button>
-      <button type="button" class="icon-btn" data-node-down="${i}" title="下移节点" ${i===n-1?'disabled':''}>↓</button>
-      <button type="button" class="icon-btn" data-node-add="${i}" title="在此节点后插入一个节点">＋</button>
-      <button type="button" class="icon-btn danger" data-node-del="${i}" title="删除该节点" ${n<=min?'disabled':''}>×</button>`:''}
+      <input type="number" step="0.1" title="${esc(L('节点 X（米，可为负）'))}" data-node-axis="x" data-node-index="${i}" value="${fmt(p[0])}">
+      <input type="number" step="0.1" title="${esc(L('节点 Y（米，可为负）'))}" data-node-axis="y" data-node-index="${i}" value="${fmt(p[1])}">
+      ${canEdit?`<button type="button" class="icon-btn" data-node-up="${i}" title="${esc(L('上移节点'))}" aria-label="${esc(L('上移节点'))}" ${i===0?'disabled':''}>↑</button>
+      <button type="button" class="icon-btn" data-node-down="${i}" title="${esc(L('下移节点'))}" aria-label="${esc(L('下移节点'))}" ${i===n-1?'disabled':''}>↓</button>
+      <button type="button" class="icon-btn" data-node-add="${i}" title="${esc(L('在此节点后插入一个节点'))}" aria-label="${esc(L('在此节点后插入一个节点'))}">＋</button>
+      <button type="button" class="icon-btn danger" data-node-del="${i}" title="${esc(L('删除该节点'))}" aria-label="${esc(L('删除该节点'))}" ${n<=min?'disabled':''}>×</button>`:''}
     </div>`).join('');
   const shapeName=o.kind==='dimension'?'测距链':(o.closed?'闭合区域':'开放折线');
   const hint=canEdit
-    ? `<div class="hint-text">共 ${n} 点（${shapeName}至少 ${min} 点）；拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除</div>`
-    : `<div class="hint-text">共 ${n} 点；可在画布上拖节点手柄调整位置</div>`;
+    ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L('点'))}）；${esc(L('拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除'))}</div>`
+    : `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}；${esc(L('可在画布上拖节点手柄调整位置'))}</div>`;
   /* span2：节点列表需跨满 form-grid 两列，否则会被压进 78px 的标签列导致坐标输入框仅剩几十像素 */
   return `<div class="node-list span2">${rows}${hint}</div>`;
 }
@@ -118,8 +118,8 @@ function annotToggleKeys(o){
 function renderAnnotToggles(o){
   const keys=annotToggleKeys(o);
   if(!keys.length) return '';
-  const chks=keys.map(k=>`<label class="annot-chk" title="在图上显示「${annotLabel(o,k)}」"><input type="checkbox" data-annot="${k}" ${annotOn(o,k)?'checked':''}> ${annotLabel(o,k)}</label>`).join('');
-  return `<label class="span2">图上标注</label><div class="annot-chks span2">${chks}</div>`;
+  const chks=keys.map(k=>`<label class="annot-chk" title="${esc(L('在图上显示'))} ${esc(L(annotLabel(o,k)))}"><input type="checkbox" data-annot="${k}" ${annotOn(o,k)?'checked':''}> ${esc(L(annotLabel(o,k)))}</label>`).join('');
+  return `<label class="span2">${esc(L('图上标注'))}</label><div class="annot-chks span2">${chks}</div>`;
 }
 /* -------------------- 场地属性 / 场地节点编辑 -------------------- */
 /**
@@ -131,15 +131,15 @@ function sitePropsHTML(bg, mode){
   bg=bg||state.background;
   const tool=mode==='tool';
   const heading=tool?'场地节点':'场地属性';
-  if(!bg) return `<div class="section"><h3>${esc(heading)}</h3><div class="prop-empty">尚未设置底图/场地，请点顶部「底图/场地」上传图片或绘制矢量场地。</div></div>`;
+  if(!bg) return `<div class="section"><h3>${esc(L(heading))}</h3><div class="prop-empty">${esc(L('尚未设置底图/场地，请点顶部「底图/场地」上传图片或绘制矢量场地。'))}</div></div>`;
   if(bg.kind==='image'){
-    if(tool) return `<div class="section"><h3>场地节点 <span class="hint-text">图片底图</span></h3><div class="prop-empty">当前为图片底图，暂无场地节点可编辑。<br><br>请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/平行四边形/多边形矢量场地；图片底图请改用「仿射校准」。</div></div>`;
+    if(tool) return `<div class="section"><h3>${esc(L('场地节点'))} <span class="hint-text">${esc(L('图片底图'))}</span></h3><div class="prop-empty">${esc(L('当前为图片底图，暂无场地节点可编辑。'))}<br><br>${esc(L('请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/平行四边形/多边形矢量场地；图片底图请改用「仿射校准」。'))}</div></div>`;
     return imagePropsHTML(bg, heading);
   }
   const sh=bg.shape||{};
   const fv=(v,fb=0)=>{ const n=Number(v); return fmt(Number.isFinite(n)?n:fb); };
   const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-site-field="${field}" value="${val}">`;
-  const row=(label,inner)=>`<label>${label}</label><div>${inner}</div>`;
+  const row=(label,inner)=>`<label>${esc(L(label))}</label><div>${inner}</div>`;
   let params='';
   if(sh.type==='polygon'){
     const pts=sh.points||[];
@@ -147,14 +147,14 @@ function sitePropsHTML(bg, mode){
     params=`<div class="node-list span2">${pts.map((p,i)=>`
       <div class="node-row vtx" data-site-node-row="${i}">
         <span class="node-idx">${i+1}</span>
-        <input type="number" step="0.1" title="顶点 X（米，可为负）" data-site-node-axis="x" data-site-node-index="${i}" value="${fv(p[0])}">
-        <input type="number" step="0.1" title="顶点 Y（米，可为负）" data-site-node-axis="y" data-site-node-index="${i}" value="${fv(p[1])}">
-        <button type="button" class="icon-btn" data-site-node-up="${i}" title="上移顶点" ${i===0?'disabled':''}>↑</button>
-        <button type="button" class="icon-btn" data-site-node-down="${i}" title="下移顶点" ${i===pts.length-1?'disabled':''}>↓</button>
-        <button type="button" class="icon-btn" data-site-node-add="${i}" title="在此顶点后插入一个顶点">＋</button>
-        <button type="button" class="icon-btn danger" data-site-node-del="${i}" title="删除该顶点" ${pts.length<=3?'disabled':''}>×</button>
+        <input type="number" step="0.1" title="${esc(L('顶点 X（米，可为负）'))}" data-site-node-axis="x" data-site-node-index="${i}" value="${fv(p[0])}">
+        <input type="number" step="0.1" title="${esc(L('顶点 Y（米，可为负）'))}" data-site-node-axis="y" data-site-node-index="${i}" value="${fv(p[1])}">
+        <button type="button" class="icon-btn" data-site-node-up="${i}" title="${esc(L('上移顶点'))}" ${i===0?'disabled':''}>↑</button>
+        <button type="button" class="icon-btn" data-site-node-down="${i}" title="${esc(L('下移顶点'))}" ${i===pts.length-1?'disabled':''}>↓</button>
+        <button type="button" class="icon-btn" data-site-node-add="${i}" title="${esc(L('在此顶点后插入一个顶点'))}">＋</button>
+        <button type="button" class="icon-btn danger" data-site-node-del="${i}" title="${esc(L('删除该顶点'))}" ${pts.length<=3?'disabled':''}>×</button>
       </div>`).join('')}
-      <div class="hint-text">共 ${pts.length} 个顶点（至少 3）；画布上双击边插入顶点、双击顶点删除</div>
+      <div class="hint-text">${esc(L('共'))} ${pts.length} ${esc(L('个顶点'))}（${esc(L('至少'))} 3）；${esc(L('画布上双击边插入顶点、双击顶点删除'))}</div>
     </div>`;
   }else if(sh.type==='circle'){
     params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}`;
@@ -177,35 +177,35 @@ function sitePropsHTML(bg, mode){
   const hint=tool
     ?'拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地随底图保持真实比例。'
     :'直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
-  return `<div class="section"><h3>${esc(heading)} <span class="hint-text">${esc(siteKindName(bg.kind))}</span></h3>
+  return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L(siteKindName(bg.kind)))}</span></h3>
     <div class="form-grid">${params}</div>
     <div class="form-grid">
-      <label>面积</label><div><b id="siteAreaVal">${fmt(ap.area)}</b> ㎡</div>
-      <label>周长</label><div><b id="sitePerimVal">${fmt(ap.perimeter)}</b> m</div>
+      <label>${esc(L('面积'))}</label><div><b id="siteAreaVal">${fmt(ap.area)}</b> ㎡</div>
+      <label>${esc(L('周长'))}</label><div><b id="sitePerimVal">${fmt(ap.perimeter)}</b> m</div>
     </div>
-    <div class="hint-text">${hint}</div>
-    ${tool?'':`<div class="hint-text">提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。</div>`}
+    <div class="hint-text">${esc(L(hint))}</div>
+    ${tool?'':`<div class="hint-text">${esc(L('提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。'))}</div>`}
   </div>`;
 }
 /** 图片底图属性摘要（含比例尺/仿射校准入口）；实测范围为其外接矩形 */
 function imagePropsHTML(bg, heading){
   const d=siteDomainOf(bg);
-  const cal=bg.calibrated?'已校准':'未校准';
-  const rot=bg.transform?'已校正倾斜':'轴对齐';
-  return `<div class="section"><h3>${esc(heading)} <span class="hint-text">图片底图</span></h3>
+  const cal=L(bg.calibrated?'已校准':'未校准');
+  const rot=L(bg.transform?'已校正倾斜':'轴对齐');
+  return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L('图片底图'))}</span></h3>
     <div class="form-grid">
-      <label>名称</label><div>${esc(bg.fileName||'未命名')}</div>
-      <label>像素</label><div>${bg.width}×${bg.height} px</div>
-      <label>比例</label><div>${fmt(bg.metersPerPixel)} m/px</div>
-      <label>校准</label><div>${cal} ｜ ${rot}</div>
-      <label>实测范围</label><div>${fmt(d.w)}×${fmt(d.h)} m（外接矩形）</div>
+      <label>${esc(L('名称'))}</label><div>${esc(bg.fileName||L('未命名'))}</div>
+      <label>${esc(L('像素'))}</label><div>${bg.width}×${bg.height} px</div>
+      <label>${esc(L('比例'))}</label><div>${fmt(bg.metersPerPixel)} m/px</div>
+      <label>${esc(L('校准'))}</label><div>${cal} ｜ ${rot}</div>
+      <label>${esc(L('实测范围'))}</label><div>${fmt(d.w)}×${fmt(d.h)} m${esc(L('（外接矩形）'))}</div>
     </div>
     <div class="form-grid">
-      <button class="primary" id="siteOpenBtn" title="上传图片底图，或改画矢量场地">底图/场地…</button>
-      <button id="siteCalibBtn" title="仅图片底图需要：指定两点实际距离校准米/像素">比例尺校准</button>
-      <button id="siteAffineBtn" title="在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放">仿射校准</button>
+      <button class="primary" id="siteOpenBtn" title="${esc(L('上传图片底图，或改画矢量场地'))}">${esc(L('底图/场地…'))}</button>
+      <button id="siteCalibBtn" title="${esc(L('仅图片底图需要：指定两点实际距离校准米/像素'))}">${esc(L('比例尺校准'))}</button>
+      <button id="siteAffineBtn" title="${esc(L('在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放'))}">${esc(L('仿射校准'))}</button>
     </div>
-    <div class="hint-text">图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。</div>
+    <div class="hint-text">${esc(L('图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。'))}</div>
   </div>`;
 }
 /** 渲染场地/底图属性面板并按 mode 绑定事件（default=未选中对象时的场地属性；tool=场地节点工具） */
@@ -278,18 +278,18 @@ function renderProps(){
   if(!objs.length){ renderSiteProps(box,'default'); return; }
   if(objs.length>1){ renderMultiProps(box,objs); return; }
   const o=objs[0], t=getType(o.typeId);
-  const row=(label,inner)=>`<label>${label}</label><div>${inner}</div>`;
+  const row=(label,inner)=>`<label>${esc(L(label))}</label><div>${inner}</div>`;
   const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-field="${field}" value="${val}">`;
   const txt=(field,val)=>`<input type="text" data-field="${field}" value="${esc(val||'')}">`;
   const layerSel=`<select data-field="layerId">${state.layers.map(l=>`<option value="${esc(l.id)}" ${l.id===o.layerId?'selected':''}>${esc(l.name)}</option>`).join('')}</select>`;
   let typeSel='';
   if(['point','rect','line'].includes(o.kind)){
-    typeSel=`<select data-field="typeId">${typesOfKind(o.kind).map(x=>`<option value="${esc(x.id)}" ${x.id===o.typeId?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
-  }else typeSel=`<input value="${kindName(o.kind)}" disabled>`;
+    typeSel=`<select data-field="typeId">${typesOfKind(o.kind).map(x=>`<option value="${esc(x.id)}" ${x.id===o.typeId?'selected':''}>${esc(typeDisplayName(x))}</option>`).join('')}</select>`;
+  }else typeSel=`<input value="${esc(L(kindName(o.kind)))}" disabled>`;
   let specific='';
   if(o.kind==='rect'){
     const stt=areaShapeType(o), sh=o.shape||{};
-    const shapeSel=`<select data-field="shapeType">${AREA_SHAPE_TYPES.map(x=>`<option value="${x}" ${x===stt?'selected':''}>${({rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形（饼形）',parallelogram:'平行四边形'})[x]}</option>`).join('')}</select>`;
+    const shapeSel=`<select data-field="shapeType">${AREA_SHAPE_TYPES.map(x=>`<option value="${x}" ${x===stt?'selected':''}>${esc(L(({rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形（饼形）',parallelogram:'平行四边形'})[x]))}</option>`).join('')}</select>`;
     /* 基点即渲染/命中/拖拽共用的锚点 (o.x,o.y)：矩形/平行四边形=基点(左下角，旋转中心)，圆/椭圆/扇形=圆心 */
     const baseName=({rect:'基点',circle:'圆心',ellipse:'中心',sector:'圆心',parallelogram:'基点'})[stt];
     const baseRows=`${row(baseName+' X',num('x',fmt(o.x)))}${row(baseName+' Y',num('y',fmt(o.y)))}`;
@@ -312,32 +312,32 @@ function renderProps(){
     specific=`
       ${row('形状',shapeSel)}${params}
       ${row('面积',`<b>${fmt(shapeArea(o))}</b> ㎡`)}${row('周长',`<b>${fmt(shapePerimeter(o))}</b> m`)}
-      ${row('填充色',`<input type="color" data-style="color" value="${o.style.color||t.color}"> <label style="display:inline"><input type="checkbox" data-style="noFill" ${styleVal(o,'fillAlpha',.15)==0?'checked':''}>透明</label>`)}
+      ${row('填充色',`<input type="color" data-style="color" value="${o.style.color||t.color}"> <label style="display:inline"><input type="checkbox" data-style="noFill" ${styleVal(o,'fillAlpha',.15)==0?'checked':''}>${esc(L('透明'))}</label>`)}
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
-      <div class="hint-text span2" style="grid-column:1/-1">${stt==='rect'||stt==='parallelogram'?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'}坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。</div>`;
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt==='parallelogram'?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L('坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。'))}</div>`;
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
       ${row('颜色',`<input type="color" data-style="color" value="${o.style.color||(o.kind==='dimension'?'#111827':t.color)}">`)}
       ${o.kind==='line'?row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`):''}
       ${o.closed?row('面积',`<b>${fmt(polygonArea(o.points))}</b> ㎡`):''}
-      ${o.closed?row('周长',`<b>${fmt(objectLength(o))}</b> m（含闭合边）`):''}
+      ${o.closed?row('周长',`<b>${fmt(objectLength(o))}</b> m${esc(L('（含闭合边）'))}`):''}
       ${renderAnnotToggles(o)}
-      <label class="span2">节点</label>${renderNodeEditor(o)}`;
+      <label class="span2">${esc(L('节点'))}</label>${renderNodeEditor(o)}`;
   }else if(o.kind==='point'){
     const psh=t.scaleShape||'none';
     const canScale=psh!=='none';
     const physHint=canScale
-      ? `<div class="hint-text span2" style="grid-column:1/-1">该类型按「${POINT_SCALE_SHAPES[psh]}」渲染：填 0 为纯位置图标；填${psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'}（米）后随底图真实比例缩放${psh==='sector'?'，张角 '+(''+(t.fov||90))+'°，朝向随朝向角':''}</div>`
-      : `<div class="hint-text span2" style="grid-column:1/-1">该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。</div>`;
+      ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh==='sector'?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
+      : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。'))}</div>`;
     specific=`${row('X 坐标',num('x',fmt(o.x)))}${row('Y 坐标',num('y',fmt(o.y)))}${row('朝向角',num('angle',Math.round(o.angle),1))}
       ${row('型号',txt('propModel',o.props.model))}${row('安装高度 (m)',num('propMountHeight',o.props.mountHeight===undefined?'':o.props.mountHeight))}
       ${row('IP',txt('propIp',o.props.ip))}${row('责任人',txt('propOwner',o.props.owner))}
-      ${row('照片',`<input type="file" accept="image/*" data-photo-input><button type="button" class="icon-btn danger" data-photo-clear title="移除照片" ${o.props.photoId?'':'disabled'}>×</button>`)}
-      ${o.props.photoId?`<div class="span2" style="grid-column:1/-1"><img data-photo-img="${esc(o.props.photoId)}" alt="设备照片" style="max-width:100%;max-height:160px;border-radius:4px;border:1px solid #334155"></div>`:''}
-      ${row('图标大小',`<input type="range" min=".5" max="3" step=".05" data-field="iconSize" value="${Number(o.iconSize)||1}"><span class="hint-text">${(Number(o.iconSize)||1).toFixed(2)}×（顶栏还有全局点大小）</span>`)}
+      ${row('照片',`<input type="file" accept="image/*" data-photo-input><button type="button" class="icon-btn danger" data-photo-clear title="${esc(L('移除照片'))}" ${o.props.photoId?'':'disabled'}>×</button>`)}
+      ${o.props.photoId?`<div class="span2" style="grid-column:1/-1"><img data-photo-img="${esc(o.props.photoId)}" alt="${esc(L('设备照片'))}" style="max-width:100%;max-height:160px;border-radius:4px;border:1px solid #334155"></div>`:''}
+      ${row('图标大小',`<input type="range" min=".5" max="3" step=".05" data-field="iconSize" value="${Number(o.iconSize)||1}"><span class="hint-text">${(Number(o.iconSize)||1).toFixed(2)}×（${esc(L('顶栏还有全局点大小'))}）</span>`)}
       ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}${physHint}
       ${renderAnnotToggles(o)}`;
   }else if(o.kind==='text'){
@@ -346,39 +346,39 @@ function renderProps(){
       ${row('字高(m)',num('height',fmt(o.height),.05))}${row('旋转角',num('angle',Math.round(o.angle),1))}
       ${row('颜色',`<input type="color" data-style="color" value="${o.style.color||t.color}">`)}`;
   }
-  const props=Object.entries(o.props||{}).map(([k,v],i)=>`<div class="custom-prop"><input value="${esc(k)}" data-prop-key="${i}"><input value="${esc(v)}" data-prop-val="${i}"><button class="icon-btn" data-prop-del="${i}">×</button></div>`).join('');
+  const props=Object.entries(o.props||{}).map(([k,v],i)=>`<div class="custom-prop"><input value="${esc(k)}" data-prop-key="${i}"><input value="${esc(v)}" data-prop-val="${i}"><button class="icon-btn" data-prop-del="${i}" aria-label="${esc(L('删除'))}">×</button></div>`).join('');
   box.innerHTML=`
-    <div class="section"><h3>对象属性 <span class="hint-text">${esc(o.name)}</span></h3>
+    <div class="section"><h3>${esc(L('对象属性'))} <span class="hint-text">${esc(o.name)}</span></h3>
       <div class="form-grid">
         ${row('编号',txt('name',o.name))}${row('类型',typeSel)}${row('图层',layerSel)}${specific}
       </div>
       <div class="form-actions">
-        <button class="mini" data-action="duplicate">复制</button>
-        <button class="mini" data-action="raise">上移一层</button>
-        <button class="mini" data-action="lower">下移一层</button>
-        <button class="mini" data-action="visibility">${o.visible?'隐藏':'显示'}</button>
-        <button class="mini" data-action="lock">${o.locked?'解锁':'锁定'}</button>
-        <button class="mini danger" data-action="delete">删除</button>
+        <button class="mini" data-action="duplicate">${esc(L('复制'))}</button>
+        <button class="mini" data-action="raise">${esc(L('上移一层'))}</button>
+        <button class="mini" data-action="lower">${esc(L('下移一层'))}</button>
+        <button class="mini" data-action="visibility">${esc(L(o.visible?'隐藏':'显示'))}</button>
+        <button class="mini" data-action="lock">${esc(L(o.locked?'解锁':'锁定'))}</button>
+        <button class="mini danger" data-action="delete">${esc(L('删除'))}</button>
       </div>
     </div>
-    <div class="section"><h3>自定义属性</h3>
-      ${props||'<div class="hint-text">暂无自定义属性</div>'}
-      <div class="custom-prop" style="margin-top:7px"><input id="propKey" placeholder="键"><input id="propValue" placeholder="值"><button class="icon-btn" id="propAdd">＋</button></div>
+    <div class="section"><h3>${esc(L('自定义属性'))}</h3>
+      ${props||`<div class="hint-text">${esc(L('暂无自定义属性'))}</div>`}
+      <div class="custom-prop" style="margin-top:7px"><input id="propKey" placeholder="${esc(L('键'))}"><input id="propValue" placeholder="${esc(L('值'))}"><button class="icon-btn" id="propAdd">＋</button></div>
     </div>`;
   bindPropEvents(box,o);
 }
 function renderMultiProps(box,objs){
-  box.innerHTML=`<div class="section"><h3>批量属性 <span>${objs.length} 个对象</span></h3>
+  box.innerHTML=`<div class="section"><h3>${esc(L('批量属性'))} <span>${objs.length} ${esc(L('个对象'))}</span></h3>
     <div class="form-grid">
-      <label>移动到</label><select id="multiLayer">${state.layers.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</select>
-      <label>旋转角</label><input type="number" id="multiAngle" step="1" value="0">
+      <label>${esc(L('移动到'))}</label><select id="multiLayer">${state.layers.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</select>
+      <label>${esc(L('旋转角'))}</label><input type="number" id="multiAngle" step="1" value="0">
     </div>
     <div class="form-actions">
-      <button class="mini" id="multiLayerBtn">应用图层</button>
-      <button class="mini" id="multiRotateBtn">批量旋转</button>
-      <button class="mini" id="multiHideBtn">隐藏</button>
-      <button class="mini" id="multiLockBtn">锁定</button>
-      <button class="mini danger" id="multiDeleteBtn">全部删除</button>
+      <button class="mini" id="multiLayerBtn">${esc(L('应用图层'))}</button>
+      <button class="mini" id="multiRotateBtn">${esc(L('批量旋转'))}</button>
+      <button class="mini" id="multiHideBtn">${esc(L('隐藏'))}</button>
+      <button class="mini" id="multiLockBtn">${esc(L('锁定'))}</button>
+      <button class="mini danger" id="multiDeleteBtn">${esc(L('全部删除'))}</button>
     </div></div>`;
   $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层'); };
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
@@ -558,11 +558,11 @@ function renderList(){
     const t=getType(o.typeId), l=layerOf(o);
     const param=o.kind==='rect'?areaParamText(o):
       o.kind==='point'?`${Math.round(o.angle)}°${(o.phys||0)>0?' / '+fmt(o.phys)+'m':''}`:
-      o.kind==='line'?`${o.points.length}点 / ${fmt(objectLength(o))}m${o.closed&&o.points.length>=3?' / '+fmt(polygonArea(o.points))+'㎡':''}`:
-      o.kind==='text'?esc(o.text):(o.kind==='dimension'&&o.subtype==='ruler'?`${o.points.length}点 / Σ ${fmt(objectLength(o))}m`:o.subtype||'');
+      o.kind==='line'?`${o.points.length} ${L('点')} / ${fmt(objectLength(o))}m${o.closed&&o.points.length>=3?' / '+fmt(polygonArea(o.points))+'㎡':''}`:
+      o.kind==='text'?esc(o.text):(o.kind==='dimension'&&o.subtype==='ruler'?`${o.points.length} ${L('点')} / Σ ${fmt(objectLength(o))}m`:o.subtype||'');
     return `<tr data-id="${esc(o.id)}" class="${selectedIds.has(o.id)?'selected':''} ${o.locked?'locked':''} ${!o.visible?'hidden-row':''}">
       <td><input type="checkbox" data-row-select="${esc(o.id)}" ${selectedIds.has(o.id)?'checked':''}></td>
-      <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</td>
+      <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${t.color}"></span>${esc(typeDisplayName(t))}</td>
       <td>${esc(l.name)}</td><td>${fmt(o.x)}</td><td>${fmt(o.y)}</td><td>${param}</td>
       <td><button class="icon-btn" data-toggle-visible="${o.id}" aria-label="${esc(I18N.t('ariaObjVisible')+'：'+o.name)}">${o.visible?'👁':'–'}</button></td>
       <td><button class="icon-btn" data-toggle-lock="${o.id}" aria-label="${esc(I18N.t('ariaObjLock')+'：'+o.name)}">${o.locked?'🔒':'○'}</button></td>
@@ -617,7 +617,7 @@ function renderLayers(){
   $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerVisible); pushHistory(); l.visible=!l.visible; commitChange(); });
   $('layerList').querySelectorAll('[data-layer-lock]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerLock); pushHistory(); l.locked=!l.locked; commitChange(); });
   $('layerList').querySelectorAll('[data-layer-rename]').forEach(b=>b.onclick=async()=>{
-    const l=getLayer(b.dataset.layerRename); const v=await showPrompt({title:'重命名图层',label:'名称',value:l.name}); if(v){ pushHistory(); l.name=v; commitChange(); }
+    const l=getLayer(b.dataset.layerRename); const v=await showPrompt({title:L('重命名图层'),label:L('名称'),value:l.name}); if(v){ pushHistory(); l.name=v; commitChange(); }
   });
   $('layerList').querySelectorAll('[data-layer-delete]').forEach(b=>b.onclick=()=>{
     const l=getLayer(b.dataset.layerDelete);
@@ -636,16 +636,16 @@ function renderTypes(){
   $('typeList').innerHTML=Object.entries(groups).map(([kind,label])=>`
     <h3>${label}</h3>
     ${typesOfKind(kind).map(t=>`<div class="type-row">
-      <div class="meta"><div class="name"><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${t.icon||''}${kind==='point'?' · '+(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none)+' · 图标 '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
+      <div class="meta"><div class="name"><span class="dot" style="background:${t.color}"></span>${esc(typeDisplayName(t))}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${t.icon||''}${kind==='point'?' · '+esc(L(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none))+' · '+esc(L('图标'))+' '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
       ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="默认图标大小（屏幕倍率）" value="${Number(t.iconSize)||1}" data-type-iconsize="${t.id}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
-      <input type="color" value="${t.color}" data-type-color="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+t.name)}">
-      <button class="icon-btn" data-type-rename="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+t.name)}">✎</button>
-      <button class="icon-btn danger" data-type-delete="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+t.name)}">×</button>
+      <input type="color" value="${t.color}" data-type-color="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+typeDisplayName(t))}">
+      <button class="icon-btn" data-type-rename="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+typeDisplayName(t))}">✎</button>
+      <button class="icon-btn danger" data-type-delete="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+typeDisplayName(t))}">×</button>
     </div>`).join('')}`).join('');
   $('typeList').querySelectorAll('[data-type-color]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeColor); pushHistory(); t.color=i.value; commitChange(); });
   $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.iconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });
   $('typeList').querySelectorAll('[data-type-rename]').forEach(b=>b.onclick=async()=>{
-    const t=state.objectTypes.find(x=>x.id===b.dataset.typeRename); const v=await showPrompt({title:'重命名类型',label:'名称',value:t.name}); if(v){ pushHistory(); t.name=v; commitChange(); }
+    const t=state.objectTypes.find(x=>x.id===b.dataset.typeRename); const v=await showPrompt({title:L('重命名类型'),label:L('名称'),value:t.name}); if(v){ pushHistory(); t.name=v; commitChange(); }
   });
   $('typeList').querySelectorAll('[data-type-delete]').forEach(b=>b.onclick=()=>{
     const t=state.objectTypes.find(x=>x.id===b.dataset.typeDelete);
@@ -715,19 +715,19 @@ function findIssues(){
         :tt==='circle'?sh.r<.05
         :tt==='ellipse'?((sh.rx||0)<.05||(sh.ry||0)<.05)
         :(sh.r||0)<.05;
-      if(small) issues.push(`${o.name} 尺寸过小`);
+      if(small) issues.push(`${o.name} ${L('尺寸过小')}`);
     }
-    if(o.kind==='line'&&o.points.length<2) issues.push(`${o.name} 折线节点不足`);
+    if(o.kind==='line'&&o.points.length<2) issues.push(`${o.name} ${L('折线节点不足')}`);
     if(o.closed&&o.points.length>=3){
       for(let i=0;i<o.points.length;i++) for(let j=i+1;j<o.points.length;j++){
         const a=o.points[i],b=o.points[(i+1)%o.points.length],c=o.points[j],dd=o.points[(j+1)%o.points.length];
-        if(j!==i&&(j+1)%o.points.length!==i&&segmentsIntersect(a,b,c,dd)) issues.push(`${o.name} 存在自相交`);
+        if(j!==i&&(j+1)%o.points.length!==i&&segmentsIntersect(a,b,c,dd)) issues.push(`${o.name} ${L('存在自相交')}`);
       }
     }
     if(o.kind==='point'&&(o.phys||0)>0&&o.phys>Math.max(d.w,d.h))
-      issues.push(`${o.name} 物理尺寸 ${fmt(o.phys)}m 超过场地长边 ${fmt(Math.max(d.w,d.h))}m，请确认`);
+      issues.push(`${o.name} ${L('物理尺寸')} ${fmt(o.phys)}m ${L('超过场地长边')} ${fmt(Math.max(d.w,d.h))}m`);
     const b=objectBounds(o);
-    if(b.maxX<-.2||b.minX>d.w+.2||b.maxY<-.2||b.minY>d.h+.2) issues.push(`${o.name} 超出场地范围`);
+    if(b.maxX<-.2||b.minX>d.w+.2||b.maxY<-.2||b.minY>d.h+.2) issues.push(`${o.name} ${L('超出场地范围')}`);
   });
   return issues;
 }
@@ -739,20 +739,20 @@ function renderStats(){
   const issues=findIssues();
   $('statsPanel').innerHTML=`
     <div class="stat-grid">
-      <div class="stat-card">点设备<b>${counts.point}</b></div>
-      <div class="stat-card">矩形/区域<b>${counts.rect}</b></div>
-      <div class="stat-card">线段/折线<b>${counts.line}</b></div>
-      <div class="stat-card">文字<b>${counts.text}</b></div>
-      <div class="stat-card">标注总长<b>${fmt(len)} m</b></div>
-      <div class="stat-card">区域总面积<b>${fmt(area)} ㎡</b></div>
+      <div class="stat-card">${esc(L('点设备'))}<b>${counts.point}</b></div>
+      <div class="stat-card">${esc(L('矩形/区域'))}<b>${counts.rect}</b></div>
+      <div class="stat-card">${esc(L('线段/折线'))}<b>${counts.line}</b></div>
+      <div class="stat-card">${esc(L('文字'))}<b>${counts.text}</b></div>
+      <div class="stat-card">${esc(L('标注总长'))}<b>${fmt(len)} m</b></div>
+      <div class="stat-card">${esc(L('区域总面积'))}<b>${fmt(area)} ㎡</b></div>
     </div>
-    <div class="section" style="margin-top:10px"><h3>工程信息</h3><div class="kv-list">
-      <span>工程名称</span><b>${esc(state.meta.name)}</b><span>场地</span><b>${esc(siteKindName(state.background.kind))}</b>
-      <span>场地参数</span><b>${esc(siteDescription().split('：').slice(1).join('：'))}</b>
-      <span>对象总数</span><b>${state.objects.length}</b><span>最近更新</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
+    <div class="section" style="margin-top:10px"><h3>${esc(L('工程信息'))}</h3><div class="kv-list">
+      <span>${esc(L('工程名称'))}</span><b>${esc(state.meta.name)}</b><span>${esc(L('场地'))}</span><b>${esc(L(siteKindName(state.background.kind)))}</b>
+      <span>${esc(L('场地参数'))}</span><b>${esc(siteDescription().split('：').slice(1).join('：'))}</b>
+      <span>${esc(L('对象总数'))}</span><b>${state.objects.length}</b><span>${esc(L('最近更新'))}</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
     </div></div>
-    <div class="section"><h3>几何检查</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):'<div class="ok-banner">未发现明显的零尺寸、自相交或越界问题。</div>'}</div>
-    <div class="section"><h3>本地存储</h3><div id="storageBox"><div class="hint-text">统计中…</div></div></div>`;
+    <div class="section"><h3>${esc(L('几何检查'))}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>
+    <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>`;
   refreshStorageUsage();
 }
 function formatBytes(n){
@@ -771,12 +771,12 @@ function refreshStorageUsage(){
     const cls=pct>=85?'danger':pct>=70?'warn':'';
     box.innerHTML=
       '<div class="storage-bar"><i class="'+cls+'" style="width:'+Math.max(pct,2)+'%"></i></div>'+
-      '<div class="kv-list"><span>占用（'+sourceLabel+'）</span><b>'+formatBytes(used)+'</b>'+
-      (quota?'<span>浏览器配额</span><b>'+formatBytes(quota)+'</b><span>使用率</span><b>'+pct.toFixed(1)+'%</b>':'')+
+      '<div class="kv-list"><span>'+esc(L('占用'))+'（'+esc(L(sourceLabel))+'）</span><b>'+formatBytes(used)+'</b>'+
+      (quota?'<span>'+esc(L('浏览器配额'))+'</span><b>'+formatBytes(quota)+'</b><span>'+esc(L('使用率'))+'</span><b>'+pct.toFixed(1)+'%</b>':'')+
       '</div>'+
       (pct>=85
-        ? '<div class="issue">存储使用率较高：可移除不用的底图，或导出 JSON 备份后清理本站数据。</div>'
-        : '<p class="hint-text">工程与底图存于 IndexedDB（底图按内容哈希去重），设置存于 localStorage。</p>');
+        ? '<div class="issue">'+esc(L('存储使用率较高：可移除不用的底图，或导出 JSON 备份后清理本站数据。'))+'</div>'
+        : '<p class="hint-text">'+esc(L('工程与底图存于 IndexedDB（底图按内容哈希去重），设置存于 localStorage。'))+'</p>');
   };
   if(navigator.storage&&navigator.storage.estimate){
     navigator.storage.estimate()
@@ -797,24 +797,24 @@ function runCoverageAnalysis(){
   requestRender();
   const pct=x=>(x*100).toFixed(1)+'%';
   const head=`<div style="font-size:13px;line-height:1.9;margin-bottom:10px">
-    <div>参与统计的点设备：<b>${res.cameraCount}</b> 个（含物理尺寸的圆/球机、扇形/摄像头、方形覆盖）${res.ignoredPoints?`；仅标识位置的图标点 <b>${res.ignoredPoints}</b> 个未计入`:''}</div>
-    <div>区域/闭合折线：<b>${res.regions.length}</b> 个 ｜ 合计覆盖 <b>${pct(res.ratio)}</b></div>
-    <div>覆盖面积 <b>${fmt(res.totalCovered)}</b> m² ｜ 盲区 <b>${fmt(res.totalBlind)}</b> m² ｜ 总面积 <b>${fmt(res.totalArea)}</b> m²</div>
+    <div>${esc(L('参与统计的点设备：'))}<b>${res.cameraCount}</b> ${esc(L('个'))}${esc(L('（含物理尺寸的圆/球机、扇形/摄像头、方形覆盖）'))}${res.ignoredPoints?`；${esc(L('仅标识位置的图标点'))} <b>${res.ignoredPoints}</b> ${esc(L('个未计入'))}`:''}</div>
+    <div>${esc(L('区域/闭合折线：'))}<b>${res.regions.length}</b> ${esc(L('个'))} ｜ ${esc(L('合计覆盖'))} <b>${pct(res.ratio)}</b></div>
+    <div>${esc(L('覆盖面积'))} <b>${fmt(res.totalCovered)}</b> m² ｜ ${esc(L('盲区'))} <b>${fmt(res.totalBlind)}</b> m² ｜ ${esc(L('总面积'))} <b>${fmt(res.totalArea)}</b> m²</div>
   </div>`;
   const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">
     <span style="font-weight:600">${esc(r.name)}</span>
-    <span>覆盖 <b>${pct(r.ratio)}</b> ｜ ${fmt(r.coveredArea)}/${fmt(r.area)} m² ｜ 盲区 ${fmt(r.blindArea)} m²</span></div>`).join('');
+    <span>${esc(L('覆盖'))} <b>${pct(r.ratio)}</b> ｜ ${fmt(r.coveredArea)}/${fmt(r.area)} m² ｜ ${esc(L('盲区'))} ${fmt(r.blindArea)} m²</span></div>`).join('');
   const legend=`<div style="display:flex;gap:16px;font-size:12px;color:#475569;margin-top:12px">
-    <span><i style="display:inline-block;width:11px;height:11px;background:rgba(34,197,94,.5);border:1px solid #16a34a;border-radius:2px;vertical-align:-1px"></i> 已覆盖</span>
-    <span><i style="display:inline-block;width:11px;height:11px;background:rgba(239,68,68,.5);border:1px solid #dc2626;border-radius:2px;vertical-align:-1px"></i> 盲区</span>
-    <span style="color:#94a3b8">栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比</span></div>`;
+    <span><i style="display:inline-block;width:11px;height:11px;background:rgba(34,197,94,.5);border:1px solid #16a34a;border-radius:2px;vertical-align:-1px"></i> ${esc(L('已覆盖'))}</span>
+    <span><i style="display:inline-block;width:11px;height:11px;background:rgba(239,68,68,.5);border:1px solid #dc2626;border-radius:2px;vertical-align:-1px"></i> ${esc(L('盲区'))}</span>
+    <span style="color:#94a3b8">${esc(L('栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比'))}</span></div>`;
   const body=res.regions.length? head+rows+legend
-    : head+`<div class="hint-text" style="padding:8px 0">当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。</div>`;
-  openModal('视场覆盖率分析', body, [
-    {text:'布点优化…',class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
-    {text:'导出盲区 GeoJSON',class:'',click:exportBlindSpotsGeoJson},
-    {text:'清除叠加层',class:'',click:()=>{ coverageResult=null; invalidateStatic(); closeModal(); requestRender(); }},
-    {text:'关闭',class:'primary',click:closeModal}
+    : head+`<div class="hint-text" style="padding:8px 0">${esc(L('当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。'))}</div>`;
+  openModal(L('视场覆盖率分析'), body, [
+    {text:L('布点优化…'),class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
+    {text:L('导出盲区 GeoJSON'),class:'',click:exportBlindSpotsGeoJson},
+    {text:L('清除叠加层'),class:'',click:()=>{ coverageResult=null; invalidateStatic(); closeModal(); requestRender(); }},
+    {text:L('关闭'),class:'primary',click:closeModal}
   ]);
 }
 /**
@@ -822,26 +822,26 @@ function runCoverageAnalysis(){
  * 应用建议后自动重跑覆盖率分析，形成闭环。
  */
 async function runPlacementOptimization(){
-  const v=await showPrompt({title:'布点优化',label:'视场半径(m), 张角(°), 目标覆盖率(%), 最多新增台数（如 120,90,90,5）',value:'120,90,90,5'});
+  const v=await showPrompt({title:L('布点优化'),label:L('视场半径(m), 张角(°), 目标覆盖率(%), 最多新增台数（如 120,90,90,5）'),value:'120,90,90,5'});
   if(v===null) return;
   const m=v.split(/[,，\s]+/).map(Number);
   const phys=m[0]>0?m[0]:120, fov=m[1]>0?m[1]:90;
   const targetRatio=Math.max(.1,Math.min(1,(m[2]>0?m[2]:90)/100));
   const maxAdd=Math.max(1,Math.min(50,m[3]>0?m[3]:5));
   const res=optimizeCameraPlacement(state,{phys,fov,targetRatio,maxAdd});
-  if(res.empty){ toast('没有可用于布点的区域：请先绘制区域或闭合折线','warn'); return; }
+  if(res.empty){ toast(L('没有可用于布点的区域：请先绘制区域或闭合折线'),'warn'); return; }
   const pct=x=>(x*100).toFixed(1)+'%';
   const rows=res.suggestions.map((s,i)=>`<tr>
     <td>${i+1}</td><td>${fmt(s.x)}, ${fmt(s.y)}</td><td>${Math.round(s.angle)}°</td>
     <td>${fmt(s.gain)} ㎡（${pct(s.gainRatio)}）</td><td>${pct(s.ratioAfter)}</td></tr>`).join('');
   const body=`<div style="font-size:13px;line-height:1.9;margin-bottom:10px">
-      当前覆盖 <b>${pct(res.beforeRatio)}</b> → 预计 <b>${pct(res.afterRatio)}</b>（目标 ${pct(res.targetRatio)}）${res.reached?'，<b style="color:#16a34a">已达标</b>':'，仍未达标'}
-      <br><span class="hint-text">视场半径 ${fmt(res.phys)} m ｜ 张角 ${res.fov}° ｜ 仅在「区域/闭合折线」内统计；建议点位可位于场地边界外（立杆/壁挂）</span></div>
-    ${rows?`<div class="scroll"><table><thead><tr><th>#</th><th>建议位置 X, Y (m)</th><th>朝向</th><th>新增覆盖</th><th>累计覆盖</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      :'<p class="hint-text">当前已达标，无需新增点位。</p>'}`;
-  const buttons=[{text:'关闭',class:'',click:closeModal}];
+      ${esc(L('当前覆盖'))} <b>${pct(res.beforeRatio)}</b> → ${esc(L('预计'))} <b>${pct(res.afterRatio)}</b>（${esc(L('目标'))} ${pct(res.targetRatio)}）${res.reached?`，<b style="color:#16a34a">${esc(L('已达标'))}</b>`:`，${esc(L('仍未达标'))}`}
+      <br><span class="hint-text">${esc(L('视场半径'))} ${fmt(res.phys)} m ｜ ${esc(L('张角'))} ${res.fov}° ｜ ${esc(L('仅在「区域/闭合折线」内统计；建议点位可位于场地边界外（立杆/壁挂）'))}</span></div>
+    ${rows?`<div class="scroll"><table><thead><tr><th>#</th><th>${esc(L('建议位置 X, Y (m)'))}</th><th>${esc(L('朝向'))}</th><th>${esc(L('新增覆盖'))}</th><th>${esc(L('累计覆盖'))}</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      :`<p class="hint-text">${esc(L('当前已达标，无需新增点位。'))}</p>`}`;
+  const buttons=[{text:L('关闭'),class:'',click:closeModal}];
   if(res.suggestions.length){
-    buttons.unshift({text:`应用建议（新增 ${res.suggestions.length} 台）`,class:'primary',click:()=>{
+    buttons.unshift({text:L('应用建议（新增')+` ${res.suggestions.length} ${L('台）')}`,class:'primary',click:()=>{
       pushHistory();
       const typeId=defaultTypeId('point')==='point.marker'?'point.camera':defaultTypeId('point');
       res.suggestions.forEach(s=>{
@@ -849,11 +849,11 @@ async function runPlacementOptimization(){
           {x:Math.round(s.x*100)/100,y:Math.round(s.y*100)/100,angle:s.angle,phys:s.phys});
         state.objects.push(o);
       });
-      closeModal(); commitChange('已按建议新增 '+res.suggestions.length+' 台摄像头');
+      closeModal(); commitChange(L('已按建议新增')+' '+res.suggestions.length+' '+L('台摄像头'));
       runCoverageAnalysis();
     }});
   }
-  openModal('布点优化（贪心覆盖最大化）',body,buttons);
+  openModal(L('布点优化（贪心覆盖最大化）'),body,buttons);
 }
 
 /* -------------------- 统一刷新 -------------------- */
