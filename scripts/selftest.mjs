@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { deflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { buildStandalone } from './pack-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -3453,6 +3454,59 @@ asyncSuites.push((async()=>{
   eq('合并入口-楼层统计', floorStats.floorsAdded, 1);
   eq('合并入口-楼层对象已装载', api.state.floors.find(f => f.id === 'floor.F9').objects.length, 1);
   eq('合并入口-当前层不变', api.state.activeFloorId, 'floor.default');
+  api.resetState();
+}
+
+/* 60. 测试盲区补强：SVG 视觉快照 + 弹窗焦点管理（真实 DOM 语义桩） ---------- */
+{
+  api.resetState();
+  const push=(kind,typeId,patch)=>api.state.objects.push(api.baseObject(kind,typeId,patch));
+  push('rect','rect.area',{id:'G_RECT',name:'R1',x:3,y:3,width:8,height:5,angle:15});
+  push('rect','rect.area',{id:'G_PARA',name:'P1',x:16,y:4,width:6,height:4,shape:{type:'parallelogram',x:16,y:4,w:6,h:4,skew:25}});
+  push('point','point.camera',{id:'G_CAM',name:'C1',x:7,y:13,angle:35,phys:10,fov:90,scaleShape:'sector'});
+  push('line','line.boundary',{id:'G_LINE',name:'L1',closed:true,points:[[2,2],[10,2],[10,8]]});
+  push('dimension','dimension.distance',{id:'G_DIM',name:'D1',points:[[3,11],[13,11]],subtype:'distance'});
+  push('text','text.label',{id:'G_TXT',name:'T1',x:14,y:13,text:'SITE A',width:8,height:1.6});
+  Object.assign(api.state.settings,{precision:2,showLabels:true,showSegLen:true,showAreaTag:true,markerScale:1,unit:'m'});
+  const scene=api.buildSceneSvg();
+  const sceneHash=createHash('sha256').update(scene).digest('hex');
+  eq('视觉快照-SVG 场景哈希', sceneHash, '7b43d7ae3452b85caaa8f076dde7edcfe001220612b9b43e8bd57d895c057b49');
+  ok('视觉快照-SVG 输出非空', typeof scene==='string' && scene.length>1000);
+  ok('视觉快照-平行四边形与扇形路径存在', scene.includes('<polygon') && scene.includes(' A'));
+  eq('视觉快照-重复导出稳定', createHash('sha256').update(api.buildSceneSvg()).digest('hex'), sceneHash);
+
+  /* 真实 DOM 语义桩：验证弹窗打开聚焦、Tab 首尾循环、Esc 关闭与焦点还原 */
+  const makeEl=id=>{
+    const el={
+      id, textContent:'', innerHTML:'', className:'', onclick:null, offsetParent:{}, _focusable:[],
+      classList:(()=>{ const s=new Set(); return {add:c=>s.add(c),remove:c=>s.delete(c),contains:c=>s.has(c),toggle:(c,on)=>on?s.add(c):s.delete(c)}; })(),
+      appendChild(c){ this.children=this.children||[]; this.children.push(c); return c; },
+      setAttribute(){}, getAttribute(){ return null; }, hasAttribute(){ return false; },
+      querySelectorAll(){ return this._focusable; },
+      focus(){ fakeDoc.activeElement=this; }, remove(){}
+    };
+    return el;
+  };
+  const fakeDoc={activeElement:null,_els:new Map(),getElementById(id){ if(!this._els.has(id)) this._els.set(id,makeEl(id)); return this._els.get(id); },createElement(){ return makeEl(''); },querySelectorAll(){ return []; },addEventListener(){},removeEventListener(){},body:makeEl('body'),documentElement:makeEl('html')};
+  const f1=makeEl('f1'), f2=makeEl('f2'), trigger=makeEl('trigger');
+  fakeDoc.getElementById('modalBox')._focusable=[f1,f2];
+  fakeDoc.activeElement=trigger;
+  const oldDoc=sandbox.document;
+  sandbox.document=fakeDoc;
+  try{
+    api.openModal('测试','<p>x</p>',[{text:'OK',click(){}}]);
+    eq('焦点管理-打开后聚焦首个控件', fakeDoc.activeElement, f1);
+    fakeDoc.activeElement=f2;
+    api.modalKeydown({key:'Tab',shiftKey:false,preventDefault(){}});
+    eq('焦点管理-Tab 末位回到首位', fakeDoc.activeElement, f1);
+    api.modalKeydown({key:'Tab',shiftKey:true,preventDefault(){}});
+    eq('焦点管理-Shift+Tab 首位回到末位', fakeDoc.activeElement, f2);
+    api.modalKeydown({key:'Escape',preventDefault(){}});
+    eq('焦点管理-Esc 关闭并还原焦点', fakeDoc.activeElement, trigger);
+    eq('焦点管理-关闭后弹窗隐藏', fakeDoc.getElementById('modalBackdrop').classList.contains('show'), false);
+  }finally{
+    sandbox.document=oldDoc;
+  }
   api.resetState();
 }
 
