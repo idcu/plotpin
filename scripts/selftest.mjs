@@ -125,6 +125,8 @@ code += `\n;globalThis.__api = {
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
+  parkingLayout, parkingWarningText, applyParkingLayout,
+  undo, redo, get history(){ return history; },
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
@@ -3507,6 +3509,73 @@ asyncSuites.push((async()=>{
   }finally{
     sandbox.document=oldDoc;
   }
+  api.resetState();
+}
+
+/* 61. 停车规划：双面垂直车位/通道布局、净宽检查与旋转排列 ---------- */
+{
+  const base={siteX:0,siteY:0,siteW:100,siteH:70,stallWidth:2.5,stallDepth:5.3,aisleWidth:6,margin:1,orientation:'x'};
+  const r=api.parkingLayout(base);
+  eq('停车-默认布局可生成', r.error, null);
+  eq('停车-每排车位数', r.stats.perRow, 39);
+  eq('停车-排数（模块）', r.stats.modules, 4);
+  eq('停车-车位总数', r.stats.stallCount, 312);
+  eq('停车-通道总数', r.stats.aisleCount, 4);
+  approx('停车-车位面积', r.stats.stallArea, 4134, 1e-6);
+  approx('停车-车位占比', r.stats.stallRatio, 4134/7000, 1e-6);
+  approx('停车-含通道利用率', r.stats.totalRatio, 6474/7000, 1e-6);
+  approx('停车-首个车位 X', r.stalls[0].x, 1.25, 1e-9);
+  approx('停车-首个车位 Y', r.stalls[0].y, 1.8, 1e-9);
+  eq('停车-首个车位角度', r.stalls[0].angle, 0);
+  approx('停车-首个通道 Y', r.aisles[0].y, 7.1, 1e-9);
+  eq('停车-首个通道宽度', r.aisles[0].width, 97.5);
+  eq('停车-通道净宽', r.aisles[0].height, 6);
+  eq('停车-无规范提示', r.warnings.length, 0);
+
+  const y=api.parkingLayout(Object.assign({},base,{orientation:'y'}));
+  eq('停车-纵向排列可生成', y.error, null);
+  eq('停车-纵向每排车位', y.stats.perRow, 27);
+  eq('停车-纵向排数', y.stats.modules, 5);
+  eq('停车-纵向车位总数', y.stats.stallCount, 270);
+  eq('停车-纵向通道数', y.stats.aisleCount, 5);
+  eq('停车-纵向车位角度', y.stalls[0].angle, 90);
+  approx('停车-纵向首个车位 X', y.stalls[0].x, 8.5, 1e-9);
+  approx('停车-纵向首个车位 Y', y.stalls[0].y, 66.25, 1e-9);
+
+  const inside=(rect2,site)=>rect2.angle===90
+    ?rect2.x-rect2.height>=-1e-9&&rect2.x<=site.siteW+1e-9&&rect2.y>=-1e-9&&rect2.y+rect2.width<=site.siteH+1e-9
+    :rect2.x>=-1e-9&&rect2.x+rect2.width<=site.siteW+1e-9&&rect2.y>=-1e-9&&rect2.y+rect2.height<=site.siteH+1e-9;
+  ok('停车-横向车位均在场地内', r.stalls.every(s=>inside(s,base)) && r.aisles.every(a=>inside(a,base)));
+  ok('停车-纵向车位均在场地内', y.stalls.every(s=>inside(s,base)) && y.aisles.every(a=>inside(a,base)));
+
+  eq('停车-通道过窄拒绝生成', api.parkingLayout(Object.assign({},base,{aisleWidth:2})).error, 'aisleTooSmall');
+  eq('停车-场地过小拒绝生成', api.parkingLayout(Object.assign({},base,{siteW:3,siteH:3})).error, 'siteTooSmall');
+  eq('停车-非法尺寸拒绝生成', api.parkingLayout(Object.assign({},base,{stallWidth:0})).error, 'invalid');
+  ok('停车-通道偏窄给出提示', api.parkingLayout(Object.assign({},base,{aisleWidth:4})).warnings.includes('aisleNarrow'));
+  ok('停车-车位偏窄给出提示', api.parkingLayout(Object.assign({},base,{stallWidth:2.2})).warnings.includes('stallWidthSmall'));
+  ok('停车-车位偏浅给出提示', api.parkingLayout(Object.assign({},base,{stallDepth:4.8})).warnings.includes('stallDepthSmall'));
+  ok('停车-边距过小给出提示', api.parkingLayout(Object.assign({},base,{margin:0})).warnings.includes('marginSmall'));
+  api.I18N.setLang('en');
+  ok('停车-规范提示可翻译', api.parkingWarningText('aisleNarrow').includes('Aisle'));
+  api.I18N.setLang('zh');
+  eq('停车-中文规范提示', api.parkingWarningText('siteTooSmall'), '当前场地不足以排下完整车位与通道');
+
+  /* 应用 / 撤销 / 重做：验证写入停车场图层、墓碑与历史栈 */
+  api.resetState();
+  api.history.past=[]; api.history.future=[];
+  api.$('parkingStallW').value='2.5'; api.$('parkingStallD').value='5.3';
+  api.$('parkingAisle').value='6'; api.$('parkingMargin').value='1';
+  api.$('parkingOrient').value='x'; api.$('parkingClear').checked=true;
+  api.applyParkingLayout();
+  eq('停车-应用生成车位', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 312);
+  eq('停车-应用生成通道', api.state.objects.filter(o=>o.typeId==='rect.aisle').length, 4);
+  eq('停车-应用创建图层', api.state.layers.some(l=>l.id==='layer.parking'), true);
+  eq('停车-应用进入历史栈', api.history.past.length, 1);
+  api.undo();
+  eq('停车-撤销移除车位', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 0);
+  api.redo();
+  eq('停车-重做恢复车位', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 312);
+  api.history.past=[]; api.history.future=[];
   api.resetState();
 }
 

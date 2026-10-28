@@ -22,7 +22,77 @@ let dpr = 1;
 let coverageResult = null;   /* 视场覆盖率分析结果（含逐区域栅格），供画布叠加层与报告弹窗；对象/底图变更后清空 */
 let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(u,v y-down) → 实地(x,y y-up) */
 
+/* -------------------- 类型契约（JSDoc，供编辑器提示；不引入 TypeScript 依赖） -------------------- */
+/**
+ * @typedef {'point'|'rect'|'line'|'text'|'dimension'} ObjectKind
+ * @typedef {Object} Tombstone
+ * @property {string} id
+ * @property {string} deletedAt ISO 时间
+ * @property {'object'|'floor'} [kind]
+ * @typedef {Object} Layer
+ * @property {string} id
+ * @property {string} name
+ * @property {boolean} visible
+ * @property {boolean} locked
+ * @typedef {Object} ObjectType
+ * @property {string} id
+ * @property {ObjectKind} kind
+ * @property {string} name
+ * @property {string} color
+ * @property {string} [icon]
+ * @property {boolean} [builtin]
+ * @property {number} [iconSize]
+ * @property {'none'|'circle'|'square'|'sector'|'bar'} [scaleShape]
+ * @property {number} [fov]
+ * @property {Array<{d:string,fill?:boolean}>} [symbol]
+ * @property {{fillAlpha?:number,strokeWidth?:number}} [defaultStyle]
+ * @typedef {Object} DrawingObject
+ * @property {string} id
+ * @property {string} name
+ * @property {ObjectKind} kind
+ * @property {string} typeId
+ * @property {string} layerId
+ * @property {number} x
+ * @property {number} y
+ * @property {Array<[number,number]>} points
+ * @property {number} width
+ * @property {number} height
+ * @property {number} angle
+ * @property {number} phys 点设备物理尺寸（米，0=纯位置）
+ * @property {number} iconSize 屏幕图标倍率
+ * @property {Object<string,boolean>} annot
+ * @property {Object|null} shape
+ * @property {string} text
+ * @property {boolean} closed
+ * @property {Object} style
+ * @property {Object} props
+ * @property {boolean} visible
+ * @property {boolean} locked
+ * @property {number} z
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ * @typedef {Object} Floor
+ * @property {string} id
+ * @property {string} name
+ * @property {Object} [background]
+ * @property {DrawingObject[]} [objects]
+ * @property {Object} [viewport]
+ * @property {string} [updatedAt]
+ * @typedef {Object} ProjectState
+ * @property {string} schema
+ * @property {Object} meta
+ * @property {Object} settings
+ * @property {Object} viewport
+ * @property {Object} background
+ * @property {Layer[]} layers
+ * @property {ObjectType[]} objectTypes
+ * @property {DrawingObject[]} objects
+ * @property {Floor[]} floors
+ * @property {string} activeFloorId
+ * @property {Tombstone[]} tombstones
+ */
 /* -------------------- 初始化 / 工程数据 -------------------- */
+/** @returns {ProjectState} 新工程状态 */
 function createInitialState(){
   const now = new Date().toISOString();
   return {
@@ -73,14 +143,23 @@ function nextObjectId(){
   while(used.has('O' + String(n).padStart(4,'0'))) n++;
   return 'O' + String(n).padStart(4,'0');
 }
+/** @template T @param {T} v @returns {T} */
 function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
+/** @returns {string} ISO 时间 */
 function nowISO(){ return new Date().toISOString(); }
+/** @param {ObjectKind} kind @returns {string} */
 function defaultTypeId(kind){
   if (kind === 'point') return 'point.marker';
   if (kind === 'rect') return 'rect.area';
   if (kind === 'dimension') return 'dimension.distance';
   return 'line.custom';
 }
+/**
+ * @param {ObjectKind} kind
+ * @param {string} [typeId]
+ * @param {Partial<DrawingObject>} [patch]
+ * @returns {DrawingObject}
+ */
 function baseObject(kind, typeId, patch={}){
   return Object.assign({
     id: uid('OBJ'), name: nextObjectId(), kind, typeId: typeId || defaultTypeId(kind),
@@ -96,10 +175,12 @@ function baseObject(kind, typeId, patch={}){
 }
 
 /* -------------------- 类型 / 图层 / 样式 -------------------- */
+/** @param {string} typeId @returns {ObjectType} */
 function getType(typeId){
   return state.objectTypes.find(t => t.id === typeId) || state.objectTypes.find(t => t.kind === 'point') || {name:'未知',color:'#666',icon:'marker'};
 }
 /** 是否为内置类型：载入工程时清洗会把 builtin 标成 false，需按 id 回到内置表判断 */
+/** @param {ObjectType} t @returns {boolean} */
 function isBuiltinType(t){
   if(!t) return false;
   if(t.builtin) return true;
@@ -107,6 +188,7 @@ function isBuiltinType(t){
   catch(_){ return false; }
 }
 /** 类型显示名：内置类型随界面语言切换，用户自定义类型始终保留原名 */
+/** @param {ObjectType} t @returns {string} */
 function typeDisplayName(t){
   if(!t) return '';
   const n=t.name||'';
