@@ -37,14 +37,18 @@ function undo(){
   history.future.push(deepClone(state));
   state=history.past.pop();
   selectedIds.clear();
-  afterStateLoaded(false); pruneBgAssets(); requestRender(); toast('已撤销');
+  afterStateLoaded(false); pruneBgAssets(); requestRender();
+  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
+  toast('已撤销');
 }
 function redo(){
   if(!history.future.length) return;
   history.past.push(deepClone(state));
   state=history.future.pop();
   selectedIds.clear();
-  afterStateLoaded(false); pruneBgAssets(); requestRender(); toast('已重做');
+  afterStateLoaded(false); pruneBgAssets(); requestRender();
+  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
+  toast('已重做');
 }
 function commitChange(message){
   state.meta.updatedAt=nowISO();
@@ -52,6 +56,7 @@ function commitChange(message){
   coverageResult=null;               /* 对象变更后覆盖率叠加层失效，需重新分析 */
   invalidateStatic();                /* 静态层（非选中对象）需要重建 */
   refreshUI(); scheduleSave(); requestRender();
+  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
   if(message) toast(message,'success');
 }
 function commitObjectEdit(){
@@ -60,6 +65,7 @@ function commitObjectEdit(){
   coverageResult=null;
   invalidateStatic();
   renderList(); renderLayers(); renderStats(); scheduleSave(); requestRender();
+  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
 }
 let dbPromise=null;
 function openDB(){
@@ -484,7 +490,7 @@ function markTombstone(id,kind='object'){
 }
 /** 合并他人工程 JSON（离线 LWW）：读取→清洗→按 id/更新时间合并→替换现场。
  *  schema 不符或结构损坏时抛错，由调用方提示；合并无变化时不写历史栈。 */
-async function mergeProjectJSON(raw){
+async function mergeProjectJSON(raw,opts={}){
   if(!raw||typeof raw!=='object') throw new Error('不是有效的工程 JSON');
   if(raw.schema!==SCHEMA) throw new Error('schema 不匹配，不是本工具的工程文件');
   syncActiveFloor();
@@ -497,7 +503,7 @@ async function mergeProjectJSON(raw){
   const {project,stats}=mergeProjectData(currentRaw,deepClone(incoming));
   /* 对象/楼层之外（图层、类型、墓碑）也可能有变化：用规范化序列化判断是否需要落盘 */
   if(mergeStable(project)===mergeStable(currentRaw)) return stats;
-  pushHistory();
+  if(opts.history!==false) pushHistory();
   state=migrateProject(project);
   /* 合并不接管对方的工程库绑定：只有本地已绑定才继续绑定 */
   state.meta.projectId=(currentRaw.meta&&currentRaw.meta.projectId)||'';

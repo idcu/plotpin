@@ -18,7 +18,7 @@
       exportPdf: 'PDF 矢量（图纸+清单）', exportDxf: 'DXF（CAD 互通）',
       exportCsv: 'CSV 表格', exportTsv: 'TSV 表格', exportXlsx: 'Excel (.xlsx)',
       exportLabels: '设备二维码标签 (HTML)',
-      baseSite: '底图/场地', scaleBtn: '比例尺', affineBtn: '仿射校准', coverageBtn: '覆盖率分析', parkingBtn: '停车规划',
+      baseSite: '底图/场地', scaleBtn: '比例尺', affineBtn: '仿射校准', coverageBtn: '覆盖率分析', parkingBtn: '停车规划', collabBtn: '协作',
       panelToggle: '☰ 面板', fitBtn: '适应',
       typeNamePlaceholder: '例如：烟感、货位、警戒线',
       iconDot: '圆点', iconCamera: '摄像头', iconDome: '球机', iconLight: '路灯', iconGate: '道闸',
@@ -80,7 +80,7 @@
       exportPdf: 'PDF (drawing + list)', exportDxf: 'DXF (CAD)',
       exportCsv: 'CSV table', exportTsv: 'TSV table', exportXlsx: 'Excel (.xlsx)',
       exportLabels: 'Device QR labels (HTML)',
-      baseSite: 'Base/Site', scaleBtn: 'Scale', affineBtn: 'Affine', coverageBtn: 'Coverage', parkingBtn: 'Parking',
+      baseSite: 'Base/Site', scaleBtn: 'Scale', affineBtn: 'Affine', coverageBtn: 'Coverage', parkingBtn: 'Parking', collabBtn: 'Collab',
       panelToggle: '☰ Panel', fitBtn: 'Fit',
       typeNamePlaceholder: 'e.g. smoke detector, bay, warning line',
       iconDot: 'Dot', iconCamera: 'Camera', iconDome: 'Dome camera', iconLight: 'Street light', iconGate: 'Barrier gate',
@@ -473,6 +473,37 @@
     '车位深度偏小（建议 ≥ 5.0 m）':'Stall depth is small (recommended ≥ 5.0 m)',
     '场地边距偏小（建议 ≥ 0.3 m）':'Site margin is small (recommended ≥ 0.3 m)',
     '当前场地不足以排下完整车位与通道':'The current site cannot fit complete stalls and aisles',
+    /* 实时协作 */
+    '实时协作':'Live collaboration',
+    '同一浏览器多标签页即时同步；跨设备可用 WebRTC 手动信令，无需服务器。':
+      'Instant sync across tabs in this browser; cross-device via manual WebRTC signaling, no server required.',
+    '本机标签页同步':'Local tab sync', '频道名称':'Channel name', '启用本机同步':'Enable local sync',
+    '停用本机同步':'Disable local sync', '断开':'Disconnect',
+    '本机同步已启用':'Local sync enabled', '已连接对端':'Peer connected', '对端已断开':'Peer disconnected',
+    '已同步':'Synced', '同步失败：':'Sync failed: ',
+    '已断开':'Disconnected', '已连接，开始实时同步':'Connected; live sync started', '连接已断开':'Connection closed',
+    '当前环境不支持 BroadcastChannel，请使用跨设备直连或工程 JSON 合并':
+      'BroadcastChannel is unavailable; use direct WebRTC or JSON project merge instead',
+    '启用本机同步失败：':'Failed to enable local sync: ',
+    '当前环境不支持 WebRTC，请使用本机同步或工程 JSON 合并':
+      'WebRTC is unavailable; use local tab sync or JSON project merge instead',
+    '跨设备直连（WebRTC）':'Direct connection (WebRTC)',
+    '主机生成邀请 → 客机粘贴后生成应答 → 主机把应答粘贴回来。SDP 含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。':
+      'Host creates an invite → guest pastes it to create an answer → host pastes the answer back. SDP contains local network addresses; share only with trusted collaborators. Connected peers can edit this project.',
+    '生成邀请（主机）':'Create invite (host)', '应用对方信令 / 生成应答':'Apply peer signal / create answer',
+    '复制本机信令':'Copy local signal', '本机信令（发给对方）':'Local signal (send to peer)',
+    '对方信令（粘贴）':'Peer signal (paste)', '粘贴邀请或应答 SDP':'Paste invite or answer SDP',
+    '邀请已生成：复制给客机，再把客机应答粘贴回来':'Invite created: send it to the guest, then paste the guest answer back',
+    '生成邀请失败：':'Failed to create invite: ', '请粘贴对方信令':'Paste the peer signal first',
+    '已应用应答，正在建立连接…':'Answer applied; connecting…',
+    '本机已生成应答，等待主机应用':'Answer created locally; waiting for the host to apply it',
+    '应答已生成：复制给主机':'Answer created: send it back to the host',
+    '应用信令失败：':'Failed to apply signal: ', '已复制':'Copied',
+    '还没有可复制的信令':'No signal to copy yet', '复制失败，请手动选择文本':'Copy failed; select the text manually',
+    '底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。':
+      'Base-map images and device photos are not transferred over the live channel; use project-library merge or JSON export for a full sync.',
+    '尚未连接':'Not connected', '协作消息过大，已跳过（请用工程库合并或 JSON 交换）':
+      'Collaboration message too large and skipped (use project-library merge or JSON exchange)',
     /* 内置类型名称（用户自定义类型保持原名） */
     '通用标记':'Generic marker', '摄像头':'Camera', '球机':'Dome camera', '路灯':'Street light', '道闸':'Barrier gate',
     '充电桩':'Charger', '警示点':'Warning point', '自定义点':'Custom point', '普通区域':'Generic area', '车位区域':'Parking bay',

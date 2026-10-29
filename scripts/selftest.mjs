@@ -126,6 +126,7 @@ code += `\n;globalThis.__api = {
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
   parkingLayout, parkingWarningText, applyParkingLayout,
+  collabChunkText, collabCleanSDP, collabOnLocalChange,
   undo, redo, get history(){ return history; },
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
@@ -3577,6 +3578,32 @@ asyncSuites.push((async()=>{
   eq('停车-重做恢复车位', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 312);
   api.history.past=[]; api.history.future=[];
   api.resetState();
+}
+
+/* 62. 实时协作：长消息分块与本地提交防抖（WebRTC/BC 传输层为浏览器环境） ---------- */
+{
+  const text='A'.repeat(100);
+  const parts=api.collabChunkText(text,30);
+  eq('协作分块-块数', parts.length, 4);
+  eq('协作分块-首块长度', parts[0].length, 30);
+  eq('协作分块-末块长度', parts[3].length, 10);
+  eq('协作分块-拼接还原', parts.join(''), text);
+  eq('协作分块-空文本', api.collabChunkText('').join(''), '');
+  const big='测'.repeat(100000);
+  const bigParts=api.collabChunkText(big,48000);
+  eq('协作分块-大文本块数', bigParts.length, 3);
+  eq('协作分块-大文本还原', bigParts.join(''), big);
+  ok('协作分块-非字符串安全', api.collabChunkText(null).join('') === '');
+  const sdpClean=api.collabCleanSDP('v=0\r\na=mid:0\r\na=max-message-size:262144\r\na=sctp-port:5000\r\n');
+  ok('协作-SDP 清洗移除不兼容属性', !sdpClean.includes('max-message-size'));
+  ok('协作-SDP 清洗保留关键行', sdpClean.includes('a=mid:0') && sdpClean.includes('a=sctp-port:5000'));
+  const sdpMedia=api.collabCleanSDP('v=0\na=group:BUNDLE 0\na=mid:0\n\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\na=sctp-port:5000\n');
+  ok('协作-SDP 移除空行（Chromium 解析器不接受空行）', !sdpMedia.includes('\r\n\r\n'));
+  ok('协作-SDP 媒体段紧接会话段', sdpMedia.includes('a=mid:0\r\nm=application'));
+  ok('协作-SDP 以换行结尾', sdpMedia.endsWith('\r\n'));
+  let threw=false;
+  try{ api.collabOnLocalChange(); }catch(_){ threw=true; }
+  ok('协作-未连接时本地提交不抛错', !threw);
 }
 
 /* ---------------- 结果汇总 ---------------- */
