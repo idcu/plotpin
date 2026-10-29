@@ -59,7 +59,7 @@ function fitView(){
   requestRender(); updateZoomLabel();
 }
 function zoomAt(cx,cy,factor){
-  const v=state.viewport, nz=Math.max(.02,Math.min(200,v.zoom*factor));
+  const v=state.viewport, nz=Math.max(APP_LIMITS.ZOOM_MIN,Math.min(APP_LIMITS.ZOOM_MAX,v.zoom*factor));
   v.panX=cx-(cx-v.panX)*(nz/v.zoom);
   v.panY=cy-(cy-v.panY)*(nz/v.zoom);
   v.zoom=nz; requestRender(); updateZoomLabel();

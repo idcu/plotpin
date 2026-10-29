@@ -449,6 +449,8 @@ function migrateProject(p){
   settings.siteRadius=!!settings.siteRadius;
   settings.polar=!!settings.polar;
   settings.polarStep=[15,30,45,90].includes(Number(settings.polarStep))?Number(settings.polarStep):45;
+  settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
+    Math.round(finiteNumber(settings.segLabelMinPx,APP_LIMITS.SEG_LABEL_MIN_PX))));
   settings.lang=settings.lang==='en'?'en':'zh';
   const rawBg=typeof p.background==='object'&&p.background?p.background:{};
   const background=sanitizeBackground(rawBg);
@@ -564,7 +566,7 @@ function sanitizeBackground(rawBg){
 }
 function sanitizeViewport(raw){
   const v=Object.assign(createInitialState().viewport,raw&&typeof raw==='object'?raw:{});
-  v.zoom=Math.min(200,Math.max(.02,positiveNumber(v.zoom,1)));
+  v.zoom=Math.min(APP_LIMITS.ZOOM_MAX,Math.max(APP_LIMITS.ZOOM_MIN,positiveNumber(v.zoom,1)));
   v.panX=finiteNumber(v.panX,0); v.panY=finiteNumber(v.panY,0);
   return v;
 }

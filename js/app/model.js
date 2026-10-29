@@ -110,6 +110,7 @@ function createInitialState(){
       sitePerimeter:true,/* 矢量场地：中心周长 */
       polar:false,       /* 极轴追踪：逐点录入时自动吸附到极轴角整数倍 */
       polarStep:45,      /* 极轴角步长（15/30/45/90） */
+      segLabelMinPx:APP_LIMITS.SEG_LABEL_MIN_PX, /* 段长标注最小屏幕像素：过短的段不标，避免拥挤 */
       lang:'zh',         /* 界面语言：zh / en（静态 chrome 文案） */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     viewport: { zoom:1, panX:0, panY:0 },
@@ -251,7 +252,7 @@ function moveNodeStep(o,i,dir){
 function pointIconScale(o){
   const t=getType(o.typeId);
   const k=(Number(t.iconSize)||1)*(Number(o.iconSize)||1)*(Number(state.settings.markerScale)||1);
-  return Math.min(8,Math.max(.2,k));
+  return Math.min(APP_LIMITS.ICON_SCALE_MAX,Math.max(APP_LIMITS.ICON_SCALE_MIN,k));
 }
 
 /* -------------------- 逐对象标注显示开关 -------------------- */

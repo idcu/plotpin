@@ -521,7 +521,7 @@ function drawSiteAnnotations(c,v,toS){
       const segN=closed?n:n-1;
       for(let k=0;k<segN;k++){
         const a=pts[k], b=pts[(k+1)%n], len=dist(a,b);
-        if(len*v.zoom<26) continue;                       /* 屏幕上过短的段不标，避免拥挤 */
+        if(len*v.zoom<segLabelMinPx()) continue;           /* 屏幕上过短的段不标，避免拥挤 */
         const s=toS([(a[0]+b[0])/2,(a[1]+b[1])/2]);
         drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
       }
@@ -622,10 +622,17 @@ function annotationItems(o,opt={}){
   }
   return out;
 }
+/** 段长标注最小屏幕像素（设置可调，默认 APP_LIMITS.SEG_LABEL_MIN_PX） */
+function segLabelMinPx(){
+  const v=Number(state.settings&&state.settings.segLabelMinPx);
+  return Number.isFinite(v)&&v>0
+    ? Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,v))
+    : APP_LIMITS.SEG_LABEL_MIN_PX;
+}
 /** 绘制某对象的逐对象标注标签（屏幕固定字号；过短的段自动略去避免拥挤） */
 function drawObjectAnnotations(c,o,toS,v){
   annotationItems(o,{selected:selectedIds.has(o.id)}).forEach(it=>{
-    if(it.lenWorld && it.lenWorld*v.zoom<26) return;
+    if(it.lenWorld && it.lenWorld*v.zoom<segLabelMinPx()) return;
     const s=toS([it.wx,it.wy]);
     drawScreenTag(c,s[0]+it.dx,s[1]+it.dy,it.text);
   });
@@ -941,7 +948,7 @@ function drawDraftSegTags(c,v,toS,d){
   let total=0;
   for(let k=1;k<wps.length;k++){
     const len=dist(wps[k-1],wps[k]); total+=len;
-    if(len*v.zoom<26) continue;
+    if(len*v.zoom<segLabelMinPx()) continue;
     const s=toS([(wps[k-1][0]+wps[k][0])/2,(wps[k-1][1]+wps[k][1])/2]);
     drawScreenTag(c,s[0]+3,s[1]-19,fmt(len)+' m');
   }

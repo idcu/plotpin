@@ -115,6 +115,7 @@ code += `\n;globalThis.__api = {
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
   annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
   typeDisplayName, populateSelects,
+  esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
   $, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
   objectRows, formatNodeCoords, parseNodeCoords,
@@ -3637,6 +3638,45 @@ asyncSuites.push((async()=>{
   const s2=api.floorSummaries();
   ok('楼层汇总-切换后活动层变更', s2.rows.find(r=>r.id==='floor.F2').active===true);
   eq('楼层汇总-切换后合计不变', s2.total.count, 5);
+  api.resetState();
+}
+
+/* 64. 资源上限：缩放/图标/段长阈值、底图降采样策略、设置迁移与 HTML 转义 ---------- */
+{
+  eq('资源上限-缩放范围', [api.APP_LIMITS.ZOOM_MIN, api.APP_LIMITS.ZOOM_MAX], [0.02, 200]);
+  eq('资源上限-图标倍率范围', [api.APP_LIMITS.ICON_SCALE_MIN, api.APP_LIMITS.ICON_SCALE_MAX], [0.2, 8]);
+  eq('资源上限-段长标注阈值范围', [api.APP_LIMITS.SEG_LABEL_MIN_PX_MIN, api.APP_LIMITS.SEG_LABEL_MIN_PX_MAX], [10, 60]);
+
+  eq('底图策略-小图不缩放', api.backgroundScalePlan(2000, 1000, 'image/png', 1024 * 1024), null);
+  const wide = api.backgroundScalePlan(5000, 1000, 'image/png', 1024 * 1024);
+  eq('底图策略-长边限制到 3000', [wide.width, wide.height], [3000, 600]);
+  eq('底图策略-透明格式保留 PNG', wide.format, 'image/png');
+  const square = api.backgroundScalePlan(4000, 4000, 'image/jpeg', 2 * 1024 * 1024);
+  eq('底图策略-方形等比缩放', [square.width, square.height], [3000, 3000]);
+  eq('底图策略-不透明格式转 JPEG', square.format, 'image/jpeg');
+  approx('底图策略-JPEG 质量', square.quality, 0.85);
+  const hugePng = api.backgroundScalePlan(5000, 5000, 'image/png', 7 * 1024 * 1024);
+  eq('底图策略-超大透明图转 JPEG', hugePng.format, 'image/jpeg');
+  eq('底图策略-SVG 不降采样', api.backgroundScalePlan(5000, 5000, 'image/svg+xml', 1024), null);
+  const thin = api.backgroundScalePlan(9000, 1, 'image/jpeg', 1024);
+  eq('底图策略-极窄图最小边仍为 1', [thin.width, thin.height], [3000, 1]);
+
+  const m1 = api.migrateProject({schema:'offline-drawing-annotation/v1', objects:[], settings:{segLabelMinPx:5}});
+  eq('设置迁移-段长阈值下限', m1.settings.segLabelMinPx, 10);
+  const m2 = api.migrateProject({schema:'offline-drawing-annotation/v1', objects:[], settings:{segLabelMinPx:999}});
+  eq('设置迁移-段长阈值上限', m2.settings.segLabelMinPx, 60);
+  const m3 = api.migrateProject({schema:'offline-drawing-annotation/v1', objects:[], settings:{segLabelMinPx:'abc'}});
+  eq('设置迁移-段长阈值缺省', m3.settings.segLabelMinPx, 26);
+  const mv = api.migrateProject({schema:'offline-drawing-annotation/v1', objects:[], viewport:{zoom:0.001}});
+  eq('设置迁移-缩放下限', mv.viewport.zoom, 0.02);
+  const mv2 = api.migrateProject({schema:'offline-drawing-annotation/v1', objects:[], viewport:{zoom:500}});
+  eq('设置迁移-缩放上限', mv2.viewport.zoom, 200);
+  ok('段长阈值-读取下限', (()=>{ api.state.settings.segLabelMinPx=5; return api.segLabelMinPx()===10; })());
+  ok('段长阈值-读取上限', (()=>{ api.state.settings.segLabelMinPx=999; return api.segLabelMinPx()===60; })());
+  ok('段长阈值-非法值回退默认', (()=>{ api.state.settings.segLabelMinPx='abc'; return api.segLabelMinPx()===26; })());
+
+  ok('HTML 转义-不保留未转义标签', !api.esc('<img src=x onerror=alert(1)>').includes('<'));
+  eq('HTML 转义-引号与尖括号', api.esc('a"b\'c<d>&'), 'a&quot;b&#39;c&lt;d&gt;&amp;');
   api.resetState();
 }
 

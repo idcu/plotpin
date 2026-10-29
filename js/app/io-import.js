@@ -236,22 +236,34 @@ function applyVectorSite(kind,shape){
   fitView(); commitChange(L('已设置为')+L(siteKindName(kind))); setTool('select');
 }
 
-/* -------------------- 底图导入：字节入资产库 + 大图自动压缩 -------------------- */
+/* -------------------- 底图导入：字节入资产库 + 大图自动降采样 -------------------- */
+/** 底图降采样策略（纯函数）：最长边一律限制在 BG_MAX_EDGE，避免大尺寸图片解码后占用巨量内存。
+ *  透明格式（PNG/WebP/GIF/BMP）在未超过体积上限时重编码为 PNG 以保留透明，否则转 JPEG。 */
+function backgroundScalePlan(w,h,mime,byteLen){
+  if(/^image\/svg\+xml$/i.test(String(mime||''))) return null;
+  const width=Math.max(1,Math.round(Number(w)||0));
+  const height=Math.max(1,Math.round(Number(h)||0));
+  const edge=Math.max(width,height);
+  if(!(edge>BG_MAX_EDGE)) return null;
+  const scale=BG_MAX_EDGE/edge;
+  const tw=Math.max(1,Math.round(width*scale)), th=Math.max(1,Math.round(height*scale));
+  const huge=Number(byteLen)>BG_RECOMPRESS_LIMIT;
+  const keepAlpha=/^image\/(png|webp|gif|bmp)/i.test(String(mime||''))&&!huge;
+  return {width:tw,height:th,format:keepAlpha?'image/png':'image/jpeg',quality:keepAlpha?undefined:BG_JPEG_QUALITY};
+}
 async function prepareBackgroundBytes(f){
   const raw=new Uint8Array(await f.arrayBuffer());
   const mime=f.type||'image/png';
   const url=URL.createObjectURL(new Blob([raw],{type:mime}));
   let img;
   try{ img=await loadImageSrc(url); }finally{ URL.revokeObjectURL(url); }
-  const edge=Math.max(img.naturalWidth,img.naturalHeight);
-  const huge=raw.length>BG_RECOMPRESS_LIMIT, isJpeg=/jpe?g$/i.test(mime);
-  if(edge>BG_MAX_EDGE && (isJpeg||huge)){
-    const scale=BG_MAX_EDGE/edge, w=Math.max(1,Math.round(img.naturalWidth*scale)), h=Math.max(1,Math.round(img.naturalHeight*scale));
-    const c=document.createElement('canvas'); c.width=w; c.height=h;
-    c.getContext('2d').drawImage(img,0,0,w,h);
-    const blob=await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('图片压缩失败')),'image/jpeg',BG_JPEG_QUALITY));
-    return {bytes:new Uint8Array(await blob.arrayBuffer()),mime:'image/jpeg',width:w,height,h,
-      note:'底图过大，已压缩至 '+w+'×'+h+'（原始 '+img.naturalWidth+'×'+img.naturalHeight+'）'};
+  const plan=backgroundScalePlan(img.naturalWidth,img.naturalHeight,mime,raw.length);
+  if(plan){
+    const c=document.createElement('canvas'); c.width=plan.width; c.height=plan.height;
+    c.getContext('2d').drawImage(img,0,0,plan.width,plan.height);
+    const blob=await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('图片压缩失败')),plan.format,plan.quality));
+    return {bytes:new Uint8Array(await blob.arrayBuffer()),mime:plan.format,width:plan.width,height:plan.height,
+      note:'底图过大，已降采样至 '+plan.width+'×'+plan.height+'（原始 '+img.naturalWidth+'×'+img.naturalHeight+'）'};
   }
   return {bytes:raw,mime,width:img.naturalWidth,height:img.naturalHeight};
 }

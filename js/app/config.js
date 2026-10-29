@@ -11,10 +11,17 @@ const DB_VERSION = 2;
 const DB_STORE = 'projects';
 const DB_ASSETS = 'assets';
 const EPS = 1e-8;
-/* 底图压缩阈值：边超过 BG_MAX_EDGE 的 JPEG，或大于 BG_RECOMPRESS_LIMIT 的其他栅格图，降采样为 JPEG */
+/* 底图压缩阈值：最长边超过 BG_MAX_EDGE 的栅格图统一降采样；超过 BG_RECOMPRESS_LIMIT 的透明图转 JPEG */
 const BG_MAX_EDGE = 3000;
 const BG_JPEG_QUALITY = 0.85;
 const BG_RECOMPRESS_LIMIT = 6 * 1024 * 1024;
+/* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限），避免魔法数字散落各处 */
+const APP_LIMITS = Object.freeze({
+  ZOOM_MIN: 0.02, ZOOM_MAX: 200,
+  ICON_SCALE_MIN: 0.2, ICON_SCALE_MAX: 8,
+  SEG_LABEL_MIN_PX: 26, SEG_LABEL_MIN_PX_MIN: 10, SEG_LABEL_MIN_PX_MAX: 60,
+  BG_MAX_EDGE, BG_JPEG_QUALITY, BG_RECOMPRESS_LIMIT
+});
 
 /* 点类型的 scaleShape：设置对象“物理尺寸(m)”后按世界坐标渲染（随底图缩放），
  * none=始终屏幕固定图标（纯位置标识）；circle 圆 / square 方 / sector 扇形视场（fov 张角）/ bar 杆 */

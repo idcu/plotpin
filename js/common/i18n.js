@@ -62,7 +62,7 @@
       dimDistance: '两点距离', dimRuler: '测距（多点总长）', dimArea: '面积', dimAngle: '角度',
       /* 设置面板 */
       projectName: '工程名称', gridSpacing: '网格间距', enableSnap: '启用捕捉', showGrid: '显示网格',
-      showLabelsSetting: '显示标签', crosshair: '十字准星/坐标', segLenSetting: '段长度标注',
+      showLabelsSetting: '显示标签', crosshair: '十字准星/坐标', segLenSetting: '段长度标注', segLabelMinPxSetting: '段长标注最小像素',
       areaTagSetting: '图上显示面积', siteNodesSetting: '场地节点坐标', siteSegLenSetting: '场地段长',
       siteBaseSetting: '场地基点坐标', siteRadiusSetting: '场地半径', siteAreaSetting: '场地面积',
       sitePerimeterSetting: '场地周长', osnapSetting: '对象捕捉', polarSetting: '极轴追踪',
@@ -120,7 +120,7 @@
       shapeRect: 'Rectangle', shapeCircle: 'Circle', shapeEllipse: 'Ellipse', shapeSector: 'Sector', shapeParallelogram: 'Parallelogram',
       dimDistance: 'Two-point distance', dimRuler: 'Measure (total length)', dimArea: 'Area', dimAngle: 'Angle',
       projectName: 'Project name', gridSpacing: 'Grid spacing', enableSnap: 'Enable snapping', showGrid: 'Show grid',
-      showLabelsSetting: 'Show labels', crosshair: 'Crosshair / coordinates', segLenSetting: 'Segment lengths',
+      showLabelsSetting: 'Show labels', crosshair: 'Crosshair / coordinates', segLenSetting: 'Segment lengths', segLabelMinPxSetting: 'Min segment label (px)',
       areaTagSetting: 'Show area on drawing', siteNodesSetting: 'Site node coordinates', siteSegLenSetting: 'Site segment lengths',
       siteBaseSetting: 'Site base coordinates', siteRadiusSetting: 'Site radius', siteAreaSetting: 'Site area',
       sitePerimeterSetting: 'Site perimeter', osnapSetting: 'Object snap', polarSetting: 'Polar tracking',

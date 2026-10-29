@@ -332,7 +332,7 @@ canvas.addEventListener('pointermove',e=>{
     const [a,b]=[...activePointers.values()];
     const dNow=Math.max(8,Math.hypot(a[0]-b[0],a[1]-b[1]));
     const [mx,my]=[(a[0]+b[0])/2,(a[1]+b[1])/2];
-    const nz=Math.max(.02,Math.min(200,pinch.z0*dNow/pinch.d0));
+    const nz=Math.max(APP_LIMITS.ZOOM_MIN,Math.min(APP_LIMITS.ZOOM_MAX,pinch.z0*dNow/pinch.d0));
     /* 保持双指中点下的世界点不动：sx=panX+x·z；sy=panY+(h-y)·z（Y 翻转） */
     const kx=(pinch.mx0-pinch.panX0)/pinch.z0, ky=(pinch.my0-pinch.panY0)/pinch.z0;
     state.viewport.zoom=nz; state.viewport.panX=mx-kx*nz; state.viewport.panY=my-ky*nz;
