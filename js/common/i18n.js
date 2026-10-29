@@ -291,6 +291,10 @@
     '确定删除楼层「':'Delete floor “', '」及其全部对象？此操作可撤销。':'” and all its objects? This can be undone.',
     '楼层已删除':'Floor deleted', '楼层操作失败：':'Floor operation failed: ',
     '当前楼层':'Current floor', '当前打开':'Currently open',
+    '楼层':'Floor', '楼层汇总':'Floor summary', '全楼合计':'All floors', '总长':'Total length',
+    '点击切换到该楼层':'Click to switch to this floor',
+    '点击楼层行可切换；汇总覆盖全部楼层。':'Click a floor row to switch; totals cover all floors.',
+    '汇总覆盖全部楼层；上方图纸与几何检查为当前楼层。':'Totals cover all floors; the drawing and geometry check above reflect the current floor.',
     '工程库（保存在本机浏览器）':'Project library (stored in this browser)',
     '工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。':
       'The project library is empty. Save the current drawing to the library first, then switch between projects anytime.',

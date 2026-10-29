@@ -264,6 +264,7 @@ function renderStats(){
   const area=state.objects.reduce((s,o)=>s+objectArea(o),0);
   const len=state.objects.reduce((s,o)=>s+objectLength(o),0);
   const issues=findIssues();
+  const fs=floorSummaries();
   $('statsPanel').innerHTML=`
     <div class="stat-grid">
       <div class="stat-card">${esc(L('点设备'))}<b>${counts.point}</b></div>
@@ -273,6 +274,15 @@ function renderStats(){
       <div class="stat-card">${esc(L('标注总长'))}<b>${fmt(len)} m</b></div>
       <div class="stat-card">${esc(L('区域总面积'))}<b>${fmt(area)} ㎡</b></div>
     </div>
+    ${fs.rows.length>1?`<div class="section" style="margin-top:10px"><h3>${esc(L('楼层汇总'))}</h3>
+      <table class="floor-sum-table"><thead><tr>
+        <th>${esc(L('楼层'))}</th><th>${esc(L('对象'))}</th><th>${esc(L('点设备'))}</th><th>${esc(L('区域'))}</th><th>${esc(L('折线'))}</th><th>${esc(L('总长'))}</th><th>${esc(L('总面积'))}</th>
+      </tr></thead><tbody>
+        ${fs.rows.map(r=>`<tr data-floor-sum="${esc(r.id)}" class="${r.active?'active':''}" title="${esc(L('点击切换到该楼层'))}">
+          <td>${esc(r.name)}${r.active?' ★':''}</td><td>${r.count}</td><td>${r.counts.point}</td><td>${r.counts.rect}</td><td>${r.counts.line}</td><td>${fmt(r.len)} m</td><td>${fmt(r.area)} ㎡</td></tr>`).join('')}
+        <tr class="total"><td>${esc(L('全楼合计'))}</td><td>${fs.total.count}</td><td>${fs.total.counts.point}</td><td>${fs.total.counts.rect}</td><td>${fs.total.counts.line}</td><td>${fmt(fs.total.len)} m</td><td>${fmt(fs.total.area)} ㎡</td></tr>
+      </tbody></table>
+      <p class="hint-text">${esc(L('点击楼层行可切换；汇总覆盖全部楼层。'))}</p></div>`:''}
     <div class="section" style="margin-top:10px"><h3>${esc(L('工程信息'))}</h3><div class="kv-list">
       <span>${esc(L('工程名称'))}</span><b>${esc(state.meta.name)}</b><span>${esc(L('场地'))}</span><b>${esc(L(siteKindName(state.background.kind)))}</b>
       <span>${esc(L('场地参数'))}</span><b>${esc(siteDescription().split('：').slice(1).join('：'))}</b>
@@ -280,6 +290,14 @@ function renderStats(){
     </div></div>
     <div class="section"><h3>${esc(L('几何检查'))}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>
     <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>`;
+  $('statsPanel').querySelectorAll('tr[data-floor-sum]').forEach(tr=>{
+    tr.onclick=async()=>{
+      const id=tr.dataset.floorSum;
+      if(!id||id===state.activeFloorId) return;
+      try{ if(await switchFloor(id)) toast(L('已切换到楼层：')+currentFloorName(),'success'); }
+      catch(e){ toast(L('楼层操作失败：')+e.message,'error'); }
+    };
+  });
   refreshStorageUsage();
 }
 function formatBytes(n){

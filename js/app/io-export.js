@@ -447,8 +447,9 @@ async function exportPDF(){
 
 /* -------------------- 打印 / PDF 报告 -------------------- */
 $('printBtn').onclick=()=>{
-  const rows=objectRows(), issues=findIssues(), img=renderToDataURL(1.5);
+  const rows=objectRows(), issues=findIssues(), img=renderToDataURL(1.5), fs=floorSummaries();
   const cols=['编号','对象类型','业务类型','图层','X','Y','参数'];
+  const floorCols=['楼层','对象','点设备','区域','折线','总长','总面积'];
   $('report').innerHTML=`
     <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
       <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
@@ -458,6 +459,13 @@ $('printBtn').onclick=()=>{
       <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${state.objects.filter(o=>o.kind==='point').length} ｜ ${esc(L('区域：'))}${state.objects.filter(o=>o.kind==='rect').length} ｜ ${esc(L('折线：'))}${state.objects.filter(o=>o.kind==='line').length}</p>
       <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
       ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
+      ${fs.rows.length>1?`<h2>${esc(L('楼层汇总'))}</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr>${floorCols.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${esc(L(c))}</th>`).join('')}</tr></thead>
+          <tbody>${fs.rows.map(r=>`<tr><td style="border:1px solid #ccc;padding:4px">${esc(r.name)}${r.active?' ★':''}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.count}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.counts.point}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.counts.rect}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.counts.line}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(r.len)} m</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(r.area)} ㎡</td></tr>`).join('')}
+          <tr style="font-weight:700;background:#f3f4f6"><td style="border:1px solid #ccc;padding:4px">${esc(L('全楼合计'))}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.count}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.counts.point}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.counts.rect}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.counts.line}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(fs.total.len)} m</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(fs.total.area)} ㎡</td></tr>
+          </tbody></table>
+        <p style="color:#666">${esc(L('汇总覆盖全部楼层；上方图纸与几何检查为当前楼层。'))}</p>`:''}
     </div>
     <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
       <h2>${esc(L('对象清单'))}</h2>

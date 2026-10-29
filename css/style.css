@@ -120,6 +120,13 @@
   .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .stat-card{border:1px solid var(--line);border-radius:9px;padding:10px;background:#f8fafc}
   .stat-card b{display:block;font-size:19px;margin-top:3px}
+  .floor-sum-table{width:100%;border-collapse:collapse;font-size:11.5px}
+  .floor-sum-table th,.floor-sum-table td{border-bottom:1px solid var(--line);padding:4px 3px;text-align:right;white-space:nowrap}
+  .floor-sum-table th:first-child,.floor-sum-table td:first-child{text-align:left}
+  .floor-sum-table tr[data-floor-sum]{cursor:pointer}
+  .floor-sum-table tr[data-floor-sum]:hover{background:var(--primary-soft)}
+  .floor-sum-table tr.active{font-weight:600;color:var(--primary)}
+  .floor-sum-table tr.total td{border-top:2px solid var(--line);font-weight:700}
   .issue{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:7px;margin:5px 0;font-size:12px;line-height:1.45}
   .ok-banner{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:8px;line-height:1.5}
   .kv-list{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:12px}

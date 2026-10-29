@@ -249,6 +249,28 @@ function currentFloorName(){ const f=currentFloor(); return f?f.name:'1F'; }
 function floorObjectCount(f){
   return f&&f.id===state.activeFloorId?state.objects.length:(f&&Array.isArray(f.objects)?f.objects.length:0);
 }
+/** 全楼层汇总（纯数据）：当前层先写回楼层条目，再逐层统计对象数/分类/面积/长度，
+ *  返回 {rows,total}。供统计页签与打印报告共用，避免两处口径漂移。 */
+function floorSummaries(){
+  syncActiveFloor();
+  const rows=(state.floors||[]).map(f=>{
+    const objs=Array.isArray(f.objects)?f.objects:[];
+    const counts={point:0,rect:0,line:0,text:0,dimension:0};
+    let area=0, len=0;
+    objs.forEach(o=>{
+      if(o&&o.kind) counts[o.kind]=(counts[o.kind]||0)+1;
+      area+=objectArea(o); len+=objectLength(o);
+    });
+    return {id:f.id,name:f.name,active:f.id===state.activeFloorId,count:objs.length,counts,area,len};
+  });
+  const total={count:0,counts:{point:0,rect:0,line:0,text:0,dimension:0},area:0,len:0};
+  rows.forEach(r=>{
+    total.count+=r.count;
+    Object.keys(total.counts).forEach(k=>{ total.counts[k]+=r.counts[k]||0; });
+    total.area+=r.area; total.len+=r.len;
+  });
+  return {rows,total};
+}
 /** 把当前可编辑数据写回当前楼层条目（切换/保存/统计前调用） */
 function syncActiveFloor(){
   const f=currentFloor();

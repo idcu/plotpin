@@ -141,7 +141,7 @@ code += `\n;globalThis.__api = {
   siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
-  syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, persistableState,
+  syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON,
 };`;
@@ -3604,6 +3604,40 @@ asyncSuites.push((async()=>{
   let threw=false;
   try{ api.collabOnLocalChange(); }catch(_){ threw=true; }
   ok('协作-未连接时本地提交不抛错', !threw);
+}
+
+/* 63. 多楼层汇总：逐层对象数/分类/面积/长度与合计 ---------------------------- */
+{
+  const st=api.resetState();
+  st.objects.push(api.baseObject('point','point.marker',{name:'A',x:1,y:1}));
+  st.objects.push(api.baseObject('rect','rect.area',{name:'R1',x:0,y:0,width:10,height:10}));
+  st.objects.push(api.baseObject('line','line.boundary',{name:'L1',points:[[0,0],[3,0],[3,4]]}));
+  api.syncActiveFloor();
+  const init=api.createInitialState();
+  st.floors.push({id:'floor.F2',name:'2F',background:init.background,objects:[
+    api.baseObject('point','point.marker',{name:'B',x:2,y:2}),
+    api.baseObject('rect','rect.area',{name:'R2',x:0,y:0,width:5,height:4})
+  ],viewport:init.viewport});
+  const s1=api.floorSummaries();
+  eq('楼层汇总-层数', s1.rows.length, 2);
+  eq('楼层汇总-当前层对象数', s1.rows[0].count, 3);
+  eq('楼层汇总-当前层点设备', s1.rows[0].counts.point, 1);
+  eq('楼层汇总-当前层区域', s1.rows[0].counts.rect, 1);
+  eq('楼层汇总-当前层折线', s1.rows[0].counts.line, 1);
+  approx('楼层汇总-当前层面积', s1.rows[0].area, 100);
+  approx('楼层汇总-当前层长度', s1.rows[0].len, 7);
+  ok('楼层汇总-活动层标记', s1.rows[0].active===true&&s1.rows[1].active===false);
+  eq('楼层汇总-非活动层取楼层条目对象', s1.rows[1].count, 2);
+  approx('楼层汇总-非活动层面积', s1.rows[1].area, 20);
+  eq('楼层汇总-合计对象数', s1.total.count, 5);
+  eq('楼层汇总-合计分类', [s1.total.counts.point,s1.total.counts.rect,s1.total.counts.line], [2,2,1]);
+  approx('楼层汇总-合计面积', s1.total.area, 120);
+  approx('楼层汇总-合计长度', s1.total.len, 7);
+  ok('楼层汇总-切换二层', api.switchFloorData('floor.F2'));
+  const s2=api.floorSummaries();
+  ok('楼层汇总-切换后活动层变更', s2.rows.find(r=>r.id==='floor.F2').active===true);
+  eq('楼层汇总-切换后合计不变', s2.total.count, 5);
+  api.resetState();
 }
 
 /* ---------------- 结果汇总 ---------------- */
