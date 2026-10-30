@@ -303,12 +303,43 @@ function renderMultiProps(box,objs){
       <button class="mini" id="multiHideBtn">${esc(L('隐藏'))}</button>
       <button class="mini" id="multiLockBtn">${esc(L('锁定'))}</button>
       <button class="mini danger" id="multiDeleteBtn">${esc(L('全部删除'))}</button>
-    </div></div>`;
+    </div></div>
+    <div class="section"><h3>${esc(L('对齐 / 分布'))}</h3>
+      <div class="align-grid">
+        <button class="mini" data-align="left">${esc(L('左对齐'))}</button>
+        <button class="mini" data-align="centerX">${esc(L('水平居中'))}</button>
+        <button class="mini" data-align="right">${esc(L('右对齐'))}</button>
+        <button class="mini" data-align="top">${esc(L('上对齐'))}</button>
+        <button class="mini" data-align="centerY">${esc(L('垂直居中'))}</button>
+        <button class="mini" data-align="bottom">${esc(L('下对齐'))}</button>
+        <button class="mini" data-distribute="x">${esc(L('水平分布'))}</button>
+        <button class="mini" data-distribute="y">${esc(L('垂直分布'))}</button>
+      </div>
+      <p class="hint-text">${esc(L('按对象包围盒对齐；分布保持首末对象不动、其余等间距。'))}</p>
+    </div>`;
   $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层'); };
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
   $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象'); };
   $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象'); };
   $('multiDeleteBtn').onclick=deleteSelected;
+  box.querySelectorAll('[data-align]').forEach(b=>{
+    b.onclick=()=>{
+      const items=objs.filter(isEditable);
+      if(items.length<2) return toast(L('至少选择两个对象'),'warn');
+      pushHistory();
+      const n=alignObjects(items,b.dataset.align);
+      commitChange(L('已对齐')+' '+n+' '+L('个对象'));
+    };
+  });
+  box.querySelectorAll('[data-distribute]').forEach(b=>{
+    b.onclick=()=>{
+      const items=objs.filter(isEditable);
+      if(items.length<3) return toast(L('至少选择三个对象'),'warn');
+      pushHistory();
+      const n=distributeObjects(items,b.dataset.distribute);
+      commitChange(L('已分布')+' '+n+' '+L('个对象'));
+    };
+  });
 }
 function bindPropEvents(box,o){
   box.addEventListener('focusin',()=>pushHistory(),{once:true});

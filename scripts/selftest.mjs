@@ -96,6 +96,7 @@ code += `\n;globalThis.__api = {
   polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds,
+  translateObject, alignObjects, distributeObjects, objectBounds,
   get history(){ return history; },
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
@@ -3677,6 +3678,59 @@ asyncSuites.push((async()=>{
 
   ok('HTML 转义-不保留未转义标签', !api.esc('<img src=x onerror=alert(1)>').includes('<'));
   eq('HTML 转义-引号与尖括号', api.esc('a"b\'c<d>&'), 'a&quot;b&#39;c&lt;d&gt;&amp;');
+  api.resetState();
+}
+
+/* 65. 对象对齐与分布：包围盒边界/中线、等间距、少于阈值不动 -------------------- */
+{
+  const mk=(patch)=>api.baseObject('rect','rect.area',Object.assign({x:0,y:0,width:10,height:10},patch));
+  const boxes=objs=>objs.map(o=>api.objectBounds(o));
+
+  let a=mk({x:0,y:0}), b=mk({x:20,y:5}), c=mk({x:40,y:2});
+  api.alignObjects([a,b,c],'left');
+  eq('对齐-左边界一致', boxes([a,b,c]).map(x=>x.minX), [0,0,0]);
+  eq('对齐-左对齐不改变 Y', [a.y,b.y,c.y], [0,5,2]);
+
+  a=mk({x:0,y:0}); b=mk({x:20,y:5}); c=mk({x:40,y:2});
+  api.alignObjects([a,b,c],'centerX');
+  eq('对齐-水平居中中心一致', boxes([a,b,c]).map(x=>(x.minX+x.maxX)/2), [25,25,25]);
+
+  a=mk({x:0,y:0}); b=mk({x:20,y:5}); c=mk({x:40,y:2});
+  api.alignObjects([a,b,c],'right');
+  eq('对齐-右边界一致', boxes([a,b,c]).map(x=>x.maxX), [50,50,50]);
+
+  a=mk({x:0,y:0}); b=mk({x:20,y:5}); c=mk({x:40,y:2});
+  api.alignObjects([a,b,c],'top');
+  eq('对齐-上边界一致', boxes([a,b,c]).map(x=>x.maxY), [15,15,15]);
+
+  a=mk({x:0,y:0}); b=mk({x:20,y:5}); c=mk({x:40,y:2});
+  api.alignObjects([a,b,c],'centerY');
+  approx('对齐-垂直居中 A', boxes([a])[0].minY+boxes([a])[0].maxY, 15);
+  approx('对齐-垂直居中 B', boxes([b])[0].minY+boxes([b])[0].maxY, 15);
+  approx('对齐-垂直居中 C', boxes([c])[0].minY+boxes([c])[0].maxY, 15);
+
+  a=mk({x:0,y:0}); b=mk({x:20,y:5}); c=mk({x:40,y:2});
+  api.alignObjects([a,b,c],'bottom');
+  eq('对齐-下边界一致', boxes([a,b,c]).map(x=>x.minY), [0,0,0]);
+  eq('对齐-返回对象数', api.alignObjects([a,b,c],'left'), 3);
+  const solo=mk({x:7,y:7});
+  eq('对齐-少于两个对象不移动', api.alignObjects([solo],'left'), 0);
+  eq('对齐-单对象坐标不变', [solo.x,solo.y], [7,7]);
+
+  const line=api.baseObject('line','line.boundary',{x:10,y:5,points:[[0,0],[10,0]]});
+  api.translateObject(line,5,-3);
+  eq('平移-折线锚点同步', [line.x,line.y], [15,2]);
+  eq('平移-折线节点同步', line.points, [[5,-3],[15,-3]]);
+
+  const p1=mk({x:0,y:0}), p2=mk({x:10,y:0}), p3=mk({x:40,y:0});
+  api.distributeObjects([p3,p1,p2],'x');
+  eq('分布-水平等间距', boxes([p1,p2,p3]).map(x=>(x.minX+x.maxX)/2), [5,25,45]);
+  eq('分布-首末保持不动', [p1.x,p3.x], [0,40]);
+
+  const q1=mk({x:0,y:0}), q2=mk({x:0,y:10}), q3=mk({x:0,y:40});
+  api.distributeObjects([q3,q1,q2],'y');
+  eq('分布-垂直等间距', boxes([q1,q2,q3]).map(x=>(x.minY+x.maxY)/2), [5,25,45]);
+  eq('分布-少于三个对象不移动', api.distributeObjects([p1,p2],'x'), 0);
   api.resetState();
 }
 

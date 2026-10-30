@@ -374,6 +374,13 @@
     '已撤销':'Undone', '已重做':'Redone', '已删除对象':'Objects deleted', '已复制对象':'Objects duplicated',
     '已新增图层':'Layer added', '已删除图层':'Layer deleted', '已修改图层':'Layer updated',
     '已批量平移':'Batch moved', '已批量旋转':'Batch rotated', '已隐藏对象':'Objects hidden', '已锁定对象':'Objects locked',
+    '对齐 / 分布':'Align / distribute', '左对齐':'Align left', '水平居中':'Center horizontally', '右对齐':'Align right',
+    '上对齐':'Align top', '垂直居中':'Center vertically', '下对齐':'Align bottom',
+    '水平分布':'Distribute horizontally', '垂直分布':'Distribute vertically',
+    '按对象包围盒对齐；分布保持首末对象不动、其余等间距。':
+      'Aligns by object bounding boxes; distribution keeps the first and last objects fixed and spaces the rest evenly.',
+    '至少选择两个对象':'Select at least two objects', '至少选择三个对象':'Select at least three objects',
+    '已对齐':'Aligned', '已分布':'Distributed',
     '至少保留一个图层':'Keep at least one layer', '请先移走该图层下的对象':'Move objects out of this layer first',
     '该类型仍被对象使用':'This type is still used by objects', '选中对象位于锁定图层':'Selected objects are on a locked layer',
     '没有可删除的选中对象（可能位于锁定图层）':'No deletable selection (it may be on a locked layer)',

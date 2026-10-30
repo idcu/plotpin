@@ -289,6 +289,49 @@ function objectBounds(o){
   const ps=objectPoints(o);
   return {minX:Math.min(...ps.map(p=>p[0])),maxX:Math.max(...ps.map(p=>p[0])),minY:Math.min(...ps.map(p=>p[1])),maxY:Math.max(...ps.map(p=>p[1]))};
 }
+/** 平移单个对象（点/区域移动锚点，折线与标注同步平移全部节点） */
+function translateObject(o,dx,dy){
+  if(!o||!(dx||dy)) return;
+  o.x=(Number(o.x)||0)+dx; o.y=(Number(o.y)||0)+dy;
+  if(o.points&&o.points.length) o.points=o.points.map(p=>[p[0]+dx,p[1]+dy]);
+  o.updatedAt=nowISO();
+}
+/** 多对象对齐：left/centerX/right/top/centerY/bottom，按各自包围盒对齐到选区外边界或中线 */
+function alignObjects(objs,mode){
+  const items=(objs||[]).filter(o=>o&&typeof o==='object');
+  if(items.length<2) return 0;
+  const boxes=items.map(objectBounds);
+  const minX=Math.min(...boxes.map(b=>b.minX)), maxX=Math.max(...boxes.map(b=>b.maxX));
+  const minY=Math.min(...boxes.map(b=>b.minY)), maxY=Math.max(...boxes.map(b=>b.maxY));
+  items.forEach((o,i)=>{
+    const b=boxes[i];
+    let dx=0, dy=0;
+    if(mode==='left') dx=minX-b.minX;
+    else if(mode==='centerX') dx=(minX+maxX)/2-(b.minX+b.maxX)/2;
+    else if(mode==='right') dx=maxX-b.maxX;
+    else if(mode==='top') dy=maxY-b.maxY;
+    else if(mode==='centerY') dy=(minY+maxY)/2-(b.minY+b.maxY)/2;
+    else if(mode==='bottom') dy=minY-b.minY;
+    translateObject(o,dx,dy);
+  });
+  return items.length;
+}
+/** 多对象等间距分布（按包围盒中心，首末保持不动）；axis=x 水平、y 垂直 */
+function distributeObjects(objs,axis='x'){
+  const items=(objs||[]).filter(o=>o&&typeof o==='object');
+  if(items.length<3) return 0;
+  const useY=axis==='y';
+  const list=items.map(o=>{
+    const b=objectBounds(o);
+    return {o, c:useY?(b.minY+b.maxY)/2:(b.minX+b.maxX)/2};
+  }).sort((a,b)=>a.c-b.c);
+  const first=list[0].c, last=list[list.length-1].c, step=(last-first)/(list.length-1);
+  list.forEach((it,i)=>{
+    const d=first+step*i-it.c;
+    translateObject(it.o, useY?0:d, useY?d:0);
+  });
+  return list.length;
+}
 function boundsIntersect(a,b){ return !(a.maxX<b.minX||b.maxX<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
 
 /* -------------------- 统一参数形状（区域与矢量场地共用） -------------------- */
