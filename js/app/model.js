@@ -144,6 +144,49 @@ function nextObjectId(){
   while(used.has('O' + String(n).padStart(4,'0'))) n++;
   return 'O' + String(n).padStart(4,'0');
 }
+/** 全工程既有对象编号（跨楼层唯一性检查用） */
+function allObjectNames(){
+  const used=new Set();
+  state.objects.forEach(o=>{ if(o&&o.name) used.add(o.name); });
+  (state.floors||[]).forEach(f=>{
+    if(f.id===state.activeFloorId) return;
+    (f.objects||[]).forEach(o=>{ if(o&&o.name) used.add(o.name); });
+  });
+  return used;
+}
+/** 批量重排编号：prefix+三位序号，按 start/step 递增，自动跳过 used 中已占用编号。
+ *  直接改写对象 name/updatedAt，返回处理数量；调用方负责撤销快照。 */
+function renumberObjects(objs,prefix,start=1,step=1,used){
+  const items=(objs||[]).filter(Boolean);
+  if(!items.length) return 0;
+  const prefixText=String(prefix??'');
+  let seq=Number.isFinite(Number(start))?Math.max(0,Math.floor(Number(start))):1;
+  const stride=Number.isFinite(Number(step))?Math.max(1,Math.floor(Number(step))):1;
+  const reserved=used instanceof Set?used:new Set(Array.isArray(used)?used:[]);
+  items.forEach(o=>{
+    let name;
+    do{ name=prefixText+String(seq).padStart(3,'0'); seq+=stride; }while(reserved.has(name));
+    o.name=name; o.updatedAt=nowISO(); reserved.add(name);
+  });
+  return items.length;
+}
+/** 批量置顶/置底：直接重排对象数组并归一 z（与 commitChange 的 z=顺序 不变式一致），
+ *  所选对象之间保持原有视觉顺序。 */
+function restackObjects(objects,ids,mode){
+  const arr=Array.isArray(objects)?objects:[];
+  const idSet=ids instanceof Set?ids:new Set(Array.isArray(ids)?ids:[]);
+  const order=arr.map((o,i)=>({o,i,z:Number.isFinite(Number(o&&o.z))?Number(o.z):i}))
+    .sort((a,b)=>a.z-b.z||a.i-b.i).map(x=>x.o);
+  const sel=order.filter(o=>o&&idSet.has(o.id));
+  if(!sel.length) return 0;
+  const rest=order.filter(o=>o&&!idSet.has(o.id));
+  const ordered=mode==='front'?rest.concat(sel):sel.concat(rest);
+  const stamp=nowISO();
+  sel.forEach(o=>{ o.updatedAt=stamp; });
+  arr.length=0; arr.push(...ordered);
+  arr.forEach((o,i)=>{ o.z=i; });
+  return sel.length;
+}
 /** @template T @param {T} v @returns {T} */
 function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
 /** @returns {string} ISO 时间 */

@@ -381,6 +381,11 @@
       'Aligns by object bounding boxes; distribution keeps the first and last objects fixed and spaces the rest evenly.',
     '至少选择两个对象':'Select at least two objects', '至少选择三个对象':'Select at least three objects',
     '已对齐':'Aligned', '已分布':'Distributed',
+    '编号 / 层级':'Numbering / z-order', '编号前缀':'Number prefix', '起始序号':'Start number', '步长':'Step',
+    '批量编号':'Renumber selected', '置顶':'Bring to front', '置底':'Send to back',
+    '编号跨楼层自动避让；置顶/置底改变叠放顺序。':
+      'Numbering avoids duplicates across floors; front/back changes stacking order.',
+    '已重新编号':'Renumbered', '已置顶':'Brought to front', '已置底':'Sent to back',
     '至少保留一个图层':'Keep at least one layer', '请先移走该图层下的对象':'Move objects out of this layer first',
     '该类型仍被对象使用':'This type is still used by objects', '选中对象位于锁定图层':'Selected objects are on a locked layer',
     '没有可删除的选中对象（可能位于锁定图层）':'No deletable selection (it may be on a locked layer)',
@@ -422,6 +427,11 @@
     [/^盲区多边形已导出：(\d+) 个面（合计 (.+) ㎡）$/, 'Blind-spot polygons exported: $1 features ($2 m² total)'],
     [/^PDF 已导出：图纸 1 页 \+ 清单 (\d+) 页$/, 'PDF exported: 1 drawing page + $1 list pages'],
     [/^多楼层 PDF 已导出：(\d+) 层 \/ (\d+) 页$/, 'Multi-floor PDF exported: $1 floors / $2 pages'],
+    [/^已对齐 (\d+) 个对象$/, 'Aligned $1 objects'],
+    [/^已分布 (\d+) 个对象$/, 'Distributed $1 objects'],
+    [/^已重新编号 (\d+) 个对象$/, 'Renumbered $1 objects'],
+    [/^已置顶 (\d+) 个对象$/, 'Brought $1 objects to front'],
+    [/^已置底 (\d+) 个对象$/, 'Sent $1 objects to back'],
     [/^PDF 生成失败：(.+)$/, 'PDF generation failed: $1'],
     [/^不支持的文件类型：\.(.+)（支持 JSON 工程 \/ DXF \/ PDF \/ CSV·TSV·XLSX 表格 \/ 图片底图）$/,
       'Unsupported file type: .$1 (supported: JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)']

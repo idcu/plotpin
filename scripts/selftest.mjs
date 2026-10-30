@@ -97,6 +97,7 @@ code += `\n;globalThis.__api = {
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds,
   translateObject, alignObjects, distributeObjects, objectBounds,
+  renumberObjects, restackObjects, allObjectNames,
   get history(){ return history; },
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
@@ -3731,6 +3732,50 @@ asyncSuites.push((async()=>{
   api.distributeObjects([q3,q1,q2],'y');
   eq('分布-垂直等间距', boxes([q1,q2,q3]).map(x=>(x.minY+x.maxY)/2), [5,25,45]);
   eq('分布-少于三个对象不移动', api.distributeObjects([p1,p2],'x'), 0);
+  api.resetState();
+}
+
+/* 66. 批量编号与层级：跨层避让、步长/空前缀/非法参数、置顶置底 ------------------ */
+{
+  const st=api.resetState();
+  const mk=(name,z)=>api.baseObject('point','point.marker',{name,x:1,y:1,z});
+  const a=mk('A',0), b=mk('B',1), c=mk('C',2);
+  const used=new Set(['P001','P003']);
+  eq('编号-处理数量', api.renumberObjects([a,b,c],'P',1,1,used), 3);
+  eq('编号-自动跳过已占用', [a.name,b.name,c.name], ['P002','P004','P005']);
+  eq('编号-新编号写回 used', used.has('P005'), true);
+
+  const d=mk('D',3), e=mk('E',4);
+  api.renumberObjects([d,e],'CAM',10,2,new Set());
+  eq('编号-步长递增', [d.name,e.name], ['CAM010','CAM012']);
+  const f=mk('F',5), g=mk('G',6);
+  api.renumberObjects([f,g],'',1,1,new Set());
+  eq('编号-空前缀为纯序号', [f.name,g.name], ['001','002']);
+  const h=mk('H',7), i=mk('I',8);
+  api.renumberObjects([h,i],'Q',NaN,0,new Set());
+  eq('编号-非法起始与步长回退', [h.name,i.name], ['Q001','Q002']);
+
+  st.objects.push(mk('A',0), mk('B',1));
+  st.floors.push({id:'floor.F2',name:'2F',background:st.background,objects:[mk('C2',0)],viewport:st.viewport});
+  const names=api.allObjectNames();
+  ok('编号-全工程编号含非当前层', names.has('A')&&names.has('B')&&names.has('C2'));
+
+  const o1=mk('o1',0), o2=mk('o2',1), o3=mk('o3',2), o4=mk('o4',3);
+  const all=[o1,o2,o3,o4];
+  const reset=()=>{ all.length=0; all.push(o1,o2,o3,o4); all.forEach((o,i)=>o.z=i); };
+  eq('层级-置顶数量', api.restackObjects(all,new Set([o1.id,o3.id]),'front'), 2);
+  eq('层级-置顶后数组顺序', all.map(o=>o.name), ['o2','o4','o1','o3']);
+  eq('层级-置顶后 z 归一', all.map(o=>o.z), [0,1,2,3]);
+
+  reset();
+  eq('层级-置底数量', api.restackObjects(all,new Set([o1.id,o3.id]),'back'), 2);
+  eq('层级-置底后数组顺序', all.map(o=>o.name), ['o1','o3','o2','o4']);
+  eq('层级-置底后 z 归一', all.map(o=>o.z), [0,1,2,3]);
+  eq('层级-空选择不处理', api.restackObjects(all,new Set(),'front'), 0);
+
+  reset();
+  api.restackObjects(all,new Set([o4.id,o1.id]),'front');
+  eq('层级-多选保持相对视觉顺序', all.map(o=>o.name), ['o2','o3','o1','o4']);
   api.resetState();
 }
 

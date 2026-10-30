@@ -316,6 +316,19 @@ function renderMultiProps(box,objs){
         <button class="mini" data-distribute="y">${esc(L('垂直分布'))}</button>
       </div>
       <p class="hint-text">${esc(L('按对象包围盒对齐；分布保持首末对象不动、其余等间距。'))}</p>
+    </div>
+    <div class="section"><h3>${esc(L('编号 / 层级'))}</h3>
+      <div class="form-grid">
+        <label>${esc(L('编号前缀'))}</label><input id="multiPrefix" value="P">
+        <label>${esc(L('起始序号'))}</label><input type="number" id="multiStart" min="0" step="1" value="1">
+        <label>${esc(L('步长'))}</label><input type="number" id="multiStep" min="1" step="1" value="1">
+      </div>
+      <div class="form-actions">
+        <button class="mini" id="multiRenumberBtn">${esc(L('批量编号'))}</button>
+        <button class="mini" id="multiFrontBtn">${esc(L('置顶'))}</button>
+        <button class="mini" id="multiBackBtn">${esc(L('置底'))}</button>
+      </div>
+      <p class="hint-text">${esc(L('编号跨楼层自动避让；置顶/置底改变叠放顺序。'))}</p>
     </div>`;
   $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层'); };
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
@@ -340,6 +353,27 @@ function renderMultiProps(box,objs){
       commitChange(L('已分布')+' '+n+' '+L('个对象'));
     };
   });
+  if($('multiRenumberBtn')) $('multiRenumberBtn').onclick=()=>{
+    const items=objs.filter(isEditable);
+    if(!items.length) return toast(L('选中对象位于锁定图层'),'warn');
+    const prefix=String($('multiPrefix').value||'').trim()||'P';
+    const startRaw=Number($('multiStart').value), stepRaw=Number($('multiStep').value);
+    const start=Number.isFinite(startRaw)?Math.max(0,Math.floor(startRaw)):1;
+    const step=Number.isFinite(stepRaw)?Math.max(1,Math.floor(stepRaw)):1;
+    const used=allObjectNames(); items.forEach(o=>used.delete(o.name));
+    pushHistory();
+    const n=renumberObjects(items,prefix,start,step,used);
+    commitChange(L('已重新编号')+' '+n+' '+L('个对象'));
+  };
+  const restack=mode=>{
+    const items=objs.filter(isEditable);
+    if(!items.length) return toast(L('选中对象位于锁定图层'),'warn');
+    pushHistory();
+    const n=restackObjects(state.objects,new Set(items.map(o=>o.id)),mode);
+    commitChange((mode==='front'?L('已置顶'):L('已置底'))+' '+n+' '+L('个对象'));
+  };
+  if($('multiFrontBtn')) $('multiFrontBtn').onclick=()=>restack('front');
+  if($('multiBackBtn')) $('multiBackBtn').onclick=()=>restack('back');
 }
 function bindPropEvents(box,o){
   box.addEventListener('focusin',()=>pushHistory(),{once:true});
