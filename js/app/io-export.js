@@ -108,9 +108,10 @@ async function exportJSON(){
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
   toast('JSON 工程已导出（含底图与设备照片）','success');
 }
-const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','X','Y','角度','宽度','高度','形状','形状参数','闭合','标注类型','节点坐标','节点数','长度','面积','显示','锁定','备注','更新时间'];
-function objectRows(){
-  return state.objects.map(o=>{
+const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','X','Y','角度','宽度','高度','形状','形状参数','闭合','标注类型','节点坐标','节点数','长度','面积','显示','锁定','备注','更新时间','楼层'];
+function objectRows(objs=state.objects,floorName){
+  const fname=floorName===undefined?currentFloorName():floorName;
+  return objs.map(o=>{
     const t=getType(o.typeId),l=layerOf(o);
     /* 非矩形区域：宽/高列填外接盒尺寸（圆/扇形=2r，椭圆=2rx×2ry），形状列保留精确类型，面积仍取精确值 */
     let w='',h='',ang=o.angle||0,shape='',shapeParam='';
@@ -132,12 +133,20 @@ function objectRows(){
       标注类型:o.kind==='dimension'?(DIM_SUB_LABELS[o.subtype]||o.subtype||''):'',
       节点坐标:(o.kind==='line'||o.kind==='dimension')&&o.points?.length?formatNodeCoords(o.points):'',
       节点数:o.points?.length||0,长度:objectLength(o)?fmt(objectLength(o)):'',面积:objectArea(o)?fmt(objectArea(o)):'',
-      显示:o.visible?'是':'否',锁定:o.locked?'是':'否',备注:o.props.note||'',更新时间:o.updatedAt
+      显示:o.visible?'是':'否',锁定:o.locked?'是':'否',备注:o.props.note||'',更新时间:o.updatedAt,楼层:fname
     };
   });
 }
+/** 全楼层行（当前层对象取 state.objects，其余层取楼层条目） */
+function objectRowsAll(){
+  syncActiveFloor();
+  return (state.floors||[]).flatMap(f=>objectRows(
+    f.id===state.activeFloorId?state.objects:(f.objects||[]),
+    f.name
+  ));
+}
 function exportDelimited(delim,ext,mime){
-  const rows=objectRows(); const cols=TABLE_COLUMNS;
+  const rows=objectRowsAll(); const cols=TABLE_COLUMNS;
   const text='\ufeff'+[cols.join(delim),...rows.map(r=>cols.map(c=>csvCell(r[c],delim)).join(delim))].join('\n');
   downloadBlob(new Blob([text],{type:mime}),safeName()+'.'+ext);
 }
@@ -145,7 +154,7 @@ function csvCell(v,delim){ const s=String(v??''); return /[",\n\r\t]/.test(s)?'"
 /** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返） */
 function exportXlsx(){
   const cols=TABLE_COLUMNS;
-  const table=[cols,...objectRows().map(r=>cols.map(c=>String(r[c]??'')))];
+  const table=[cols,...objectRowsAll().map(r=>cols.map(c=>String(r[c]??'')))];
   const buf=Xlsx.build(table, '图纸标注');
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
   toast('XLSX 已导出（可再次导入更新对象属性）','success');

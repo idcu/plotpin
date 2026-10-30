@@ -191,20 +191,37 @@ function rowsToObjectsPlan(rows){
     return {updates:[],creates:[],warnings:['首行未找到「编号/对象类型」表头，请使用本工具导出的 CSV/TSV/XLSX 模板']};
   }
   const cell=(r,name)=>idx[name]!==undefined?String(r[idx[name]]??'').trim():'';
-  const byCode=new Map(state.objects.map(o=>[o.name,o]));
+  syncActiveFloor();
+  const floors=(state.floors||[]).map(f=>({id:f.id,name:f.name,active:f.id===state.activeFloorId,objects:Array.isArray(f.objects)?f.objects:[]}));
+  const current=floors.find(f=>f.active);
+  if(!current) floors.push({id:state.activeFloorId||'',name:currentFloorName(),active:true,objects:state.objects});
+  const floorByName=new Map(floors.map(f=>[String(f.name||'').trim(),f]));
+  const codeMaps=new Map(floors.map(f=>[f.id,new Map((f.objects||[]).map(o=>[o.name,o]))]));
   const updates=[],creates=[];
   const check=(where,c,cnd)=>checkRowGeom(where,c,cnd).forEach(w=>warnings.push(w));
   rows.slice(1).forEach((r,i)=>{
     const lineNo=i+2;
     if(!r.some(v=>String(v??'').trim()!=='')) return;
     const code=cell(r,'编号');
-    const where='第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'');
+    const rowFloor=cell(r,'楼层');
+    let ctx=current;
+    if(rowFloor){
+      const f=floorByName.get(rowFloor);
+      if(!f){ warnings.push('第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+'：未知楼层「'+rowFloor+'」，已跳过'); return; }
+      ctx=f;
+    }
+    const where='第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+(rowFloor?'［楼层 '+rowFloor+'］':'');
     const c=name=>cell(r,name);
-    if(code&&byCode.has(code)){
-      const obj=byCode.get(code);
+    const floorCodes=codeMaps.get(ctx.id);
+    if(code&&floorCodes&&floorCodes.has(code)){
+      const obj=floorCodes.get(code);
       check(where,c,previewGeomCandidate(obj,c));
-      updates.push({obj,cell:c});
+      updates.push({obj,cell:c,floorId:ctx.id});
       return;
+    }
+    if(code){
+      const other=floors.find(f=>f.id!==ctx.id&&codeMaps.get(f.id)&&codeMaps.get(f.id).has(code));
+      if(other){ warnings.push(where+'：编号「'+code+'」已存在于楼层「'+other.name+'」，为避免重复已跳过'); return; }
     }
     const kind=TABLE_KIND_BY_NAME[cell(r,'对象类型')];
     if(!kind){ warnings.push(where+'：对象类型「'+(cell(r,'对象类型')||'空')+'」无法识别，已跳过'); return; }
@@ -220,7 +237,7 @@ function rowsToObjectsPlan(rows){
       }
       const closed=kind==='line'&&tableBool(c('闭合'));
       if(closed&&pts.length<3){ warnings.push(where+'：闭合折线至少需要 3 个节点，已按开放折线处理'); }
-      const cr={kind,x,y,closed:closed&&pts.length>=3,subtype,points:pts,cell:c};
+      const cr={kind,x,y,closed:closed&&pts.length>=3,subtype,points:pts,cell:c,floorId:ctx.id};
       const cnd=baseObject(kind);
       cnd.points=pts;
       if(kind==='line') cnd.closed=cr.closed; else cnd.subtype=subtype;
@@ -242,11 +259,11 @@ function rowsToObjectsPlan(rows){
       const cnd=baseObject(kind);
       applyRowShape(cnd,AREA_SHAPE_LABELS[shape],{x,y,w,h,angle:tableNum(c('角度')),params:parseShapeParams(c('形状参数'))});
       check(where,c,cnd);
-      creates.push({kind,x,y,shape,cell:c});
+      creates.push({kind,x,y,shape,cell:c,floorId:ctx.id});
       return;
     }
     check(where,c,baseObject(kind));   /* 点设备/文字：长度面积应为空或 0 */
-    creates.push({kind,x,y,cell:c});
+    creates.push({kind,x,y,cell:c,floorId:ctx.id});
   });
   return {updates,creates,warnings};
 }
@@ -268,6 +285,8 @@ function showTableImportPreview(fileName,plan){
 }
 function applyTableImport(plan){
   pushHistory();
+  syncActiveFloor();
+  const floorObjects=new Map((state.floors||[]).map(f=>[f.id,Array.isArray(f.objects)?f.objects:null]));
   let updated=0,created=0;
   plan.updates.forEach(u=>{
     const o=u.obj,c=u.cell;
@@ -351,7 +370,10 @@ function applyTableImport(plan){
     const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
     const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
     applyLedgerCells(o,c);
-    state.objects.push(o); created++;
+    const target=cr.floorId&&cr.floorId!==state.activeFloorId?floorObjects.get(cr.floorId):null;
+    const list=target||state.objects;
+    o.z=list.length;
+    list.push(o); created++;
   });
   selectedIds.clear();
   commitChange('表格导入完成：更新 '+updated+' 项，新增 '+created+' 项');

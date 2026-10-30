@@ -120,7 +120,7 @@ code += `\n;globalThis.__api = {
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
   $, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
-  objectRows, formatNodeCoords, parseNodeCoords,
+  objectRows, objectRowsAll, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
@@ -3776,6 +3776,52 @@ asyncSuites.push((async()=>{
   reset();
   api.restackObjects(all,new Set([o4.id,o1.id]),'front');
   eq('层级-多选保持相对视觉顺序', all.map(o=>o.name), ['o2','o3','o1','o4']);
+  api.resetState();
+}
+
+/* 67. 多楼层台账：导出楼层列、导入按楼层路由、未知楼层与跨层重号 ------------ */
+{
+  const st=api.resetState();
+  st.objects.push(api.baseObject('point','point.marker',{name:'A',x:1,y:1}));
+  api.syncActiveFloor();
+  const init=api.createInitialState();
+  st.floors.push({id:'floor.F2',name:'2F',background:init.background,
+    objects:[api.baseObject('point','point.marker',{name:'B',x:2,y:2})],viewport:init.viewport});
+
+  const rows=api.objectRowsAll();
+  eq('台账-全楼层行数', rows.length, 2);
+  eq('台账-楼层列', rows.map(r=>r.楼层), ['1F','2F']);
+
+  const C=api.TABLE_COLUMNS;
+  const header=C.slice();
+  const rowFor=o=>C.map(k=>o[k]??'');
+  const bRow=rows.find(r=>r.编号==='B');
+  const upd=rowFor(Object.assign({},bRow,{X:'9.50',Y:'8.50',楼层:'2F'}));
+  const p1=api.rowsToObjectsPlan([header,upd]);
+  eq('台账-跨层更新命中', p1.updates.length, 1);
+  eq('台账-跨层更新目标楼层', p1.updates[0].floorId, 'floor.F2');
+  api.applyTableImport(p1);
+  const f2=api.state.floors.find(f=>f.id==='floor.F2');
+  const b=f2.objects.find(o=>o.name==='B');
+  approx('台账-跨层更新 X', b.x, 9.5);
+  approx('台账-跨层更新 Y', b.y, 8.5);
+  eq('台账-活动层对象数不变', api.state.objects.length, 1);
+
+  const newRow=C.map(k=>({'编号':'C2','对象类型':'点设备','业务类型':'通用标记','X':'5','Y':'6','楼层':'2F'}[k]??''));
+  const p2=api.rowsToObjectsPlan([header,newRow]);
+  eq('台账-跨层新建数', p2.creates.length, 1);
+  eq('台账-跨层新建目标楼层', p2.creates[0].floorId, 'floor.F2');
+  api.applyTableImport(p2);
+  eq('台账-2F 新增对象', f2.objects.length, 2);
+  eq('台账-当前层仍 1 个', api.state.objects.length, 1);
+
+  const bad=C.map(k=>({'编号':'X9','对象类型':'点设备','X':'1','Y':'2','楼层':'9F'}[k]??''));
+  const p3=api.rowsToObjectsPlan([header,bad]);
+  ok('台账-未知楼层告警且不新建', p3.creates.length===0&&p3.warnings.some(w=>w.includes('9F')));
+
+  const dup=C.map(k=>({'编号':'A','对象类型':'点设备','X':'1','Y':'2','楼层':'2F'}[k]??''));
+  const p4=api.rowsToObjectsPlan([header,dup]);
+  ok('台账-跨层重号跳过', p4.creates.length===0&&p4.warnings.some(w=>w.includes('已存在于楼层')));
   api.resetState();
 }
 
