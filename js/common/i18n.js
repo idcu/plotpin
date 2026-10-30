@@ -421,6 +421,7 @@
     [/^已导出 (\d+) 张设备二维码标签（可打印）$/, 'Exported $1 device QR labels (printable)'],
     [/^盲区多边形已导出：(\d+) 个面（合计 (.+) ㎡）$/, 'Blind-spot polygons exported: $1 features ($2 m² total)'],
     [/^PDF 已导出：图纸 1 页 \+ 清单 (\d+) 页$/, 'PDF exported: 1 drawing page + $1 list pages'],
+    [/^多楼层 PDF 已导出：(\d+) 层 \/ (\d+) 页$/, 'Multi-floor PDF exported: $1 floors / $2 pages'],
     [/^PDF 生成失败：(.+)$/, 'PDF generation failed: $1'],
     [/^不支持的文件类型：\.(.+)（支持 JSON 工程 \/ DXF \/ PDF \/ CSV·TSV·XLSX 表格 \/ 图片底图）$/,
       'Unsupported file type: .$1 (supported: JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)']
@@ -461,6 +462,9 @@
     '扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。':
       'Scan to get PLOTPIN:ID; search this ID in the project to locate the device. Generated offline by PlotPin with no external resources.',
     '图纸标注报告':'Drawing annotation report', '生成时间：':'Generated: ', '统计摘要':'Summary',
+    '统计摘要（全部楼层）':'Summary (all floors)', '正在生成多楼层报告…':'Generating multi-floor report…',
+    '正在生成多楼层 PDF…':'Generating multi-floor PDF…', '报告生成失败：':'Report generation failed: ',
+    '每层图纸与对象清单见后；几何检查按层列出。':'Per-floor drawings and object lists follow; geometry checks are listed by floor.',
     '对象总数：':'Total objects: ', '点设备：':'Points: ', '区域：':'Areas: ', '折线：':'Polylines: ',
     '几何检查：':'Geometry check: ', '项提示':'warnings', '未发现明显问题':'No obvious issues',
     '对象清单':'Object list', '清单超过 180 行，已在打印版截断；完整数据请导出 JSON/CSV。':

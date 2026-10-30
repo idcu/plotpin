@@ -387,7 +387,7 @@ function canvasToJpegBase64(canvas,quality=.92){
   return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('JPEG 编码失败')),'image/jpeg',quality))
     .then(b=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); }));
 }
-async function renderPdfDrawingPage(){
+async function renderPdfDrawingPage(floorName){
   const W=1748,H=1240;   /* A4 横向 150dpi 像素 */
   const c=document.createElement('canvas'); c.width=W; c.height=H;
   const cc=c.getContext('2d'); cc.fillStyle='#fff'; cc.fillRect(0,0,W,H);
@@ -395,11 +395,11 @@ async function renderPdfDrawingPage(){
   const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
   drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
   cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
-  cc.fillText(state.meta.name+' · '+siteDescription(),margin,H-14);
+  cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription(),margin,H-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
 const PDF_COLS=[['编号',110],['名称',120],['对象类型',100],['业务类型',130],['图层',110],['X',90],['Y',90],['参数',190],['长度',90],['面积',100]];
-async function renderPdfListPages(){
+async function renderPdfListPages(floorName){
   const W=1240,H=1748, margin=48, rowH=30, headH=40;
   const rows=objectRows(), pages=[];
   const per=Math.floor((H-margin*2-150)/rowH);
@@ -409,7 +409,7 @@ async function renderPdfListPages(){
     const c=document.createElement('canvas'); c.width=W; c.height=H;
     const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,W,H);
     g.fillStyle='#111827'; g.font='bold 26px Microsoft YaHei,Arial'; g.textBaseline='alphabetic';
-    g.fillText(state.meta.name+' — '+L('对象清单'),margin,margin+8);
+    g.fillText(state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单'),margin,margin+8);
     g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
     g.fillText(L('共')+' '+rows.length+' '+L('个对象')+' · '+L('第')+' '+(pi+1)+' / '+total+' '+L('页')+' · '+new Date().toLocaleString(),margin,margin+34);
     let y=margin+70;
@@ -438,42 +438,113 @@ async function renderPdfListPages(){
 }
 async function exportPDF(){
   try{
-    const pages=[await renderPdfDrawingPage(),...await renderPdfListPages()];
+    const fs=floorSummaries();
+    let pages=[];
+    if(fs.rows.length<=1){
+      pages=[await renderPdfDrawingPage(),...await renderPdfListPages()];
+    }else{
+      toast(L('正在生成多楼层 PDF…'));
+      for(const row of fs.rows){
+        await withFloor(row.id, async()=>{
+          pages.push(await renderPdfDrawingPage(row.name));
+          pages.push(...await renderPdfListPages(row.name));
+        });
+      }
+    }
     const buf=Pdf.buildImagePdf(pages);
     downloadBlob(new Blob([buf],{type:'application/pdf'}),safeName()+'.pdf');
-    toast('PDF 已导出：图纸 1 页 + 清单 '+ (pages.length-1) +' 页','success');
+    const msg=fs.rows.length>1
+      ? '多楼层 PDF 已导出：'+fs.rows.length+' 层 / '+pages.length+' 页'
+      : 'PDF 已导出：图纸 1 页 + 清单 '+ (pages.length-1) +' 页';
+    toast(msg,'success');
   }catch(e){ toast('PDF 生成失败：'+e.message,'error'); }
 }
 
 /* -------------------- 打印 / PDF 报告 -------------------- */
-$('printBtn').onclick=()=>{
-  const rows=objectRows(), issues=findIssues(), img=renderToDataURL(1.5), fs=floorSummaries();
-  const cols=['编号','对象类型','业务类型','图层','X','Y','参数'];
-  const floorCols=['楼层','对象','点设备','区域','折线','总长','总面积'];
-  $('report').innerHTML=`
-    <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
-      <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
-      <div style="color:#555;margin-bottom:14px">${esc(L('生成时间：'))}${new Date().toLocaleString()} ｜ ${esc(siteDescription())}</div>
-      <img src="${img}" style="width:100%;max-height:58vh;object-fit:contain;border:1px solid #ccc">
-      <h2>${esc(L('统计摘要'))}</h2>
-      <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${state.objects.filter(o=>o.kind==='point').length} ｜ ${esc(L('区域：'))}${state.objects.filter(o=>o.kind==='rect').length} ｜ ${esc(L('折线：'))}${state.objects.filter(o=>o.kind==='line').length}</p>
-      <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
-      ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
-      ${fs.rows.length>1?`<h2>${esc(L('楼层汇总'))}</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead><tr>${floorCols.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${esc(L(c))}</th>`).join('')}</tr></thead>
-          <tbody>${fs.rows.map(r=>`<tr><td style="border:1px solid #ccc;padding:4px">${esc(r.name)}${r.active?' ★':''}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.count}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.counts.point}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.counts.rect}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${r.counts.line}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(r.len)} m</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(r.area)} ㎡</td></tr>`).join('')}
-          <tr style="font-weight:700;background:#f3f4f6"><td style="border:1px solid #ccc;padding:4px">${esc(L('全楼合计'))}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.count}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.counts.point}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.counts.rect}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fs.total.counts.line}</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(fs.total.len)} m</td><td style="border:1px solid #ccc;padding:4px;text-align:right">${fmt(fs.total.area)} ㎡</td></tr>
-          </tbody></table>
-        <p style="color:#666">${esc(L('汇总覆盖全部楼层；上方图纸与几何检查为当前楼层。'))}</p>`:''}
-    </div>
-    <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
-      <h2>${esc(L('对象清单'))}</h2>
+const REPORT_LIST_COLS=['编号','对象类型','业务类型','图层','X','Y','参数'];
+/** 对象清单页（每层独立分页，超 180 行截断并提示） */
+function reportListPageHtml(rows,title){
+  return `<div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
+      <h2>${esc(title)}</h2>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr>${cols.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${esc(L(c))}</th>`).join('')}</tr></thead>
-        <tbody>${rows.slice(0,180).map(r=>`<tr>${cols.map(c=>`<td style="border:1px solid #ccc;padding:4px">${esc(c==='对象类型'?L(r[c]):r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
+        <thead><tr>${REPORT_LIST_COLS.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${esc(L(c))}</th>`).join('')}</tr></thead>
+        <tbody>${rows.slice(0,180).map(r=>`<tr>${REPORT_LIST_COLS.map(c=>`<td style="border:1px solid #ccc;padding:4px">${esc(c==='对象类型'?L(r[c]):r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
       </table>
       ${rows.length>180?`<p style="color:#666">${esc(L('清单超过 180 行，已在打印版截断；完整数据请导出 JSON/CSV。'))}</p>`:''}
     </div>`;
-  window.print();
+}
+/** 楼层汇总表（全部楼层；与统计页签共用 floorSummaries 的口径） */
+function reportFloorSummaryTableHtml(fs){
+  const floorCols=['楼层','对象','点设备','区域','折线','总长','总面积'];
+  const cell=(v,align)=>`<td style="border:1px solid #ccc;padding:4px${align?';text-align:right':''}">${v}</td>`;
+  return `<table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr>${floorCols.map(c=>`<th style="border:1px solid #999;padding:4px;background:#eee">${esc(L(c))}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${fs.rows.map(r=>`<tr><td style="border:1px solid #ccc;padding:4px">${esc(r.name)}${r.active?' ★':''}</td>${cell(r.count,1)}${cell(r.counts.point,1)}${cell(r.counts.rect,1)}${cell(r.counts.line,1)}${cell(fmt(r.len)+' m',1)}${cell(fmt(r.area)+' ㎡',1)}</tr>`).join('')}
+        <tr style="font-weight:700;background:#f3f4f6">${cell(esc(L('全楼合计')))}${cell(fs.total.count,1)}${cell(fs.total.counts.point,1)}${cell(fs.total.counts.rect,1)}${cell(fs.total.counts.line,1)}${cell(fmt(fs.total.len)+' m',1)}${cell(fmt(fs.total.area)+' ㎡',1)}</tr>
+      </tbody></table>`;
+}
+/** 单层图纸页（标题含楼层名） */
+function reportFloorPageHtml(name,img){
+  const counts={point:0,rect:0,line:0,text:0,dimension:0};
+  state.objects.forEach(o=>{ counts[o.kind]=(counts[o.kind]||0)+1; });
+  const area=state.objects.reduce((s,o)=>s+objectArea(o),0);
+  const len=state.objects.reduce((s,o)=>s+objectLength(o),0);
+  const issues=findIssues();
+  return `<div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
+      <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(name)}</h1>
+      <div style="color:#555;margin-bottom:14px">${esc(L('生成时间：'))}${new Date().toLocaleString()} ｜ ${esc(siteDescription())}</div>
+      <img src="${img}" style="width:100%;max-height:58vh;object-fit:contain;border:1px solid #ccc">
+      <h2>${esc(L('统计摘要'))}</h2>
+      <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${counts.point} ｜ ${esc(L('区域：'))}${counts.rect} ｜ ${esc(L('折线：'))}${counts.line}</p>
+      <p>${esc(L('标注总长：'))}${fmt(len)} m ｜ ${esc(L('区域总面积：'))}${fmt(area)} ㎡</p>
+      <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
+      ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
+    </div>`;
+}
+$('printBtn').onclick=async()=>{
+  if(window.__printingReport) return;
+  window.__printingReport=true;
+  try{
+    const fs=floorSummaries();
+    if(fs.rows.length<=1){
+      const rows=objectRows(), issues=findIssues(), img=renderToDataURL(1.5);
+      $('report').innerHTML=`
+        <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
+          <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
+          <div style="color:#555;margin-bottom:14px">${esc(L('生成时间：'))}${new Date().toLocaleString()} ｜ ${esc(siteDescription())}</div>
+          <img src="${img}" style="width:100%;max-height:58vh;object-fit:contain;border:1px solid #ccc">
+          <h2>${esc(L('统计摘要'))}</h2>
+          <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${state.objects.filter(o=>o.kind==='point').length} ｜ ${esc(L('区域：'))}${state.objects.filter(o=>o.kind==='rect').length} ｜ ${esc(L('折线：'))}${state.objects.filter(o=>o.kind==='line').length}</p>
+          <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
+          ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
+        </div>
+        ${reportListPageHtml(rows,L('对象清单'))}`;
+    }else{
+      toast(L('正在生成多楼层报告…'));
+      const pages=[`<div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
+          <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
+          <div style="color:#555;margin-bottom:14px">${esc(L('生成时间：'))}${new Date().toLocaleString()} ｜ ${fs.rows.length} ${esc(L('层'))}</div>
+          <h2>${esc(L('统计摘要（全部楼层）'))}</h2>
+          <p>${esc(L('对象总数：'))}${fs.total.count} ｜ ${esc(L('点设备：'))}${fs.total.counts.point} ｜ ${esc(L('区域：'))}${fs.total.counts.rect} ｜ ${esc(L('折线：'))}${fs.total.counts.line}</p>
+          <p>${esc(L('标注总长：'))}${fmt(fs.total.len)} m ｜ ${esc(L('区域总面积：'))}${fmt(fs.total.area)} ㎡</p>
+          <h2>${esc(L('楼层汇总'))}</h2>
+          ${reportFloorSummaryTableHtml(fs)}
+          <p style="color:#666">${esc(L('每层图纸与对象清单见后；几何检查按层列出。'))}</p>
+        </div>`];
+      for(const row of fs.rows){
+        await withFloor(row.id, ()=>{
+          const img=renderToDataURL(1.2);
+          pages.push(reportFloorPageHtml(row.name,img));
+          pages.push(reportListPageHtml(objectRows(),row.name+' — '+L('对象清单')));
+        });
+      }
+      $('report').innerHTML=pages.join('');
+    }
+    window.print();
+  }catch(e){
+    toast(L('报告生成失败：')+e.message,'error');
+  }finally{
+    window.__printingReport=false;
+  }
 };

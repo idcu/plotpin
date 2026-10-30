@@ -302,6 +302,24 @@ async function switchFloor(id){
   fitView(); requestRender(); renderProps();
   return true;
 }
+/** 在指定楼层内执行异步任务（如逐层导出/打印），结束后恢复原楼层、视口与选择集 */
+async function withFloor(id, fn){
+  if(!id||id===state.activeFloorId) return fn();
+  const prevId=state.activeFloorId;
+  const prevViewport=deepClone(state.viewport);
+  const prevSelection=new Set(selectedIds);
+  if(!switchFloor(id)) throw new Error('楼层切换失败');
+  try{
+    return await fn();
+  }finally{
+    if(switchFloor(prevId)){
+      state.viewport=prevViewport;
+      selectedIds.clear(); prevSelection.forEach(x=>selectedIds.add(x));
+      invalidateStatic(); resetFrameRef();
+      renderProps(); refreshUI(); requestRender();
+    }
+  }
+}
 /** 新增楼层：空白矢量场地；当前楼层数据先写回再创建 */
 async function addFloor(name){
   syncActiveFloor();
