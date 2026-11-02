@@ -14,7 +14,6 @@ const PT_TO_METER=__pdf.PT_TO_METER;
 /* 读取上限：防止畸形/超大 PDF 与解压炸弹耗尽内存（测试可传入更小的 opt） */
 const PDF_LIMITS=__pdf.PDF_LIMITS;
 
-function bytesToBinary(bytes){ return __pdf.bytesToBinary(bytes); }
 function binaryToBytes(s){ return __pdf.binaryToBytes(s); }
 
 /* ---------------- Flate 解压（zlib 头优先，失败退 deflate-raw 去头） ---------------- */
@@ -39,16 +38,10 @@ async function inflate(bytes){
 /* ---------------- 字典小工具（委托模块） ---------------- */
 function dictName(dict,name){ return __pdf.dictName(dict,name); }
 function dictNumber(dict,name){ return __pdf.dictNumber(dict,name); }
-function dictArray(dict,name){ return __pdf.dictArray(dict,name); }
-function dictRef(dict,name){ return __pdf.dictRef(dict,name); }
 /* /Name 后可能是直接字典，也可能是间接引用；数组同理。这里取内容字符串（内联）或解析引用 */
 function dictRawBlock(dict,name){ return __pdf.dictRawBlock(dict,name); }
 
-/* ---------------- 对象扫描 ---------------- */
-function scanObjects(bin){ return __pdf.scanObjects(bin); }
-async function decodeStream(obj){ return __pdf.decodeStream(obj,{inflate,maxInflateBytes:PDF_LIMITS.maxInflateBytes}); }
-
-/* ---------------- 内容流算子解析 ---------------- */
+/* ---------------- 内容流词法分析 ---------------- */
 function tokenizeContent(str){ return __pdf.tokenizeContent(str); }
 /* 2x3 仿射矩阵 */
 function mulCTM(m,cm){
