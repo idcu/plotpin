@@ -27,6 +27,12 @@
     },
     {
       "from": "gitee:idcu/ngm-repo",
+      "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf",
+      "path": "packages/format/pdf",
+      "main": "./src/index.mjs"
+    },
+    {
+      "from": "gitee:idcu/ngm-repo",
       "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf-image",
       "path": "packages/format/pdf-image",
       "main": "./src/index.mjs"

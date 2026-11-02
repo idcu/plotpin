@@ -1,4 +1,4 @@
-/* pdf-read.js —— 零依赖 PDF 读取（面向 CAD/图纸类矢量 PDF + 扫描件内嵌栅格）
+/* pdf-read.js —— PDF 读取：容器解析委托 @idcu/format-pdf，内容流→绘图对象/底图语义留在本项目
  * 能力：
  *  - 对象/xref 扫描、FlateDecode 解压（浏览器 DecompressionStream，zlib/deflate-raw 双兜底）
  *  - 内容流算子：m/l/c/v/y/re/h/S/f/b/q/cm + 文本 BT..ET（Tj/TJ/Tm/Td/Tf）
@@ -8,20 +8,14 @@
 (function (global) {
   'use strict';
 
-const PT_TO_METER=0.0254/72;
+const __pdf=globalThis.__idcuPdf;
+if(!__pdf) throw new Error('pdf-read.js：缺少 @idcu/format-pdf，请检查 index.html 脚本顺序');
+const PT_TO_METER=__pdf.PT_TO_METER;
 /* 读取上限：防止畸形/超大 PDF 与解压炸弹耗尽内存（测试可传入更小的 opt） */
-const PDF_LIMITS={maxBytes:50*1024*1024,maxPages:300,maxObjects:20000,maxInflateBytes:64*1024*1024};
+const PDF_LIMITS=__pdf.PDF_LIMITS;
 
-function bytesToBinary(bytes){
-  let s=''; const CH=0x8000;
-  for(let i=0;i<bytes.length;i+=CH){ s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH)); }
-  return s;
-}
-function binaryToBytes(s){
-  const out=new Uint8Array(s.length);
-  for(let i=0;i<s.length;i++) out[i]=s.charCodeAt(i)&0xff;
-  return out;
-}
+function bytesToBinary(bytes){ return __pdf.bytesToBinary(bytes); }
+function binaryToBytes(s){ return __pdf.binaryToBytes(s); }
 
 /* ---------------- Flate 解压（zlib 头优先，失败退 deflate-raw 去头） ---------------- */
 async function inflate(bytes){
@@ -42,122 +36,20 @@ async function inflate(bytes){
   }
 }
 
-/* ---------------- 字典小工具 ---------------- */
-function dictName(dict,name){
-  const m=dict.match(new RegExp('/'+name+'\\s+/([^\\s\\[\\]<>(){}%]+)'));
-  return m?m[1]:null;
-}
-function dictNumber(dict,name){
-  const m=dict.match(new RegExp('/'+name+'\\s+(-?\\d+(?:\\.\\d+)?)'));
-  return m?parseFloat(m[1]):null;
-}
-function dictArray(dict,name){
-  const m=dict.match(new RegExp('/'+name+'\\s*\\[([^\\]]*)\\]'));
-  if(!m) return null;
-  const nums=m[1].match(/-?\d+(?:\.\d+)?/g);
-  return nums?nums.map(Number):null;
-}
-function dictRef(dict,name){
-  const m=dict.match(new RegExp('/'+name+'\\s+(\\d+)\\s+(\\d+)\\s+R'));
-  return m?{num:+m[1],gen:+m[2]}:null;
-}
+/* ---------------- 字典小工具（委托模块） ---------------- */
+function dictName(dict,name){ return __pdf.dictName(dict,name); }
+function dictNumber(dict,name){ return __pdf.dictNumber(dict,name); }
+function dictArray(dict,name){ return __pdf.dictArray(dict,name); }
+function dictRef(dict,name){ return __pdf.dictRef(dict,name); }
 /* /Name 后可能是直接字典，也可能是间接引用；数组同理。这里取内容字符串（内联）或解析引用 */
-function dictRawBlock(dict,name){
-  const m=dict.match(new RegExp('/'+name+'\\s*(<<[\\s\\S]*?>>)'));
-  return m?m[1]:null;
-}
+function dictRawBlock(dict,name){ return __pdf.dictRawBlock(dict,name); }
 
 /* ---------------- 对象扫描 ---------------- */
-function scanObjects(bin){
-  const map=new Map();
-  const re=/(\d+)\s+(\d+)\s+obj([\s\S]*?)endobj/g;
-  let m;
-  while((m=re.exec(bin))){
-    const num=+m[1], body=m[3];
-    const si=body.search(/stream[\r\n]/);
-    let dict=body, data=null;
-    if(si>=0){
-      dict=body.slice(0,si);
-      const after=body.slice(si);
-      const nl=after.startsWith('stream\r\n')?8:(after.startsWith('stream\n')?7:6);
-      let start=si+nl, end=body.indexOf('endstream',si);
-      const len=dictNumber(dict,'Length');
-      if(Number.isFinite(len)){
-        let e2=start+len;
-        if(body[e2-1]==='\n') e2--; if(body[e2-1]==='\r') e2--;
-        if(body.slice(e2).indexOf('endstream')===0) end=e2;
-      }
-      if(end>=start) data=body.slice(start,end);
-    }
-    map.set(num,{dict,data});
-  }
-  return map;
-}
-async function decodeStream(obj){
-  if(obj.data===null) return '';
-  const f=dictName(obj.dict,'Filter');
-  const arr=obj.dict.match(/\/Filter\s*\[([^\]]*)\]/);
-  const filters=arr?arr[1].match(/\/\w+/g).map(s=>s.slice(1)):(f?[f]:[]);
-  let bytes=binaryToBytes(obj.data);
-  let isBinary=false;
-  for(const fl of filters){
-    if(fl==='FlateDecode'){ bytes=await inflate(bytes); isBinary=true; }
-    else if(fl==='DCTDecode'){ /* JPEG 原样保留 */ return {bytes,binary:true}; }
-    else if(fl==='ASCIIHexDecode'||fl==='ASCII85Decode'){ /* 罕见，忽略 */ }
-  }
-  return {bytes,binary:isBinary,text:bytesToBinary(bytes)};
-}
+function scanObjects(bin){ return __pdf.scanObjects(bin); }
+async function decodeStream(obj){ return __pdf.decodeStream(obj,{inflate,maxInflateBytes:PDF_LIMITS.maxInflateBytes}); }
 
 /* ---------------- 内容流算子解析 ---------------- */
-function tokenizeContent(str){
-  const toks=[];
-  let i=0;
-  while(i<str.length){
-    const ch=str[i];
-    if(ch===' '||ch==='\r'||ch==='\n'||ch==='\t'){ i++; continue; }
-    if(ch==='%'){ while(i<str.length&&str[i]!=='\n') i++; continue; }
-    if(ch==='('){
-      let depth=1, j=i+1, out='';
-      while(j<str.length&&depth>0){
-        const c=str[j];
-        if(c==='\\'){
-          const n=str[j+1];
-          if(n==='n') out+='\n';
-          else if(n==='r') out+='\r';
-          else if(n==='t') out+='\t';
-          else if(n==='('||n===')'||n==='\\') out+=n;
-          else if(n>='0'&&n<='7'){
-            let oct=n; let k=j+2;
-            while(k<j+4&&str[k]>='0'&&str[k]<='7'){ oct+=str[k]; k++; }
-            out+=String.fromCharCode(parseInt(oct,8)&0xff); j=k; continue;
-          }else out+=n===undefined?'':n;
-          j+=2; continue;
-        }
-        if(c==='('){ depth++; out+=c; }
-        else if(c===')'){ depth--; if(depth>0) out+=c; }
-        else out+=c;
-        j++;
-      }
-      toks.push({t:'str',v:out}); i=j+1; continue;
-    }
-    if(ch==='<'){
-      const j=str.indexOf('>',i+1);
-      toks.push({t:'hex',v:str.slice(i+1,j<0?str.length:j)}); i=(j<0?str.length:j+1); continue;
-    }
-    if(ch==='['){ toks.push({t:'[',v:'['}); i++; continue; }
-    if(ch===']'){ toks.push({t:']',v:']'}); i++; continue; }
-    if(ch==='/'){
-      let j=i+1; while(j<str.length&&!/[\s\[\]()<>{}%/]/.test(str[j])) j++;
-      toks.push({t:'name',v:str.slice(i+1,j)}); i=j; continue;
-    }
-    const num=/[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?/.exec(str.slice(i));
-    if(num && /[-.+\d]/.test(ch)){ toks.push({t:'num',v:parseFloat(num[0])}); i+=num[0].length; continue; }
-    let j=i; while(j<str.length&&/[A-Za-z'"]/.test(str[j])) j++;
-    if(j>i){ toks.push({t:'op',v:str.slice(i,j)}); i=j; continue; }
-    i++;
-  }
-  return toks;
-}
+function tokenizeContent(str){ return __pdf.tokenizeContent(str); }
 /* 2x3 仿射矩阵 */
 function mulCTM(m,cm){
   const [a,b,c,d,e,f]=m,[A,B,C,D,E,F]=cm;
@@ -335,60 +227,21 @@ function buildPng(w,h,rgb){
 
 /* ---------------- 主入口 ---------------- */
 async function parsePdf(input,opt){
-  const L=Object.assign({},PDF_LIMITS,opt||{});
-  const src=input instanceof Uint8Array?input
-    :typeof input==='string'?binaryToBytes(input)
-    :new Uint8Array(input);
-  if(src.length>L.maxBytes) throw new Error('PDF 过大（超过 '+(L.maxBytes/1048576)+'MB 上限），请拆分后导入');
-  /* 基本校验 */
-  if(String.fromCharCode(src[0],src[1],src[2],src[3])!=='%PDF') throw new Error('不是有效的 PDF 文件');
-  const bin=bytesToBinary(src);
-  const objs=scanObjects(bin);
-  if(objs.size>L.maxObjects) throw new Error('PDF 对象数超过上限 '+L.maxObjects+'，请拆分后导入');
-
-  /* 页面集合 */
-  const pages=[];
-  for(const [num,o] of objs){
-    if(/\/Type\s*\/Page(?!s)/.test(o.dict)) pages.push({num,obj:o});
-  }
-  if(!pages.length) throw new Error('PDF 中未找到页面');
-  if(pages.length>L.maxPages) throw new Error('PDF 页数超过上限 '+L.maxPages+' 页，请拆分后导入');
+  /* 容器层（对象树/页面/内容流原文）由 @idcu/format-pdf 解析；这里只做绘图语义转换 */
+  const parsed=await __pdf.parse(input,{inflate,limits:opt});
   const merged={paths:[],texts:[],images:[]};
   let firstBox=null;
-  for(const {num,obj} of pages){
-    /* MediaBox（本页或沿 Parent 继承） */
-    let box=dictArray(obj.dict,'MediaBox');
-    let dict=obj.dict, hops=0;
-    while(!box&&hops<8){
-      const p=dictRef(dict,'Parent');
-      if(!p) break;
-      const po=objs.get(p.num); if(!po) break;
-      box=dictArray(po.dict,'MediaBox'); dict=po.dict; hops++;
-    }
-    box=box||[0,0,612,792];
-    const llx=box[0],lly=box[1];
-    if(!firstBox) firstBox={w:box[2]-box[0],h:box[3]-box[1]};
-    /* 内容流：直接或数组引用 */
-    let contentStr='';
-    const cRef=dictRef(obj.dict,'Contents');
-    if(cRef){
-      const co=objs.get(cRef.num);
-      if(co){ const d=await decodeStream(co); contentStr+=d.text||''; }
-    }else{
-      const cm=obj.dict.match(/\/Contents\s*\[([\s\S]*?)\]/);
-      if(cm){
-        const refs=[...cm[1].matchAll(/(\d+)\s+\d+\s*R/g)].map(x=>+x[1]);
-        for(const rn of refs){ const co=objs.get(rn); if(co){ const d=await decodeStream(co); contentStr+=(d.text||'')+'\n'; } }
-      }
-    }
-    const interp=interpretContent(contentStr);
+  for(const page of parsed.pages){
+    const box=page.mediaBox;
+    if(!firstBox) firstBox={w:box.width,h:box.height};
+    const interp=interpretContent(page.contentText);
     interp.paths.forEach(p=>merged.paths.push({
-      points:p.points.map(q=>[q[0]-llx,q[1]-lly]),closed:p.closed,filled:p.filled}));
-    interp.texts.forEach(t=>merged.texts.push({x:t.x-llx,y:t.y-lly,size:t.size,text:t.text}));
+      points:p.points.map(q=>[q[0]-box.x,q[1]-box.y]),closed:p.closed,filled:p.filled}));
+    interp.texts.forEach(t=>merged.texts.push({x:t.x-box.x,y:t.y-box.y,size:t.size,text:t.text}));
   }
   /* 内嵌图像（每页资源）：收集 /Subtype /Image 对象，选最大者 */
   const images=[];
-  for(const [num,o] of objs){
+  for(const [num,o] of parsed.objects){
     if(!/\/Subtype\s*\/Image/.test(o.dict)||o.data===null) continue;
     const w=dictNumber(o.dict,'Width'), h=dictNumber(o.dict,'Height');
     if(!w||!h) continue;
