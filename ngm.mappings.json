@@ -3,8 +3,26 @@
   "mappings": [
     {
       "from": "gitee:idcu/ngm-repo",
+      "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets",
+      "path": "packages/core/assets",
+      "main": "./src/index.mjs"
+    },
+    {
+      "from": "gitee:idcu/ngm-repo",
       "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dsv",
       "path": "packages/format/dsv",
+      "main": "./src/index.mjs"
+    },
+    {
+      "from": "gitee:idcu/ngm-repo",
+      "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf",
+      "path": "packages/format/dxf",
+      "main": "./src/index.mjs"
+    },
+    {
+      "from": "gitee:idcu/ngm-repo",
+      "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/qr",
+      "path": "packages/format/qr",
       "main": "./src/index.mjs"
     },
     {

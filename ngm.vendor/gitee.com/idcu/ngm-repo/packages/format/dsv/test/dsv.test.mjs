@@ -43,6 +43,16 @@ test('guardFormula supports boolean and custom RegExp without changing defaults'
   assert.equal(quoteCell('-5', { guardFormula: true }), "'-5");
   assert.equal(quoteCell('-5', { guardFormula: /^[=+@]|^-\D/ }), '-5');
   assert.equal(quoteCell('-x', { guardFormula: /^[=+@]|^-\D/ }), "'-x");
+  assert.equal(quoteCell(-5, { guardFormula: (s, v) => typeof v === 'string' && /^[=+\-@\t\r]/.test(s) }), '-5');
+  assert.equal(quoteCell('-5', { guardFormula: (s, v) => typeof v === 'string' && /^[=+\-@\t\r]/.test(s) }), "'-5");
+});
+
+test('quoteChars customises the quote trigger set', () => {
+  const opt = { quoteChars: /[",\n\r\t]/ };
+  assert.equal(quoteCell('a\tb', opt), '"a\tb"');
+  assert.equal(quoteCell('a,b', opt), '"a,b"');
+  assert.equal(quoteCell('a;b', opt), 'a;b');
+  assert.equal(quoteCell('a,b'), '"a,b"');
 });
 
 test('formatRows honours bom, delimiter and eol options', () => {

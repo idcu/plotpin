@@ -147,10 +147,15 @@ function objectRowsAll(){
 }
 function exportDelimited(delim,ext,mime){
   const rows=objectRowsAll(); const cols=TABLE_COLUMNS;
-  const text='\ufeff'+[cols.join(delim),...rows.map(r=>cols.map(c=>csvCell(r[c],delim)).join(delim))].join('\n');
+  /* 表头保持原样不转义；数据行用公共 DSV 写出（quoteChars 保留原 \t 触发规则） */
+  const body=DSV.formatRows(rows.map(r=>cols.map(c=>r[c])),{
+    delimiter:delim,eol:'\n',bom:false,quoteChars:/[",\n\r\t]/
+  });
+  const text='\ufeff'+cols.join(delim)+'\n'+body;
   downloadBlob(new Blob([text],{type:mime}),safeName()+'.'+ext);
 }
-function csvCell(v,delim){ const s=String(v??''); return /[",\n\r\t]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+/* 保留旧单格转义入口（自测与插件可能调用），实现委托公共 DSV */
+function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[",\n\r\t]/}); }
 /** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返） */
 function exportXlsx(){
   const cols=TABLE_COLUMNS;
