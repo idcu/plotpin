@@ -56,6 +56,18 @@ test('limits can be overridden per call', async () => {
   );
 });
 
+test('verifyCrc rejects corrupted entries when requested', async () => {
+  const buf = build([{ name: 'a.txt', text: 'hello' }]);
+  const bytes = new Uint8Array(buf);
+  const at = bytes.findIndex((v, i) => v === 104 && bytes[i + 1] === 101 && bytes[i + 2] === 108);
+  assert.ok(at > 0);
+  bytes[at] = 105;
+  const corrupted = bytes.buffer;
+  const entries = await readEntries(corrupted);
+  assert.equal(decodeUtf8(entries['a.txt']), 'iello');
+  await assert.rejects(() => readEntries(corrupted, { verifyCrc: true }), /CRC/);
+});
+
 test('optional compressor writes method=8 and round trips', async () => {
   const buf = build(
     [{ name: 'big.txt', text: 'compress-me-'.repeat(200) }],

@@ -18,7 +18,7 @@ console.log(readText(entries, 'a.txt')); // hello
   （Node 传 `zlib.deflateRawSync` 即可，模块不 import 任何压缩库）。
 - 读：method 0（stored）与 method 8（deflate-raw，依赖宿主 `DecompressionStream`，Node 22+ 可用）。
 - `readEntries(buffer, opt)` 的上限可逐次覆盖：`maxBytes` / `maxEntries` / `maxEntryBytes` / `maxTotalBytes`，
-  默认值见 `LIMITS`（防解压炸弹）。
+  默认值见 `LIMITS`（防解压炸弹）；`verifyCrc: true` 时逐条校验 CRC32（默认关闭）。
 - `readText(entries, name)` 按条目名解码，缺失返回 `null`。
 - 不支持 ZIP64、加密、多卷。
 
