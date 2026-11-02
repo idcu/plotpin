@@ -139,7 +139,7 @@ npx serve .
 │   │   ├── parking.js        # 停车规划：双面车位/通道自动排布与净宽检查
 │   │   ├── collab.js         # 实时协作：本机 BroadcastChannel + 跨设备 WebRTC 手动信令
 │   │   └── …                 # config/model/geometry/render/interaction/ui-shell/persistence
-│   └── common/               # 零依赖基础库：XML 解析、ZIP、OOXML(XLSX)、DSV、内容寻址资产库、LWW 合并
+│   └── common/               # 项目内基础库：内容寻址资产库、LWW 合并、DXF/PDF/QR；XML/ZIP/XLSX/DSV 走 ngm.vendor
 ├── scripts/
 │   └── selftest.mjs          # 逻辑层零依赖自测
 ├── package.json              # 仅提供 npm test 入口，无任何依赖

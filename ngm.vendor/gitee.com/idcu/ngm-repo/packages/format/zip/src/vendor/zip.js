@@ -26,26 +26,32 @@ function decodeUtf8(bytes){
   return decodeURIComponent(escape(s));
 }
 
-/* ---- ZIP 写入：stored（不压缩）+ CRC32；本地头 + 中央目录 + EOCD ---- */
+/* ---- ZIP 写入：默认 stored + CRC32；可选注入 compress 走 method=8；本地头 + 中央目录 + EOCD ---- */
 const ZIP_SIG_LOC=0x04034b50, ZIP_SIG_CEN=0x02014b50, ZIP_SIG_EOCD=0x06054b50;
-function zipBuild(entries){
+/* 可选压缩器：compress(bytes,name) 返回 Uint8Array（method=8）或 null（退化为 stored）。
+ * 压缩器由调用方注入（Node 可传 zlib.deflateRawSync），模块本身保持零依赖。 */
+function zipBuild(entries,opt){
+  const compress=(opt&&typeof opt.compress==='function')?opt.compress:null;
   const locals=[], centrals=[]; let offset=0;
   entries.forEach(entry=>{
     const nameBytes=encodeUtf8(entry.name);
-    const data=entry.bytes||encodeUtf8(entry.text||'');
-    const crc=crc32(data);
+    const raw=entry.bytes||encodeUtf8(entry.text||'');
+    const packed=compress?compress(raw,entry.name):null;
+    const data=packed||raw;
+    const method=packed?8:0;
+    const crc=crc32(raw);
     const loc=new DataView(new ArrayBuffer(30));
     loc.setUint32(0,ZIP_SIG_LOC,true);
-    loc.setUint16(4,20,true); loc.setUint16(6,0x0800,true); loc.setUint16(8,0,true);
+    loc.setUint16(4,20,true); loc.setUint16(6,0x0800,true); loc.setUint16(8,method,true);
     loc.setUint16(10,0,true); loc.setUint16(12,0x0021,true);
-    loc.setUint32(14,crc,true); loc.setUint32(18,data.length,true); loc.setUint32(22,data.length,true);
+    loc.setUint32(14,crc,true); loc.setUint32(18,data.length,true); loc.setUint32(22,raw.length,true);
     loc.setUint16(26,nameBytes.length,true); loc.setUint16(28,0,true);
     locals.push([new Uint8Array(loc.buffer),nameBytes,data]);
     const cen=new DataView(new ArrayBuffer(46));
     cen.setUint32(0,ZIP_SIG_CEN,true);
-    cen.setUint16(4,20,true); cen.setUint16(6,20,true); cen.setUint16(8,0x0800,true); cen.setUint16(10,0,true);
+    cen.setUint16(4,20,true); cen.setUint16(6,20,true); cen.setUint16(8,0x0800,true); cen.setUint16(10,method,true);
     cen.setUint16(12,0,true); cen.setUint16(14,0x0021,true);
-    cen.setUint32(16,crc,true); cen.setUint32(20,data.length,true); cen.setUint32(24,data.length,true);
+    cen.setUint32(16,crc,true); cen.setUint32(20,data.length,true); cen.setUint32(24,raw.length,true);
     cen.setUint16(28,nameBytes.length,true); cen.setUint16(30,0,true); cen.setUint16(32,0,true);
     cen.setUint16(34,0,true); cen.setUint16(36,0,true); cen.setUint32(38,0,true);
     cen.setUint32(42,offset,true);
@@ -119,5 +125,10 @@ async function zipReadEntries(arrayBuffer,opt){
   }
   return entries;
 }
-  global.Zip = { crc32, encodeUtf8, decodeUtf8, build: zipBuild, readEntries: zipReadEntries, inflateRaw: zipInflateRaw, LIMITS: ZIP_LIMITS };
+/* 按条目名读取并解码为文本；不存在时返回 null */
+function zipReadText(entries,name){
+  const e=entries&&entries[name];
+  return e?decodeUtf8(e):null;
+}
+  global.Zip = { crc32, encodeUtf8, decodeUtf8, build: zipBuild, readEntries: zipReadEntries, readText: zipReadText, inflateRaw: zipInflateRaw, LIMITS: ZIP_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);

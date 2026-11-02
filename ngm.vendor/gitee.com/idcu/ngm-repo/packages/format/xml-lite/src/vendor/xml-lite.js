@@ -28,6 +28,8 @@
   function makeElement(tagName,parsed){
     const el={tagName,nodeName:tagName,nodeType:1,children:[],_attrs:parsed.attrs,_ns:parsed.ns};
     el.getAttribute=function(name){ const a=this._attrs.find(x=>x.name===name); return a?a.value:null; };
+    /* 按命名空间 URI + 本地名取属性（docx 的 r:embed 等前缀属性需要） */
+    el.getAttributeNS=function(uri,local){ const a=this._attrs.find(x=>x.ns===String(uri||'')&&x.local===local); return a?a.value:null; };
     el.getElementsByTagName=function(q){
       const out=[]; const walk=node=>{ for(const ch of node.children){ if(typeof ch!=='string'){ if(ch.tagName===q) out.push(ch); walk(ch); } } };
       walk(this); return out;

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "lockfileVersion": "2.0.0",
+  "dependencies": [
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "commit": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "moduleDigest": "sha256:c53202e14f5a09488f1260185d19b6ab3acab60f54cf1dcd73bf81866ca7b354",
+      "subtreeOid": "sha1:7cf127d4beebe428df03101127cb7afc0cc0bfef",
+      "version": "0.2.0",
+      "resolvedAt": "2026-11-02T13:39:45Z",
+      "vendorPath": "gitee.com/idcu/ngm-repo",
+      "subPath": "packages/format/dsv",
+      "requiredBy": [
+        "(root)"
+      ]
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "commit": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "moduleDigest": "sha256:31dd53342ba5b744a9f0f86e9520116a708b6046fe69089412395aa7ca7583be",
+      "subtreeOid": "sha1:f462264bb4e4a89b38fae30e39f5d2a4768089fc",
+      "version": "0.2.0",
+      "resolvedAt": "2026-11-02T13:39:45Z",
+      "vendorPath": "gitee.com/idcu/ngm-repo",
+      "subPath": "packages/format/xlsx-read",
+      "requiredBy": [
+        "(root)"
+      ]
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "commit": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "moduleDigest": "sha256:54c1902260bbb3544e062ddaad9d4a211449fd88641512ff060f67e53eb342bb",
+      "subtreeOid": "sha1:6a65dd4f3d8316aa40c37a97abda003a0e9eaadb",
+      "version": "0.2.0",
+      "resolvedAt": "2026-11-02T13:39:45Z",
+      "vendorPath": "gitee.com/idcu/ngm-repo",
+      "subPath": "packages/format/xml-lite",
+      "requiredBy": [
+        "(root)",
+        "gitee:idcu/ngm-repo#packages/format/xlsx-read"
+      ]
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "commit": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "moduleDigest": "sha256:a5eab04b2d961916d60d3e513fe6554be0f64d8d638ebbcfaa37eb92c584227b",
+      "subtreeOid": "sha1:02bd812ae243a314fb6211a97d594a6c6ff1ae07",
+      "version": "0.2.0",
+      "resolvedAt": "2026-11-02T13:39:45Z",
+      "vendorPath": "gitee.com/idcu/ngm-repo",
+      "subPath": "packages/format/zip",
+      "requiredBy": [
+        "(root)",
+        "gitee:idcu/ngm-repo#packages/format/xlsx-read"
+      ]
+    }
+  ]
+}

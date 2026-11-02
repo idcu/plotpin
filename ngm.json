@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "plotpin",
+  "version": "0.2.0",
+  "runtime": "node",
+  "main": "./index.html",
+  "dependencies": [
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "path": "packages/format/dsv"
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "path": "packages/format/xlsx-read"
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "path": "packages/format/xml-lite"
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
+      "ref": "afa540175c554eab48086fa2a31c29969a03b0ee",
+      "refType": "commit",
+      "path": "packages/format/zip"
+    }
+  ],
+  "vendor": {
+    "mode": "local",
+    "linkMode": "copy"
+  }
+}
