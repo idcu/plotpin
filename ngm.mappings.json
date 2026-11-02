@@ -9,6 +9,12 @@
     },
     {
       "from": "gitee:idcu/ngm-repo",
+      "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/geometry",
+      "path": "packages/core/geometry",
+      "main": "./src/index.mjs"
+    },
+    {
+      "from": "gitee:idcu/ngm-repo",
       "to": "./ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dsv",
       "path": "packages/format/dsv",
       "main": "./src/index.mjs"

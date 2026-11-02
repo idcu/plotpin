@@ -1,39 +1,17 @@
-/* geometry.js —— 世界坐标几何纯函数 */
-/* -------------------- 几何工具 -------------------- */
-const add=(a,b)=>[a[0]+b[0],a[1]+b[1]];
-const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]];
-const mul=(a,s)=>[a[0]*s,a[1]*s];
-const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
-function rotatePoint(p,c,angDeg){
-  const a=angDeg*Math.PI/180, x=p[0]-c[0], y=p[1]-c[1];
-  return [c[0]+x*Math.cos(a)-y*Math.sin(a), c[1]+x*Math.sin(a)+y*Math.cos(a)];
-}
-function polygonArea(points){
-  let a=0;
-  for(let i=0;i<points.length;i++){
-    const p=points[i], q=points[(i+1)%points.length];
-    a += p[0]*q[1]-q[0]*p[1];
-  }
-  return Math.abs(a/2);
-}
-function polylineLength(points){
-  let s=0; for(let i=1;i<points.length;i++) s += dist(points[i-1],points[i]); return s;
-}
-function pointInPolygon(p, poly){
-  let inside=false;
-  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
-    const xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
-    const hit=((yi>p[1])!==(yj>p[1])) && (p[0] < (xj-xi)*(p[1]-yi)/(yj-yi)+xi);
-    if(hit) inside=!inside;
-  }
-  return inside;
-}
-function distanceToSegment(p,a,b){
-  const v=sub(b,a), w=sub(p,a), l2=v[0]*v[0]+v[1]*v[1];
-  if(l2<EPS) return dist(p,a);
-  let t=(w[0]*v[0]+w[1]*v[1])/l2; t=Math.max(0,Math.min(1,t));
-  return dist(p,[a[0]+t*v[0],a[1]+t*v[1]]);
-}
+/* geometry.js —— 世界坐标几何：纯数学委托 @idcu/core-geometry，业务部分留在本文件 */
+/* 模块由 index.html 在本脚本之前加载（globalThis.__idcuGeometry）；以下保留原导出名，调用点不改 */
+const __geo = globalThis.__idcuGeometry;
+if (!__geo) throw new Error('geometry.js：缺少 @idcu/core-geometry，请检查 index.html 脚本顺序');
+/* -------------------- 几何工具（委托模块） -------------------- */
+const add=(a,b)=>__geo.vecAdd(a,b);
+const sub=(a,b)=>__geo.vecSub(a,b);
+const mul=(a,s)=>__geo.vecScale(a,s);
+const dist=(a,b)=>__geo.distance(a,b);
+function rotatePoint(p,c,angDeg){ return __geo.rotatePoint(p,c,angDeg); }
+function polygonArea(points){ return __geo.polygonArea(points); }
+function polylineLength(points){ return __geo.polylineLength(points); }
+function pointInPolygon(p,poly){ return __geo.pointInPolygon(p,poly); }
+function distanceToSegment(p,a,b){ return __geo.distanceToSegment(p,a,b); }
 /* -------------------- 对象捕捉 OSNAP（纯数据，屏幕阈值由调用方换算为世界米） -------------------- */
 const OSNAP_LABELS={
   endpoint:'端点', midpoint:'中点', center:'圆心', quadrant:'象限点',
@@ -121,35 +99,7 @@ function guideEdges(){
  * 优先级：参考边平行 > 参考边垂直 > 上一段等距 > 极轴；返回 {p, mode}。
  * opt: {refDir(弧度), prevDir(弧度), prevLen, polarStep(度, 0=关闭), tolDeg=4, polarTolDeg=3}
  */
-function directionalSnap(last,wp,opt){
-  opt=opt||{};
-  const v=[wp[0]-last[0],wp[1]-last[1]], len=Math.hypot(v[0],v[1]);
-  if(len<EPS) return {p:[wp[0],wp[1]],mode:'none'};
-  const ang=Math.atan2(v[1],v[0]);
-  const tol=(opt.tolDeg===undefined?4:Number(opt.tolDeg))*Math.PI/180;
-  const near=(a,b,t)=>{
-    let d=a-b; d=Math.atan2(Math.sin(d),Math.cos(d));
-    return Math.min(Math.abs(d),Math.abs(Math.abs(d)-Math.PI))<=t;
-  };
-  const project=(dir)=>{
-    const u=[Math.cos(dir),Math.sin(dir)], dot=v[0]*u[0]+v[1]*u[1];
-    return [last[0]+u[0]*dot,last[1]+u[1]*dot];
-  };
-  if(Number.isFinite(opt.refDir)){
-    if(near(ang,opt.refDir,tol)) return {p:project(opt.refDir),mode:'parallel'};
-    if(near(ang,opt.refDir+Math.PI/2,tol)) return {p:project(opt.refDir+Math.PI/2),mode:'perpendicular'};
-  }
-  if(Number.isFinite(opt.prevDir)&&Number(opt.prevLen)>EPS&&near(ang,opt.prevDir,tol)){
-    return {p:[last[0]+Math.cos(ang)*opt.prevLen,last[1]+Math.sin(ang)*opt.prevLen],mode:'equal'};
-  }
-  if(Number(opt.polarStep)>0){
-    const step=Number(opt.polarStep), deg=ang*180/Math.PI;
-    const nearest=Math.round(deg/step)*step;
-    const pTol=(opt.polarTolDeg===undefined?3:Number(opt.polarTolDeg))*Math.PI/180;
-    if(near(ang,nearest*Math.PI/180,pTol)) return {p:project(nearest*Math.PI/180),mode:'polar'};
-  }
-  return {p:[wp[0],wp[1]],mode:'none'};
-}
+function directionalSnap(last,wp,opt){ return __geo.constrainDirectional(last,wp,opt); }
 /** 收集正圆（支持精确切点；椭圆切点不启用）@returns [{id,c,r}] */
 function collectSnapCircles(st,vis){
   const out=[];
@@ -159,14 +109,7 @@ function collectSnapCircles(st,vis){
   });
   return out;
 }
-function _segSegInt(a,b,c,d){
-  const r=sub(b,a), s=sub(d,c), den=r[0]*s[1]-r[1]*s[0];
-  if(Math.abs(den)<EPS) return null;
-  const t=((c[0]-a[0])*s[1]-(c[1]-a[1])*s[0])/den;
-  const u=((c[0]-a[0])*r[1]-(c[1]-a[1])*r[0])/den;
-  if(t<0||t>1||u<0||u>1) return null;
-  return [a[0]+t*r[0], a[1]+t*r[1]];
-}
+function _segSegInt(a,b,c,d){ return __geo.segmentIntersection(a,b,c,d); }
 /* 捕捉类型优先级（数值越小越优先）：精确点 > 交点 > 垂足 > 切点。
    同优先级再按到鼠标的屏幕距离取最近；不同优先级时即使稍远也优先精确类型。 */
 const OSNAP_PRIORITY={endpoint:0,midpoint:1,quadrant:1,center:1,intersection:2,perpendicular:3,tangent:4};
@@ -224,45 +167,18 @@ function findOsnap(st,raw,tol,excludeIds,vis,typeFilter){
  * 正交（ORTHO）：按住 Shift 时，把 p 钳到相对基点 base 的水平/垂直方向。
  * 主轴取位移分量绝对值较大者；不按 Shift 或无基点时原样返回。
  */
-function orthoPoint(base,p,shift){
-  if(!shift||!base) return p;
-  const dx=p[0]-base[0], dy=p[1]-base[1];
-  if(Math.abs(dx)>=Math.abs(dy)) return [p[0],base[1]];
-  return [base[0],p[1]];
-}
+function orthoPoint(base,p,shift){ return __geo.constrainOrtho(base,p,shift); }
 /** 极轴吸附：按住 Shift 时把 p 相对 center 的方位角钳到 45° 的整数倍（0/45/90/…），半径不变 */
-function polarSnap45(center,p,shift,stepDeg){
-  if(!shift||!center) return p;
-  const r=Math.hypot(p[0]-center[0],p[1]-center[1]);
-  if(r<EPS) return p;
-  const step=stepDeg||45;
-  const deg=Math.atan2(p[1]-center[1],p[0]-center[0])*180/Math.PI;
-  const a=Math.round(deg/step)*step*Math.PI/180;
-  return [center[0]+r*Math.cos(a),center[1]+r*Math.sin(a)];
-}
+function polarSnap45(center,p,shift,stepDeg){ return __geo.constrainPolar(center,p,shift,stepDeg); }
 /**
  * 正方形/正圆拖画：以 a 为固定角点（圆心式拖画时 a 为包围盒第一角），
  * Shift 时把另一角 p 拉成边长等于主导位移的正方形，保留各轴方向符号。
  */
-function squareCorner(a,p,shift){
-  if(!shift) return p;
-  const dx=p[0]-a[0], dy=p[1]-a[1];
-  const s=Math.max(Math.abs(dx),Math.abs(dy));
-  if(s<EPS) return p;
-  return [a[0]+(dx===0?0:Math.sign(dx))*s, a[1]+(dy===0?0:Math.sign(dy))*s];
-}
+function squareCorner(a,p,shift){ return __geo.constrainSquareCorner(a,p,shift); }
 
 /** p 到线段 ab 的最近点（垂足夹到线段内）；双击插入节点时保证新点落在线段上 */
-function nearestPointOnSegment(p,a,b){
-  const v=sub(b,a), w=sub(p,a), l2=v[0]*v[0]+v[1]*v[1];
-  if(l2<EPS) return a.slice();
-  let t=(w[0]*v[0]+w[1]*v[1])/l2; t=Math.max(0,Math.min(1,t));
-  return [a[0]+t*v[0],a[1]+t*v[1]];
-}
-function segmentsIntersect(a,b,c,d){
-  function ccw(p1,p2,p3){return (p3[1]-p1[1])*(p2[0]-p1[0]) > (p2[1]-p1[1])*(p3[0]-p1[0]);}
-  return ccw(a,c,d)!==ccw(b,c,d) && ccw(a,b,c)!==ccw(a,b,d);
-}
+function nearestPointOnSegment(p,a,b){ return __geo.nearestPointOnSegment(p,a,b); }
+function segmentsIntersect(a,b,c,d){ return __geo.segmentsIntersect(a,b,c,d); }
 function rectPoints(o){
   if(o.shape&&o.shape.type==='parallelogram'){
     return parallelogramPoints(o.x,o.y,o.width,o.height,o.shape.skew)
@@ -332,7 +248,7 @@ function distributeObjects(objs,axis='x'){
   });
   return list.length;
 }
-function boundsIntersect(a,b){ return !(a.maxX<b.minX||b.maxX<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
+function boundsIntersect(a,b){ return __geo.boundsIntersect(a,b); }
 
 /* -------------------- 统一参数形状（区域与矢量场地共用） -------------------- */
 /* 区域对象：shape=null 为矩形（width/height/angle）；否则 circle/ellipse/sector/parallelogram，锚点 (x,y) */
@@ -341,34 +257,17 @@ const SHAPE_SEGMENTS=72;
 /* 平行四边形倾角（°）：0=矩形，正值上边向右错切；限制 ±80° 避免退化为无限长边 */
 const PARALLELOGRAM_DEFAULT_SKEW=30;
 const PARALLELOGRAM_MAX_SKEW=80;
-function parallelogramSkew(sh){
-  const v=Number(sh&&sh.skew)||0;
-  return Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,v));
-}
+function parallelogramSkew(sh){ return __geo.clampSkew(sh&&sh.skew,PARALLELOGRAM_MAX_SKEW); }
 /** 平行四边形四角（世界坐标，未旋转）：基点=左下角，错切位移 off=高×tan(倾角) */
-function parallelogramPoints(x,y,w,h,skew){
-  const off=Math.max(0,h)*Math.tan(parallelogramSkew({skew})*Math.PI/180);
-  return [[x,y],[x+w,y],[x+w+off,y+h],[x+off,y+h]];
-}
+function parallelogramPoints(x,y,w,h,skew){ return __geo.parallelogramPoints(x,y,w,h,skew); }
 function areaShapeType(o){
   const t=o&&o.shape&&o.shape.type;
   return (t==='circle'||t==='ellipse'||t==='sector'||t==='parallelogram')?t:'rect';
 }
 /** 扇形有效张角（0–360°）；a0/a1 为世界系绝对角度（Y 向上），相等时视为整圆 */
-function sectorSweep(sh){
-  let s=(Number(sh.a1)||0)-(Number(sh.a0)||0);
-  s=((s%360)+360)%360;
-  return s===0?360:s;
-}
+function sectorSweep(sh){ return __geo.sectorSweep(sh&&sh.a0,sh&&sh.a1); }
 /** 扇形弧采样（seg 等分），世界坐标，圆心由调用方给定 */
-function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){
-  const pts=[];
-  for(let i=0;i<=seg;i++){
-    const a=(a0+sweep*i/seg)*Math.PI/180;
-    pts.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);
-  }
-  return pts;
-}
+function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){ return __geo.sectorArcPoints(cx,cy,r,a0,sweep,seg); }
 /** 区域形状 → 闭合世界多边形顶点（扇形首点为圆心）；渲染/包围盒/框选/SVG 共用 */
 function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
   const tt=areaShapeType(o);
@@ -415,9 +314,9 @@ function shapeArea(o){
   if(tt==='rect'||tt==='parallelogram') return Math.max(0,o.width)*Math.max(0,o.height);
   const sh=o.shape;
   if(tt==='circle'){ const r=Number(sh.r)||0; return Math.PI*r*r; }
-  if(tt==='ellipse') return Math.PI*(Number(sh.rx)||0)*(Number(sh.ry)||0);
+  if(tt==='ellipse') return __geo.ellipseArea(sh.rx,sh.ry);
   const r=Number(sh.r)||0;
-  return sectorSweep(sh)/360*Math.PI*r*r;
+  return __geo.sectorArea(r,sectorSweep(sh));
 }
 /** 周长（米）：矩形 2(w+h)；圆 2πr；椭圆 Ramanujan 近似；扇形 2r+弧长（整圆扇=圆） */
 function shapePerimeter(o){
@@ -431,16 +330,11 @@ function shapePerimeter(o){
   }
   const sh=o.shape;
   if(tt==='circle') return 2*Math.PI*sh.r;
-  if(tt==='ellipse'){
-    const a=Math.max(0,sh.rx), b=Math.max(0,sh.ry);
-    if(a+b<EPS) return 0;
-    const h=((a-b)*(a-b))/((a+b)*(a+b));
-    return Math.PI*(a+b)*(1+3*h/(10+Math.sqrt(4-3*h)));
-  }
+  if(tt==='ellipse') return __geo.ellipsePerimeter(sh.rx,sh.ry);
   const r=Math.max(0,sh.r);
   let sweep=sectorSweep(sh); if(!sh.a0&&!sh.a1) sweep=360;
   /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
-  return (sweep>=360?0:2*r)+r*sweep*Math.PI/180;
+  return __geo.sectorPerimeter(r,sweep);
 }
 /** 标签/变换中心：矩形取四角中心；圆/椭圆/扇形锚点即圆心 (x,y) */
 function shapeLabelCenter(o){
@@ -643,7 +537,7 @@ function hitPhysicalPoint(o,shape,p){
   }
   return false;
 }
-function normalizeAngle(a){ a=((a%360)+360)%360; return a; }
+function normalizeAngle(a){ return __geo.normalizeAngle(a); }
 
 /* ==================== 视场覆盖率分析（栅格法，零依赖） ==================== */
 /** 点设备的有效覆盖 footprint：扇形摄像机/全向圆点；无物理半径或仅图标设备返回 null */
@@ -684,11 +578,7 @@ function regionPolygons(st){
   }
   return out;
 }
-function polygonBBox(poly){
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  for(const [x,y] of poly){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
-  return {minX,minY,maxX,maxY,w:maxX-minX,h:maxY-minY};
-}
+function polygonBBox(poly){ return __geo.polygonBBox(poly); }
 /**
  * 栅格覆盖率：每个区域自适应步长（目标 ~targetCells 个候选格），
  * 格心在区域内且被任一摄像机覆盖即计入。返回每区域网格，供画布叠加层逐格渲染。
@@ -908,73 +798,17 @@ function imageCornerWorld(bg){
   return [[0,0],[w,0],[w,h],[0,h]].map(px=>bgPixelToWorld(bg,px));
 }
 /* 2x3 仿射 [a,b,c;d,e,f] 行优先拼长度 6 */
-function affApply(T,p){ return [T[0]*p[0]+T[1]*p[1]+T[2], T[3]*p[0]+T[4]*p[1]+T[5]]; }
-function affMul(A,B){
-  return [
-    A[0]*B[0]+A[1]*B[3], A[0]*B[1]+A[1]*B[4], A[0]*B[2]+A[1]*B[5]+A[2],
-    A[3]*B[0]+A[4]*B[3], A[3]*B[1]+A[4]*B[4], A[3]*B[2]+A[4]*B[5]+A[5]];
-}
-function affInv(T){
-  const det=T[0]*T[4]-T[1]*T[3];
-  if(Math.abs(det)<1e-18) return [1,0,0,0,1,0];
-  const ia=T[4]/det, ib=-T[1]/det, id=-T[3]/det, ie=T[0]/det;
-  return [ia,ib,-(ia*T[2]+ib*T[5]), id,ie,-(id*T[2]+ie*T[5])];
-}
-/** 最小二乘解 A(3列)·coef=z */
-function _ls3(U,z){
-  let ATA=[[0,0,0],[0,0,0],[0,0,0]], ATz=[0,0,0];
-  U.forEach((u,i)=>{
-    const row=[u[0],u[1],1], zi=z[i];
-    for(let r=0;r<3;r++){ ATz[r]+=row[r]*zi; for(let c2=0;c2<3;c2++) ATA[r][c2]+=row[r]*row[c2]; }
-  });
-  /* 高斯消元 3x3 */
-  const M=ATA.map((row,r)=>row.concat([ATz[r]]));
-  for(let i=0;i<3;i++){
-    let p=i; for(let k=i+1;k<3;k++) if(Math.abs(M[k][i])>Math.abs(M[p][i])) p=k;
-    const tmp=M[i]; M[i]=M[p]; M[p]=tmp;
-    if(Math.abs(M[i][i])<1e-18) return null;
-    for(let k=0;k<3;k++){ if(k===i) continue; const f=M[k][i]/M[i][i]; for(let j=i;j<4;j++) M[k][j]-=f*M[i][j]; }
-  }
-  return [M[0][3]/M[0][0],M[1][3]/M[1][1],M[2][3]/M[2][2]];
-}
+function affApply(T,p){ return __geo.affineApply(T,p); }
+function affMul(A,B){ return __geo.affineMultiply(A,B); }
+function affInv(T){ return __geo.affineInvert(T); }
 /**
  * 由像素点(u,v y-down)/世界点(x,y y-up)对应求图片仿射。
  * 2 对点 → 精确相似（旋转+等比缩放+平移，复数解）；≥3 → 六点最小二乘完整仿射。
  * 返回 {T:{a,b,c,d,e,f}, scale, rotationDeg, isSimilarity}
  */
-function solveImageAffine(pairs){
-  if(pairs.length<2) throw new Error('仿射校准至少需要 2 个对应点');
-  if(pairs.length===2){
-    const [p0,p1]=pairs;
-    const du=p1.u-p0.u, dv=p1.v-p0.v;
-    const dx=p1.x-p0.x, dy=p1.y-p0.y;
-    /* y 向上像素复数 z=u-i·v；W=α z+β */
-    const den=du*du+dv*dv;
-    if(den<1e-18) throw new Error('两个校准点重合，无法求解');
-    const ar=(dx*du+dy*dv)/den, ai=(-dx*dv+dy*du)/den; /* α=(dx+i dy)/(du-i dv) */
-    const c=p0.x-(ar*p0.u+ai*p0.v), f=p0.y-(ai*p0.u-ar*p0.v);
-    const T={a:ar,b:ai,c,d:ai,e:-ar,f};
-    return {T,scale:Math.hypot(ar,ai),rotationDeg:Math.atan2(ai,ar)*180/Math.PI,isSimilarity:true};
-  }
-  const cx=_ls3(pairs.map(p=>[p.u,p.v]),pairs.map(p=>p.x));
-  const cy=_ls3(pairs.map(p=>[p.u,p.v]),pairs.map(p=>p.y));
-  if(!cx||!cy) throw new Error('校准点退化（共线或重合），无法求解仿射');
-  const T={a:cx[0],b:cx[1],c:cx[2],d:cy[0],e:cy[1],f:cy[2]};
-  const scale=Math.sqrt(Math.abs(T.a*T.e-T.b*T.d));
-  /* 相似度判定：y-down 像素下相似形满足 a≈-e 且 b≈d */
-  const ref=Math.max(1,Math.hypot(T.a,T.b));
-  const isSimilarity=Math.abs(T.a+T.e)<ref*1e-6 && Math.abs(T.b-T.d)<ref*1e-6;
-  const rotationDeg=Math.atan2(T.b,T.a)*180/Math.PI;
-  return {T,scale,rotationDeg,isSimilarity};
-}
+function solveImageAffine(pairs){ return __geo.solveAffine(pairs); }
 /** 校验图片仿射系数：6 个有限数且行列式非退化才采用，否则返回 null */
-function validImageTransform(t){
-  if(!t||typeof t!=='object') return null;
-  const c=['a','b','c','d','e','f'].map(k=>Number(t[k]));
-  if(!c.every(Number.isFinite)) return null;
-  if(Math.abs(c[0]*c[4]-c[1]*c[3])<1e-18) return null;
-  return {a:c[0],b:c[1],c:c[2],d:c[3],e:c[4],f:c[5]};
-}
+function validImageTransform(t){ return __geo.validAffine(t); }
 /** 仿射校准后图片四角的世界轴对齐包围框；无有效 transform 时返回 null */
 function imageWorldFrame(bg){
   if(!bg||bg.kind!=='image') return null;

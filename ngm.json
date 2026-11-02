@@ -13,6 +13,12 @@
     },
     {
       "name": "gitee:idcu/ngm-repo",
+      "ref": "6727b6cf0c5900eeda7ad9992f73de87fc326abf",
+      "refType": "commit",
+      "path": "packages/core/geometry"
+    },
+    {
+      "name": "gitee:idcu/ngm-repo",
       "ref": "packages/format/dsv/v0.3.0",
       "refType": "tag",
       "path": "packages/format/dsv"
