@@ -7,50 +7,50 @@
   "dependencies": [
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/core/assets/v0.2.0",
+      "refType": "tag",
       "path": "packages/core/assets"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/dsv/v0.3.0",
+      "refType": "tag",
       "path": "packages/format/dsv"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/dxf/v0.1.0",
+      "refType": "tag",
       "path": "packages/format/dxf"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/pdf-image/v0.1.0",
+      "refType": "tag",
       "path": "packages/format/pdf-image"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/qr/v0.1.0",
+      "refType": "tag",
       "path": "packages/format/qr"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/xlsx-read/v0.2.0",
+      "refType": "tag",
       "path": "packages/format/xlsx-read"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/xml-lite/v0.2.0",
+      "refType": "tag",
       "path": "packages/format/xml-lite"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "858a6d823562f7b4530e50fade60d1f9a5a746ea",
-      "refType": "commit",
+      "ref": "packages/format/zip/v0.2.0",
+      "refType": "tag",
       "path": "packages/format/zip"
     }
   ],
