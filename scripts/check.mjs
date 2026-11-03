@@ -71,9 +71,15 @@ if (contracts.status !== 0) {
   errors.push('契约判据未通过：\n' + (contracts.stdout || '').trim() + '\n' + (contracts.stderr || '').trim());
 }
 
+/* 7. 对外 API 承诺面（PlotPin.* 的键 ↔ contracts/plugin-api.json） */
+const api = spawnSync(process.execPath, [join(root, 'scripts', 'check-plugin-api.mjs')], { encoding: 'utf8' });
+if (api.status !== 0) {
+  errors.push('对外 API 面未守约：\n' + (api.stdout || '').trim() + '\n' + (api.stderr || '').trim());
+}
+
 if (errors.length) {
   console.error('❌ 工程自检未通过：');
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约`);

@@ -9,6 +9,8 @@
     "lint": "node scripts/check.mjs",
     "contracts": "node scripts/check-contracts.mjs",
     "contracts:selftest": "node scripts/check-contracts.mjs --selftest",
+    "api": "node scripts/check-plugin-api.mjs",
+    "api:selftest": "node scripts/check-plugin-api.mjs --selftest",
     "badge": "node scripts/badge.mjs",
     "bench": "node scripts/bench.mjs",
     "build": "node scripts/build.mjs",

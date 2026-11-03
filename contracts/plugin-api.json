@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "file": "js/app/plugins.js",
+  "object": "PlotPin",
+  "description": "PlotPin 对插件的承诺面。这里的每个键都是「有人可以依赖」的；不在表里的键，插件不该用，用了我也不保证下次还在。加一个键就要加到这里；删一个键就要在 README 的插件章节写迁移说明。",
+  "api": {
+    "version": "API 版本号，插件用它判断兼容性",
+    "registerObjectType": "注册自定义设备/区域/折线类型（进入类型下拉并随工程保存）",
+    "unregisterObjectType": "注销类型；被对象使用时拒绝",
+    "registerExporter": "注册导出器（出现在导出下拉）",
+    "unregisterExporter": "注销导出器",
+    "registerImporter": "注册导入器（按扩展名接管）",
+    "unregisterImporter": "注销导入器",
+    "listPluginTypes": "列出已注册的插件类型",
+    "listExporters": "列出导出器（不含 run）",
+    "listImporters": "列出导入器（不含 run）",
+    "findExporter": "按 id 查导出器",
+    "findImporter": "按扩展名查导入器",
+    "state": "实时工程状态（只读快照语义，插件改它不会落盘）"
+  }
+}

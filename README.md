@@ -134,6 +134,10 @@ npm run ci        # = node scripts/check.mjs，与 CI 同一条命令
 **契约判据**（`contracts/conventions.json`）守四件看不见的事：版本号三处一致、
 中英文案键对齐、每个脚本恰好一行文件头、枚举同源。判据自己也有牙齿：
 `npm run contracts:selftest` 会用一棵必然违约的临时树证明它真的会红。
+
+**插件 API 面**（`contracts/plugin-api.json`）是另一条：`PlotPin.*` 的每个键都必须在清单里登记，
+清单里的每个键也必须真的存在——`npm run api` 双向比对，`npm run api:selftest` 验证解析器。
+「代码有、清单没有」是 API 泄漏：插件一旦依赖，你改名就是静默破坏兼容。
 刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、渲染性能）逐一写在
 [docs/engineering.md](docs/engineering.md) 里——不设不是忘了，是明说不保证。
 
