@@ -62,7 +62,7 @@ node scripts/check.mjs           语法 → 入口资源 → 离线承诺 → �
 插件的边界不是"能不能调"，而是"**调了算数吗**"。`PlotPin` 对象上每多一个键，
 就多一个别人可以依赖、你却不能再改的东西；每少一个键，就是一句承诺落空。
 
-`scripts/check-plugin-api.mjs` 把 `js/app/plugins.js` 里 `const PlotPin = {…}` 的**顶层键**
+`scripts/check-plugin-api.mjs` 把 `js/features/plugins.js` 里 `const PlotPin = {…}` 的**顶层键**
 与清单双向比对：
 
 | 情况 | 后果（都不报错） |

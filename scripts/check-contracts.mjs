@@ -182,7 +182,7 @@ function selftest() {
       schemaVersion: 1,
       versionSources: [
         { file: 'package.json', path: 'version' },
-        { file: 'js/app/plugins.js', pattern: "version:\\s*'([0-9.]+)'" }
+        { file: 'js/features/plugins.js', pattern: "version:\\s*'([0-9.]+)'" }
       ],
       i18n: { source: 'js/common/i18n.js', html: 'index.html' },
       headers: { root: 'js' },
@@ -193,7 +193,7 @@ function selftest() {
       }]
     }, null, 2));
     write('package.json', JSON.stringify({ version: '1.0.0' }));
-    write('js/app/plugins.js', '/* plugins.js —— x */\nconst PlotPin = { version: \'0.9.0\' };\n');
+    write('js/features/plugins.js', '/* plugins.js —— x */\nconst PlotPin = { version: \'0.9.0\' };\n');
     write('js/common/i18n.js', '(function (g) { g.I18N = { dict: { zh: { a: \'A\' }, en: {} } }; })(this)\n');
     write('index.html', '<button data-i18n="nope">x</button>\n');
     write('js/dup.js', '/* dup.js —— 第一行 */\n/* dup.js —— 第二行 */\n');

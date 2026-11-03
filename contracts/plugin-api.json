@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "file": "js/app/plugins.js",
+  "file": "js/features/plugins.js",
   "object": "PlotPin",
   "description": "PlotPin 对插件的承诺面。这里的每个键都是「有人可以依赖」的；不在表里的键，插件不该用，用了我也不保证下次还在。加一个键就要加到这里；删一个键就要在 README 的插件章节写迁移说明。",
   "api": {

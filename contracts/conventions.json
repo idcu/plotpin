@@ -5,7 +5,7 @@
     { "file": "package.json", "path": "version", "为什么": "发行版本与 Service Worker 缓存的锚点" },
     { "file": "ngm.json", "path": "version", "为什么": "依赖清单与包版本必须同一口径" },
     {
-      "file": "js/app/plugins.js",
+      "file": "js/features/plugins.js",
       "pattern": "version:\\s*'([0-9]+\\.[0-9]+\\.[0-9]+)'",
       "为什么": "外部插件通过 PlotPin.version 判断 API 版本；它不能与包版本各走各的"
     }
@@ -22,8 +22,8 @@
   "enums": [
     {
       "name": "scaleShape",
-      "a": { "file": "js/app/config.js", "pattern": "POINT_SCALE_SHAPES\\s*=\\s*\\{([^}]*)\\}" },
-      "b": { "file": "js/app/plugins.js", "pattern": "TYPE_SHAPES\\s*=\\s*\\[([^\\]]*)\\]" },
+      "a": { "file": "js/core/config.js", "pattern": "POINT_SCALE_SHAPES\\s*=\\s*\\{([^}]*)\\}" },
+      "b": { "file": "js/features/plugins.js", "pattern": "TYPE_SHAPES\\s*=\\s*\\[([^\\]]*)\\]" },
       "为什么": "插件注册时校验 scaleShape 的合法集合，渲染则按 POINT_SCALE_SHAPES 解释；两个集合必须相等"
     }
   ],

@@ -2559,7 +2559,7 @@ asyncSuites.push((async()=>{
   /* Service Worker 必须在站点根目录：/js/ 下的默认 scope 只能接管 /js/，无法缓存 index.html */
   ok('PWA-Service Worker 位于根目录', existsSync(join(root,'sw.js')));
   ok('PWA-旧 js/sw.js 已移除', !existsSync(join(root,'js','sw.js')));
-  const appSrc=readFileSync(join(root,'js','app','app.js'),'utf8');
+  const appSrc=readFileSync(join(root,'js','core','app.js'),'utf8');
   ok('PWA-注册路径指向根 sw.js', /serviceWorker\.register\(\s*['"]sw\.js['"]\s*\)/.test(appSrc));
 }
 

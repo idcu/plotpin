@@ -8,6 +8,9 @@
  * 5) 断言数一致：README 徽章/正文/命令注释与 selftest 实际断言数一致
  * 6) 契约判据：contracts/conventions.json 里列出的约定（版本三处一致 / i18n 键对齐 /
  *    文件头唯一 / 枚举同源）由 scripts/check-contracts.mjs 逐条核对
+ * 7) 对外 API 面：PlotPin.* 的顶层键 ↔ contracts/plugin-api.json 双向比对
+ * 8) 删除记录：docs/deletions.md 字段齐全、无假删除
+ * 9) 模块分层：js/ 下只允许 common/core/features，且加载顺序按层非递减（docs/modules.md）
  *
  * 用法：node scripts/check.mjs
  */
@@ -38,7 +41,7 @@ for (const f of [...jsFiles, ...toolFiles, ...(existsSync(swFile) ? [swFile] : [
   const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   if (r.status !== 0) errors.push(`语法错误：${relative(root, f)}\n${(r.stderr || '').trim()}`);
 }
-const appSrc = readFileSync(join(root, 'js', 'app', 'app.js'), 'utf8');
+const appSrc = readFileSync(join(root, 'js', 'core', 'app.js'), 'utf8');
 const swReg = appSrc.match(/serviceWorker\.register\(\s*['"]([^'"]+)['"]/);
 if (!swReg) errors.push('app.js 中未找到 Service Worker 注册调用');
 else if (swReg[1].replace(/^\.\//, '') !== 'sw.js') errors.push(`Service Worker 注册路径应指向根目录 sw.js（当前：${swReg[1]}）`);
@@ -83,9 +86,36 @@ if (dels.status !== 0) {
   errors.push('删除记录未守约：\n' + (dels.stdout || '').trim() + '\n' + (dels.stderr || '').trim());
 }
 
+/* 9. 模块分层（docs/modules.md）：目录归属 + 加载顺序按层非递减。
+   classic <script> 共享全局作用域，目录边界是唯一还能被机器核对的"模块边界"。 */
+const LAYERS = { 'js/common/': 0, 'js/core/': 1, 'js/features/': 2 };
+const ENTRY_LAYER = 3;
+const layerOf = (p) => {
+  const n = relative(root, p).replace(/\\/g, '/');
+  if (n === 'js/core/app.js') return ENTRY_LAYER;
+  for (const [prefix, v] of Object.entries(LAYERS)) if (n.startsWith(prefix)) return v;
+  return -1;
+};
+const jsDirs = readdirSync(join(root, 'js'), { withFileTypes: true })
+  .filter(e => e.isDirectory()).map(e => e.name).sort();
+const allowedDirs = ['common', 'core', 'features'];
+for (const d of jsDirs) {
+  if (!allowedDirs.includes(d)) errors.push(`js/ 下出现未登记的层：${d}/（只允许 ${allowedDirs.join(' / ')}）`);
+}
+
+const layerSrcs = [...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m => m[1]);
+let prev = -1;
+for (const src of layerSrcs) {
+  if (!src.startsWith('js/')) continue;
+  const lv = layerOf(join(root, src));
+  if (lv < 0) { errors.push(`脚本不在任何已登记的层里：${src}`); continue; }
+  if (lv < prev) errors.push(`层序倒退：${src} 属于第 ${lv} 层，却排在第 ${prev} 层之后（见 docs/modules.md）`);
+  prev = Math.max(prev, lv);
+}
+
 if (errors.length) {
   console.error('❌ 工程自检未通过：');
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约`);

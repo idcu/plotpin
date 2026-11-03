@@ -94,24 +94,25 @@ npx serve .
 ├── css/
 │   └── style.css
 ├── js/
-│   ├── app/                  # 应用逻辑：配置 / 模型 / 几何 / 渲染 / 交互 / 持久化
+│   ├── core/                 # 内核：常量 / 模型 / 几何 / 渲染 / 交互 / 持久化 / 视口 / 启动
+│   ├── features/             # 功能域：属性面板、清单、UI 外壳、插件注册点、导入导出、停车、协作
 │   │   ├── props.js          # 属性面板、场地属性、标注开关、节点编辑、批量属性
 │   │   ├── ui-panels.js      # 侧栏页签、清单、图层/类型、统计、覆盖率、统一刷新
-│   │   ├── io.js             # 新建、多工程库、楼层管理、底图与文件导入
-│   │   ├── io-import.js      # 文件导入路由、DXF/PDF/图片底图、底图与场地选择
-│   │   ├── io-table.js       # CSV/TSV/XLSX 表格导入规划与合并
-│   │   ├── io-export.js      # JSON/PNG/SVG/CSV/XLSX/DXF/PDF、标签、盲区与打印报告
+│   │   ├── io*.js            # 新建/工程库/楼层、文件导入、表格导入、导出与打印报告
 │   │   ├── parking.js        # 停车规划：双面车位/通道自动排布与净宽检查
 │   │   ├── collab.js         # 实时协作：本机 BroadcastChannel + 跨设备 WebRTC 手动信令
-│   │   └── …                 # config/model/geometry/render/interaction/ui-shell/persistence
+│   │   ├── ui-shell.js       # UI 外壳组装
+│   │   └── plugins.js        # 插件注册点（对外 API 面见 contracts/plugin-api.json）
 │   └── common/               # 项目专有库：i18n、LWW 合并、符号库；XML/ZIP/XLSX/DSV/DXF/PDF/PDF-image/QR/资产/几何走 ngm.vendor
 ├── contracts/
-│   └── conventions.json      # 机器可读契约：版本号 / i18n 键 / 文件头 / 枚举同源
+│   ├── conventions.json      # 机器可读契约：版本号 / i18n 键 / 文件头 / 枚举同源
+│   └── plugin-api.json       # PlotPin 对外承诺的 13 个键（双向比对）
 ├── scripts/                  # check（门禁总闸）/ check-contracts（契约判据）/ selftest / badge / bench / build
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
     ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
     ├── features.md           # 35 条完整特性（含边界与实现口径）
+    ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
     └── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
 ```
 
@@ -213,7 +214,7 @@ npm run build
 ### Plugins
 
 ```html
-<script src="js/app/plugins.js"></script>
+<script src="js/core/plugins.js"></script>
 <script>
 /* 自定义设备类型：进入类型下拉，新建/载入工程都会带上；被对象使用时注销会被拒绝 */
 PlotPin.registerObjectType({
