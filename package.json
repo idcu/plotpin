@@ -14,7 +14,8 @@
     "badge": "node scripts/badge.mjs",
     "bench": "node scripts/bench.mjs",
     "build": "node scripts/build.mjs",
-    "ci": "node scripts/check.mjs"
+    "ci": "node scripts/check.mjs",
+    "discipline": "node scripts/check-discipline.mjs"
   },
   "keywords": [
     "canvas",
