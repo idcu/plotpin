@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "name": "@idcu/core-geometry",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "runtime": "node",
   "main": "./src/index.mjs",
   "dependencies": []

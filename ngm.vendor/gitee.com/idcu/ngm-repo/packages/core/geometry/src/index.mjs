@@ -9,6 +9,7 @@ export const {
   vecAdd, vecSub, vecScale, distance, rotatePoint, normalizeAngle,
   polygonArea, polylineLength, pointInPolygon, polygonBBox, boundsIntersect,
   nearestPointOnSegment, distanceToSegment, segmentIntersection, segmentsIntersect,
+  polygonSelfIntersects, segmentBlocked,
   constrainDirectional, constrainOrtho, constrainPolar, constrainSquareCorner,
   clampSkew, parallelogramPoints, sectorSweep, sectorArcPoints,
   sectorArea, sectorPerimeter, ellipseArea, ellipsePerimeter,

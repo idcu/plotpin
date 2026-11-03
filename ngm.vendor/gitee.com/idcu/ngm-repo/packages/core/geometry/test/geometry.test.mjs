@@ -155,6 +155,26 @@ test('validAffine', () => {
   assert.equal(G.validAffine({ a: 1, b: 0, c: 0, d: 0, e: NaN, f: 0 }), null);
 });
 
+test('polygonSelfIntersects', () => {
+  assert.equal(G.polygonSelfIntersects([[0, 0], [2, 2], [2, 0], [0, 2]]), true);   // 蝴蝶结
+  assert.equal(G.polygonSelfIntersects([[0, 0], [2, 0], [2, 2], [0, 2]]), false);   // 正方形
+  assert.equal(G.polygonSelfIntersects([[0, 0], [4, 0], [4, 4], [2, 2], [0, 4]]), false);
+  assert.equal(G.polygonSelfIntersects([[0, 0], [4, 0], [0, 2], [4, 2]]), true);
+  assert.equal(G.polygonSelfIntersects([[0, 0], [2, 0], [4, 0], [4, 2], [0, 2]]), false);
+  assert.equal(G.polygonSelfIntersects([[0, 0], [1, 0], [1, 1]]), false);
+  assert.equal(G.polygonSelfIntersects([]), false);
+});
+
+test('segmentBlocked', () => {
+  const square = [[1, 1], [3, 1], [3, 3], [1, 3]];
+  assert.equal(G.segmentBlocked([0, 0], [4, 4], [square]), true);
+  assert.equal(G.segmentBlocked([1.5, 1.5], [2.5, 2.5], [square]), false);
+  assert.equal(G.segmentBlocked([0, 0], [0.5, 0.5], [square]), false);
+  assert.equal(G.segmentBlocked([0, 0], [4, 4], []), false);
+  assert.equal(G.segmentBlocked([0, 0], [4, 4], [[[5, 5], [6, 5], [6, 6]]]), false);
+  assert.equal(G.segmentBlocked([0, 4], [4, 0], [square, [[5, 0], [6, 0], [6, 6], [5, 6]]]), true);
+});
+
 test('cjs entry loads and shares the same implementation', () => {
   const require = createRequire(import.meta.url);
   const C = require('../src/index.cjs');

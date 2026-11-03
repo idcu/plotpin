@@ -13,7 +13,7 @@
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/core/geometry/v0.1.0",
+      "ref": "packages/core/geometry/v0.2.0",
       "refType": "tag",
       "path": "packages/core/geometry"
     },
@@ -25,13 +25,13 @@
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/dxf/v0.1.0",
+      "ref": "packages/format/dxf/v0.2.1",
       "refType": "tag",
       "path": "packages/format/dxf"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/pdf/v0.1.0",
+      "ref": "packages/format/pdf/v0.2.0",
       "refType": "tag",
       "path": "packages/format/pdf"
     },

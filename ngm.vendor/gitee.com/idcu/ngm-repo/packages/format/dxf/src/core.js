@@ -11,8 +11,27 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-/* $INSUNITS → 米换算系数（AutoCAD 规范常用值） */
-const UNIT_TO_METER={0:1,1:0.0254,2:0.3048,4:0.001,5:0.01,6:1,8:0.0254/100,9:1,10:1,13:1000,14:0.1};
+/* 旧版 $INSUNITS 映射（0.1.0 行为，默认保留以保证旧调用不变） */
+const LEGACY_UNIT_TO_METER={0:1,1:0.0254,2:0.3048,4:0.001,5:0.01,6:1,8:0.0254/100,9:1,10:1,13:1000,14:0.1};
+/* 完整/正确的 AutoCAD $INSUNITS 映射；opt.strictUnits=true 时启用 */
+const FULL_UNIT_TO_METER={
+  0:1,            /* unitless（按米处理） */
+  1:0.0254,       /* inches */
+  2:0.3048,       /* feet */
+  3:1609.344,     /* miles */
+  4:0.001,        /* millimeters */
+  5:0.01,         /* centimeters */
+  6:1,            /* meters */
+  7:1000,         /* kilometers */
+  8:2.54e-8,      /* microinches */
+  9:2.54e-5,      /* mils */
+  10:0.9144,      /* yards */
+  11:1e-10,       /* angstroms */
+  12:1e-9,        /* nanometers */
+  13:1e-6,        /* microns */
+  14:0.1          /* decimeters */
+};
+const UNIT_TO_METER=LEGACY_UNIT_TO_METER;
 
 /* 标准 ACI 颜色前 9 号（图层/实体用），超出取最近 */
 const ACI_RGB={
@@ -177,23 +196,32 @@ function parseDxf(text,opt){
       delete e.vertices;
     }
   });
-  /* 展开 INSERT 块引用，再统一几何落地与单位换算 */
-  const factor=UNIT_TO_METER[insUnits]??1;
+  /* 递归展开 INSERT 块引用（含块内嵌套 INSERT），再统一几何落地与单位换算。
+   * maxInsertDepth 默认 1（保持旧行为：只展开顶层引用）；opt.maxInsertDepth 可放宽到 8。
+   * transforms 从外到内累积；落地时逆序应用，保证嵌套块的旋转/缩放/平移顺序正确。 */
+  const factor=(opt&&opt.strictUnits?FULL_UNIT_TO_METER:LEGACY_UNIT_TO_METER)[insUnits]??1;
+  const maxDepth=Math.max(1,Math.min(8,Number(opt&&opt.maxInsertDepth)||1));
   const expanded=[];
-  const pushExpanded=(rec,ins)=>{
-    for(const out of finalizeRecord(rec,blocks,ins)) expanded.push(out);
-  };
-  entities.forEach(rec=>{
+  const expandRecord=(rec,transforms,depth)=>{
     if(rec.kind==='INSERT'){
+      if(depth>=maxDepth) return;
       const blk=blocks.get(rec.block);
       if(!blk) return;
       blk.forEach(b=>{
         const copy=JSON.parse(JSON.stringify(b));
         if(copy.layer==='0') copy.layer=rec.layer||'0';
-        pushExpanded(copy,rec);
+        expandRecord(copy,(transforms||[]).concat([rec]),depth+1);
       });
-    }else pushExpanded(rec,null);
-  });
+      return;
+    }
+    const geoms=finalizeRecord(rec,blocks,null);
+    (transforms||[]).slice().reverse().forEach(t=>geoms.forEach(e=>applyInsertTransform(e,t)));
+    geoms.forEach(e=>{
+      if(expanded.length>=L.maxEntities) throw new Error('DXF 展开后实体数超过上限 '+L.maxEntities+'，请拆分或简化后导入');
+      expanded.push(e);
+    });
+  };
+  entities.forEach(rec=>expandRecord(rec,[],0));
   return {entities:expanded.filter(Boolean).map(e=>scaleEntity(e,factor)), unit:factor, insUnits, blockCount:blocks.size};
 }
 
@@ -267,6 +295,7 @@ function finalizeRecord(rec,blocks,ins){
     out.push({type:'LWPOLYLINE',layer:rec.layer,closed:false,points:[[rec.x,rec.y],[rec.x2,rec.y2]]});
   }else if(kind==='LWPOLYLINE'){
     /* 凸度弧段展开为密集折线；闭合由 closed 标志表达，闭合段不再重复首点 */
+    if(!Array.isArray(rec.points)||!rec.points.length) return out;   /* 零顶点多段线：跳过 */
     const pts=[rec.points[0]];
     const n=rec.points.length;
     const segs=rec.closed?n:n-1;
@@ -280,7 +309,7 @@ function finalizeRecord(rec,blocks,ins){
     const forceOpen=pts.length<3;
     if(!rec.closed && pts.length>=2) out.push({type:'LWPOLYLINE',layer:rec.layer,closed:false,points:pts});
     else if(rec.closed && pts.length>=3) out.push({type:'LWPOLYLINE',layer:rec.layer,closed:true,points:pts});
-    else if(forceOpen) out.push({type:'LWPOLYLINE',layer:rec.layer,closed:false,points:pts});
+    else if(forceOpen && pts.length>=2) out.push({type:'LWPOLYLINE',layer:rec.layer,closed:false,points:pts});
   }else if(kind==='CIRCLE'){
     if(ins&&Math.abs((ins.sx||1)-(ins.sy??1))>1e-9){
       /* INSERT 非均匀缩放：圆退化为椭圆折线 */
@@ -315,14 +344,23 @@ function finalizeRecord(rec,blocks,ins){
 function applyInsertTransform(e,ins){
   const sx=ins.sx||1, sy=ins.sy===undefined?1:ins.sy, th=(ins.rot||0)*Math.PI/180;
   const co=Math.cos(th), si=Math.sin(th);
+  /* 非均匀缩放：圆退化为椭圆折线（与旧版 finalizeRecord 的 ins 分支一致） */
+  if(e.type==='CIRCLE' && Math.abs(sx-sy)>1e-9){
+    const ell=sampleEllipse([e.x,e.y],[e.r,0],1,0,2*Math.PI,48);
+    e.type='LWPOLYLINE'; e.closed=true; e.points=ell.points;
+    delete e.x; delete e.y; delete e.r;
+  }
   const map=p=>{ const x=p[0]*sx, y=p[1]*sy; return [ins.x+x*co-y*si, ins.y+x*si+y*co]; };
   if(e.points) e.points=e.points.map(map);
   if(e.type==='CIRCLE'){
     const nx=ins.x+e.x*sx*co-e.y*sy*si, ny=ins.y+e.x*sx*si+e.y*sy*co;
     e.x=nx; e.y=ny; e.r*=Math.abs(sx);
   }else{
-    e.x=ins.x+e.x*sx*co-e.y*sy*si;
-    e.y=ins.y+e.x*sx*si+e.y*sy*co;
+    /* 先缓存原始 x/y：第二行若复用已被改写的 e.x，会让旋转块内的 TEXT/POINT Y 坐标错误 */
+    const ox=e.x, oy=e.y;
+    e.x=ins.x+ox*sx*co-oy*sy*si;
+    e.y=ins.y+ox*sx*si+oy*sy*co;
+    if(e.type==='TEXT') e.height=(Number(e.height)||1)*Math.abs(sy);
   }
 }
 /** $INSUNITS 线性量统一换算到米 */
@@ -333,9 +371,11 @@ function scaleEntity(e,f){
   return e;
 }
 
-/* ---------------- 生成 R12 ASCII DXF（坐标米→毫米） ---------------- */
+/* ---------------- 生成 ASCII DXF（坐标米→毫米） ----------------
+ * 默认 R12/AC1009；opt.version='R14' 输出 AC1014（LWPOLYLINE 自 R14 起才正式定义）。 */
 function buildDxf(entities,layers,opt={}){
   const factor=opt.factor??1000;
+  const acadVersion=opt.version==='R14'?'AC1014':'AC1009';
   const f=v=>{ const n=Number(v)*factor; return (Math.round(n*1e6)/1e6).toString(); };
   const layerList=[]; const layerColor=new Map();
   const addLayer=(name,color)=>{ const n=safeLayer(name); if(!layerList.includes(n)){layerList.push(n);layerColor.set(n,nearestAci(color));} };
@@ -345,7 +385,7 @@ function buildDxf(entities,layers,opt={}){
 
   const pair=(c,v)=>c+'\r\n'+v+'\r\n';
   let out='';
-  out+=pair(0,'SECTION')+pair(2,'HEADER')+pair(9,'$ACADVER')+pair(1,'AC1009')
+  out+=pair(0,'SECTION')+pair(2,'HEADER')+pair(9,'$ACADVER')+pair(1,acadVersion)
       + pair(9,'$INSUNITS')+pair(70,4)+pair(0,'ENDSEC');
   out+=pair(0,'SECTION')+pair(2,'TABLES');
   out+=pair(0,'TABLE')+pair(2,'LTYPE')+pair(70,1)+pair(0,'LTYPE')+pair(2,'CONTINUOUS')+pair(70,0)+pair(3,'CONTINUOUS')+pair(72,65)+pair(73,0)+pair(40,0)+pair(0,'ENDTAB');
@@ -381,6 +421,6 @@ return {
   build: buildDxf,
   parseDxf, buildDxf,
   nearestAci, safeLayer, bulgeSegment, evalBSpline, sampleEllipse, stripMtext,
-  UNIT_TO_METER, LIMITS: DXF_LIMITS
+  UNIT_TO_METER, FULL_UNIT_TO_METER, LIMITS: DXF_LIMITS
 };
 });

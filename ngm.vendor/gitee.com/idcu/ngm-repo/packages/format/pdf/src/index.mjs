@@ -9,6 +9,7 @@ export const {
   bytesToBinary, binaryToBytes,
   dictName, dictNumber, dictArray, dictRef, dictRawBlock,
   scanObjects, filtersOf, decodeStream, tokenizeContent,
+  unpackObjectStreams, lzwDecode, cmykToRgb,
   parse
 } = P;
 

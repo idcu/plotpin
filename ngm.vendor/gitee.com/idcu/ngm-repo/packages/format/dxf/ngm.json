@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "name": "@idcu/format-dxf",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "runtime": "node",
   "main": "./src/index.mjs",
   "dependencies": []

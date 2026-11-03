@@ -23,7 +23,7 @@ solveAffine([
 |---|---|
 | 向量 | `vecAdd` / `vecSub` / `vecScale` / `distance` / `rotatePoint` / `normalizeAngle` |
 | 多边形 | `polygonArea` / `polylineLength` / `pointInPolygon` / `polygonBBox` / `boundsIntersect` |
-| 线段 | `nearestPointOnSegment` / `distanceToSegment` / `segmentIntersection` / `segmentsIntersect` |
+| 线段 | `nearestPointOnSegment` / `distanceToSegment` / `segmentIntersection` / `segmentsIntersect` / `polygonSelfIntersects` / `segmentBlocked` |
 | 方向约束 | `constrainDirectional` / `constrainOrtho` / `constrainPolar` / `constrainSquareCorner` |
 | 形状度量 | `clampSkew` / `parallelogramPoints` / `sectorSweep` / `sectorArcPoints` / `sectorArea` / `sectorPerimeter` / `ellipseArea` / `ellipsePerimeter` |
 | 仿射 | `affineApply` / `affineMultiply` / `affineInvert` / `solveAffine` / `validAffine` |
@@ -34,5 +34,7 @@ solveAffine([
 - `EPS = 1e-8` 是退化判定阈值（零长度向量、平行线），与上游实现一致。
 - `solveAffine(pairs)` 的 `pairs` 每项为 `{u,v,x,y}`：源坐标 → 目标坐标；2 对点求精确相似，≥3 对点用最小二乘求完整仿射。
 - `affineInvert` 对奇异矩阵返回单位矩阵，不抛错。
+- 0.2.0 新增 `polygonSelfIntersects(points)`（网格分桶的闭合多边形自相交检测）与
+  `segmentBlocked(a, b, polygons)`（线段是否被多边形边界遮挡，`polygons` 为坐标点数组的数组）。
 
 来源：plotpin `js/app/geometry.js` 的纯数学部分（MIT），业务对象/捕捉/覆盖率/底图语义保留在上游。

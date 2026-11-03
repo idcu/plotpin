@@ -108,6 +108,76 @@
     return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
   }
 
+  /** 闭合多边形自相交检测：均匀网格分桶，只比较同桶边，避免 O(n²)；相邻边（含首尾）跳过 */
+  function polygonSelfIntersects(points) {
+    const ps = points || [], n = ps.length;
+    if (n < 4) return false;
+    let bbox = null;
+    for (const p of ps) {
+      if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+      if (!bbox) bbox = [p.slice()];
+      else bbox.push(p);
+    }
+    if (!bbox) return false;
+    const bb = polygonBBox(bbox);
+    if (!bb) return false;
+    const span = Math.max(bb.w, bb.h);
+    const cell = Math.max(1e-9, span / Math.max(2, Math.sqrt(n)));
+    const cols = Math.max(1, Math.ceil(bb.w / cell) + 1);
+    const rows = Math.max(1, Math.ceil(bb.h / cell) + 1);
+    const grid = new Map();
+    const idx = (cx, cy) => cy * cols + cx;
+    const clampX = (x) => Math.max(0, Math.min(cols - 1, x));
+    const clampY = (y) => Math.max(0, Math.min(rows - 1, y));
+    for (let i = 0; i < n; i++) {
+      const a = ps[i], b = ps[(i + 1) % n];
+      if (!a || !b) continue;
+      const x0 = clampX(Math.floor((Math.min(a[0], b[0]) - bb.minX) / cell));
+      const x1 = clampX(Math.floor((Math.max(a[0], b[0]) - bb.minX) / cell));
+      const y0 = clampY(Math.floor((Math.min(a[1], b[1]) - bb.minY) / cell));
+      const y1 = clampY(Math.floor((Math.max(a[1], b[1]) - bb.minY) / cell));
+      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+        const k = idx(cx, cy);
+        let list = grid.get(k);
+        if (!list) { list = []; grid.set(k, list); }
+        list.push(i);
+      }
+    }
+    const tested = new Set();
+    for (const list of grid.values()) {
+      for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+        const i = list[x], j = list[y], diff = Math.abs(i - j);
+        if (diff <= 1 || diff === n - 1) continue;
+        const key = i < j ? i * n + j : j * n + i;
+        if (tested.has(key)) continue;
+        tested.add(key);
+        if (segmentsIntersect(ps[i], ps[(i + 1) % n], ps[j], ps[(j + 1) % n])) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 线段 ab 是否被任一多边形边遮挡（视线/遮挡判定）；polygons 为坐标点数组的数组。
+   * 只做线段与多边形边界求交，不判断端点是否在多边形内部（与遮挡墙语义一致）。
+   */
+  function segmentBlocked(a, b, polygons) {
+    if (!a || !b || !polygons || !polygons.length) return false;
+    const minX = Math.min(a[0], b[0]), maxX = Math.max(a[0], b[0]);
+    const minY = Math.min(a[1], b[1]), maxY = Math.max(a[1], b[1]);
+    for (const poly of polygons) {
+      if (!poly || poly.length < 2) continue;
+      const bb = polygonBBox(poly);
+      if (!bb) continue;
+      if (bb.maxX < minX || bb.minX > maxX || bb.maxY < minY || bb.minY > maxY) continue;
+      const n = poly.length;
+      for (let i = 0; i < n; i++) {
+        if (segmentIntersection(a, b, poly[i], poly[(i + 1) % n])) return true;
+      }
+    }
+    return false;
+  }
+
   /* ---------------- 方向约束（正交 / 极轴 / 等距 / 平行垂直 / 正方形） ---------------- */
   /**
    * 方向约束：在「平行 / 垂直 / 等距 / 极轴」容差内把 point 钳到对应方向。
@@ -313,6 +383,7 @@
     vecAdd, vecSub, vecScale, distance, rotatePoint, normalizeAngle,
     polygonArea, polylineLength, pointInPolygon, polygonBBox, boundsIntersect,
     nearestPointOnSegment, distanceToSegment, segmentIntersection, segmentsIntersect,
+    polygonSelfIntersects, segmentBlocked,
     constrainDirectional, constrainOrtho, constrainPolar, constrainSquareCorner,
     clampSkew, parallelogramPoints, sectorSweep, sectorArcPoints,
     sectorArea, sectorPerimeter, ellipseArea, ellipsePerimeter,

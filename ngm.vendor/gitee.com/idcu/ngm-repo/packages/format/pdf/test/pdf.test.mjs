@@ -127,6 +127,72 @@ test('parse rejects invalid input and limit violations', async () => {
   await assert.rejects(P.parse(fixture().pdf, { inflate, limits: { maxPages: 0 } }), /页数超过上限/);
 });
 
+/* 最小 PDF LZW 编码器（仅测试用，earlyChange=1），与解码器形成往返闭环 */
+function lzwEncode(input, earlyChange = 1) {
+  const dict = new Map();
+  let next = 258, codeLen = 9;
+  for (let i = 0; i < 256; i++) dict.set(String.fromCharCode(i), i);
+  const bits = [];
+  const emit = (code) => { for (let i = codeLen - 1; i >= 0; i--) bits.push((code >> i) & 1); };
+  emit(256);
+  let seq = String.fromCharCode(input[0]);
+  for (let i = 1; i < input.length; i++) {
+    const c = String.fromCharCode(input[i]), cand = seq + c;
+    if (dict.has(cand)) { seq = cand; continue; }
+    emit(dict.get(seq));
+    if (next < 4096) {
+      dict.set(cand, next); next++;
+      if (next + earlyChange >= (1 << codeLen) && codeLen < 12) codeLen++;
+    }
+    seq = c;
+  }
+  emit(dict.get(seq));
+  emit(257);
+  const out = new Uint8Array(Math.ceil(bits.length / 8));
+  bits.forEach((b, i) => { out[i >> 3] |= b << (7 - (i & 7)); });
+  return out;
+}
+
+test('lzwDecode round trips the PDF LZW variant', () => {
+  /* PDF 规范示例：-----A---B */
+  assert.deepEqual([...P.lzwDecode(new Uint8Array([0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01]))],
+    [45, 45, 45, 45, 45, 65, 45, 45, 45, 66]);
+  const raw = new Uint8Array(700);
+  for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 251;
+  const packed = lzwEncode(raw);
+  const back = P.lzwDecode(packed);
+  assert.deepEqual([...back], [...raw]);
+  assert.ok(back.length > 300);               // 覆盖 9→10 位扩宽
+});
+
+test('decodeStream supports LZWDecode', async () => {
+  const content = '0 0 m 4 4 l S';
+  const packed = lzwEncode(new Uint8Array(Buffer.from(content, 'binary')));
+  const d = await P.decodeStream({ dict: '<< /Filter /LZWDecode /Length ' + packed.length + ' >>', data: toLatin(packed) }, { inflate });
+  assert.equal(d.text, content);
+});
+
+test('parse unpacks /ObjStm object streams so pages are discoverable', async () => {
+  const body = '<< /Type /Page /MediaBox [0 0 100 100] /Contents 4 0 R >>';
+  const text = '3 0 ' + body;
+  const z = deflateSync(Buffer.from(text, 'binary'));
+  let pdf = '%PDF-1.4\n';
+  pdf += obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  pdf += obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  pdf += obj(4, '<< /Length 5 >>\nstream\nA B m\nendstream');
+  pdf += obj(5, '<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length ' + z.length + ' >>\nstream\n' + toLatin(z) + 'endstream');
+  const r = await P.parse(pdf, { inflate });
+  assert.equal(r.pages.length, 1);
+  assert.ok(r.objects.has(3));
+  assert.deepEqual(r.pages[0].contentRefs, [4]);
+  assert.equal(r.pages[0].contentText, 'A B m\n');
+});
+
+test('cmykToRgb converts 4-channel pixels to RGB', () => {
+  const rgb = P.cmykToRgb(new Uint8Array([0, 255, 255, 0, 0, 0, 0, 255, 255, 255, 255, 0]));
+  assert.deepEqual([...rgb], [255, 0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
 test('cjs entry loads and shares the same implementation', () => {
   const require = createRequire(import.meta.url);
   const C = require('../src/index.cjs');
