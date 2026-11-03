@@ -4,8 +4,11 @@
   "description": "图钉 PlotPin — 离线、零依赖、双击即用的通用图纸标注工具",
   "private": true,
   "scripts": {
-    "test": "node scripts/selftest.mjs",
+    "test": "node scripts/check-ngm.mjs && node scripts/selftest.mjs",
+    "check:ngm": "node scripts/check-ngm.mjs",
     "lint": "node scripts/check.mjs",
+    "contracts": "node scripts/check-contracts.mjs",
+    "contracts:selftest": "node scripts/check-contracts.mjs --selftest",
     "badge": "node scripts/badge.mjs",
     "bench": "node scripts/bench.mjs",
     "build": "node scripts/build.mjs",

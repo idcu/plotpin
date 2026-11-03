@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "为什么": "这几条约定一旦漂移都是静默的：版本号错 → 插件按错误的 API 版本编程；文案键缺 → 切到英文直接露出键名；文件头重复 → 新读者读到两份互相矛盾的职责说明；枚举不同源 → 渲染把未知形状当成 none。它们看不见，所以必须由判据看着。",
+  "versionSources": [
+    { "file": "package.json", "path": "version", "为什么": "发行版本与 Service Worker 缓存的锚点" },
+    { "file": "ngm.json", "path": "version", "为什么": "依赖清单与包版本必须同一口径" },
+    {
+      "file": "js/app/plugins.js",
+      "pattern": "version:\\s*'([0-9]+\\.[0-9]+\\.[0-9]+)'",
+      "为什么": "外部插件通过 PlotPin.version 判断 API 版本；它不能与包版本各走各的"
+    }
+  ],
+  "i18n": {
+    "source": "js/common/i18n.js",
+    "html": "index.html",
+    "为什么": "zh / en 必须同键集，且 index.html 里每个 data-i18n* 键都要有译文——缺一个就露出键名"
+  },
+  "headers": {
+    "root": "js",
+    "为什么": "每个脚本恰好一行 `/* 文件名.js —— 职责 */`；两行会互相矛盾（io.js / ui-panels.js 就出过）"
+  },
+  "enums": [
+    {
+      "name": "scaleShape",
+      "a": { "file": "js/app/config.js", "pattern": "POINT_SCALE_SHAPES\\s*=\\s*\\{([^}]*)\\}" },
+      "b": { "file": "js/app/plugins.js", "pattern": "TYPE_SHAPES\\s*=\\s*\\[([^\\]]*)\\]" },
+      "为什么": "插件注册时校验 scaleShape 的合法集合，渲染则按 POINT_SCALE_SHAPES 解释；两个集合必须相等"
+    }
+  ],
+  "notGated": [
+    "Service Worker 的 CACHE 版本号：它是**换代纪律**，没有可读的判据能证明「改了 js 就必须 bump」——只在 docs/engineering.md 里写明，不假装有门禁。"
+  ]
+}

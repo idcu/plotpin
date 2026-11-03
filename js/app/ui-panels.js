@@ -1,5 +1,4 @@
 /* ui-panels.js —— 侧栏页签、下拉、对象清单、图层/类型、统计、覆盖率与统一刷新 */
-/* ui-panels.js —— 标签页、属性面板、对象清单、图层/类型管理、统计与存储占用 */
 /* -------------------- UI：标签页 / 工具栏 -------------------- */
 function switchTab(tab){
   document.querySelectorAll('.side-tab').forEach(b=>{

@@ -6,6 +6,8 @@
  * 3) 入口完整性：js/ 下每个脚本都必须被 index.html 引用（Service Worker 例外）
  * 4) 离线承诺：入口不得引用任何远程脚本/样式/资源
  * 5) 断言数一致：README 徽章/正文/命令注释与 selftest 实际断言数一致
+ * 6) 契约判据：contracts/conventions.json 里列出的约定（版本三处一致 / i18n 键对齐 /
+ *    文件头唯一 / 枚举同源）由 scripts/check-contracts.mjs 逐条核对
  *
  * 用法：node scripts/check.mjs
  */
@@ -63,9 +65,15 @@ for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
 const badge = spawnSync(process.execPath, [join(root, 'scripts', 'badge.mjs'), '--check'], { encoding: 'utf8' });
 if (badge.status !== 0) errors.push((badge.stdout || badge.stderr || '断言数校验失败').trim());
 
+/* 6. 契约判据（版本 / i18n / 文件头 / 枚举） */
+const contracts = spawnSync(process.execPath, [join(root, 'scripts', 'check-contracts.mjs')], { encoding: 'utf8' });
+if (contracts.status !== 0) {
+  errors.push('契约判据未通过：\n' + (contracts.stdout || '').trim() + '\n' + (contracts.stderr || '').trim());
+}
+
 if (errors.length) {
   console.error('❌ 工程自检未通过：');
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约`);
