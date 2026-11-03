@@ -77,6 +77,12 @@ if (api.status !== 0) {
   errors.push('对外 API 面未守约：\n' + (api.stdout || '').trim() + '\n' + (api.stderr || '').trim());
 }
 
+/* 8. 结构性删除的账本（docs/deletions.md：字段齐全、无假删除） */
+const dels = spawnSync(process.execPath, [join(root, 'scripts', 'check-deletions.mjs')], { encoding: 'utf8' });
+if (dels.status !== 0) {
+  errors.push('删除记录未守约：\n' + (dels.stdout || '').trim() + '\n' + (dels.stderr || '').trim());
+}
+
 if (errors.length) {
   console.error('❌ 工程自检未通过：');
   errors.forEach(e => console.error('  - ' + e));

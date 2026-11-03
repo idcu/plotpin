@@ -110,7 +110,9 @@ npx serve .
 ├── scripts/                  # check（门禁总闸）/ check-contracts（契约判据）/ selftest / badge / bench / build
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
-    └── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
+    ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
+    ├── features.md           # 35 条完整特性（含边界与实现口径）
+    └── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
 ```
 
 ---
