@@ -2947,6 +2947,36 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+/* 导出双槽与场地标注证据：JSON / SVG / DXF 真实产物断言（PNG/PDF 共用 drawScene，浏览器回归触发） */
+{
+  api.resetState();
+  Object.assign(api.state.settings,{siteNodes:true,siteSegLen:true,siteBase:true,siteRadius:true,siteArea:true,sitePerimeter:true});
+  api.state.background={kind:'image',fileName:'export.png',assetId:'bg.export',width:100,height:80,origin:[0,0],
+    metersPerPixel:1,calibrated:true,transform:{a:1,b:0,c:0,d:1,e:0,f:0}};
+  api.state.site={type:'site',id:'site.export',name:'导出场地',layerId:'layer.default',visible:true,locked:false,
+    annot:{},style:{},updatedAt:'2026-01-01T00:00:00.000Z',kind:'circle',
+    shape:{type:'circle',cx:0,cy:0,r:10}};
+  const eo=api.baseObject('point','point.marker',{id:'O_EXP',name:'EXP',x:5,y:5});
+  api.state.objects=[eo];
+  api.syncActiveFloor();
+  const ejson=api.persistableState();
+  eq('导出JSON-图片槽保留', ejson.background.kind, 'image');
+  eq('导出JSON-场地槽保留半径', ejson.site.shape.r, 10);
+  ok('导出JSON-序列化同时含双槽键', JSON.stringify(ejson).includes('"background"')&&JSON.stringify(ejson).includes('"site"'));
+  const esvg=api.buildSceneSvg();
+  ok('导出SVG-含场地半径文本', esvg.includes('10.00 m'));
+  ok('导出SVG-含场地面积与周长', esvg.includes('面积 314.16 ㎡')&&esvg.includes('周长 62.83 m'));
+  ok('导出SVG-含场地基点坐标', esvg.includes('(0.00, 0.00)'));
+  ok('导出SVG-场地与业务对象同图输出', esvg.includes('>EXP<'));
+  ok('导出SVG-场地标注先于业务对象', esvg.indexOf('10.00 m')<esvg.indexOf('>EXP<'));
+  const edxf=api.siteDxfEntities();
+  eq('导出DXF-场地图层', edxf.length===1&&edxf[0].layer, 'SITE');
+  eq('导出DXF-场地闭合折线', edxf[0].closed, true);
+  ok('导出DXF-场地顶点由圆轮廓采样', edxf[0].points.length>=8);
+  eq('导出DXF-不进对象台账', api.objectRowsAll().filter(r=>r['编号']==='SITE').length, 0);
+  api.resetState();
+}
+
 /* 54. 方向约束（平行/垂直/等距/极轴）与临时参考线 ---------------------------- */
 {
   const p=(wp,opt)=>api.directionalSnap([0,0],wp,opt);

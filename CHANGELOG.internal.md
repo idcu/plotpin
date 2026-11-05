@@ -157,5 +157,19 @@
   - 清空会写入 2000 级对象墓碑（受 `TOMBSTONE_LIMIT` 限制），大工程合并时墓碑可能挤掉更早记录；这是既有墓碑策略，不在本次扩展。
   - 清空不可恢复除撤销外的备份；图片资产本体保留在 IndexedDB（供撤销重载），不会立即回收空间。
 
+## 2026-11-05 · 导出双槽与场地标注实测核验
+
+- **Commit Hash**：`占位（本提交后回填）`（test(export): 双槽与场地标注导出证据断言）。
+- **核心改动点**
+  - 未发现导出缺场地：JSON 走 `persistableState()`，顶层同时序列化 `background` 与 `site`；PNG/PDF 图纸页共用 `drawScene()`（含 `drawSite`）；SVG 的场地圆/多边形、节点、段长、半径、面积周长由 `buildSceneSvg` 输出；DXF 场地走 `siteDxfEntities()` 写入独立 `SITE` 图层闭合 `LWPOLYLINE`；CSV/XLSX 只遍历 `state.objects`，场地不产生行。
+  - 新增 12 条真实产物断言：JSON 双槽键、SVG 圆半径 `10.00 m`、面积 `314.16 ㎡` / 周长 `62.83 m`、基点坐标、场地标注先于业务对象、DXF `SITE` 层与闭合折线、场地不进对象台账。
+  - 文档无需改行为描述（`docs/features.md` 双槽导出口径已存在），本提交只补实测证据与变更日志。
+- **实测验证数据（本机实测）**
+  - `node scripts/selftest.mjs`：1614 通过 / 0 失败（前值 1602，净增 12）。
+  - `node scripts/check.mjs` / `node scripts/badge.mjs`：通过，徽章 1614。
+  - PNG/PDF 的实际触发以浏览器回归为准（本轮回归后回填）。
+- **遗留 TODO / 风险**
+  - PNG/PDF 为位图产物，自测不比对像素；依赖 `drawScene` 与 SVG/画布共用绘制链。浏览器回归只验证导出成功提示与画布可见场地，不做像素级比对。
+
 
 
