@@ -71,10 +71,21 @@ let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(
  * @property {number} z
  * @property {string} createdAt
  * @property {string} updatedAt
+ * @typedef {Object} Site
+ * @property {string} id
+ * @property {string} name
+ * @property {string} layerId
+ * @property {boolean} visible
+ * @property {boolean} locked
+ * @property {Object} annot
+ * @property {Object} style
+ * @property {string} kind 场地形状类型（=shape.type，兼容旧代码）
+ * @property {Object} shape 世界坐标形状参数（米）
  * @typedef {Object} Floor
  * @property {string} id
  * @property {string} name
- * @property {Object} [background]
+ * @property {Object} [background] 图片栅格槽
+ * @property {Site|null} [site] 矢量场地槽
  * @property {DrawingObject[]} [objects]
  * @property {Object} [viewport]
  * @property {string} [updatedAt]
@@ -83,7 +94,8 @@ let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(
  * @property {Object} meta
  * @property {Object} settings
  * @property {Object} viewport
- * @property {Object} background
+ * @property {Object} background 图片栅格槽（kind:'empty'|'image'）
+ * @property {Site|null} site 矢量场地槽（独立于 objects）
  * @property {Layer[]} layers
  * @property {ObjectType[]} objectTypes
  * @property {DrawingObject[]} objects
@@ -114,15 +126,15 @@ function createInitialState(){
       lang:'zh',         /* 界面语言：zh / en（静态 chrome 文案） */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     viewport: { zoom:1, panX:0, panY:0 },
-    /* kind: image=图片底图(像素×m/px)；rect/circle/ellipse/sector/polygon=矢量场地(世界坐标米，无需校准) */
-    background: { kind:'rect', fileName:'', assetId:'', width:1000, height:700, origin:[0,0], metersPerPixel:0.1, calibrated:false,
-      transform:null,   /* 仿射校准系数 {a,b,c,d,e,f}：像素(u,v y-down)→世界(x,y y-up)；null=缺省轴对齐 */
-      shape:{type:'rect', w:100, h:70} },
+    /* 双槽：background 只承载图片栅格（kind:'empty'|'image'）；site 独立承载矢量场地（世界坐标米）。
+       两者互不覆盖，每层最多 1 图 + 1 场地；场地不进 objects，不占编号/表格行。 */
+    background: createEmptyBackground(),
+    site: createSiteSlot(defaultSiteShape()),
     layers: [{ id:'layer.default', name:'默认图层', visible:true, locked:false }],
     objectTypes: deepClone(BUILTIN_TYPES),
     objects: [],
-    /* 多楼层/多底图：floors 保存全部楼层元数据；非当前楼层额外持有 background/objects/viewport。
-       当前楼层的可编辑数据始终是顶层 state.background / state.objects（切换与保存时同步）。 */
+    /* 多楼层/多底图：floors 保存全部楼层元数据；非当前楼层额外持有 background/site/objects/viewport。
+       当前楼层的可编辑数据始终是顶层 state.background / state.site / state.objects（切换与保存时同步）。 */
     floors: [{ id:'floor.default', name:'1F' }],
     activeFloorId: 'floor.default',
     /* 删除墓碑（离线 LWW 合并用）：{id, deletedAt, kind:'object'|'floor'}。
@@ -191,6 +203,35 @@ function restackObjects(objects,ids,mode){
 function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
 /** @returns {string} ISO 时间 */
 function nowISO(){ return new Date().toISOString(); }
+
+/* -------------------- 双槽工厂 / 判定（图片栅格 + 矢量场地） -------------------- */
+/** 空图片槽：双槽模型下 background 只承载图片栅格，无图时为 empty */
+function createEmptyBackground(){
+  return { kind:'empty', fileName:'', assetId:'', width:0, height:0, origin:[0,0],
+    metersPerPixel:0.1, calibrated:false, transform:null };
+}
+/** 默认矢量场地形状（世界坐标米，第一象限） */
+function defaultSiteShape(){ return { type:'rect', w:100, h:70 }; }
+/**
+ * 矢量场地槽：独立于 objects，不占 O 编号/CSV/XLSX 行，不设 typeId。
+ * @param {Object} [shape]
+ * @returns {Site}
+ */
+function createSiteSlot(shape){
+  const sh = shape || defaultSiteShape();
+  return { id:'site.default', name:'场地', layerId:'layer.default', visible:true, locked:false,
+    annot:{}, style:{}, updatedAt:nowISO(), kind: sh.type || 'rect', shape: deepClone(sh) };
+}
+/** 图片底图判定：只有 kind==='image' 的槽才承载栅格 */
+function isImageBackground(bg){ return !!(bg && bg.kind==='image'); }
+/** 场地形状（兼容旧 background 对象） */
+function siteShapeOf(site){ return (site && site.shape) || defaultSiteShape(); }
+/** 场地可见性（显式 false 才隐藏） */
+function siteIsVisible(site){ return !!(site && site.visible!==false); }
+/** 场地锁定（锁定后不渲染手柄/不可编辑） */
+function siteIsLocked(site){ return !!(site && site.locked); }
+/** 旧 background 场地对象兼容：非图片且带 shape/矢量 kind */
+function isSiteLike(v){ return !!(v && v.kind!=='image' && v.kind!=='empty' && (v.shape || v.kind)); }
 /** @param {ObjectKind} kind @returns {string} */
 function defaultTypeId(kind){
   if (kind === 'point') return 'point.marker';

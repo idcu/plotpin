@@ -390,7 +390,8 @@ function convertAreaShape(o,newType){
 /* -------------------- 矢量场地（矩形/圆形/椭圆/扇形/多边形） -------------------- */
 /** 场地世界域（米）：图片=像素×m/px；矢量形状直接以米定义、规整在第一象限 */
 function siteDomainOf(bg){
-  bg=bg||state.background;
+  bg=bg||state.site;
+  if(!bg) return {w:100,h:70};
   if(bg.kind==='image'){
     const f=imageWorldFrame(bg);   /* 仿射校准后取四角轴对齐包围框，保证域尺寸与渲染/网格一致 */
     if(f) return {w:Math.max(.01,f.w),h:Math.max(.01,f.h)};
@@ -409,8 +410,9 @@ function siteDomainOf(bg){
     return {w:Math.max(.01,Math.max(...xs)-Math.min(...xs)),h:Math.max(.01,Math.max(...ys)-Math.min(...ys))};
   }
   if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3){
-    const xs=sh.points.map(p=>p[0]),ys=sh.points.map(p=>p[1]);
-    return {w:Math.max(.01,Math.max(...xs,0)),h:Math.max(.01,Math.max(...ys,0))};
+    const xs=sh.points.map(p=>Number(p[0])||0),ys=sh.points.map(p=>Number(p[1])||0);
+    /* 与 siteBounds 一致：取 max-min，负坐标场地不会被错误地钳到 0 */
+    return {w:Math.max(.01,Math.max(...xs)-Math.min(...xs)),h:Math.max(.01,Math.max(...ys)-Math.min(...ys))};
   }
   if(sh.type==='parallelogram'){
     const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
@@ -427,7 +429,8 @@ function positiveNum(v,fb){ const n=Number(v); return Number.isFinite(n)&&n>0?n:
  * 供 worldFrame 取景框使用：节点拖拽到负坐标或超出原范围时取景框随实际形状更新。
  */
 function siteBounds(bg){
-  bg=bg||state.background;
+  bg=bg||state.site;
+  if(!bg) return {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70};
   const mk=(minX,minY,maxX,maxY)=>({minX,minY,maxX,maxY,w:Math.max(.01,maxX-minX),h:Math.max(.01,maxY-minY)});
   if(bg.kind==='image'){
     const f=imageWorldFrame(bg);
@@ -462,6 +465,37 @@ function siteBounds(bg){
   const w=positiveNum(sh.w,100), h=positiveNum(sh.h,70), x=Number(sh.x)||0, y=Number(sh.y)||0;
   return mk(x,y,x+w,y+h);
 }
+/**
+ * 场地统一边界点（世界坐标米，按顺时针/逆时针给出闭合轮廓）：
+ * rect/parallelogram 四角、polygon 顶点、circle/ellipse 采样、sector 弧+圆心。
+ * 供 SVG/DXF 导出与命中测试复用，避免各导出器各写一套形状分支。
+ */
+function siteOutlinePoints(site){
+  const sh=siteShapeOf(site);
+  const pair=p=>[Number(p&&p[0])||0,Number(p&&p[1])||0];
+  if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3) return sh.points.map(pair);
+  if(sh.type==='parallelogram'){
+    return parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew).map(pair);
+  }
+  if(sh.type==='circle'||sh.type==='ellipse'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+    const rx=sh.type==='circle'?positiveNum(sh.r,50):positiveNum(sh.rx,50);
+    const ry=sh.type==='circle'?rx:positiveNum(sh.ry,35);
+    const rot=(Number(sh.angle)||0)*Math.PI/180, c=Math.cos(rot), s=Math.sin(rot);
+    const n=Math.max(32,Math.ceil(Math.max(rx,ry)*4)), out=[];
+    for(let i=0;i<n;i++){
+      const a=i/n*Math.PI*2, lx=Math.cos(a)*rx, ly=Math.sin(a)*ry;
+      out.push([cx+lx*c-ly*s, cy+lx*s+ly*c]);
+    }
+    return out;
+  }
+  if(sh.type==='sector'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0, r=positiveNum(sh.r,50);
+    return sectorArcPoints(cx,cy,r,Number(sh.a0)||0,sectorSweep(sh)).concat([[cx,cy]]).map(pair);
+  }
+  const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), h=positiveNum(sh.h,70);
+  return [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+}
 /** 把任意位置的两个角点规整为原点矩形 {type:'rect',w,h} */
 function rectShapeFromCorners(a,b){
   return {type:'rect',w:Math.max(.05,Math.abs(a[0]-b[0])),h:Math.max(.05,Math.abs(a[1]-b[1]))};
@@ -491,7 +525,8 @@ function polygonShapeFromPoints(points){
 }
 function siteKindName(k){ return ({image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',parallelogram:'平行四边形场地',polygon:'多边形场地'})[k]||k; }
 function siteDescription(bg){
-  bg=bg||state.background;
+  bg=bg===undefined?state.site:bg;
+  if(!bg) return L('矢量场地：未设置');
   const d=siteDomainOf(bg);
   if(bg.kind==='image') return `${L('图片底图：')}${bg.fileName||L('未命名')} ${bg.width}×${bg.height}px ｜ ${fmt(bg.metersPerPixel)} m/px${bg.calibrated?L('（已校准）'):L('（未校准）')} ｜ ${L('实地')} ${fmt(d.w)}×${fmt(d.h)} m`;
   if(bg.kind==='circle') return `${L('圆形场地：')}${L('半径')} ${fmt(bg.shape.r)} m ｜ ${L('占地')} ${fmt(d.w)}×${fmt(d.h)} m`;

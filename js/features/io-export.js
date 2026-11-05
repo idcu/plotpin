@@ -85,7 +85,7 @@ async function exportJSON(){
   // 只要运行时有已装载的图片数据就内嵌——IDB 不可用的降级路径 assetId 为空，同样必须带走（评估报告 5.4）
   const copy=persistableState();
   copy.meta.updatedAt=state.meta.updatedAt;
-  if(bgDataUrl) copy.background.dataUrl=bgDataUrl;
+  if(bgDataUrl && isImageBackground(copy.background)) copy.background.dataUrl=bgDataUrl;
   /* 设备照片同样内嵌 dataUrl，跨设备导入后由 ensureObjectPhotoAssets 转回资产库 */
   for(const o of copy.objects||[]){
     const id=o.props&&o.props.photoId;
@@ -188,38 +188,38 @@ function buildSceneSvg(){
   /* 世界→SVG：以取景框 (minX,minY)-(maxX,maxY) 为基准，兼容仿射校准后含负 min 的包围框 */
   const X=x=>margin+(x-d.minX)*ppu, Y=y=>margin+(d.minY+d.h-y)*ppu;
   const shapes=[], markers=[];
-  if(state.background.kind==='image'&&bgImage&&bgDataUrl){
-    const bg=state.background, t=validImageTransform(bg.transform);
+  const bg=state.background, site=state.site;
+  if(isImageBackground(bg)&&bgImage&&bgDataUrl){
+    const t=validImageTransform(bg.transform);
     if(t){
       /* 按仿射系数把图像像素空间直接映射到 SVG 坐标（支持旋转/不等比/切变） */
       const m=`matrix(${t.a*ppu} ${-t.d*ppu} ${t.b*ppu} ${-t.e*ppu} ${X(t.c)} ${Y(t.f)})`;
       shapes.push(`<image x="0" y="0" width="${bg.width}" height="${bg.height}" transform="${m}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
     }else{
-      shapes.push(`<image x="${X(0)}" y="${Y(d.minY+d.h)}" width="${d.w*ppu}" height="${d.h*ppu}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
+      /* 轴对齐图片：按自身像素×m/px 尺寸绘制，不能用并集取景框尺寸（否则有场地时会被拉伸 */
+      const ww=Math.max(.01,Number(bg.width)*positiveNumber(bg.metersPerPixel,0.1));
+      const hh=Math.max(.01,Number(bg.height)*positiveNumber(bg.metersPerPixel,0.1));
+      shapes.push(`<image x="${X(0)}" y="${Y(hh)}" width="${ww*ppu}" height="${hh*ppu}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
     }
-  }else if(state.background.shape?.type==='circle'){
-    const sh=state.background.shape;
-    shapes.push(`<circle cx="${X(sh.cx)}" cy="${Y(sh.cy)}" r="${sh.r*ppu}" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
-  }else if(state.background.shape?.type==='ellipse'){
-    const sh=state.background.shape;
-    shapes.push(`<ellipse cx="${X(sh.cx)}" cy="${Y(sh.cy)}" rx="${sh.rx*ppu}" ry="${sh.ry*ppu}" transform="rotate(${-Number(sh.angle)||0} ${X(sh.cx)} ${Y(sh.cy)})" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
-  }else if(state.background.shape?.type==='sector'){
-    const sh=state.background.shape, R=sh.r*ppu, cx=X(sh.cx), cy=Y(sh.cy), sweep=sectorSweep(sh);
-    const ex=a=>[cx+R*Math.cos(a*Math.PI/180),cy-R*Math.sin(a*Math.PI/180)];
-    /* 注意运算符优先级：(Number(a0)||0)+sweep，不能写成 a0||0+sweep（起始角非零时退化为同点） */
-    const a0=Number(sh.a0)||0;
-    const p0=ex(a0), p1=ex(a0+sweep), large=sweep>180?1:0;
-    shapes.push(`<path d="M${cx},${cy} L${p1[0]},${p1[1]} A${R},${R} 0 ${large} 1 ${p0[0]},${p0[1]} Z" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
-  }else if(state.background.shape?.type==='parallelogram'){
-    const sh=state.background.shape;
-    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,Number(sh.w)||0,Number(sh.h)||0,sh.skew)
-      .map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
-    shapes.push(`<polygon points="${pts}" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
-  }else if(state.background.shape?.type==='polygon'&&state.background.shape?.points?.length){
-    const pts=state.background.shape.points.map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
-    shapes.push(`<polygon points="${pts}" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>`);
-  }else{
-    shapes.push(`<rect x="${X(0)}" y="${Y(d.h)}" width="${d.w*ppu}" height="${d.h*ppu}" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>`);
+  }
+  /* 矢量场地层：独立于图片槽，SVG 中始终叠加在图片之上 */
+  if(site&&siteIsVisible(site)){
+    const sh=siteShapeOf(site), st=site.style||{};
+    const fill=st.fill||'#eef2f7', stroke=st.stroke||'#3b82f6';
+    if(sh.type==='circle'){
+      shapes.push(`<circle cx="${X(sh.cx)}" cy="${Y(sh.cy)}" r="${sh.r*ppu}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
+    }else if(sh.type==='ellipse'){
+      shapes.push(`<ellipse cx="${X(sh.cx)}" cy="${Y(sh.cy)}" rx="${sh.rx*ppu}" ry="${sh.ry*ppu}" transform="rotate(${-Number(sh.angle)||0} ${X(sh.cx)} ${Y(sh.cy)})" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
+    }else if(sh.type==='sector'){
+      const R=sh.r*ppu, cx=X(sh.cx), cy=Y(sh.cy), sweep=sectorSweep(sh);
+      const ex=a=>[cx+R*Math.cos(a*Math.PI/180),cy-R*Math.sin(a*Math.PI/180)];
+      const a0=Number(sh.a0)||0;
+      const p0=ex(a0), p1=ex(a0+sweep), large=sweep>180?1:0;
+      shapes.push(`<path d="M${cx},${cy} L${p1[0]},${p1[1]} A${R},${R} 0 ${large} 1 ${p0[0]},${p0[1]} Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
+    }else{
+      const pts=siteOutlinePoints(site).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
+      shapes.push(`<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
+    }
   }
   /* SVG 面积/周长双行标签（与画布 drawAreaTag 语义一致；白描边保证任意底色可读）；可分别关闭 */
   const areaTagSvg=(cx,cy,area,perim,showArea=true,showPerim=true)=>{
@@ -229,6 +229,23 @@ function buildSceneSvg(){
     if(s1&&s2) return line(s1,cy-7)+line(s2,cy+9);
     return line(s1||s2,cy+4);
   };
+  /* 场地标注：节点坐标 / 段长 / 半径 / 面积周长（与画布 drawSiteAnnotations 同口径） */
+  if(site&&siteIsVisible(site)){
+    const S=state.settings||{}, ap=siteAreaPerimeter(site), cen=siteShapeCenter(site);
+    if(S.siteArea||S.sitePerimeter) markers.push(areaTagSvg(X(cen[0]),Y(cen[1]),ap.area,ap.perimeter,!!S.siteArea,!!S.sitePerimeter));
+    if(S.siteRadius){
+      const rt=siteRadiusText(site);
+      if(rt) markers.push(`<text x="${X(cen[0])}" y="${Y(cen[1])+18}" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(rt)}</text>`);
+    }
+    const bp=siteBoundaryPoints(site);
+    if(bp&&bp.length){
+      if(S.siteNodes) bp.forEach((p,i)=>markers.push(`<text x="${X(p[0])+5}" y="${Y(p[1])-5}" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P${i+1} (${fmt(p[0])},${fmt(p[1])})</text>`));
+      if(S.siteSegLen) bp.forEach((p,i)=>{
+        const q=bp[(i+1)%bp.length], len=dist(p,q), mx=(p[0]+q[0])/2, my=(p[1]+q[1])/2;
+        markers.push(`<text x="${X(mx)}" y="${Y(my)}" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">${fmt(len)} m</text>`);
+      });
+    }
+  }
   /* 逐对象标注条目 → SVG 文本（与画布 drawObjectAnnotations 共用同一数据源，导出所见一致） */
   const annotItemsSvg=(o)=>annotationItems(o,{selected:false}).map(it=>
     `<text x="${X(it.wx)+it.dx}" y="${Y(it.wy)+it.dy+4}" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(it.text)}</text>`).join('');
@@ -365,9 +382,19 @@ function angleDimDeg(o){
   const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]),a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
   let deg=Math.abs((a2-a1)*180/Math.PI); return deg>180?360-deg:deg;
 }
+/** 场地 DXF 实体：独立 SITE 图层闭合 LWPOLYLINE；隐藏场地不导出 */
+function siteDxfEntities(){
+  const site=state.site;
+  if(!site||!siteIsVisible(site)) return [];
+  return [{type:'LWPOLYLINE',layer:'SITE',color:'#16a34a',points:siteOutlinePoints(site).map(p=>p.slice()),closed:true}];
+}
 function exportDXF(){
   const entities=[];
   const layers=state.layers.map(l=>({name:l.name,color:'#7c3aed'}));
+  /* 矢量场地：独立 SITE 图层，闭合 LWPOLYLINE（不进 objects/CSV/XLSX） */
+  const siteEnts=siteDxfEntities();
+  if(siteEnts.length&&!layers.some(l=>l.name==='SITE')) layers.push({name:'SITE',color:'#16a34a'});
+  entities.push(...siteEnts);
   state.objects.filter(isVisible).forEach(o=>{
     const color=o.style.color||getType(o.typeId).color||'#111827';
     const layer=layerOf(o).name;

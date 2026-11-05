@@ -38,6 +38,19 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 2. `index.html` 的脚本加载顺序按上表**层号非递减**（`core/app.js` 视为 3）；
 3. 每个脚本恰好属于一层，且文件存在。
 
+## 双槽底图的公共抽象（避免重复实现）
+
+图片栅格与矢量场地拆成两个槽位后，以下公共能力只在 `js/core/` 维护一份，`render.js` / `io-export.js` / `interaction.js` 不得各自复制：
+
+| 能力 | 归属 | 调用方 |
+|---|---|---|
+| `createEmptyBackground / createSiteSlot / isImageBackground / siteShapeOf / siteIsVisible / siteIsLocked` | `js/core/model.js` | 全仓 |
+| `siteDomainOf / siteBounds / siteOutlinePoints / imageWorldFrame` | `js/core/geometry.js` | 视口、渲染、导出、交互 |
+| `siteHandleList / resizeSiteByHandle / siteAreaPerimeter` | `js/core/interaction.js`（展示/命中/拖拽层，几何内核来自 geometry） | 渲染、属性面板 |
+| `applyVectorSite / siteDxfEntities` | `js/features/io-import.js` / `js/features/io-export.js` | 仅功能域内部 |
+
+影响范围：`siteHandleList/siteAreaPerimeter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；新增 `siteOutlinePoints` 供 SVG/DXF 共用形状边界。
+
 ## 加一个新功能时
 
 1. 判断它属于哪一层（多数新功能进 `js/features/`）；

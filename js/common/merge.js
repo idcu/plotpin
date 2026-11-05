@@ -30,7 +30,7 @@ function mergeProjectData(currentRaw, incomingRaw){
     const set = mergeFloorObjects(fa, fb, tombs, stats);
     floors.set(id, {
       id, name:meta.name, updatedAt:meta.updatedAt,
-      background:meta.background, viewport:meta.viewport,
+      background:meta.background, site:meta.site, viewport:meta.viewport,
       objects:set.objects, order:set.order
     });
     order.push(id);
@@ -46,7 +46,7 @@ function mergeProjectData(currentRaw, incomingRaw){
       order.push(fallback.id);
     } else {
       const id = 'floor.default';
-      floors.set(id, { id, name:'1F', updatedAt:'', background:null, viewport:null, objects:new Map(), order:[] });
+      floors.set(id, { id, name:'1F', updatedAt:'', background:null, site:null, viewport:null, objects:new Map(), order:[] });
       order.push(id);
     }
   }
@@ -57,7 +57,7 @@ function mergeProjectData(currentRaw, incomingRaw){
     const f = floors.get(id);
     const objs = mergeCloneObjects(f);
     if (id === activeFloorId) return { id, name:f.name };
-    return { id, name:f.name, background:mergeClone(f.background || {}), viewport:mergeClone(f.viewport || {}), objects:objs };
+    return { id, name:f.name, background:mergeClone(f.background || {}), site:mergeClone(f.site || null), viewport:mergeClone(f.viewport || {}), objects:objs };
   });
 
   const meta = Object.assign({}, mergeClone(B.meta || {}), mergeClone(A.meta || {}));
@@ -75,6 +75,7 @@ function mergeProjectData(currentRaw, incomingRaw){
     meta, settings,
     viewport: mergeClone(active.viewport || {}),
     background: mergeClone(active.background || {}),
+    site: mergeClone(active.site || null),
     layers: mergeListById(A.layers, B.layers),
     objectTypes: mergeListById(A.objectTypes, B.objectTypes),
     objects: mergeCloneObjects(active),
@@ -99,11 +100,16 @@ function mergeNormalizeSide(raw){
     const bg = useTop
       ? (raw.background && typeof raw.background === 'object' ? raw.background : null)
       : (f.background && typeof f.background === 'object' ? f.background : null);
+    /* 场地槽：新档显式 site；旧档未迁移时从矢量 background 推导，避免合并且丢失场地 */
+    const site = useTop
+      ? (raw.site !== undefined ? raw.site : mergeSiteFromBackground(raw.background))
+      : (f.site !== undefined ? f.site : mergeSiteFromBackground(f.background));
     floors.set(id, {
       id,
       name: typeof f.name === 'string' ? f.name : '',
       updatedAt: typeof f.updatedAt === 'string' ? f.updatedAt : '',
       background: bg,
+      site,
       viewport: useTop ? (raw.viewport || null) : (f.viewport || null),
       objects: objs.map,
       order: objs.order
@@ -211,16 +217,30 @@ function mergeFloorWrite(fa, fb){
   return t;
 }
 
-/** 同名楼层元数据：名称/底图按最后写入较新的一方，视口保持本地 */
+/** 旧档兼容：无 site 字段时，非图片 background 即矢量场地 */
+function mergeSiteFromBackground(bg){
+  if (!bg || typeof bg !== 'object') return null;
+  return bg.kind && bg.kind !== 'image' && bg.kind !== 'empty' ? bg : null;
+}
+/** 场地 LWW 时间：优先 site.updatedAt（场地独立编辑），否则退回楼层 updatedAt */
+function mergeSiteTime(f){
+  if (!f) return '';
+  const t = f.site && f.site.updatedAt;
+  return typeof t === 'string' && t ? t : f.updatedAt;
+}
+/** 同名楼层元数据：名称/底图/场地按最后写入较新的一方，视口保持本地 */
 function mergeFloorMeta(fa, fb){
   if (!fa) return fb;
   if (!fb) return fa;
   const newer = mergeTime(fb) > mergeTime(fa);
+  const ta = mergeSiteTime(fa), tb = mergeSiteTime(fb);
+  const siteNewer = tb > ta || (tb === ta && fb.site && !fa.site);
   return {
     id: fa.id,
     name: newer ? fb.name : (fa.name || fb.name),
     updatedAt: newer ? fb.updatedAt : fa.updatedAt,
     background: newer ? (fb.background || fa.background) : (fa.background || fb.background),
+    site: siteNewer ? fb.site : (fa.site || fb.site),
     viewport: fa.viewport || fb.viewport
   };
 }

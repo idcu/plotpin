@@ -1,17 +1,29 @@
 /* viewport.js —— 屏幕/世界坐标、DPR、缩放平移、网格吸附 */
 /* -------------------- 画布视图 / 坐标 -------------------- */
 /**
- * 世界坐标取景框（米）：矢量场地/未校准图片规整在第一象限 (0,0)-(w,h)；
- * 仿射校准后的图片四角可为任意平行四边形，取其轴对齐包围框（min 允许负值）。
- * w2s/s2w 统一以该框为基准，保证旋转底图与对象、网格、交互仍共用同一坐标链路。
+ * 世界坐标取景框（米）：图片四角轴对齐框 ∪ 矢量场地实际包围盒。
+ * 双槽共存时取景框覆盖两者，保证切换/缩放时两张图层都在视野内；
+ * 两者都无时回退默认 100×70。w2s/s2w 仍共用同一基准，网格/对象/交互坐标链路不变。
  */
 function computeWorldFrame(){
+  const frames=[];
   const bg=state.background;
-  if(bg&&bg.kind==='image'){
+  if(isImageBackground(bg)){
     const f=imageWorldFrame(bg);
-    if(f) return f;
+    if(f) frames.push(f);
+    else if(Number(bg.width)>0&&Number(bg.height)>0){
+      const m=positiveNumber(bg.metersPerPixel,0.1);
+      const w=Math.max(.01,Number(bg.width)*m), h=Math.max(.01,Number(bg.height)*m);
+      frames.push({minX:0,minY:0,maxX:w,maxY:h,w,h});
+    }
   }
-  return siteBounds(bg);
+  const site=state.site;
+  if(site&&siteIsVisible(site)) frames.push(siteBounds(site));
+  if(!frames.length) return {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70};
+  if(frames.length===1) return frames[0];
+  const minX=Math.min(...frames.map(f=>f.minX)), minY=Math.min(...frames.map(f=>f.minY));
+  const maxX=Math.max(...frames.map(f=>f.maxX)), maxY=Math.max(...frames.map(f=>f.maxY));
+  return {minX,minY,maxX,maxY,w:Math.max(.01,maxX-minX),h:Math.max(.01,maxY-minY)};
 }
 /* 当前取景框缓存：随场地形状变更经 syncFramePan/resetFrameRef 显式刷新。
    缓存可避免每次 w2s 重复计算（扇形弧采样），更重要的是让同一交互帧内的坐标映射保持稳定。 */

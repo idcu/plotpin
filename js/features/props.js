@@ -51,16 +51,14 @@ function renderAnnotToggles(o){
  * mode='default'：未选中任何对象时显示「场地属性」；mode='tool'：「场地节点」工具下显示并给出画布拖拽提示。
  * 矢量场地按形状提供可编辑坐标/参数（世界坐标米，可为负）；图片底图给出底图摘要与比例尺/仿射校准入口。
  */
-function sitePropsHTML(bg, mode){
-  bg=bg||state.background;
+function sitePropsHTML(site, mode){
+  site=site===undefined?state.site:site;
   const tool=mode==='tool';
   const heading=tool?'场地节点':'场地属性';
-  if(!bg) return `<div class="section"><h3>${esc(L(heading))}</h3><div class="prop-empty">${esc(L('尚未设置底图/场地，请点顶部「底图/场地」上传图片或绘制矢量场地。'))}</div></div>`;
-  if(bg.kind==='image'){
-    if(tool) return `<div class="section"><h3>${esc(L('场地节点'))} <span class="hint-text">${esc(L('图片底图'))}</span></h3><div class="prop-empty">${esc(L('当前为图片底图，暂无场地节点可编辑。'))}<br><br>${esc(L('请先在「底图」弹窗中切换为矩形/圆形/椭圆/扇形/平行四边形/多边形矢量场地；图片底图请改用「仿射校准」。'))}</div></div>`;
-    return imagePropsHTML(bg, heading);
-  }
-  const sh=bg.shape||{};
+  if(!site) return `<div class="section"><h3>${esc(L(heading))}</h3><div class="prop-empty">${esc(L('尚未设置矢量场地，请点顶部「底图/场地」绘制矩形/圆形/椭圆/扇形/平行四边形/多边形场地。'))}</div></div>`;
+  /* 兼容旧调用：显式传入旧图片底图对象时仍给出图片属性 */
+  if(site.kind==='image') return imagePropsHTML(site, heading);
+  const sh=siteShapeOf(site);
   const fv=(v,fb=0)=>{ const n=Number(v); return fmt(Number.isFinite(n)?n:fb); };
   const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-site-field="${field}" value="${val}">`;
   const row=(label,inner)=>`<label>${esc(L(label))}</label><div>${inner}</div>`;
@@ -97,11 +95,18 @@ function sitePropsHTML(bg, mode){
     params=`${row('基点 X',num('x',fv(sh.x)))}${row('基点 Y',num('y',fv(sh.y)))}
       ${row('宽度 (m)',num('w',fv(sh.w,100)))}${row('高度 (m)',num('h',fv(sh.h,70)))}`;
   }
-  const ap=siteAreaPerimeter(bg);
+  const ap=siteAreaPerimeter(site);
+  const siteMeta=`<div class="form-grid">
+      <label>${esc(L('名称'))}</label><div><input type="text" data-site-meta="name" value="${esc(site.name||'场地')}"></div>
+      <label>${esc(L('图层'))}</label><div><select data-site-meta="layerId">${state.layers.map(l=>`<option value="${esc(l.id)}" ${l.id===site.layerId?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>
+      <label>${esc(L('显示'))}</label><div><input type="checkbox" data-site-meta="visible" ${site.visible!==false?'checked':''}></div>
+      <label>${esc(L('锁定'))}</label><div><input type="checkbox" data-site-meta="locked" ${site.locked?'checked':''}></div>
+    </div>`;
   const hint=tool
-    ?'拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地随底图保持真实比例。'
+    ?'拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。'
     :'直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
-  return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L(siteKindName(bg.kind)))}</span></h3>
+  return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L(siteKindName(site.kind||sh.type)))}</span></h3>
+    ${siteMeta}
     <div class="form-grid">${params}</div>
     <div class="form-grid">
       <label>${esc(L('面积'))}</label><div><b id="siteAreaVal">${fmt(ap.area)}</b> ㎡</div>
@@ -132,13 +137,14 @@ function imagePropsHTML(bg, heading){
     <div class="hint-text">${esc(L('图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。'))}</div>
   </div>`;
 }
-/** 渲染场地/底图属性面板并按 mode 绑定事件（default=未选中对象时的场地属性；tool=场地节点工具） */
+/** 渲染「图片底图 + 场地」双槽属性面板：图片只读摘要 + 场地可编辑属性 */
 function renderSiteProps(box, mode){
-  box.innerHTML=sitePropsHTML(state.background, mode||'default');
+  const img=isImageBackground(state.background)?imagePropsHTML(state.background, L('图片底图')):'';
+  box.innerHTML=img+sitePropsHTML(state.site, mode||'default');
   bindSiteNodeEvents(box);
 }
 function updateSiteStats(box){
-  const ap=siteAreaPerimeter(state.background);
+  const ap=siteAreaPerimeter(state.site);
   const a=box.querySelector('#siteAreaVal'), p=box.querySelector('#sitePerimVal');
   if(a) a.textContent=fmt(ap.area);
   if(p) p.textContent=fmt(ap.perimeter);
@@ -147,10 +153,22 @@ function bindSiteNodeEvents(box){
   box.addEventListener('focusin',()=>pushHistory(),{once:true});
   const changed=()=>{ state.meta.updatedAt=nowISO(); coverageResult=null; syncFramePan(); updateSiteStats(box); scheduleSave(); requestRender(); };
   box.querySelectorAll('[data-site-field]').forEach(el=>el.addEventListener('input',()=>{
-    if(applySiteField(el.dataset.siteField,el.value)) changed();
+    if(applySiteField(el.dataset.siteField,el.value)){ state.site.updatedAt=nowISO(); changed(); }
   }));
+  box.querySelectorAll('[data-site-meta]').forEach(el=>{
+    const key=el.dataset.siteMeta;
+    const evt=(el.type==='checkbox'||el.tagName==='SELECT')?'change':'input';
+    el.addEventListener(evt,()=>{ if(!state.site) return;
+      if(key==='visible') state.site.visible=!!el.checked;
+      else if(key==='locked') state.site.locked=!!el.checked;
+      else if(key==='layerId') state.site.layerId=el.value;
+      else if(key==='name') state.site.name=String(el.value||'场地').slice(0,40);
+      state.site.updatedAt=nowISO();
+      changed();
+    });
+  });
   box.querySelectorAll('[data-site-node-axis]').forEach(el=>el.addEventListener('input',()=>{
-    const pts=state.background.shape?.points, i=Number(el.dataset.siteNodeIndex), n=Number(el.value);
+    const pts=state.site?.shape?.points, i=Number(el.dataset.siteNodeIndex), n=Number(el.value);
     if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return;
     pts[i][el.dataset.siteNodeAxis==='y'?1:0]=n; changed();
   }));
@@ -164,7 +182,7 @@ function bindSiteNodeEvents(box){
   const affB=box.querySelector('#siteAffineBtn'); if(affB) affB.onclick=()=>$('affineBtn').click();
 }
 function applySiteField(field,v){
-  const sh=state.background.shape; if(!sh) return false;
+  const sh=state.site?.shape; if(!sh) return false;
   const n=Number(v); if(!Number.isFinite(n)) return false;
   if(field==='a0') sh.a0=normalizeAngle(n);
   else if(field==='angle') sh.angle=normalizeAngle(n);
@@ -176,24 +194,24 @@ function applySiteField(field,v){
 }
 /* 场地多边形顶点增删排序（闭合环；操作后同步取景框并提交） */
 function siteInsertNode(at){
-  const pts=state.background.shape?.points; if(!pts) return;
+  const pts=state.site?.shape?.points; if(!pts) return;
   const a=pts[at], c=pts[(at+1)%pts.length];
   pushHistory();
   pts.splice(Math.min(at+1,pts.length),0,[(a[0]+c[0])/2,(a[1]+c[1])/2]);
-  syncFramePan(); commitChange('已插入场地顶点');
+  state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已插入场地顶点');
 }
 function siteRemoveNode(i){
-  const pts=state.background.shape?.points; if(!pts) return;
+  const pts=state.site?.shape?.points; if(!pts) return;
   if(pts.length<=3) return toast('多边形场地至少保留 3 个顶点','warn');
-  pushHistory(); pts.splice(i,1); syncFramePan(); commitChange('已删除场地顶点');
+  pushHistory(); pts.splice(i,1); state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已删除场地顶点');
 }
 function siteMoveNode(i,dir){
-  const pts=state.background.shape?.points; if(!pts) return;
+  const pts=state.site?.shape?.points; if(!pts) return;
   const to=i+(dir<0?-1:1);
   if(to<0||to>=pts.length) return;
   pushHistory();
   const p=pts.splice(i,1)[0]; pts.splice(to,0,p);
-  syncFramePan(); commitChange('场地顶点顺序已调整');
+  state.site.updatedAt=nowISO(); syncFramePan(); commitChange('场地顶点顺序已调整');
 }
 function renderProps(){
   const box=$('propPanel');

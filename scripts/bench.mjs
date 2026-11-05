@@ -77,7 +77,10 @@ const api = sandbox.__bench;
 
 /* 2000 个对象：点设备/区域/折线混合，分布在大范围场地上 */
 api.resetState();
-api.state.background = { kind: 'rect', fileName: '', assetId: '', width: 0, height: 0, origin: [0, 0], metersPerPixel: 1, calibrated: false, shape: { type: 'rect', x: 0, y: 0, w: 2000, h: 1500 } };
+/* 双槽模型：场地槽承载 2000×1500m 世界域，图片槽为空 */
+api.state.background = { kind: 'empty', fileName: '', assetId: '', width: 0, height: 0, origin: [0, 0], metersPerPixel: 0.1, calibrated: false, transform: null };
+api.state.site = { id:'site.bench', name:'基准场地', layerId:'layer.default', visible:true, locked:false, annot:{}, style:{}, updatedAt:'',
+  kind:'rect', shape:{ type:'rect', x:0, y:0, w:2000, h:1500 } };
 api.state.viewport = { zoom: 0.6, panX: 20, panY: 20 };
 api.resetFrameRef();
 const objs = [];
@@ -98,11 +101,14 @@ const now = () => performance.now();
 /* 预热 */
 api.invalidateStatic(); api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: true, markerScale: 1 });
 
-function timeIt(label, n, fn) {
-  const t0 = now();
-  for (let i = 0; i < n; i++) fn(i);
-  return (now() - t0) / n;
+function timeSamples(n, fn) {
+  const arr = new Float64Array(n);
+  for (let i = 0; i < n; i++) { const t0 = now(); fn(i); arr[i] = now() - t0; }
+  return arr;
 }
+function avgOf(arr) { let s = 0; for (const v of arr) s += v; return s / arr.length; }
+function p95Of(arr) { const a = Array.from(arr).sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * 0.95))]; }
+function timeIt(label, n, fn) { return avgOf(timeSamples(n, fn)); }
 
 /* 1) 重建帧：每次强制静态层失效 */
 const rebuildMs = timeIt('rebuild', 10, () => {
@@ -110,14 +116,16 @@ const rebuildMs = timeIt('rebuild', 10, () => {
   api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: true, markerScale: 1 });
 });
 /* 2) 缓存帧：静态层命中，只绘制选中对象与动态层 */
-const cachedMs = timeIt('cached', 200, () => {
+const cachedSamples = timeSamples(200, () => {
   api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: true, markerScale: 1 });
 });
+const cachedMs = avgOf(cachedSamples);
+const cachedP95Ms = p95Of(cachedSamples);
 /* 3) 直接全量绘制（导出路径对照） */
 const directMs = timeIt('direct', 10, () => {
   api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: false, markerScale: 1.6 });
 });
-const out = { rebuildMs: +rebuildMs.toFixed(2), cachedMs: +cachedMs.toFixed(2), directMs: +directMs.toFixed(2), objects: 2000 };
+const out = { rebuildMs: +rebuildMs.toFixed(2), cachedMs: +cachedMs.toFixed(2), cachedP95Ms: +cachedP95Ms.toFixed(2), directMs: +directMs.toFixed(2), objects: 2000 };
 /* 4) 视口裁剪：放大到 6 倍后统计实际绘制的对象数 */
 const saved = { ...api.state.viewport };
 api.state.viewport = { zoom: 6, panX: 100, panY: 100 };
@@ -126,6 +134,9 @@ const viewRect = api.visibleWorldRect(api.state.viewport, d, W, H);
 const drawn = api.state.objects.filter(o => api.boundsIntersect(api.objectBounds(o), viewRect)).length;
 out.drawnObjects = drawn;
 out.culledRatio = +(1 - drawn / 2000).toFixed(3);
+/* 默认视图（zoom 0.6）实际参与绘制的对象数，用于解释重建耗时 */
+const viewBase = api.visibleWorldRect(saved, api.worldDims(), W, H);
+out.baseDrawn = api.state.objects.filter(o => api.boundsIntersect(api.objectBounds(o), viewBase)).length;
 api.state.viewport = saved;
 
 /* 5) 覆盖率分析：1000×1000m 场地 + 30 个摄像头，目标 36000 格 */
@@ -139,15 +150,18 @@ const tCov = now();
 const cov = api.analyzeCoverage(api.state, { targetCells: 36000 });
 out.coverageMs = +(now() - tCov).toFixed(1);
 out.coverageRatio = +(cov.ratio * 100).toFixed(1);
+out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
 
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(out));
 } else {
   console.log('渲染基准（2000 对象 / 1600×900）');
   console.log(`  静态层重建：${out.rebuildMs} ms/帧（对象增删改时触发）`);
-  console.log(`  缓存命中帧：${out.cachedMs} ms/帧（拖拽场景，目标 < 8ms）`);
+  console.log(`  缓存命中帧：${out.cachedMs} ms/帧（P95 ${out.cachedP95Ms} ms，目标 < 8ms）`);
   console.log(`  直接全量帧：${out.directMs} ms/帧（导出/打印对照）`);
+  console.log(`  堆内存 heapUsed：${out.heapUsedMB} MB`);
   console.log(`  视口裁剪：放大 6 倍时绘制 ${out.drawnObjects} / 2000 个对象（裁剪 ${(out.culledRatio * 100).toFixed(1)}%）`);
+  console.log(`  默认视图绘制对象：${out.baseDrawn} / 2000`);
   console.log(`  覆盖率分析：1000×1000m + 30 摄像头 ${out.coverageMs} ms（覆盖率 ${out.coverageRatio}%，目标 < 300ms）`);
 }
 if (out.cachedMs > 8) {

@@ -122,7 +122,7 @@ code += `\n;globalThis.__api = {
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
-  buildSceneSvg,
+  buildSceneSvg, siteDxfEntities, siteOutlinePoints,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
@@ -374,6 +374,7 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('迁移-精度钳制到6', st.settings.precision, 6);
   eq('迁移-网格间距回退默认', st.settings.gridSize, 1);
   eq('迁移-有图片引用判为 image', st.background.kind, 'image');
+  eq('迁移-旧图片档不生成场地槽', st.site, null);
   eq('迁移-保留内嵌 dataUrl（待入资产库）', st.background.dataUrl.startsWith('data:image/png'), true);
   eq('迁移-合法点保留', st.objects.filter(o => o.name === 'P1').length, 1);
   eq('迁移-零宽矩形丢弃', st.objects.some(o => o.name === 'R1'), false);
@@ -382,26 +383,27 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('迁移-点对象默认 phys=0', st.objects[0].phys, 0);
   eq('迁移-默认图层兜底', st.layers[0].id, 'layer.default');
 
-  /* 无图片引用的旧空白档 → 矩形矢量场地，域由像素参数推导（1000×700×0.1=100×70） */
+  /* 无图片引用的旧空白档 → 矩形矢量场地（迁入独立 site 槽，图片槽置空） */
   const blank = api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background: { width:1000, height:700, metersPerPixel:0.1 } });
-  eq('迁移-空白档判为 rect', blank.background.kind, 'rect');
-  eq('迁移-空白档形状域 100×70', [blank.background.shape.w, blank.background.shape.h], [100, 70]);
+  eq('迁移-空白档图片槽置空', blank.background.kind, 'empty');
+  eq('迁移-空白档判为 rect', blank.site.kind, 'rect');
+  eq('迁移-空白档形状域 100×70', [blank.site.shape.w, blank.site.shape.h], [100, 70]);
 
   /* 圆形场地清洗：保留实际圆心坐标（不再强制拉回域中心，便于「场地节点」编辑后重载还原） */
   const circ = api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background: { kind:'circle', shape:{ type:'circle', r:20, cx:0, cy:0 } } });
-  eq('迁移-圆形形状保留圆心', circ.background.shape, { type:'circle', cx:0, cy:0, r:20 });
+  eq('迁移-圆形形状保留圆心', circ.site.shape, { type:'circle', cx:0, cy:0, r:20 });
   /* 缺省 cx/cy 时回退到域中心 r,r，与新建场地一致 */
   const circ2 = api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background: { kind:'circle', shape:{ type:'circle', r:20 } } });
-  eq('迁移-圆形缺省圆心回退域中心', [circ2.background.shape.cx, circ2.background.shape.cy], [20, 20]);
+  eq('迁移-圆形缺省圆心回退域中心', [circ2.site.shape.cx, circ2.site.shape.cy], [20, 20]);
 
   /* 损坏的多边形（不足3点）回退矩形域 */
   const badPoly = api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background: { kind:'polygon', shape:{ type:'polygon', points:[[0,0],[1,1]] }, width:2000, height:1000, metersPerPixel:0.1 } });
-  eq('迁移-坏多边形回退矩形', badPoly.background.shape.type, 'rect');
-  eq('迁移-回退域取像素推导 200×100', [badPoly.background.shape.w, badPoly.background.shape.h], [200, 100]);
+  eq('迁移-坏多边形回退矩形', badPoly.site.shape.type, 'rect');
+  eq('迁移-回退域取像素推导 200×100', [badPoly.site.shape.w, badPoly.site.shape.h], [200, 100]);
 
   /* phys 清洗 + 自定义点类型 scaleShape/fov 保留 */
   const withPhys = api.migrateProject({ schema:'offline-drawing-annotation/v1',
@@ -421,10 +423,11 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
 
 /* 12. 场地形状：默认值、规整、健壮性与描述文案 ----------------------------- */
 {
-  /* 新建工程默认就是 100×70 的矩形矢量场地，世界域一致 */
+  /* 新建工程默认就是 100×70 的矩形矢量场地（独立 site 槽），图片槽为空 */
   const init = api.createInitialState();
-  eq('初始场地 kind=rect', init.background.kind, 'rect');
-  eq('初始场地形状', init.background.shape, { type:'rect', w:100, h:70 });
+  eq('初始图片槽为空', init.background.kind, 'empty');
+  eq('初始场地 kind=rect', init.site.kind, 'rect');
+  eq('初始场地形状', init.site.shape, { type:'rect', w:100, h:70 });
   api.resetState();
   eq('worldDims 取初始矩形域', api.worldDims(), { minX:0, minY:0, maxX:100, maxY:70, w:100, h:70 });
 
@@ -722,18 +725,18 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   /* 椭圆/扇形场地迁移 */
   const m4=api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background:{ kind:'ellipse', shape:{type:'ellipse',rx:30,ry:15} } });
-  eq('迁移-椭圆场地 kind', m4.background.kind, 'ellipse');
-  eq('迁移-椭圆场地形状', [m4.background.shape.rx,m4.background.shape.ry,m4.background.shape.cx,m4.background.shape.cy], [30,15,30,15]);
+  eq('迁移-椭圆场地 kind', m4.site.kind, 'ellipse');
+  eq('迁移-椭圆场地形状', [m4.site.shape.rx,m4.site.shape.ry,m4.site.shape.cx,m4.site.shape.cy], [30,15,30,15]);
   const m5=api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background:{ kind:'sector', shape:{type:'sector',cx:0,cy:0,r:20,a0:0,a1:90} } });
-  eq('迁移-扇形场地 kind', m5.background.kind, 'sector');
-  eq('迁移-扇形场地半径', m5.background.shape.r, 20);
-  eq('迁移-扇形场地域', [api.siteDomainOf(m5.background).w,api.siteDomainOf(m5.background).h], [20,20]);
+  eq('迁移-扇形场地 kind', m5.site.kind, 'sector');
+  eq('迁移-扇形场地半径', m5.site.shape.r, 20);
+  eq('迁移-扇形场地域', [api.siteDomainOf(m5.site).w,api.siteDomainOf(m5.site).h], [20,20]);
 
   /* 坏椭圆场地回退矩形（不产生非法域） */
   const m6=api.migrateProject({ schema:'offline-drawing-annotation/v1',
     background:{ kind:'ellipse', shape:{type:'ellipse',rx:0,ry:0} } });
-  eq('迁移-坏椭圆回退矩形形状', m6.background.shape.type, 'rect');
+  eq('迁移-坏椭圆回退矩形形状', m6.site.shape.type, 'rect');
 
   /* 测距链：subtype=ruler 保留；非法 subtype 回退 distance；ruler 至少 2 点，单点丢弃 */
   const m7=api.migrateProject({ schema:'offline-drawing-annotation/v1',
@@ -1426,8 +1429,8 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
 {
   /* 扇形场地 a0=30,a1=120：圆弧两端点必须不同（原 a0||0+sweep 优先级 bug 会退化为同点） */
   const st=api.resetState();
-  st.background={kind:'sector',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:1,calibrated:false,
-    shape:{type:'sector',cx:0,cy:0,r:20,a0:30,a1:120}};
+  st.site={id:'site.test',name:'场地',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',
+    kind:'sector',shape:{type:'sector',cx:0,cy:0,r:20,a0:30,a1:120}};
   st.objects.push(
     api.baseObject('line','line.custom',{name:'BOX',closed:true,points:[[0,0],[10,0],[10,10],[0,10]],x:0,y:0}),
     api.baseObject('dimension','dimension.distance',{name:'AR',subtype:'area',points:[[30,0],[40,0],[30,10]],x:30,y:0}),
@@ -1909,7 +1912,7 @@ asyncSuites.push((async()=>{
 {
   api.resetState();
   /* siteBounds：默认矩形（基点原点）与实际取景框一致 */
-  eq('场地节点-默认矩形包围盒', api.siteBounds(api.state.background), {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70});
+  eq('场地节点-默认矩形包围盒', api.siteBounds(api.state.site), {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70});
   eq('场地节点-默认取景框=包围盒', api.computeWorldFrame(), {minX:0,minY:0,maxX:100,maxY:70,w:100,h:70});
   /* 偏移矩形：基点 x,y 生效，包围盒随基点平移 */
   eq('场地节点-偏移矩形包围盒', api.siteBounds({kind:'rect',shape:{type:'rect',x:-5,y:-2,w:100,h:70}}), {minX:-5,minY:-2,maxX:95,maxY:68,w:100,h:70});
@@ -1927,7 +1930,7 @@ asyncSuites.push((async()=>{
   /* syncFramePan：形状变更时按取景框差值补偿 pan，使未变内容保持屏幕位置 */
   api.resetState();
   api.state.viewport.panX=10; api.state.viewport.panY=20; api.state.viewport.zoom=2;
-  api.state.background={kind:'rect',shape:{type:'rect',x:-5,y:0,w:100,h:70}};
+  api.state.site={kind:'rect',shape:{type:'rect',x:-5,y:0,w:100,h:70}};
   const nf=api.syncFramePan();
   approx('场地节点-补偿后 panX（minX −5×zoom2）', api.state.viewport.panX, 0, 1e-9);
   approx('场地节点-补偿后 panY 不变', api.state.viewport.panY, 20, 1e-9);
@@ -1936,7 +1939,7 @@ asyncSuites.push((async()=>{
 
   /* 控制点清单：各形状手柄数量与位置 */
   api.resetState();
-  api.state.background={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  api.state.site={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
   eq('场地节点-多边形手柄数', api.siteHandleList().length, 4);
   eq('场地节点-多边形手柄0', [api.siteHandleList()[0].mode,api.siteHandleList()[0].x,api.siteHandleList()[0].y], ['vertex',0,0]);
   { const hs=api.siteHandleList({kind:'circle',shape:{type:'circle',cx:5,cy:5,r:10}});
@@ -1954,40 +1957,40 @@ asyncSuites.push((async()=>{
 
   /* resizeSiteByHandle：按模式改写规格参数 */
   api.resetState();
-  api.state.background={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  api.state.site={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
   api.resizeSiteByHandle({mode:'vertex',index:1},[20,3]);
-  eq('场地节点-拖拽多边形顶点', api.state.background.shape.points[1], [20,3]);
+  eq('场地节点-拖拽多边形顶点', api.state.site.shape.points[1], [20,3]);
 
-  api.state.background={kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:20}};
+  api.state.site={kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:20}};
   api.resizeSiteByHandle({mode:'corner',index:2},[14,30]);
-  eq('场地节点-拖拽矩形角(对角固定)', [api.state.background.shape.x,api.state.background.shape.y,api.state.background.shape.w,api.state.background.shape.h], [0,0,14,30]);
+  eq('场地节点-拖拽矩形角(对角固定)', [api.state.site.shape.x,api.state.site.shape.y,api.state.site.shape.w,api.state.site.shape.h], [0,0,14,30]);
 
-  api.state.background={kind:'circle',shape:{type:'circle',cx:5,cy:5,r:10}};
+  api.state.site={kind:'circle',shape:{type:'circle',cx:5,cy:5,r:10}};
   api.resizeSiteByHandle({mode:'center'},[7,8]);
-  eq('场地节点-拖拽圆心(半径不变)', [api.state.background.shape.cx,api.state.background.shape.cy,api.state.background.shape.r], [7,8,10]);
+  eq('场地节点-拖拽圆心(半径不变)', [api.state.site.shape.cx,api.state.site.shape.cy,api.state.site.shape.r], [7,8,10]);
   api.resizeSiteByHandle({mode:'radius'},[7,18]);
-  approx('场地节点-拖拽圆半径', api.state.background.shape.r, 10, 1e-9);
+  approx('场地节点-拖拽圆半径', api.state.site.shape.r, 10, 1e-9);
 
-  api.state.background={kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}};
+  api.state.site={kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}};
   api.resizeSiteByHandle({mode:'rx'},[30,0]);
-  approx('场地节点-拖拽椭圆长轴', api.state.background.shape.rx, 30, 1e-9);
+  approx('场地节点-拖拽椭圆长轴', api.state.site.shape.rx, 30, 1e-9);
   api.resizeSiteByHandle({mode:'ry'},[0,4]);
-  approx('场地节点-拖拽椭圆短轴', api.state.background.shape.ry, 4, 1e-9);
+  approx('场地节点-拖拽椭圆短轴', api.state.site.shape.ry, 4, 1e-9);
 
-  api.state.background={kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}};
+  api.state.site={kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}};
   api.resizeSiteByHandle({mode:'edge0'},[0,20]);
-  approx('场地节点-拖拽扇形边0半径', api.state.background.shape.r, 20, 1e-9);
-  approx('场地节点-拖拽扇形边0角度', api.state.background.shape.a0, 90, 1e-9);
+  approx('场地节点-拖拽扇形边0半径', api.state.site.shape.r, 20, 1e-9);
+  approx('场地节点-拖拽扇形边0角度', api.state.site.shape.a0, 90, 1e-9);
   api.resizeSiteByHandle({mode:'edge1'},[-30,0]);
-  approx('场地节点-拖拽扇形边1角度', api.state.background.shape.a1, 180, 1e-9);
+  approx('场地节点-拖拽扇形边1角度', api.state.site.shape.a1, 180, 1e-9);
 
   /* sanitizeShape：编辑后的负坐标/偏移在保存→重载后保留（不被打回原点） */
   const mp=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10]]}}});
-  eq('场地节点-负坐标多边形重载保留', mp.background.shape.points, [[-10,-10],[10,-10],[10,10]]);
+  eq('场地节点-负坐标多边形重载保留', mp.site.shape.points, [[-10,-10],[10,-10],[10,10]]);
   const mrx=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'rect',shape:{type:'rect',x:-5,y:-3,w:20,h:10}}});
-  eq('场地节点-偏移矩形重载保留', [mrx.background.shape.x,mrx.background.shape.y,mrx.background.shape.w,mrx.background.shape.h], [-5,-3,20,10]);
+  eq('场地节点-偏移矩形重载保留', [mrx.site.shape.x,mrx.site.shape.y,mrx.site.shape.w,mrx.site.shape.h], [-5,-3,20,10]);
   const mc=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}}});
-  eq('场地节点-偏心圆重载保留', [mc.background.shape.cx,mc.background.shape.cy,mc.background.shape.r], [30,20,10]);
+  eq('场地节点-偏心圆重载保留', [mc.site.shape.cx,mc.site.shape.cy,mc.site.shape.r], [30,20,10]);
   api.resetState();
 }
 
@@ -2026,10 +2029,10 @@ asyncSuites.push((async()=>{
   ok('底图属性-图片含名称像素比例', hi.includes('plan.png') && hi.includes('500×400 px') && hi.includes('0.20 m/px'));
   ok('底图属性-图片含校准状态', hi.includes('已校准') && hi.includes('轴对齐'));
   ok('底图属性-图片含校准入口按钮', hi.includes('id="siteOpenBtn"') && hi.includes('id="siteCalibBtn"') && hi.includes('id="siteAffineBtn"'));
-  ok('场地节点-图片底图给引导语', api.sitePropsHTML({kind:'image',fileName:'x.png'},'tool').includes('暂无场地节点可编辑'));
-  /* 无底图 */
+  ok('场地节点-图片底图给图片属性', api.sitePropsHTML({kind:'image',fileName:'x.png'},'tool').includes('仿射校准'));
+  /* 无场地 */
   const saved=api.state.background; api.state.background=null;
-  ok('场地属性-无底图提示', api.sitePropsHTML(null,'default').includes('尚未设置底图/场地'));
+  ok('场地属性-无场地提示', api.sitePropsHTML(null,'default').includes('尚未设置矢量场地'));
   api.state.background=saved;
   api.resetState();
 }
@@ -2423,9 +2426,12 @@ asyncSuites.push((async()=>{
   api.applyField(pf('shapeType','rect'),pv,()=>{});
   eq('面板接线-切回矩形', api.areaShapeType(pv),'rect');
 
-  /* SVG 导出：按四顶点多边形绘制 */
+  /* SVG 导出：按四顶点多边形绘制（首个 polygon 现在可能是场地层，取四角 X 互不相同的对象多边形） */
   const svg=api.buildSceneSvg();
-  const poly=svg.match(/<polygon points="([^"]+)"/);
+  const poly=(()=>{ for(const m of svg.matchAll(/<polygon points="([^"]+)"/g)){
+    const pts=m[1].trim().split(/\s+/);
+    if(new Set(pts.map(s=>s.split(',')[0])).size===4) return [m[0],m[1]];
+  } return null; })();
   eq('SVG-平行四边形四顶点', poly?poly[1].trim().split(/\s+/).length:0, 4);
   ok('SVG-平行四边形四角X互不相同（含错切）', !!poly&&new Set(poly[1].trim().split(/\s+/).map(s=>s.split(',')[0])).size===4);
 
@@ -2470,14 +2476,14 @@ asyncSuites.push((async()=>{
   approx('场地-包围盒宽含错切', gb.w, 10+6*Math.tan(Math.PI/6), 1e-9);
   approx('场地-包围盒高', gb.h, 6, 1e-9);
 
-  api.state.background=bg; api.resetFrameRef(); api.state.objects=[];
+  api.state.site=bg; api.resetFrameRef(); api.state.objects=[];
   const svgSite=api.buildSceneSvg();
   ok('SVG-场地平行四边形多边形', /<polygon points="[^"]+" fill="#eef2f7"/.test(svgSite));
 
   const m2=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'parallelogram',shape:{type:'parallelogram',x:1,y:2,w:10,h:6,skew:200}}});
-  eq('迁移-场地种类', m2.background.kind, 'parallelogram');
-  eq('迁移-场地倾角钳到80°', m2.background.shape.skew, 80);
-  approx('迁移-场地宽保留', m2.background.shape.w, 10, 1e-9);
+  eq('迁移-场地种类', m2.site.kind, 'parallelogram');
+  eq('迁移-场地倾角钳到80°', m2.site.shape.skew, 80);
+  approx('迁移-场地宽保留', m2.site.shape.w, 10, 1e-9);
   api.resetState();
 }
 
@@ -2804,7 +2810,8 @@ asyncSuites.push((async()=>{
   eq('迁移-顶层对象属于活动层', m.objects[0].name, 'A');
   const f1=m.floors.find(f=>f.id==='f1');
   ok('迁移-非活动层保留对象', !!f1&&f1.objects[0].name==='B');
-  eq('迁移-非活动层背景类型', f1&&f1.background.kind, 'circle');
+  eq('迁移-非活动层背景槽置空', f1&&f1.background.kind, 'empty');
+  eq('迁移-非活动层场地类型', f1&&f1.site.kind, 'circle');
   const legacy=api.migrateProject({schema:'offline-drawing-annotation/v1',objects:[]});
   eq('迁移-旧档补默认楼层', legacy.floors.length, 1);
   eq('迁移-旧档默认层名', legacy.floors[0].name, '1F');
@@ -2815,6 +2822,33 @@ asyncSuites.push((async()=>{
   const ids=api.reachableBgAssetIds();
   ok('楼层-可达集合含非当前层底图', ids.includes('bg_floor3'));
   ok('楼层-可达集合含非当前层照片', ids.includes('bg_photo3'));
+
+  /* 双槽：持久化 / SVG / DXF / 静态缓存签名 */
+  api.resetState();
+  Object.assign(api.state.settings,{siteNodes:true,siteSegLen:true,siteArea:true,sitePerimeter:true,siteRadius:true});
+  api.state.site={id:'site.dual',name:'双槽场地',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},
+    updatedAt:'2026-01-01T00:00:00.000Z',kind:'polygon',
+    shape:{type:'polygon',points:[[-5,-5],[15,-5],[15,10],[-5,10]]}};
+  api.syncActiveFloor();
+  const ps=api.persistableState();
+  eq('双槽-顶层持久化含场地', ps.site&&ps.site.shape.type, 'polygon');
+  eq('双槽-活动层不重复存场地', ps.floors.find(f=>f.id===ps.activeFloorId).site, undefined);
+  eq('双槽-图片槽仍为空', ps.background.kind, 'empty');
+  const svgDual=api.buildSceneSvg();
+  ok('双槽-SVG 含场地多边形', svgDual.includes('<polygon points='));
+  ok('双槽-SVG 含场地节点标注', svgDual.includes('P1 (-5.00,-5.00)'));
+  ok('双槽-SVG 含场地段长标注', svgDual.includes(' m'));
+  const dxfEnts=api.siteDxfEntities();
+  eq('双槽-DXF 场地实体数', dxfEnts.length, 1);
+  eq('双槽-DXF 场地独立图层', dxfEnts[0].layer, 'SITE');
+  eq('双槽-DXF 场地闭合', dxfEnts[0].closed, true);
+  eq('双槽-DXF 场地顶点数', dxfEnts[0].points.length, 4);
+  api.invalidateStatic(); const sk1=api.sceneStaticKey({zoom:1,panX:0,panY:0},api.worldDims(),800,600);
+  api.state.site.shape.points[0]=[0,0];
+  ok('双槽-场地变化使静态签名失效', api.sceneStaticKey({zoom:1,panX:0,panY:0},api.worldDims(),800,600)!==sk1);
+  api.state.site.visible=false;
+  eq('双槽-隐藏场地不导出 DXF', api.siteDxfEntities().length, 0);
+  ok('双槽-隐藏场地不渲染 SVG', !api.buildSceneSvg().includes('<polygon points='));
   api.resetState();
 }
 
@@ -3212,6 +3246,17 @@ asyncSuites.push((async()=>{
   eq('合并-同时间戳双向一致', m6r.project.objects[0].x, 2);
   eq('合并-同时间戳记更新', m6.stats.updated, 1);
 
+  /* 双槽合并：site 楼层级 LWW，不能被图片槽合并覆盖/丢失 */
+  const siteA={id:'site.merge',name:'A',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},
+    updatedAt:T1,kind:'rect',shape:{type:'rect',x:0,y:0,w:20,h:10}};
+  const siteB=Object.assign({},siteA,{updatedAt:T2,shape:{type:'rect',x:0,y:0,w:30,h:10}});
+  const msN=M(P([], {site:siteA}), P([], {site:siteB}));
+  eq('合并-较新场地胜出', msN.project.site.shape.w, 30);
+  const msO=M(P([], {site:siteB}), P([], {site:siteA}));
+  eq('合并-较旧场地不覆盖', msO.project.site.shape.w, 30);
+  eq('合并-场地独立保留', !!msO.project.site, true);
+  eq('合并-图片槽与场地共存', msO.project.background.kind, 'rect');
+
   const m7 = M(P([O('A', T1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
   eq('合并-删除墓碑胜过旧对象', m7.project.objects.length, 0);
   eq('合并-删除统计', m7.stats.deleted, 1);
@@ -3476,7 +3521,7 @@ asyncSuites.push((async()=>{
   Object.assign(api.state.settings,{precision:2,showLabels:true,showSegLen:true,showAreaTag:true,markerScale:1,unit:'m'});
   const scene=api.buildSceneSvg();
   const sceneHash=createHash('sha256').update(scene).digest('hex');
-  eq('视觉快照-SVG 场景哈希', sceneHash, '7b43d7ae3452b85caaa8f076dde7edcfe001220612b9b43e8bd57d895c057b49');
+  eq('视觉快照-SVG 场景哈希', sceneHash, '623d4b6f480e34c3ae6f96c4097f14af0e6e7c05df2b85d3c1386e6928e1e2fe');
   ok('视觉快照-SVG 输出非空', typeof scene==='string' && scene.length>1000);
   ok('视觉快照-平行四边形与扇形路径存在', scene.includes('<polygon') && scene.includes(' A'));
   eq('视觉快照-重复导出稳定', createHash('sha256').update(api.buildSceneSvg()).digest('hex'), sceneHash);

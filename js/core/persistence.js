@@ -127,7 +127,7 @@ async function listProjects(){
       out.push({key,id:key.slice(PROJECT_PREFIX.length),
         name:p.meta?.name||'未命名工程',updatedAt:p.meta?.updatedAt||'',
         objectCount:Array.isArray(p.objects)?p.objects.length:0,
-        bgKind:p.background?.kind||'rect', bound:state.meta?.projectId===p.meta?.projectId});
+        bgKind:p.site?.kind||p.background?.kind||'rect', bound:state.meta?.projectId===p.meta?.projectId});
     }
   }
   return out.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -198,7 +198,7 @@ function persistableState(){
   const copy=deepClone(state);
   if(copy.background && copy.background.dataUrl) delete copy.background.dataUrl;
   (copy.floors||[]).forEach(f=>{
-    if(f.id===copy.activeFloorId){ delete f.background; delete f.objects; delete f.viewport; return; }
+    if(f.id===copy.activeFloorId){ delete f.background; delete f.site; delete f.objects; delete f.viewport; return; }
     if(f.background&&f.background.dataUrl) delete f.background.dataUrl;
   });
   return copy;
@@ -276,6 +276,7 @@ function syncActiveFloor(){
   const f=currentFloor();
   if(!f) return;
   f.background=state.background;
+  f.site=state.site;
   f.objects=state.objects;
   f.viewport=state.viewport;
 }
@@ -283,9 +284,10 @@ function syncActiveFloor(){
 function switchFloorData(id){
   if(!Array.isArray(state.floors)||id===state.activeFloorId) return false;
   const target=state.floors.find(f=>f.id===id);
-  if(!target||!target.background||!Array.isArray(target.objects)) return false;
+  if(!target||(!target.background&&!target.site)||!Array.isArray(target.objects)) return false;
   syncActiveFloor();
-  state.background=target.background;
+  state.background=target.background||createEmptyBackground();
+  state.site=target.site||null;
   state.objects=target.objects;
   state.viewport=target.viewport||state.viewport;
   state.activeFloorId=id;
@@ -328,7 +330,7 @@ async function addFloor(name){
   const nm=(String(name||'').trim()||('F'+n)).slice(0,40);
   const init=createInitialState();
   const id='floor_'+uid('F');
-  state.floors.push({id,name:nm,background:init.background,objects:[],viewport:init.viewport});
+  state.floors.push({id,name:nm,background:init.background,site:init.site,objects:[],viewport:init.viewport});
   const ok=await switchFloor(id);
   return ok?id:null;
 }
@@ -344,7 +346,8 @@ async function deleteFloor(id){
   state.floors.splice(idx,1);
   if(id===state.activeFloorId){
     const target=state.floors[0];
-    state.background=target.background;
+    state.background=target.background||createEmptyBackground();
+    state.site=target.site||null;
     state.objects=target.objects;
     state.viewport=target.viewport||state.viewport;
     state.activeFloorId=target.id;
@@ -434,7 +437,7 @@ async function ensureFloorBackgroundAssets(st){
   for(const f of (st&&st.floors)||[]){
     if(!f||f.id===st.activeFloorId) continue;
     const bg=f.background;
-    if(!bg||!bg.dataUrl) continue;
+    if(!bg||!isImageBackground(bg)||!bg.dataUrl) continue;
     try{
       const bin=dataUrlToBytes(bg.dataUrl);
       bg.assetId=assetIdFor(bin.bytes);
@@ -470,14 +473,16 @@ function migrateProject(p){
   settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
     Math.round(finiteNumber(settings.segLabelMinPx,APP_LIMITS.SEG_LABEL_MIN_PX))));
   settings.lang=settings.lang==='en'?'en':'zh';
-  const rawBg=typeof p.background==='object'&&p.background?p.background:{};
-  const background=sanitizeBackground(rawBg);
-  const viewport=sanitizeViewport(p.viewport);
   const layers=sanitizeLayers(p.layers);
+  /* 双槽迁移：有 site 字段按新档清洗；旧档按 background.kind 拆分（image 保留，矢量迁入 site） */
+  const slots=migrateBackgroundAndSite(p,layers);
+  const background=slots.background;
+  const site=slots.site;
+  const viewport=sanitizeViewport(p.viewport);
   const objectTypes=mergeTypes(p.objectTypes);
   const objects=sanitizeObjects(p.objects,layers,objectTypes);
   const tombstones=sanitizeTombstones(p.tombstones);
-  /* 楼层：当前楼层数据取顶层 background/objects；其余楼层各自清洗并保留 */
+  /* 楼层：当前楼层数据取顶层 background/site/objects；其余楼层各自清洗并保留 */
   const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
   const floors=[]; const seenFloor=new Set();
   rawFloors.forEach((f,i)=>{
@@ -487,7 +492,9 @@ function migrateProject(p){
     const name=(String(f.name||('F'+(i+1))).trim()||('F'+(i+1))).slice(0,40);
     const entry={id,name};
     if(f.id!==p.activeFloorId){
-      entry.background=sanitizeBackground(f.background||{});
+      const fslots=migrateBackgroundAndSite(f,layers);
+      entry.background=fslots.background;
+      entry.site=fslots.site;
       entry.objects=sanitizeObjects(f.objects||[],layers,objectTypes);
       entry.viewport=sanitizeViewport(f.viewport);
     }
@@ -496,7 +503,7 @@ function migrateProject(p){
   if(!floors.length) floors.push({id:'floor.default',name:'1F'});
   let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
   if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F'});
-  state=Object.assign(base,p,{meta,settings,background,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+  state=Object.assign(base,p,{meta,settings,background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
   return state;
 }
 /** 删除墓碑清洗：按 (kind,id) 去重取最晚删除时间；非法/无时间的条目丢弃，并限制总量 */
@@ -555,22 +562,13 @@ async function mergeProjectJSON(raw,opts={}){
   refreshUI(); requestRender();
   return stats;
 }
-/** 背景清洗（顶层与多楼层共用同一规则） */
-function sanitizeBackground(rawBg){
+/** 图片槽清洗：只接受 kind:'image'；其余一律空槽（矢量数据由 site 承载） */
+function sanitizeImageBackground(rawBg){
   rawBg=typeof rawBg==='object'&&rawBg?rawBg:{};
-  // 兼容旧档（无 kind）：有图片引用判为 image，否则按像素域推导为矩形矢量场地
-  const hasImage=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
-  const shapeKind=rawBg.shape?.type;
-  const inferred=['image','rect','circle','ellipse','sector','parallelogram','polygon'].includes(shapeKind)?shapeKind:'rect';
-  const kind=['image','rect','circle','ellipse','sector','parallelogram','polygon'].includes(rawBg.kind)
-    ?rawBg.kind
-    :(hasImage?'image':(inferred!=='rect'?inferred:'rect'));
-  const legacyW=positiveNumber(rawBg.width,1000)*positiveNumber(rawBg.metersPerPixel,0.1);
-  const legacyH=positiveNumber(rawBg.height,700)*positiveNumber(rawBg.metersPerPixel,0.1);
-  const base=createInitialState().background;
-  return Object.assign(base,rawBg,{
-    kind,
-    shape:sanitizeShape(rawBg.shape,kind,legacyW,legacyH),
+  const hasImageRef=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
+  if(rawBg.kind!=='image'&&!(rawBg.kind===undefined&&hasImageRef)) return createEmptyBackground();
+  return {
+    kind:'image',
     width:positiveNumber(rawBg.width,1000),
     height:positiveNumber(rawBg.height,700),
     metersPerPixel:positiveNumber(rawBg.metersPerPixel,0.1),
@@ -580,7 +578,49 @@ function sanitizeBackground(rawBg){
     fileName:typeof rawBg.fileName==='string'?rawBg.fileName:'',
     calibrated:!!rawBg.calibrated,
     transform:validImageTransform(rawBg.transform)
-  });
+  };
+}
+/**
+ * 矢量场地槽清洗：复用 sanitizeShape 的形状规则，补独立元数据（id/name/layerId/visible/locked/annot/style）。
+ * 场地不进 objects，不设 typeId；kind 始终等于 shape.type。
+ */
+function sanitizeSite(rawSite,layers){
+  if(!rawSite||typeof rawSite!=='object') return null;
+  const allowed=['rect','circle','ellipse','sector','parallelogram','polygon'];
+  const shapeKind=rawSite.shape&&rawSite.shape.type;
+  const kind=allowed.includes(rawSite.kind)?rawSite.kind:(allowed.includes(shapeKind)?shapeKind:'rect');
+  const legacyW=positiveNumber(rawSite.width,1000)*positiveNumber(rawSite.metersPerPixel,0.1);
+  const legacyH=positiveNumber(rawSite.height,700)*positiveNumber(rawSite.metersPerPixel,0.1);
+  const shape=sanitizeShape(rawSite.shape,kind,legacyW,legacyH);
+  const site=createSiteSlot(shape);
+  site.id=typeof rawSite.id==='string'&&rawSite.id?rawSite.id:site.id;
+  site.name=String(rawSite.name||'场地').slice(0,40);
+  site.layerId=Array.isArray(layers)&&layers.some(l=>l.id===rawSite.layerId)?rawSite.layerId:'layer.default';
+  site.visible=rawSite.visible!==false;
+  site.locked=!!rawSite.locked;
+  site.annot=typeof rawSite.annot==='object'&&rawSite.annot?rawSite.annot:{};
+  site.style=typeof rawSite.style==='object'&&rawSite.style?rawSite.style:{};
+  site.updatedAt=typeof rawSite.updatedAt==='string'?rawSite.updatedAt:'';
+  site.kind=shape.type;
+  return site;
+}
+/**
+ * 双槽迁移（顶层与每个楼层共用）：
+ * - 已是新档（存在 site 字段）：background/site 分别清洗；
+ * - 旧档 background.kind==='image'：图片原样保留，site=null；
+ * - 旧档 background.kind!=='image'：旧 background 迁入 site，background 置空图。
+ */
+function migrateBackgroundAndSite(raw,layers){
+  raw=typeof raw==='object'&&raw?raw:{};
+  if(Object.prototype.hasOwnProperty.call(raw,'site')){
+    return { background:sanitizeImageBackground(raw.background||{}), site:sanitizeSite(raw.site,layers) };
+  }
+  const rawBg=typeof raw.background==='object'&&raw.background?raw.background:{};
+  const hasImageRef=!!(rawBg.assetId||rawBg.dataUrl||rawBg.fileName);
+  if(rawBg.kind==='image'||(rawBg.kind===undefined&&hasImageRef)){
+    return { background:sanitizeImageBackground(rawBg), site:null };
+  }
+  return { background:createEmptyBackground(), site:sanitizeSite(rawBg,layers) };
 }
 function sanitizeViewport(raw){
   const v=Object.assign(createInitialState().viewport,raw&&typeof raw==='object'?raw:{});
@@ -785,6 +825,7 @@ async function afterStateLoaded(fit=true){
   if(fit) fitView();
   requestRender();
   const bg=state.background;
+  if(!isImageBackground(bg)) return;   /* 空槽（含仅场地）无需加载图片 */
   try{
     let url='';
     if(bg.assetId){

@@ -85,10 +85,10 @@ async function importDxfFile(f){
       state.objects.push(o); counts.text++;
     }
   });
-  /* 默认 100×70 矩形场地时，扩到能容纳导入几何（坐标允许负值，只扩不挪） */
-  if(state.background.kind==='rect'&&state.background.shape?.type==='rect'&&!state.background.calibrated&&Number.isFinite(maxX)){
-    state.background.shape.w=Math.max(state.background.shape.w,maxX+10);
-    state.background.shape.h=Math.max(state.background.shape.h,maxY+10);
+  /* 默认矩形场地时，扩到能容纳导入几何（坐标允许负值，只扩不挪）；图片槽不受影响 */
+  if(state.site&&state.site.kind==='rect'&&state.site.shape?.type==='rect'&&Number.isFinite(maxX)){
+    state.site.shape.w=Math.max(state.site.shape.w,maxX+10);
+    state.site.shape.h=Math.max(state.site.shape.h,maxY+10);
   }
   selectedIds.clear();
   commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字');
@@ -153,10 +153,10 @@ async function importPdfFile(f){
     o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
     state.objects.push(o); counts.text++;
   }
-  /* 无内嵌图时，把矢量场地设为 PDF 页面尺寸的矩形域，保证坐标框正确 */
-  if(!pdf.images.length && state.background.kind==='rect' && state.background.shape?.type==='rect' && !state.background.calibrated){
-    state.background.shape.w=Math.max(state.background.shape.w,wM||100);
-    state.background.shape.h=Math.max(state.background.shape.h,hM||70);
+  /* 无内嵌图时，把矢量场地设为 PDF 页面尺寸的矩形域，保证坐标框正确；图片槽保持不变 */
+  if(!pdf.images.length && state.site && state.site.kind==='rect' && state.site.shape?.type==='rect'){
+    state.site.shape.w=Math.max(state.site.shape.w,wM||100);
+    state.site.shape.h=Math.max(state.site.shape.h,hM||70);
   }
   selectedIds.clear();
   commitChange('PDF 已导入：'+counts.line+' 线 / '+counts.area+' 区域 / '+counts.text+' 文字'+(bgNote?' / '+bgNote:''));
@@ -166,7 +166,7 @@ async function importPdfFile(f){
 /* -------------------- 底图/场地：选择弹窗与矢量场地应用 -------------------- */
 function openSitePicker(){
   openModal(L('底图 / 场地'),
-    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(siteDescription())}</div>
+    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(L('图片底图')+'：'+(isImageBackground(state.background)?(state.background.fileName||L('已导入')):L('未设置'))+'；'+siteDescription(state.site))}</div>
      <div class="site-pick">
        <button class="site-card" data-site="image"><b>🖼 ${esc(L('上传图片底图'))}</b><span class="hint-text">${esc(L('PNG/JPG/WebP/BMP；再用「比例尺」校准米/像素'))}</span></button>
        <button class="site-card" data-site="rect-num"><b>▭ ${esc(L('矩形场地（输入尺寸）'))}</b><span class="hint-text">${esc(L('直接输入长×宽（米）'))}</span></button>
@@ -180,7 +180,7 @@ function openSitePicker(){
        <button class="site-card" data-site="para-draw"><b>▱ ${esc(L('平行四边形场地（拖画）'))}</b><span class="hint-text">${esc(L('拖出底×高，生成后默认倾角 30°'))}</span></button>
        <button class="site-card" data-site="polygon"><b>⬡ ${esc(L('多边形场地（描边）'))}</b><span class="hint-text">${esc(L('沿边界逐点单击，双击/✓闭合；三角形同理'))}</span></button>
      </div>
-     <p class="hint-text">${esc(L('矢量场地直接以米为世界坐标，缩放时设备尺寸与场地保持真实比例。切换会替换当前底图/场地，已有标注对象保留（如需请重新对齐）。'))}</p>`,
+     <p class="hint-text">${esc(L('图片底图与矢量场地可共存：每层最多 1 张图 + 1 个场地。矢量场地直接以米为世界坐标，缩放时保持真实比例；替换场地不会删除已导入的图片底图，已有标注对象保留（如需请重新对齐）。'))}</p>`,
     [{text:L('关闭'),click:closeModal}]);
   $('modalBody').querySelectorAll('[data-site]').forEach(btn=>btn.onclick=async()=>{
     const act=btn.dataset.site;
@@ -226,13 +226,15 @@ function openSitePicker(){
     }
   });
 }
-/** 应用矢量场地（替换当前图片底图；图片资产在无引用时回收） */
+/** 应用矢量场地：只更新独立 site 槽，保留图片底图、场地元数据（id/name/layer/visible/locked/annot/style） */
 function applyVectorSite(kind,shape){
   pushHistory();
-  const oldId=state.background.assetId;
-  Object.assign(state.background,{kind,shape,assetId:'',fileName:'',calibrated:false,transform:null});
-  bgImage=null; bgDataUrl=''; selectedIds.clear();
-  if(oldId) assetPrune([]).catch(()=>{});
+  const site=state.site||createSiteSlot(shape);
+  site.kind=shape.type||kind;
+  site.shape=deepClone(shape);
+  site.updatedAt=nowISO();
+  if(!state.site) state.site=site;
+  selectedIds.clear();
   fitView(); commitChange(L('已设置为')+L(siteKindName(kind))); setTool('select');
 }
 
@@ -299,7 +301,7 @@ async function importBackgroundFile(f){
 /* -------------------- 文件输入绑定 -------------------- */
 $('bgBtn').onclick=openSitePicker;
 $('calibBtn').onclick=()=>{
-  if(state.background.kind!=='image') return toast('矢量场地直接以米为坐标，无需比例尺校准；仅图片底图需要','warn');
+  if(!isImageBackground(state.background)) return toast('当前没有图片底图；矢量场地直接以米为坐标，无需比例尺校准','warn');
   setTool('calibrate');
 };
 $('fileInput').addEventListener('change',e=>{

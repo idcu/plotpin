@@ -116,7 +116,7 @@ function sceneStaticKey(v,cssW,cssH,d){
   return [v.zoom,v.panX,v.panY,cssW,cssH,dpr||1,staticRev,
     d.minX,d.minY,d.maxX,d.maxY,
     JSON.stringify(state.settings),
-    JSON.stringify(bg.shape||null),
+    JSON.stringify(state.site||null),
     bg.transform?JSON.stringify(bg.transform):'',
     bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,bg.metersPerPixel||0,
     bgImage?1:0,(bgDataUrl||'').length,
@@ -152,6 +152,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
       const sc=ensureStaticLayer(cssW,cssH);
       sc.clearRect(0,0,cssW,cssH);
       drawBackground(sc,v,d,cssW,cssH,toS);
+      drawSite(sc,v,toS);
       drawGrid(sc,v,d,cssW,cssH,toS);
       drawCoverage(sc,v,d);
       drawSiteAnnotations(sc,v,toS);
@@ -187,6 +188,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   c.clearRect(0,0,cssW,cssH);
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   drawBackground(c,v,d,cssW,cssH,toS);
+  drawSite(c,v,toS);
   drawGrid(c,v,d,cssW,cssH,toS);
   drawCoverage(c,v,d);
   drawSiteAnnotations(c,v,toS);
@@ -215,6 +217,8 @@ function drawScene(c,v,cssW,cssH,opt={}){
  */
 function drawSiteHandles(c,v,toS){
   if(currentTool!=='site-node') return;
+  const site=state.site;
+  if(!site||!siteIsVisible(site)||siteIsLocked(site)) return;
   const hs=siteHandleList();
   if(!hs.length) return;
   c.save();
@@ -327,49 +331,53 @@ function drawOsnapMarker(c,toS){
   drawScreenTag(c,s[0]+10,s[1]-26,'◈ '+(OSNAP_LABELS[snap.type]||snap.type));
 }
 function drawBackground(c,v,d,cssW,cssH,toS){
-  const bg=state.background;
-  if(bg.kind==='image' && bgImage && bgDataUrl){
-    drawImageBackground(c,v,d,bg);
-    return;
-  }
-  /* 矢量场地：域外白色，域内浅色；形状边界用蓝色实线 */
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
+  const bg=state.background;
+  if(isImageBackground(bg)&&bgImage&&bgDataUrl) drawImageBackground(c,v,d,bg);
+}
+/**
+ * 矢量场地层（独立槽位）：域内浅色、蓝色实线边界。
+ * 渲染顺序固定为「图片 → 场地 → 网格/覆盖」，因此场地永远画在图片之上；
+ * visible=false 不渲染；locked 仍渲染，仅限制编辑/手柄。
+ */
+function drawSite(c,v,toS){
+  const site=state.site;
+  if(!site||!siteIsVisible(site)) return;
+  const sh=siteShapeOf(site), st=site.style||{};
+  const fill=typeof st.fill==='string'&&st.fill?st.fill:'#eef2f7';
+  const stroke=typeof st.stroke==='string'&&st.stroke?st.stroke:'#3b82f6';
   c.save();
-  if((bg.kind==='circle'||bg.shape?.type==='circle') && bg.shape){
-    const sh=bg.shape, ce=toS([sh.cx,sh.cy]);
-    c.fillStyle='#eef2f7';
+  if(sh.type==='circle'){
+    const ce=toS([sh.cx,sh.cy]);
+    c.fillStyle=fill;
     c.beginPath(); c.arc(ce[0],ce[1],sh.r*v.zoom,0,Math.PI*2); c.fill();
-    c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
-  }else if((bg.kind==='ellipse'||bg.shape?.type==='ellipse') && bg.shape){
-    const sh=bg.shape, ce=toS([sh.cx,sh.cy]);
-    c.fillStyle='#eef2f7';
+    c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
+  }else if(sh.type==='ellipse'){
+    const ce=toS([sh.cx,sh.cy]);
+    c.fillStyle=fill;
     c.beginPath(); c.ellipse(ce[0],ce[1],sh.rx*v.zoom,sh.ry*v.zoom,screenAngle({angle:sh.angle||0}),0,Math.PI*2); c.fill();
-    c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
-  }else if((bg.kind==='sector'||bg.shape?.type==='sector') && bg.shape){
-    const sh=bg.shape, ce=toS([sh.cx,sh.cy]), R=sh.r*v.zoom;
-    /* 世界角(Y上)映射屏幕角(Y下)：从 a1 端顺时针画到 a0 端 */
-    c.fillStyle='#eef2f7';
+    c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
+  }else if(sh.type==='sector'){
+    const ce=toS([sh.cx,sh.cy]), R=sh.r*v.zoom;
+    c.fillStyle=fill;
     c.beginPath(); c.moveTo(ce[0],ce[1]);
     c.arc(ce[0],ce[1],R,-Number(sh.a1||0)*Math.PI/180,-Number(sh.a0||0)*Math.PI/180,false); c.closePath(); c.fill();
-    c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
-  }else if((bg.kind==='parallelogram'||bg.shape?.type==='parallelogram') && bg.shape){
-    const sh=bg.shape;
-    const w=Number(sh.w)||0, h=Number(sh.h)||0;
-    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,w,h,sh.skew).map(toS);
-    c.fillStyle='#eef2f7';
+    c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
+  }else if(sh.type==='parallelogram'){
+    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,Number(sh.w)||0,Number(sh.h)||0,sh.skew).map(toS);
+    c.fillStyle=fill;
     c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.fill();
-    c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
-  }else if((bg.kind==='polygon'||bg.shape?.type==='polygon') && bg.shape?.points?.length>=3){
-    const pts=bg.shape.points.map(toS);
+    c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
+  }else if(sh.type==='polygon'&&sh.points&&sh.points.length>=3){
+    const pts=sh.points.map(toS);
     c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath();
-    c.fillStyle='#eef2f7'; c.fill();
-    c.strokeStyle='#3b82f6'; c.lineWidth=2; c.stroke();
+    c.fillStyle=fill; c.fill();
+    c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
   }else{
-    /* 矩形场地：按实际基点/宽高（siteBounds）取屏幕矩形，用 min/abs 规避 Y 轴翻转导致的负尺寸 */
-    const sb=siteBounds(bg), pa=toS([sb.minX,sb.minY]), pb=toS([sb.maxX,sb.maxY]);
+    const sb=siteBounds(site), pa=toS([sb.minX,sb.minY]), pb=toS([sb.maxX,sb.maxY]);
     const x=Math.min(pa[0],pb[0]), y=Math.min(pa[1],pb[1]), w=Math.abs(pb[0]-pa[0]), h=Math.abs(pb[1]-pa[1]);
-    c.fillStyle='#f8fafc'; c.fillRect(x,y,w,h);
-    c.strokeStyle='#94a3b8'; c.lineWidth=1.5; c.strokeRect(x,y,w,h);
+    c.fillStyle=typeof st.fill==='string'&&st.fill?st.fill:'#f8fafc'; c.fillRect(x,y,w,h);
+    c.strokeStyle=typeof st.stroke==='string'&&st.stroke?st.stroke:'#94a3b8'; c.lineWidth=1.5; c.strokeRect(x,y,w,h);
   }
   c.restore();
 }
@@ -490,7 +498,8 @@ function siteRadiusText(bg){
 }
 /** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/平行四边形/圆/椭圆/扇形） */
 function siteAreaPerimeter(bg){
-  const sh=(bg&&bg.shape)||{};
+  if(!bg) return {area:0,perimeter:0};
+  const sh=bg.shape||{};
   if(sh.type==='polygon'){
     const ps=(sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
     if(ps.length<3) return {area:0,perimeter:ps.length===2?polylineLength(ps):0};
@@ -511,10 +520,10 @@ function siteAreaPerimeter(bg){
  * 屏幕固定字号，缩放不糊。
  */
 function drawSiteAnnotations(c,v,toS){
-  const bg=state.background, S=state.settings;
-  if(!bg||bg.kind==='image') return;
+  const site=state.site, S=state.settings;
+  if(!site||!siteIsVisible(site)) return;
   if(!(S.siteNodes||S.siteSegLen||S.siteArea||S.sitePerimeter||S.siteBase||S.siteRadius)) return;
-  const pts=siteBoundaryPoints(bg);
+  const pts=siteBoundaryPoints(site);
   if(pts&&pts.length>=2){
     const n=pts.length, closed=n>=3;
     if(S.siteSegLen){
@@ -531,18 +540,18 @@ function drawSiteAnnotations(c,v,toS){
     }
   }
   /* 基点坐标与半径分别可开关：圆/椭圆/扇形有半径与圆心，矩形/平行四边形只有基点，多边形两者皆无 */
-  const cs=toS(siteShapeCenter(bg));
+  const cs=toS(siteShapeCenter(site));
   if(S.siteBase){
-    const b=siteBasePoint(bg);
+    const b=siteBasePoint(site);
     if(b){ const s=toS(b); drawScreenTag(c,s[0]+7,s[1]-16,'('+fmt(b[0])+', '+fmt(b[1])+')'); }
   }
   if(S.siteRadius){
-    const rt=siteRadiusText(bg);
+    const rt=siteRadiusText(site);
     if(rt) drawScreenTag(c,cs[0]+7,cs[1]+22,'R '+rt);
   }
   /* 周长与面积分别可开关，胶囊组件同一处渲染 */
   if(S.siteArea||S.sitePerimeter){
-    const ap=siteAreaPerimeter(bg);
+    const ap=siteAreaPerimeter(site);
     drawAreaTag(c,cs[0],cs[1],ap.area,ap.perimeter,S.siteArea,S.sitePerimeter);
   }
 }

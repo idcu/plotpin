@@ -248,7 +248,7 @@ canvas.addEventListener('pointerdown',e=>{
     const h=siteHandleAt(wp,sp);
     if(h){
       pushHistory();
-      drag={type:'siteHandle',handle:h,start:wp,originalShape:deepClone(state.background.shape)};
+      drag={type:'siteHandle',handle:h,start:wp,originalShape:deepClone(state.site?.shape)};
     }
     return;
   }
@@ -402,9 +402,10 @@ canvas.addEventListener('pointerup',e=>{
   if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
     const isSite=drag.type==='siteHandle';
     const changed=isSite
-      ? JSON.stringify(drag.originalShape)!==JSON.stringify(state.background.shape)
+      ? JSON.stringify(drag.originalShape)!==JSON.stringify(state.site?.shape)
       : state.objects.some(o=>drag.originals?.has(o.id) || o.id===drag.id);
     if(isSite && !changed) history.past.pop();      /* 仅点击未拖动：弹出未变更的撤销快照 */
+    if(isSite && changed && state.site) state.site.updatedAt=nowISO();
     drag=null;
     if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); }
     return;
@@ -448,9 +449,9 @@ canvas.addEventListener('dblclick',e=>{
 });
 /** 「场地节点」工具下双击多边形场地：点中顶点→删除；点中边→在该处插入顶点（吸附生效） */
 function editSiteNodeByDoubleClick(e){
-  const bg=state.background;
-  if(!bg||bg.kind==='image') return;
-  const sh=bg.shape||{};
+  const site=state.site;
+  if(!site||!siteIsVisible(site)||siteIsLocked(site)) return;
+  const sh=siteShapeOf(site);
   if(sh.type!=='polygon'||!(sh.points||[]).length) return;
   const wp=resolveWorldPoint(e), tol=9/state.viewport.zoom, pts=sh.points, n=pts.length;
   let ni=-1;
@@ -468,7 +469,7 @@ function editSiteNodeByDoubleClick(e){
     const foot=nearestPointOnSegment(wp,pts[best.k],pts[(best.k+1)%n]);
     pushHistory(); pts.splice(best.k+1,0,[foot[0],foot[1]]);
   }
-  syncFramePan(); commitChange('场地节点已更新');
+  syncFramePan(); state.site.updatedAt=nowISO(); commitChange('场地节点已更新');
 }
 /** 选择工具下双击折线：点中节点→删除；点中线段→在该处插入节点（吸附生效） */
 function editLineNodeByDoubleClick(e){
@@ -561,8 +562,8 @@ function resizeShapeByHandle(o,h,p){
 /* -------------------- 矢量场地控制点编辑（「场地节点」工具） -------------------- */
 /** 场地控制点清单（世界坐标，Y 向上）：与渲染手柄、命中、拖拽共用同一基准 */
 function siteHandleList(bg){
-  bg=bg||state.background;
-  if(!bg||bg.kind==='image') return [];
+  bg=bg===undefined?state.site:bg;
+  if(!bg||bg.kind==='image'||bg.kind==='empty') return [];
   const sh=bg.shape||{}, out=[];
   if(sh.type==='polygon'){
     (sh.points||[]).forEach((p,i)=>out.push({type:'siteNode',mode:'vertex',index:i,x:Number(p[0])||0,y:Number(p[1])||0}));
@@ -606,6 +607,8 @@ function siteHandleList(bg){
 }
 /** 命中场地控制点（屏幕阈值，与对象手柄一致） */
 function siteHandleAt(wp,sp){
+  const site=state.site;
+  if(!site||!siteIsVisible(site)||siteIsLocked(site)) return null;
   for(const h of siteHandleList()){
     const s=w2s([h.x,h.y]);
     if(Math.hypot(s[0]-sp[0],s[1]-sp[1])<=9) return h;
@@ -614,8 +617,8 @@ function siteHandleAt(wp,sp){
 }
 /** 拖拽场地控制点：按模式改写场地 shape 参数（世界坐标米） */
 function resizeSiteByHandle(h,p){
-  const bg=state.background; if(!bg||bg.kind==='image') return;
-  const sh=bg.shape||{};
+  const site=state.site; if(!site||!siteIsVisible(site)||siteIsLocked(site)) return;
+  const sh=siteShapeOf(site);
   if(h.mode==='vertex'){ sh.points[h.index]=[p[0],p[1]]; return; }
   if(h.mode==='corner'){
     const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
@@ -672,7 +675,7 @@ function cancelActiveDrag(){
     if(o && d.original) Object.assign(o,deepClone(d.original));
     history.past.pop();
   }else if(d.type==='siteHandle'){
-    if(state.background) state.background.shape=deepClone(d.originalShape);
+    if(state.site) state.site.shape=deepClone(d.originalShape);
     syncFramePan();                 /* 形状还原后同步取景框，视野回到拖拽前 */
     history.past.pop();
   }else return true;
@@ -814,6 +817,7 @@ async function finishSiteDraft(){
   }
 }
 async function finishCalibration(){
+  if(!isImageBackground(state.background)){ calibPoints=[]; setTool('select'); toast('比例尺校准仅适用于图片底图','warn'); return; }
   const old=dist(calibPoints[0],calibPoints[1]);
   if(old<EPS){ calibPoints=[]; return; }
   const value=await showPrompt({title:L('比例尺校准'),label:L('两点之间的实际距离（米）'),value:fmt(old)});
