@@ -77,6 +77,7 @@ function undo(){
   state=history.past.pop();
   selectedIds.clear();
   afterStateLoaded(false); pruneBgAssets(); requestRender();
+  scheduleSave();                  /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
   if(typeof collabOnLocalChange==='function') collabOnLocalChange();
   toast('已撤销');
 }
@@ -86,6 +87,7 @@ function redo(){
   state=history.future.pop();
   selectedIds.clear();
   afterStateLoaded(false); pruneBgAssets(); requestRender();
+  scheduleSave();                  /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
   if(typeof collabOnLocalChange==='function') collabOnLocalChange();
   toast('已重做');
 }
@@ -394,6 +396,7 @@ async function addFloor(name){
   const id='floor_'+uid('F');
   state.floors.push({id,name:nm,background:init.background,site:init.site,objects:[],viewport:init.viewport});
   const ok=await switchFloor(id);
+  if(ok) scheduleSave();           /* 新增楼层必须立刻落盘，刷新后不能消失（审计 P0-4） */
   return ok?id:null;
 }
 /** 删除楼层：至少保留一层；删除当前楼层时自动切到第一层 */
@@ -415,6 +418,7 @@ async function deleteFloor(id){
     state.activeFloorId=target.id;
     selectedIds.clear(); coverageResult=null; invalidateStatic(); resetFrameRef();
     await afterStateLoaded(false); fitView();
+    scheduleSave();                /* 删除当前楼层后落盘，刷新不能复活（审计 P0-4） */
   }else commitChange('已删除楼层');
   return true;
 }

@@ -152,6 +152,8 @@ code += `\n;globalThis.__api = {
   drawObject, drawLabel, drawAreaTag, drawScreenTag, surfaceCssSize, markSurfaceSize,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
+  addFloor, deleteFloor,
+  get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   clearCurrentFloor,
   get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
   get affinePairs(){ return affinePairs; }, set affinePairs(v){ affinePairs=v; },
@@ -4165,6 +4167,44 @@ asyncSuites.push((async()=>{
   eq('清空撤销-背景资产仍可重载', api.state.background.assetId, 'bg.test');
   api.resetState();
 }
+
+/* 63. 撤销/重做/增删楼层统一落盘（A-03 / 审计 P0-4） ---------------------------- */
+asyncSuites.push((async()=>{
+  const origSave=api.scheduleSave;
+  let calls=0, saved=null;
+  api.scheduleSave=()=>{ calls++; saved=api.persistableState(); };
+  try{
+    /* 撤销：落盘快照必须包含被恢复的对象 */
+    api.resetState(); api.history.past=[]; api.history.future=[];
+    const obj=api.baseObject('point','point.marker',{name:'P1',x:1,y:1});
+    api.state.objects=[obj]; api.pushHistory();
+    api.state.objects=[];
+    calls=0; saved=null; api.undo();
+    ok('落盘-撤销调用保存', calls>=1);
+    eq('落盘-撤销快照恢复对象', saved&&saved.objects.length, 1);
+    /* 重做：落盘快照必须反映重做后的空对象列表 */
+    calls=0; saved=null; api.redo();
+    ok('落盘-重做调用保存', calls>=1);
+    eq('落盘-重做快照对象归零', saved&&saved.objects.length, 0);
+    /* 新增楼层：刷新后楼层不能消失 */
+    api.resetState(); api.history.past=[]; api.history.future=[];
+    calls=0; saved=null;
+    const newId=await api.addFloor('F2');
+    ok('落盘-新增楼层返回 id', !!newId);
+    ok('落盘-新增楼层调用保存', calls>=1);
+    eq('落盘-新增楼层快照两层', saved&&saved.floors.length, 2);
+    eq('落盘-新增楼层活动层正确', saved&&saved.activeFloorId, newId);
+    /* 删除当前楼层：刷新后不能复活，活动层切到第一层 */
+    calls=0; saved=null;
+    await api.deleteFloor(newId);
+    ok('落盘-删除当前楼层调用保存', calls>=1);
+    eq('落盘-删除当前楼层快照一层', saved&&saved.floors.length, 1);
+    ok('落盘-删除当前楼层活动层不复活', !!saved&&saved.activeFloorId!==newId);
+  } finally {
+    api.scheduleSave=origSave;
+    api.history.past=[]; api.history.future=[]; api.resetState();
+  }
+})());
 
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites);
