@@ -122,7 +122,10 @@ code += `\n;globalThis.__api = {
   SITE_ANNOT_SETTING_KEYS, siteAnnotSettingOn, setSiteAnnotSetting,
   typeDisplayName, populateSelects,
   normalizeIcon, TYPE_ICONS, mergeTypes,
-  SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange,
+  SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
+  markDirty, MARK_DIRTY_PROFILES,
+  get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
+  get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
@@ -135,7 +138,7 @@ code += `\n;globalThis.__api = {
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
   parkingLayout, parkingWarningText, applyParkingLayout,
-  collabChunkText, collabCleanSDP, collabOnLocalChange,
+  collabChunkText, collabCleanSDP,
   undo, redo, pushHistory, get history(){ return history; },
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
@@ -4325,6 +4328,60 @@ asyncSuites.push(async()=>{
   api.mergeBlankMissingTimestamps(blank);
   eq('合并-旧档楼层时间置空', blank.floors[0].updatedAt, '');
   eq('合并-旧档对象时间置空', blank.floors[0].objects[0].updatedAt, '');
+  api.resetState();
+}
+
+/* 67. 变更提交协议 markDirty：清覆盖率/落盘/广播按 kind 差异化 --------------- */
+{
+  api.resetState();
+  const realSave=api.scheduleSave;
+  const realBroadcast=api.collabOnLocalChange;
+  let saves=0, broadcasts=0;
+  api.scheduleSave=()=>{saves++;};
+  api.collabOnLocalChange=()=>{broadcasts++;};
+
+  api.coverageResult={stale:true};
+  api.markDirty('object');
+  eq('markDirty-object 落盘一次', saves, 1);
+  ok('markDirty-object 清覆盖率', api.coverageResult===null);
+  eq('markDirty-object 广播一次', broadcasts, 1);
+
+  api.coverageResult={stale:true};
+  api.markDirty('objectEdit');
+  eq('markDirty-objectEdit 落盘累加', saves, 2);
+  eq('markDirty-objectEdit 广播累加', broadcasts, 2);
+
+  api.markDirty('clear');
+  eq('markDirty-clear 落盘', saves, 3);
+  eq('markDirty-clear 不广播（保持既有行为）', broadcasts, 2);
+
+  api.markDirty('floor');
+  eq('markDirty-floor 落盘', saves, 4);
+  eq('markDirty-floor 不广播', broadcasts, 2);
+
+  api.markDirty('restore');
+  eq('markDirty-restore 落盘', saves, 5);
+  eq('markDirty-restore 广播', broadcasts, 3);
+
+  api.markDirty('unknown');
+  eq('markDirty-未知 kind 回退 object 并广播', broadcasts, 4);
+  eq('markDirty-profile 表冻结', Object.isFrozen(api.MARK_DIRTY_PROFILES), true);
+  eq('markDirty-profile objectEdit UI', api.MARK_DIRTY_PROFILES.objectEdit.ui, 'lists');
+
+  /* commitChange/commitObjectEdit 必须走同一协议 */
+  api.resetState();
+  api.state.objects=[api.baseObject('point','point.marker',{x:1,y:2})];
+  const before=saves;
+  api.commitChange();
+  eq('commitChange 统一落盘一次', saves, before+1);
+  ok('commitChange 清覆盖率', api.coverageResult===null);
+  api.commitObjectEdit();
+  eq('commitObjectEdit 统一落盘一次', saves, before+2);
+  ok('commitObjectEdit 清覆盖率', api.coverageResult===null);
+
+  api.scheduleSave=realSave;
+  api.collabOnLocalChange=realBroadcast;
+  api.coverageResult=null;
   api.resetState();
 }
 

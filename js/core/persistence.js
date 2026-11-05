@@ -76,9 +76,8 @@ function undo(){
   history.future.push(deepClone(state));
   state=history.past.pop();
   selectedIds.clear();
-  afterStateLoaded(false); pruneBgAssets(); requestRender();
-  scheduleSave();                  /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
-  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
+  afterStateLoaded(false); pruneBgAssets();
+  markDirty('restore');            /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
   toast('已撤销');
 }
 function redo(){
@@ -86,9 +85,8 @@ function redo(){
   history.past.push(deepClone(state));
   state=history.future.pop();
   selectedIds.clear();
-  afterStateLoaded(false); pruneBgAssets(); requestRender();
-  scheduleSave();                  /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
-  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
+  afterStateLoaded(false); pruneBgAssets();
+  markDirty('restore');            /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
   toast('已重做');
 }
 /**
@@ -105,24 +103,46 @@ function touchFloor(id){
   f.updatedAt=nowISO();
   return f.updatedAt;
 }
+/**
+ * 统一变更提交协议（审计 A-05）。
+ * 一次完成：清覆盖率叠加层 → 重建静态层 → 落盘 → 广播 → 刷 UI/重绘。
+ * 各调用点用 kind 选择差异化的 UI 刷新粒度，避免改变既有行为：
+ *  - object      ：新增/删除/移动后全量刷新（refreshUI）
+ *  - objectEdit  ：属性编辑中只刷清单/图层/统计，避免重建正在编辑的属性面板
+ *  - clear       ：清空楼层后全量刷新（保持既有：不广播）
+ *  - restore     ：载入/撤销/重做后由 afterStateLoaded 负责静态层与 UI，这里只补落盘+广播
+ *  - floor       ：删除楼层分支只补落盘（保持既有：不广播）
+ * 所有 kind 都会清覆盖率并重新安排保存；差异仅在 UI 刷新与广播范围内。
+ */
+const MARK_DIRTY_PROFILES=Object.freeze({
+  object:Object.freeze({ui:'full',broadcast:true}),
+  objectEdit:Object.freeze({ui:'lists',broadcast:true}),
+  clear:Object.freeze({ui:'full',broadcast:false}),
+  restore:Object.freeze({ui:'none',broadcast:true}),
+  floor:Object.freeze({ui:'none',broadcast:false})
+});
+function markDirty(kind){
+  const p=MARK_DIRTY_PROFILES[kind]||MARK_DIRTY_PROFILES.object;
+  coverageResult=null;               /* 对象/楼层变更后覆盖率叠加层失效，需重新分析 */
+  invalidateStatic();                /* 静态层（非选中对象）需要重建 */
+  scheduleSave();
+  requestRender();
+  if(p.ui==='full') refreshUI();
+  else if(p.ui==='lists'){ renderList(); renderLayers(); renderStats(); }
+  if(p.broadcast&&typeof collabOnLocalChange==='function') collabOnLocalChange();
+}
 function commitChange(message){
   touchFloor();
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
-  coverageResult=null;               /* 对象变更后覆盖率叠加层失效，需重新分析 */
-  invalidateStatic();                /* 静态层（非选中对象）需要重建 */
-  refreshUI(); scheduleSave(); requestRender();
-  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
+  markDirty('object');
   if(message) toast(message,'success');
 }
 function commitObjectEdit(){
   touchFloor();
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
-  coverageResult=null;
-  invalidateStatic();
-  renderList(); renderLayers(); renderStats(); scheduleSave(); requestRender();
-  if(typeof collabOnLocalChange==='function') collabOnLocalChange();
+  markDirty('objectEdit');
 }
 /**
  * 清空当前楼层全部内容：图片底图槽、矢量场地槽、业务对象与标注、校准草稿/选中态、
@@ -142,11 +162,11 @@ function clearCurrentFloor(){
   bgImage=null; bgDataUrl='';
   selectedIds.clear(); draft=null; drag=null; rubber=null;
   calibPoints=[]; affinePairs=[]; calibSelection=null; calibUndoStack=[];
-  coverageResult=null; activeOsnap=null; trackLine=null; refEdge=null;
+  activeOsnap=null; trackLine=null; refEdge=null;
   if(typeof clearGuides==='function') clearGuides();
   syncActiveFloor();
-  invalidateStatic(); resetFrameRef(); fitView();
-  refreshUI(); scheduleSave(); requestRender();
+  resetFrameRef(); fitView();
+  markDirty('clear');               /* 覆盖率/静态层/落盘/UI 统一走提交协议（保持既有：不广播） */
   return summary;
 }
 let dbPromise=null;
@@ -434,9 +454,9 @@ async function deleteFloor(id){
     state.objects=target.objects;
     state.viewport=target.viewport||state.viewport;
     state.activeFloorId=target.id;
-    selectedIds.clear(); coverageResult=null; invalidateStatic(); resetFrameRef();
+    selectedIds.clear(); resetFrameRef();
     await afterStateLoaded(false); fitView();
-    scheduleSave();                /* 删除当前楼层后落盘，刷新不能复活（审计 P0-4） */
+    markDirty('floor');            /* 删除当前楼层后落盘，刷新不能复活（审计 P0-4） */
   }else commitChange('已删除楼层');
   return true;
 }

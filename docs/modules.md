@@ -59,6 +59,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | `siteAnnotToggleKeys(site) / renderSiteAnnotToggles(site)` | `js/features/props.js`（按场地形状筛选有效开关） | 场地属性面板；无场地返回空串，锁定（含图层锁定）时 `disabled` |
 | `SITE_ANNOT_SETTING_KEYS / siteAnnotSettingOn / setSiteAnnotSetting` | `js/core/model.js`（仍写 `state.settings` 原键，不改 schema） | 场地属性面板、`drawSiteAnnotations`、SVG 导出、`selftest.mjs` |
 | `clearCurrentFloor()` | `js/core/persistence.js`（当前楼层全清并恢复默认取景框，返回清理摘要） | 顶栏「清空」按钮（先 `pushHistory` 再调用）；自测直接调用。影响：清空写入对象墓碑、同步当前楼层条目、清空校准运行时状态，不重置图层/类型/楼层结构 |
+| `markDirty(kind)` | `js/core/persistence.js`（变更提交协议唯一实现：清覆盖率 → 重建静态层 → 落盘 → 广播 → 按 kind 刷 UI/重绘） | `commitChange`（object）、`commitObjectEdit`（objectEdit）、`clearCurrentFloor`（clear，不广播）、`undo/redo`（restore）、`deleteFloor`（floor，不广播）；`switchFloorData` 仍只清覆盖率/静态层，落盘由 `switchFloor` 负责，避免载入资产前提前写盘 |
 | `markSurfaceSize(canvas, cssW, cssH) / surfaceCssSize(ctx)` | `js/core/render.js`（绘图表面逻辑尺寸的唯一来源） | `drawScreenTag` 的夹边、离屏静态层、PNG/PDF 导出画布。离屏 canvas 的 `clientWidth` 恒为 0，必须用登记尺寸，否则屏幕标签被压到 (2,2) |
 
 影响范围：`siteHandleList/siteAreaPerimeter/siteBoundaryPoints/siteShapeCenter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；`resizeSiteByHandle(h,p)` 是写 `state.site` 的薄包装，新代码应优先用 `siteHandleDragTo(site,h,p)`，它不读全局、便于单测。删除重复后 `render.js` 不再声明 `siteBoundaryPoints/siteShapeCenter/siteAreaPerimeter/siteBasePoint/siteRadiusText`，`interaction.js` 不再声明 `siteHandleList/resizeSiteByHandle`——同名函数只保留 `geometry.js` 一份，避免两份实现漂移。
