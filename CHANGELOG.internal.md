@@ -2,6 +2,31 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-12 快赢包：椭圆圆心 / 图标尺寸 / 统计场地类型 / 文件 accept
+
+- **Commit Hash**：`629449a`（fix(ui): 椭圆数值输入圆心 / 图标尺寸编辑 / 统计场地类型 / 文件 accept 四连修）。
+- **核心改动点**
+  - **P1-5 椭圆**：`io-import` 新增纯函数 `ellipseShapeFromInput(text)`，只解析长/短轴半径，`cx/cy` 固定为 `0`（旧实现 `cx=m[0],cy=m[1]` 让椭圆偏移 (rx,ry)）。
+  - **P1-10 图标尺寸**：`ui-panels` 将 `data-type-iconsize` 的读取由 `i.dataset.iconsize` 修正为 `i.dataset.typeIconsize`，类型面板修改图标尺寸不再静默失效。
+  - **P1-11 统计场地类型**：`renderStats` 改读 `state.site?.kind || state.background.kind`（旧实现只看 background.kind，有矢量场地时恒显示 empty/image）。
+  - **P2-24 文件 accept**：`index.html` 的 `fileInput accept` 增加 `.dxf,.pdf`，与导入分支支持范围一致。
+  - **测试框架**：`asyncSuites` 允许 push 函数，统一在结果汇总阶段执行，修复 §63 await 与 §65 同步 `resetState` 的并发竞态（该竞态在本次新增用例时真实触发并被发现）。
+- **实测验证数据（本机 Windows / Node 18，2026-11-06）**
+  - `node scripts/selftest.mjs`：**1694 通过 / 0 失败**（新增 14 项）。
+  - **门禁牙齿（可逆破坏）**：临时把 `cx:m[0],cy:m[1]` 改回旧实现 → 3 项变红（`椭圆-中心在原点` 期望 [0,0] 实际 [40,25]、左/上边界各 1 项，1691/3）；恢复后 1694/0。
+  - `node scripts/check.mjs --selftest`：通过。
+  - `node scripts/build.mjs --check`：**669.8KB ≤ 750KB**，SHA256 `ce781c8d…`，二次构建确定性一致。
+  - `node scripts/bench.mjs`：avg 0.35ms（≤8）/ P95 0.42ms（≤3）/ 重建 21.74ms（≤60）/ heapUsed 14.67MB（≤64）/ 裁剪 99.4% / 覆盖率 7.7ms（≤300）。
+  - README 断言数经 `badge.mjs` 同步为 1694。
+- **公共抽象 / 影响面**
+  - 新增全局纯函数 `ellipseShapeFromInput`（导入分支与自测共用）；数值输入不再接受圆心坐标，只接受两个正半径。
+  - 无对外 API 删除/改名；`applyVectorSite(kind,shape)` 签名不变。
+  - 测试框架：`asyncSuites` 元素允许为函数（结果阶段调用）；既有 Promise 元素行为不变。
+- **遗留 TODO / 风险**
+  - 统计面板 `siteDescription` 的 `split('：')` 英文界面解析问题**未修**（不在本期用户清单内）。
+  - 文件 accept 仅过滤选择器；拖拽导入仍按扩展名运行时校验，两处规则需长期保持一致。
+  - 四项修复均未做真实浏览器交互验证（A-14 暂缓）。
+
 ## 2026-11-06 · A-07 CSV/TSV/XLSX 公式注入防护（审计 P1-3）
 
 - **Commit Hash**：`7f5cb70`（fix(export): CSV/TSV 公式注入防护 + XLSX 单元格全文本，封堵导出侧公式执行）。
