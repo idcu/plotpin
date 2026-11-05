@@ -2,6 +2,32 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-07 CSV/TSV/XLSX 公式注入防护（审计 P1-3）
+
+- **Commit Hash**：`7f5cb70`（fix(export): CSV/TSV 公式注入防护 + XLSX 单元格全文本，封堵导出侧公式执行）。
+- **核心改动点**
+  - 新增 `formulaGuard(s)`（`js/features/io-export.js`）：`= + - @`、Tab/CR 开头**且非纯数字**时命中，交给 DSV 加前导单引号，Excel/WPS 按文本显示。
+  - 纯数字豁免规则 `NUMERIC_CELL_RE`：负数、科学计数、坐标/角度列表（`-1.00,-2.00;3.00,4.00`）原样输出，避免负坐标与 CSV 再导入被文本化。
+  - 新增纯函数 `delimitedText(delim)`：真实导出路径的数据行统一 `DSV.formatRows(...,{guardFormula:formulaGuard})`，`exportDelimited` 仅负责下载，便于自测直接断言产物。
+  - `csvCell()` 默认带 `guardFormula:formulaGuard`，旧调用方（插件/自测）自动获得防护。
+  - `exportXlsx()` 补充说明与断言：单元格一律 `t="inlineStr"`（文本），OOXML 中不存在 `<f>` 公式节点，`=cmd|calc`/`@SUM(1)` 按原文保存。
+  - 未修改 vendored DSV 代码，只使用其既有 `guardFormula` 选项（boolean/RegExp/Function）。
+- **实测验证数据（本机 Windows / Node 18，2026-11-06）**
+  - `node scripts/selftest.mjs`：**1680 通过 / 0 失败**（新增 17 项：9 项单格/整表、3 项真实导出路径、5 项 XLSX）。
+  - **门禁牙齿（可逆破坏）**：`delimitedText` 的 `guardFormula` 临时置空 → `✗ 公式-导出路径给编号加前缀`、`✗ 公式-导出路径给备注加前缀`（1678/2）；恢复后 1680/0。
+  - `node scripts/check.mjs --selftest`：通过。
+  - `node scripts/build.mjs --check`：**669.4KB ≤ 750KB**，SHA256 `71ea6afac9d3…`，二次构建确定性一致。
+  - `node scripts/bench.mjs`：avg 0.35ms（≤8）/ P95 0.46ms（≤3）/ 重建 21.68ms（≤60）/ heapUsed 15.13MB（≤64）/ 裁剪 99.4% / 覆盖率 11ms（≤300）。
+  - README 断言数经 `badge.mjs` 同步为 1680。
+- **公共抽象 / 影响面**
+  - 新增全局抽象：`formulaGuard`、`delimitedText`（导出与自测/后续 BOM 导出共用）。
+  - `csvCell()` 语义变化：危险前缀单元格默认多一个前导单引号；纯数字不变。插件直接调用即获防护。
+  - `exportDelimited` 对外行为不变（除新增防护外）。
+- **遗留 TODO / 风险**
+  - 未在 Excel/WPS 中人工打开 `=cmd|...`、`=HYPERLINK(...)`、`@SUM(...)` 的导出文件确认「显示为文本且无安全警告」（计划 V-4 要求人工；本机无 Office 自动化环境）。
+  - 导出的前导单引号在本工具再导入时会成为普通字符；纯数字/坐标已豁免，危险前缀文本字段会多一个 `'`（是否在导入侧剥除待人工确认）。
+  - CSV/TSV 表头为应用常量，不参与防护；自定义表头插件需自行调用 `formulaGuard`。
+
 ## 2026-11-06 · A-03 撤销/重做/增删楼层统一落盘（审计 P0-4）
 
 - **Commit Hash**：`9428089`（fix(persist): 撤销/重做/新增楼层/删除当前楼层统一落盘）。
