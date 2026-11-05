@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-04 存储 v2 + 楼层 updatedAt + touchFloor 统一 LWW（审计 P0-3）
+
+- **Commit Hash**：`b423dbd`（feat(schema): 存储 v2 + 楼层 updatedAt + touchFloor 统一 LWW）。
+- **核心改动点**
+  - `config.js`：`SCHEMA` → `offline-drawing-annotation/v2`；新增 `SCHEMA_V1`、`SCHEMA_READABLE`、`isReadableSchema()`（v1/v2 可读，未知版本拒绝）。
+  - `model.createInitialState`：默认楼层带 `updatedAt`（ISO）。
+  - `persistence`：新增 `touchFloor(id)`（楼层级 LWW 唯一时间来源）；`commitChange` / `commitObjectEdit` / `clearCurrentFloor` 统一调用；`addFloor` 创建即写时间；`migrateProject` 保留已有时间、缺失写空串、并把 schema 升级为 v2。
+  - schema 校验全部改为 `isReadableSchema`：`listProjects` / `openProjectById` / `loadSavedProject` / `mergeProjectJSON` / JSON 导入 / 实时协作快照。
+  - `merge.js`：合并输出的**活动与非活动楼层都保留 `updatedAt`**（旧实现输出时丢弃，导致下一次合并丢楼层级 LWW 时间）；`mergeBlankMissingTimestamps` 同时为楼层本身补空串时间。
+- **实测验证数据（本机 Windows / Node 18，2026-11-06）**
+  - `node scripts/selftest.mjs`：**1710 通过 / 0 失败**（新增 16 项：schema 兼容 5、v1 迁移 3、touchFloor/commitChange/快照 4、合并 LWW 2、旧档入站时间 2）。
+  - **门禁牙齿（可逆破坏）**：去掉合并输出活动楼层的 `updatedAt` → 3 项红：`合并-楼层时间保留较新（期望 2026-02-01…，实际 undefined）`、`合并入口-无变化不写历史栈（0 vs 1）`、`合并入口-历史栈增加（1 vs 2）`（1707/3）；恢复后 1710/0。顺带证明输出丢时间会使幂等合并被误判为有变化。
+  - `node scripts/check.mjs --selftest`：通过。
+  - `node scripts/build.mjs --check`：**671.6KB ≤ 750KB**，SHA256 `f9b54ef2…`，二次构建确定性一致。
+  - `node scripts/bench.mjs`：avg 0.34ms（≤8）/ P95 0.38ms（≤3）/ 重建 21.77ms（≤60）/ heapUsed 14.67MB（≤64）/ 裁剪 99.4% / 覆盖率 7.5ms（≤300）。
+  - README 断言数经 `badge.mjs` 同步为 1710。
+- **公共抽象 / 影响面**
+  - 新增：`touchFloor`、`isReadableSchema`、`SCHEMA_V1`、`SCHEMA_READABLE`；合并输出楼层对象新增 `updatedAt` 字段。
+  - **BREAKING（计划要求）**：存储升 v2，旧版 App 只认 v1，会拒绝加载/导入 v2 工程；新版本可读 v1 并自动迁移（不丢数据）。README/features 已显式标注。
+- **遗留 TODO / 风险**
+  - 楼层级 `updatedAt` 是整层粒度：同层底图/场地/对象仍按整层时间整体取舍，字段级合并（后续系列）未做。
+  - 旧档缺失楼层时间保留 `''`；双方均无对象时间时仍退回内容签名兜底。
+  - 未在真实 IndexedDB 验证「v1 记录读取 → v2 回写」（A-14 暂缓）。
+
 ## 2026-11-06 · A-12 快赢包：椭圆圆心 / 图标尺寸 / 统计场地类型 / 文件 accept
 
 - **Commit Hash**：`629449a`（fix(ui): 椭圆数值输入圆心 / 图标尺寸编辑 / 统计场地类型 / 文件 accept 四连修）。
