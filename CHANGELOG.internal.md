@@ -94,7 +94,7 @@
 
 ## 2026-11-05 · Phase 3B：图片变换手柄 + 场地边角吸附 + SVG 标注补齐
 
-- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **Commit Hash**：`a6dfab6`（feat(image): 图片变换手柄与场地边角吸附，SVG 场地标注补齐（Phase 3B））。
 - **核心改动点**
   - 新增左侧「🖼 图片变换」工具：`imageHandleList` 输出四类手柄——橙色中心=平移、蓝色圆点=旋转、右下角=等比缩放（锚点左上角）、顶边中点=切变；**不提供四角自由拖拽**。
   - 新增 `imageHandleDragTo(bg,drag,wp)` 纯函数：返回新 `transform` 与吸附目标，不直接写状态；`affTranslate / affRotateAbout / affScaleAbout / affShearX` 为世界空间仿射构造，渲染/命中/拖拽共用。
