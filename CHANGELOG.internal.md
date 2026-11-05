@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-08 转义与场地样式白名单
+
+- **Commit Hash**：`3532fa5`（fix(security): SVG/模态统一转义并白名单清洗场地样式）。
+- **核心改动点**
+  - `js/features/ui-shell.js`：新增 `xmlEscape`（复用 `esc` 替换表，不复制第二份）；新增 `modalBody` 模板（插值默认转义）与 `safeHTML`（仅标记内部已转义片段）。
+  - `js/features/io-export.js`：底图 `href`/`xlink:href` 与场地 `fill`/`stroke` 全部 `xmlEscape`。
+  - `js/core/persistence.js`：新增 `sanitizeSiteStyle`，`sanitizeSite` 改用它；只保留颜色（hex/rgb/hsl/命名色）、`fillAlpha`、`strokeWidth`，其余键丢弃，`url()`/引号/尖括号无法通过。
+  - `js/features/io.js` / `collab.js`：工程库与实时协作弹窗改用 `modalBody`（动态片段 `safeHTML(rows)`）。
+  - `js/features/props.js`：颜色输入框的 `value` 补 `esc`（插件类型 `color` 也会进入属性面板）。
+  - `scripts/selftest.mjs` §69（13 断言，含恶意场地样式 SVG 导出）。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1756 通过 / 0 失败**（1743 + 13）。
+  - `node scripts/e2e.mjs`：**16 passed / 0 failed（18.8s）**，CSP 5 条与其余 11 条全绿。
+  - `node scripts/build.mjs --check`：**677.4 KB ≤ 750 KB**，SHA256 `2e6b302bcebf6a1963eff862fe23128331ef0df17b2276716f90bb1dd93c3eae`，二次构建一致。
+  - 未重跑 bench：本项只改导出/弹窗/属性面板的转义与清洗，不进入渲染热路径；沿用 A-06 后 3 次实测区间（avg 0.34–0.45ms / P95 0.42–0.70ms）。
+- **公共抽象 / 影响面**
+  - `xmlEscape`、`modalBody/safeHTML`、`sanitizeSiteStyle` 登记到 `docs/modules.md`。影响：① 导入含非法场地样式的工程不再原样保留颜色键，画面回退默认色；② 模态动态文案由模板统一转义，已逐项 `esc` 的调用点保持等价。
+  - `sanitizeSiteStyle` 只作用于 `site.style`；对象样式原本已按 `#rrggbb`/数值白名单清洗，未改。
+  - 未新增运行时依赖，未改存储 schema。
+- **遗留 TODO / 风险**
+  - 其余模态仍为字符串拼接（调用点当前都已 `esc`），后续新增/改造模态应使用 `modalBody`；建议在 A-15/A-16 中把剩余弹窗一并迁移。
+  - `site.annot` 仍为传入对象（仅按布尔键读取，不进 HTML/SVG 属性）；如需严格白名单可在 A-11 合并清洗时一并处理。
+
 ## 2026-11-06 · A-06 交互提交判定与手势取消
 
 - **Commit Hash**：`942583e`（fix(interaction): 拖拽提交走深比较并统一手势取消）。
