@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-03 撤销/重做/增删楼层统一落盘（审计 P0-4）
+
+- **Commit Hash**：`9428089`（fix(persist): 撤销/重做/新增楼层/删除当前楼层统一落盘）。
+- **核心改动点**
+  - `persistence.undo()` / `redo()`：状态整体替换后补 `scheduleSave()`——刷新页面前保持撤销/重做结果（旧实现只在后续编辑时才存）。
+  - `persistence.addFloor()`：`switchFloor(id)` 成功后 `scheduleSave()`——新增楼层刷新后不再消失。
+  - `persistence.deleteFloor()` 删除**当前**楼层分支：`afterStateLoaded(false)+fitView()` 后 `scheduleSave()`——被删楼层刷新后不复活；非当前楼层仍走 `commitChange()`（原本已落盘）。
+  - 未改动 `pushHistory` / `commitChange` / `switchFloorData` 语义；`scheduleSave` 仍是 450ms 防抖。
+- **实测验证数据（本机 Windows / Node 18，2026-11-06）**
+  - `node scripts/selftest.mjs`：**1663 通过 / 0 失败**（新增 §63 共 11 项断言；首次编写时漏了 IIFE 调用括号 `()`，套件从未执行、计数仍为 1652，已修正并复测）。
+  - **门禁牙齿（可逆破坏）**：临时移除 `undo()` 的 `scheduleSave()` → selftest 立即红（`✗ 落盘-撤销调用保存`，随后 `saved` 为 null 抛错）；恢复后 1663/0。
+  - `node scripts/check.mjs --selftest`：通过。
+  - `node scripts/build.mjs --check`：**668.6KB ≤ 750KB**，SHA256 `f4e5445a…`，二次构建确定性一致。
+  - `node scripts/bench.mjs`：avg 0.34ms（≤8）/ P95 0.39ms（≤3）/ 重建 21.37ms（≤60）/ heapUsed 18.53MB（≤64）/ 裁剪 99.4% / 覆盖率 9.1ms（≤300）。
+  - README 断言数经 `badge.mjs` 同步为 1663。
+- **公共抽象 / 影响面**
+  - 无新增公共抽象；`scheduleSave()` 调用点新增 4 处（undo / redo / addFloor / deleteFloor 当前层分支）。
+  - 落盘时机：从「下一次编辑顺带保存」变为「操作后 450ms 内保存」；IndexedDB 写入次数最多 +1 次/操作。
+- **遗留 TODO / 风险**
+  - 仅**切换楼层**仍不立即落盘（`activeFloorId` 跟随上次保存），刷新后回上次保存的活动层；不在 A-03 范围，待 A-04 一并处理。
+  - 历史栈仍为 20 条整状态深拷贝（B-10），撤销后快照大小随工程增长。
+  - selftest 用 spy 替换 `scheduleSave` 验证「是否调用 + 快照内容」，未在真实 IndexedDB 中端到端验证刷新行为（需 A-14 浏览器用例）。
+
 ## 2026-11-06 · A-02 类型图标白名单 + 全量转义 + CSP
 
 - **Commit Hash**：`3279460`（fix(security): type.icon 白名单 + 全量转义 + CSP 哈希白名单，封堵 4 条注入路径）。
