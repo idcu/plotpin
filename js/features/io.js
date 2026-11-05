@@ -6,6 +6,18 @@ $('newBtn').onclick=()=>showConfirm(L('新建将清空当前工程。已自动�
   assetPrune([]).catch(()=>{});
   afterStateLoaded(); scheduleSave(); toast('已新建工程','success');
 });
+/* 清空当前楼层：图片底图 / 矢量场地 / 业务对象与标注 / 校准草稿 / 选中态 / 取景框，
+   先二次确认并 pushHistory，清空可用 Ctrl+Z 整体撤销 */
+$('clearFloorBtn').onclick=()=>{
+  const n=(state.objects||[]).length;
+  const msg=L('将清空当前楼层的图片底图、矢量场地、')+' '+n+' '+L('个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。');
+  showConfirm(msg).then(ok=>{
+    if(!ok) return;
+    pushHistory();
+    clearCurrentFloor();
+    commitChange(L('已清空当前楼层'));
+  });
+};
 $('importBtn').onclick=()=>$('fileInput').click();
 /* -------------------- 多工程库 -------------------- */
 const BG_KIND_LABELS={image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',parallelogram:'平行四边形场地',polygon:'多边形场地'};

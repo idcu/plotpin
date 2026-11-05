@@ -132,7 +132,7 @@ code += `\n;globalThis.__api = {
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
   parkingLayout, parkingWarningText, applyParkingLayout,
   collabChunkText, collabCleanSDP, collabOnLocalChange,
-  undo, redo, get history(){ return history; },
+  undo, redo, pushHistory, get history(){ return history; },
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   TABLE_COLUMNS,
@@ -149,6 +149,11 @@ code += `\n;globalThis.__api = {
   drawObject, drawLabel, drawAreaTag,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
+  clearCurrentFloor,
+  get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
+  get affinePairs(){ return affinePairs; }, set affinePairs(v){ affinePairs=v; },
+  get calibSelection(){ return calibSelection; }, set calibSelection(v){ calibSelection=v; },
+  get calibUndoStack(){ return calibUndoStack; }, set calibUndoStack(v){ calibUndoStack=v; },
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON,
 };`;
@@ -3957,6 +3962,47 @@ asyncSuites.push((async()=>{
   const dup=C.map(k=>({'编号':'A','对象类型':'点设备','X':'1','Y':'2','楼层':'2F'}[k]??''));
   const p4=api.rowsToObjectsPlan([header,dup]);
   ok('台账-跨层重号跳过', p4.creates.length===0&&p4.warnings.some(w=>w.includes('已存在于楼层')));
+  api.resetState();
+}
+
+/* 53. 清空当前楼层：双槽/对象/标注/校准/选中/取景框全清，可整体撤销 ---------- */
+{
+  api.resetState();
+  api.state.background={kind:'image',fileName:'p.png',assetId:'bg.test',width:100,height:80,origin:[0,0],
+    metersPerPixel:1,calibrated:true,transform:{a:1,b:0,c:0,d:1,e:0,f:0}};
+  api.state.site={type:'site',id:'site.t',name:'场地',layerId:'layer.default',visible:true,locked:false,
+    kind:'circle',shape:{type:'circle',cx:5,cy:5,r:3}};
+  const cO1=api.baseObject('point','point.marker',{name:'CA',x:1,y:1});
+  const cO2=api.baseObject('line','line.custom',{name:'CL',x:0,y:0,points:[[0,0],[3,4]]});
+  api.state.objects=[cO1,cO2];
+  api.selectedIds.add(cO1.id); api.selectedIds.add(cO2.id);
+  api.calibPoints=[[1,1],[5,1]];
+  api.affinePairs=[{src:[0,0],dst:[0,0],u:0,v:0,px:0,py:0}];
+  api.calibSelection={kind:'scale',index:0};
+  api.calibUndoStack=[{calib:[[0,0]],affine:[]}];
+  api.state.viewport.zoom=3; api.state.viewport.panX=120; api.state.viewport.panY=90;
+  api.pushHistory();
+  const csum=api.clearCurrentFloor();
+  eq('清空-返回统计', csum, {objects:2,background:true,site:true});
+  eq('清空-对象归零', api.state.objects.length, 0);
+  eq('清空-背景为空图槽', api.state.background.kind, 'empty');
+  eq('清空-场地为 null', api.state.site, null);
+  eq('清空-选中态清空', api.selectedIds.size, 0);
+  eq('清空-校准点与仿射清空', [api.calibPoints.length,api.affinePairs.length], [0,0]);
+  ok('清空-校准选择与撤销栈清空', api.calibSelection===null&&api.calibUndoStack.length===0);
+  ok('清空-对象墓碑写入', api.state.tombstones.some(t=>t.id===cO1.id)&&api.state.tombstones.some(t=>t.id===cO2.id));
+  eq('清空-台账无残留行', api.objectRowsAll().length, 0);
+  eq('清空-当前楼层对象同步归零', api.currentFloor().objects.length, 0);
+  eq('清空-当前楼层背景同步为空', api.currentFloor().background.kind, 'empty');
+  eq('清空-当前楼层场地同步为 null', api.currentFloor().site, null);
+  const cdim=api.worldDims();
+  approx('清空-取景框恢复默认真实比例', api.state.viewport.zoom, Math.min((900-44)/cdim.w,(600-44)/cdim.h), 1e-9);
+  approx('清空-取景框水平居中', api.state.viewport.panX, (900-cdim.w*api.state.viewport.zoom)/2, 1e-9);
+  ok('清空-静态缓存签名含空场地', api.sceneStaticKey(api.state.viewport,cdim,900,600).includes('null'));
+  api.undo();
+  eq('清空撤销-对象恢复', api.state.objects.length, 2);
+  ok('清空撤销-双槽恢复', api.state.background.kind==='image'&&!!api.state.site);
+  eq('清空撤销-背景资产仍可重载', api.state.background.assetId, 'bg.test');
   api.resetState();
 }
 

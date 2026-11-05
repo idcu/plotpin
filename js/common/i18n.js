@@ -10,7 +10,8 @@
     zh: {
       brand: '图钉',
       new: '新建', projects: '📁 工程库', floors: '🏢 楼层', import: '导入', export: '导出',
-      print: '打印/PDF', settings: '设置',
+      print: '打印/PDF', settings: '设置', clearAll: '清空',
+      clearAllTitle: '清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销',
       select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', text: '文字',
       ruler: '测距', dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
       tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabStats: '统计',
@@ -70,7 +71,8 @@
     en: {
       brand: 'PlotPin',
       new: 'New', projects: '📁 Projects', floors: '🏢 Floors', import: 'Import', export: 'Export',
-      print: 'Print/PDF', settings: 'Settings',
+      print: 'Print/PDF', settings: 'Settings', clearAll: 'Clear',
+      clearAllTitle: 'Clear the image base, vector site, all objects and annotations on this floor; undo with Ctrl+Z',
       select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', text: 'Text',
       ruler: 'Measure', dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
       tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabStats: 'Statistics',
@@ -360,6 +362,10 @@
     '布点优化（贪心覆盖最大化）':'Placement optimization (greedy coverage)',
     '新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？':
       'New project clears the current project. The auto-saved draft will be overwritten; export JSON or save to the library first?',
+    '将清空当前楼层的图片底图、矢量场地、':'This will clear the current floor: image base, vector site,',
+    '个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。':
+      'objects and annotations, all calibration points/affine config. Selection and viewport reset too. Undo with Ctrl+Z.',
+    '已清空当前楼层':'Current floor cleared',
     '添加文字':'Add text', '文字内容':'Text content', '标注文字':'Annotation text', '已添加文字':'Text added',
     '扇形场地角度':'Sector site angles', '起始角, 张角（度，用逗号分隔），例如 0,90':'start angle, sweep (deg, comma-separated), e.g. 0,90',
     '张角需在 0–360° 之间':'Sweep must be between 0 and 360°', '两点之间的实际距离（米）':'Real distance between the two points (m)',

@@ -136,5 +136,26 @@
   - 自测仅校验生成的 HTML 与 settings 写入，未模拟真实点击 `change` 事件；场地开关在浏览器中的勾选/禁用需人工回归一次（选中场地 → 切换六项 → 隐藏/锁定图层再切换）。
   - 设置弹窗删掉三行后布局更紧凑，未做 320px 窄屏截图回归；文案沿用现有中英字典，无新增硬编码。
 
+## 2026-11-05 · 顶栏「清空当前楼层」
+
+- **Commit Hash**：`占位（本提交后回填）`（feat(clear): 顶栏清空当前楼层双槽/对象/标注并支持撤销）。
+- **核心改动点**
+  - `clearCurrentFloor()`（`persistence.js`）一次清空：图片底图槽、`state.site`、`state.objects`（含标注/测量/文字/照片引用）、校准点与仿射配对、`calibSelection/calibUndoStack`、`selectedIds`、草稿/拖拽/橡皮筋、捕捉与参考线运行时状态、覆盖率结果、运行时 `bgImage/bgDataUrl`；随后 `syncActiveFloor()`、`invalidateStatic()`、`resetFrameRef()`、`fitView()`，取景框回到默认空工程。
+  - 清空对象逐个写入删除墓碑（协作合并不会复活）；楼层结构、图层、自定义类型、工程元数据名称不重置。
+  - 顶栏新增 `#clearFloorBtn`（中英 `clearAll` / `clearAllTitle`），点击先 `showConfirm` 二次确认（列出图片/场地/对象数量与不可逆范围，说明可 Ctrl+Z），确认后 `pushHistory()` → `clearCurrentFloor()` → `commitChange('已清空当前楼层')`。
+  - 文案全部走 i18n：`DICT` 新增按钮/标题键，`PHRASES` 新增确认正文与完成提示。
+- **公共抽象 / 复用**
+  - 复用现有 `pushHistory / commitChange / markTombstone / syncActiveFloor / fitView / resetFrameRef / invalidateStatic`，未新增第二套撤销/保存逻辑。
+  - 影响范围：`clearCurrentFloor` 会清空 `interaction.js` 的运行时校准变量与参考线，因此所有依赖这些状态的面板/工具在下一次 `refreshUI()` 后回到空态；楼层切换逻辑不变。
+- **实测验证数据（本机实测）**
+  - `node scripts/check.mjs`：通过。
+  - `node scripts/selftest.mjs`：1614 通过 / 0 失败（前值 1584，净增 30，含导出双槽证据）。
+  - `node scripts/badge.mjs`：README 同步 1614。
+  - 浏览器回归：待执行（本轮统一回归后回填结果）。
+  - `node scripts/bench.mjs`：清空为一次性操作，不在逐帧渲染路径；性能数据待统一 bench 后回填。
+- **遗留 TODO / 风险**
+  - 清空会写入 2000 级对象墓碑（受 `TOMBSTONE_LIMIT` 限制），大工程合并时墓碑可能挤掉更早记录；这是既有墓碑策略，不在本次扩展。
+  - 清空不可恢复除撤销外的备份；图片资产本体保留在 IndexedDB（供撤销重载），不会立即回收空间。
+
 
 

@@ -67,6 +67,30 @@ function commitObjectEdit(){
   renderList(); renderLayers(); renderStats(); scheduleSave(); requestRender();
   if(typeof collabOnLocalChange==='function') collabOnLocalChange();
 }
+/**
+ * 清空当前楼层全部内容：图片底图槽、矢量场地槽、业务对象与标注、校准草稿/选中态、
+ * 覆盖率、参考线与运行时底图缓存，并把取景框恢复到默认空工程。
+ * 调用方必须先用 pushHistory()，才能用 Ctrl+Z 撤销（本函数不负责快照）。
+ * 返回清理前的摘要，供二次确认文案与自测使用。
+ */
+function clearCurrentFloor(){
+  const summary={objects:(state.objects||[]).length,background:isImageBackground(state.background),site:!!state.site};
+  (state.objects||[]).forEach(o=>{ if(o&&o.id) markTombstone(o.id,'object'); });
+  state.background=createEmptyBackground();
+  state.site=null;
+  state.objects=[];
+  state.meta.updatedAt=nowISO();
+  bgLoadSeq++;
+  bgImage=null; bgDataUrl='';
+  selectedIds.clear(); draft=null; drag=null; rubber=null;
+  calibPoints=[]; affinePairs=[]; calibSelection=null; calibUndoStack=[];
+  coverageResult=null; activeOsnap=null; trackLine=null; refEdge=null;
+  if(typeof clearGuides==='function') clearGuides();
+  syncActiveFloor();
+  invalidateStatic(); resetFrameRef(); fitView();
+  refreshUI(); scheduleSave(); requestRender();
+  return summary;
+}
 let dbPromise=null;
 function openDB(){
   if(dbPromise) return dbPromise;
