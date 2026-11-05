@@ -2,6 +2,32 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-02 类型图标白名单 + 全量转义 + CSP
+
+- **Commit Hash**：`3279460`（fix(security): type.icon 白名单 + 全量转义 + CSP 哈希白名单，封堵 4 条注入路径）。
+- **核心改动点**
+  - `js/core/config.js`：新增 `TYPE_ICONS`（与 `render.js` 的 `drawPoint` 分支一一对应，`Object.freeze`）、`DEFAULT_ICON_BY_KIND`、`normalizeIcon(icon, kind)`——未知值按 kind 回退，绝不回传调用方原始字符串。
+  - 两条持久化写入路径统一走白名单：`persistence.mergeTypes`（导入 JSON / 旧存档）与 `plugins.normalizeObjectType`（`PlotPin.registerObjectType`）。
+  - `js/features/ui-panels.js` `renderTypes`：icon、color、type id、类型名进入 `innerHTML` 前全部 `esc()`；`data-type-*` 属性同样转义。
+  - `index.html` 新增 CSP meta：`script-src 'self' file:`（**不含** `'unsafe-inline'`）、`style-src` 保留 `'unsafe-inline'`、`object-src/base-uri/form-action` 全 `'none'`、无远程源。
+  - `scripts/pack-core.mjs`：单文件打包时按每个内联脚本文本计算 sha256 并追加到 `script-src`；入口缺 CSP 或 `script-src` 缺 `'self'` 直接拒绝构建。
+  - `scripts/build.mjs --check`：新增 CSP 断言（无 `'unsafe-inline'`、哈希数 = 内联脚本数）；统计内联脚本时先剔除 HTML 注释里的文档性 `<script>` 字样。
+  - `scripts/selftest.mjs` §56/§56.1：新增 25 项断言（白名单回退、存档清洗、插件注册清洗、renderTypes 转义、CSP 声明、打包哈希覆盖、无 CSP 拒绝构建）。
+- **实测验证数据（本机 Windows / Node 18，2026-11-06）**
+  - `node scripts/selftest.mjs`：**1652 通过 / 0 失败**（A-02 +25）。
+  - `node scripts/check.mjs --selftest`：通过（`--selftest 已执行：1652 通过 / 0 失败`）。
+  - `node scripts/bench.mjs`：avg 0.41ms（≤8）/ **P95 0.72ms（≤3）** / 重建 30.27ms（≤60）/ **heapUsed 19.38MB（≤64）** / 裁剪 99.4%（≥60）/ 覆盖率 9.9ms（≤300）。
+  - `node scripts/build.mjs --check`：**668.1KB ≤ 750KB**，SHA256 `3b50dea4…` 与登记值一致；**36 个内联脚本 = 36 条 sha256 白名单**；二次构建确定性一致。
+  - README 断言数经 `badge.mjs` 同步为 1652。
+- **公共抽象 / 影响面**
+  - 新增：`TYPE_ICONS`、`DEFAULT_ICON_BY_KIND`、`normalizeIcon`（core/config.js，供 persistence / plugins / selftest / ui 共用）。
+  - **语义收紧**：`mergeTypes` / `normalizeObjectType` 输出的 `icon` 由「调用方任意字符串（仅截断 30 字符）」变为「白名单值或 kind 默认值」。旧存档中的非法图标迁移为默认图标（不报错、不丢类型）。
+  - 无 `PlotPin.*` 对外 API 变更（`contracts/plugin-api.json` 未动）。
+- **遗留 TODO / 风险**
+  - 真实浏览器下 CSP 阻断行为尚未用 Playwright 验证（A-14 需用户批准 devDependency）。
+  - `file:` scheme 写入 `script-src` 是为兼容双击打开的 dev 入口；托管部署按 origin 判定，file: 不放宽远程源。
+  - `index.html` 的 CSP 写死策略，未来新增第三方内联样式/脚本需同步调整并重跑 `build.mjs`。
+
 ## 2026-11-06 · A-01 资产可达集 + 工程命名空间（禁止跨工程 prune）
 
 - **Commit Hash**：`9424b26`（fix(assets): 资产回收按命名空间取可达集，禁止跨工程误删底图/照片）。
