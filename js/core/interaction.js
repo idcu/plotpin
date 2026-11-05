@@ -206,9 +206,10 @@ canvas.addEventListener('pointerdown',e=>{
   try{ if(e.pointerId!==undefined && e.pointerId>=0) canvas.setPointerCapture(e.pointerId); }catch(_){}
   const sp=pointerScreen(e);
   activePointers.set(e.pointerId,sp);
-  /* 第二根手指落下：进入捏合手势，中止当前拖拽但保留绘制草稿（不丢已录节点） */
+  /* 第二根手指落下：进入捏合手势，中止当前拖拽但保留绘制草稿（不丢已录节点）；
+     中止必须走 cancelActiveDrag 回滚，不能只把 drag 置空，否则已移动的对象会留在半途且无撤销快照（审计 P1-2） */
   if(activePointers.size===2 && !pinch){
-    drag=null;
+    cancelActiveDrag();
     const [a,b]=[...activePointers.values()];
     const [mx,my]=[(a[0]+b[0])/2,(a[1]+b[1])/2];
     pinch={d0:Math.max(8,Math.hypot(a[0]-b[0],a[1]-b[1])),z0:state.viewport.zoom,mx0:mx,my0:my,
@@ -288,7 +289,7 @@ canvas.addEventListener('pointerdown',e=>{
     const o=hitObject(wp,sp);
     if(o){
       if(isEditable(o)){
-        if(e.shiftKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
+        if(e.shiftKey||e.ctrlKey||e.metaKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
         else if(!selectedIds.has(o.id)){ selectedIds.clear(); selectedIds.add(o.id); }
         drag={type:'move',start:wp,originals:new Map(),moved:false};
         selectedIds.forEach(id=>{ const obj=state.objects.find(x=>x.id===id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
@@ -297,7 +298,7 @@ canvas.addEventListener('pointerdown',e=>{
       }
       refreshUI(); requestRender(); return;
     }
-    if(!e.shiftKey) selectedIds.clear();
+    if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
     rubber={a:sp,b:sp}; refreshUI(); requestRender(); return;
   }
   if(currentTool==='point'){
@@ -369,9 +370,13 @@ canvas.addEventListener('pointermove',e=>{
     requestRender(); updateZoomLabel(); return;
   }
   if(drag?.type==='move'){
-    if(!drag.moved){ pushHistory(); drag.moved=true; }
-    const d=[wp[0]-drag.start[0],wp[1]-drag.start[1]];
-    drag.originals.forEach((orig,id)=>{ moveObjectBy(state.objects.find(o=>o.id===id),orig,d); });
+    const delta=[wp[0]-drag.start[0],wp[1]-drag.start[1]];
+    /* 屏幕位移阈值 2px：指针微抖/单击不进入拖拽，避免留下空撤销快照（审计 P1-1） */
+    if(!drag.moved){
+      if(Math.hypot(delta[0],delta[1])*state.viewport.zoom<2) return;
+      pushHistory(); drag.moved=true;
+    }
+    drag.originals.forEach((orig,id)=>{ moveObjectBy(state.objects.find(o=>o.id===id),orig,delta); });
     requestRender(); return;
   }
   if(drag?.type==='node'){
@@ -432,6 +437,12 @@ canvas.addEventListener('pointerup',e=>{
     scheduleSave(); requestRender();
     return;
   }
+  if(touchArm){
+    /* 多指手势收尾：剩余手指抬起不落点、不提交，也不推进绘制草稿（审计 P1-2） */
+    if(activePointers.size===0) touchArm=false;
+    drag=null; document.body.classList.remove('panning');
+    return;
+  }
   if(activePointers.size===0) touchArm=false;
   if(drag?.type==='pan'){ drag=null; document.body.classList.remove('panning'); return; }
   if(drag?.type==='calibPoint'){
@@ -439,18 +450,23 @@ canvas.addEventListener('pointerup',e=>{
     drag=null; requestRender(); return;
   }
   if(drag?.type==='imageHandle'){
-    if(!drag.moved){ drag=null; requestRender(); return; }
-    drag=null; commitChange('图片已变换'); return;
+    const changed=dragChanged(drag);
+    if(drag.moved && !changed) history.past.pop();   /* 拖回原位：不落盘、不留空快照 */
+    drag=null;
+    if(changed) commitChange('图片已变换'); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+    return;
   }
   if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
     const isSite=drag.type==='siteHandle';
-    const changed=isSite
-      ? JSON.stringify(drag.originalShape)!==JSON.stringify(state.site?.shape)
-      : state.objects.some(o=>drag.originals?.has(o.id) || o.id===drag.id);
-    if(isSite && !changed) history.past.pop();      /* 仅点击未拖动：弹出未变更的撤销快照 */
+    /* 提交判定统一走 dragChanged 深比较；任何 pointermove 都不再等同于“已修改”（审计 P1-1） */
+    const changed=dragChanged(drag);
+    /* 撤销快照在 pointerdown（手柄/场地）或首次越过位移阈值（move/imageHandle）时压入；
+       未产生实际变更就弹出，避免单击留下空快照 */
+    const pushed=isSite||['node','rotate','rect','shapeHandle'].includes(drag.type)||!!drag.moved;
+    if(!changed && pushed) history.past.pop();
     if(isSite && changed && state.site) state.site.updatedAt=nowISO();
     drag=null;
-    if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); }
+    if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); requestRender(); }
     return;
   }
   if(draft && ['rect','areaParallelogram'].includes(draft.kind) && draft.pending===false){ finishDraft(); return; }
@@ -461,13 +477,25 @@ canvas.addEventListener('pointerup',e=>{
     const max=s2w([Math.max(rubber.a[0],rubber.b[0]),Math.min(rubber.a[1],rubber.b[1])]);
     const rb={minX:min[0],maxX:max[0],minY:min[1],maxY:max[1]};
     if(Math.abs(rubber.b[0]-rubber.a[0])>4||Math.abs(rubber.b[1]-rubber.a[1])>4){
-      if(!e.shiftKey) selectedIds.clear();
+      if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
       state.objects.forEach(o=>{ if(isVisible(o)&&boundsIntersect(objectBounds(o),rb)) selectedIds.add(o.id); });
     }
     rubber=null; refreshUI(); requestRender();
   }
 });
-canvas.addEventListener('pointercancel',e=>{ activePointers.delete(e.pointerId); if(activePointers.size===0){ pinch=null; touchArm=false; } drag=null; rubber=null; document.body.classList.remove('panning'); setCursorScreen(null); requestRender(); });
+canvas.addEventListener('pointercancel',e=>{
+  activePointers.delete(e.pointerId);
+  if(activePointers.size===0){ pinch=null; touchArm=false; }
+  cancelActiveDrag();          /* 系统取消：回滚到按下前，不留半拖拽对象（审计 P1-2） */
+  rubber=null; document.body.classList.remove('panning'); setCursorScreen(null); requestRender();
+});
+/* 指针捕获意外丢失（元素被移除、系统抢占等）：等价于 pointercancel，必须回滚而不是静默丢弃状态 */
+canvas.addEventListener('lostpointercapture',()=>{
+  if(!drag) return;
+  cancelActiveDrag();
+  rubber=null; document.body.classList.remove('panning');
+  requestRender();
+});
 canvas.addEventListener('pointerleave',()=>{ setCursorScreen(null); requestRender(); });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 /** 双击结束录入：双击的两次 click 已各追加一个点（末两点位置几乎相同），按 8px 屏幕阈值去掉重复末点，
@@ -617,16 +645,39 @@ function imageHandleAt(sp){
   return pickScreenHandle(imageHandleList(state.background),sp,9);
 }
 /** 拖拽场地控制点：实现见 geometry.js 的 siteHandleDragTo / resizeSiteByHandle（薄包装） */
-/** Esc 取消进行中的拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照 */
+/** 可序列化值的深比较（拖拽提交判定的唯一实现；只用于单个对象/形状，体量可控） */
+function sameSerializable(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
+/** 对象是否发生业务变更：updatedAt 在拖拽过程中必变，不能当作变更证据，比较前剔除（审计 P1-1） */
+function objectMovedFrom(orig,o){
+  if(!orig||!o) return false;
+  const a=Object.assign({},orig), b=Object.assign({},o);
+  delete a.updatedAt; delete b.updatedAt;
+  return !sameSerializable(a,b);
+}
+/** 当前拖拽是否产生实际变更：click/pointermove 抖动、拖回原位都不算（审计 P1-1） */
+function dragChanged(d){
+  if(!d) return false;
+  if(d.type==='move'){
+    let changed=false;
+    d.originals.forEach((orig,id)=>{ if(objectMovedFrom(orig,state.objects.find(x=>x.id===id))) changed=true; });
+    return changed;
+  }
+  if(d.type==='siteHandle') return !sameSerializable(d.originalShape,state.site?.shape);
+  if(['node','rotate','rect','shapeHandle'].includes(d.type)) return objectMovedFrom(d.original,state.objects.find(x=>x.id===d.id));
+  if(d.type==='imageHandle') return !!d.origin&&!sameSerializable(state.background?.transform,d.origin);
+  if(d.type==='calibPoint') return !!d.moved;
+  return false;
+}
+/** Esc/系统取消中指拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照（审计 P2-16） */
 function cancelActiveDrag(){
   if(!drag) return false;
   const d=drag; drag=null;
   document.body.classList.remove('panning');
   if(d.type==='pan') return true;
+  const changed=dragChanged(d);
   if(d.type==='move'){
-    if(!d.moved) return true;
     d.originals.forEach((orig,id)=>{ const o=state.objects.find(x=>x.id===id); if(o) Object.assign(o,deepClone(orig)); });
-    history.past.pop();
+    if(d.moved) history.past.pop();
   }else if(['node','rotate','rect','shapeHandle'].includes(d.type)){
     const o=state.objects.find(x=>x.id===d.id);
     if(o && d.original) Object.assign(o,deepClone(d.original));
@@ -637,8 +688,13 @@ function cancelActiveDrag(){
     history.past.pop();
   }else if(d.type==='imageHandle'){
     if(d.moved){ state.background.transform=deepClone(d.origin); history.past.pop(); }
+  }else if(d.type==='calibPoint'){
+    /* 校准控制点走独立撤销栈（不进工程历史）：拖动过就回滚快照，仅点选则弹出未变更快照 */
+    if(d.moved) calibUndo(); else calibUndoStack.pop();
+    requestRender(); return true;
   }else return true;
-  commitChange(); return true;
+  if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+  return true;
 }
 canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(...pointerScreen(e),e.deltaY<0?1.15:1/1.15); },{passive:false});
 
@@ -954,6 +1010,8 @@ function isCanvasShortcutTarget(tag){
   return !tag||tag==='canvas'||tag==='body'||tag==='html';
 }
 let keyboardRegion=-1;
+/* 方向键连按/长按合并为一次撤销快照：首次 keydown 压栈，keyup 复位（审计 P1-13） */
+let arrowHistoryArmed=false;
 /** F6：在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点，提供离开画布 Tab 捕捉的键盘通道 */
 function cycleKeyboardRegion(){
   const regions=[
@@ -978,7 +1036,7 @@ window.addEventListener('keydown',e=>{
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }
-  if(e.key==='f'||e.key==='F'){ fitView(); return; }
+  if(e.key==='f'||e.key==='F'){ if(e.ctrlKey||e.metaKey) return; fitView(); return; }
   /* 参考线：Shift+G 清除全部；Backspace 删除上一条（无草稿时） */
   if(currentTool==='guide'||guideLines.length){
     if(e.shiftKey&&e.key.toLowerCase()==='g'){ clearGuides(); toast('参考线已清除'); requestRender(); return; }
@@ -1007,10 +1065,14 @@ window.addEventListener('keydown',e=>{
     const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return;
     e.preventDefault(); const step=(state.settings.gridSize||1)*(e.shiftKey?10:1);
     const d={ArrowUp:[0,step],ArrowDown:[0,-step],ArrowLeft:[-step,0],ArrowRight:[step,0]}[e.key];
-    pushHistory(); items.forEach(o=>{o.x+=d[0];o.y+=d[1];if(o.points)o.points=o.points.map(p=>[p[0]+d[0],p[1]+d[1]]);}); commitChange();
+    if(!arrowHistoryArmed){ pushHistory(); arrowHistoryArmed=true; }
+    items.forEach(o=>{o.x+=d[0];o.y+=d[1];if(o.points)o.points=o.points.map(p=>[p[0]+d[0],p[1]+d[1]]);}); commitChange();
   }
 });
-window.addEventListener('keyup',e=>{ if(e.code==='Space'&&spaceDown){ spaceDown=false; document.body.classList.remove('panning'); document.body.className='tool-'+currentTool; } });
+window.addEventListener('keyup',e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) arrowHistoryArmed=false;
+  if(e.code==='Space'&&spaceDown){ spaceDown=false; document.body.classList.remove('panning'); document.body.className='tool-'+currentTool; }
+});
 
 /* 关闭/刷新页面前强制落盘：IndexedDB 事务尽力触发，localStorage 同步兜底，杜绝最后编辑丢失 */
 function flushBeforeUnload(){

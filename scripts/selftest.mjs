@@ -124,6 +124,7 @@ code += `\n;globalThis.__api = {
   normalizeIcon, TYPE_ICONS, mergeTypes,
   SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
   markDirty, MARK_DIRTY_PROFILES,
+  dragChanged, sameSerializable, objectMovedFrom, cancelActiveDrag,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
@@ -4382,6 +4383,76 @@ asyncSuites.push(async()=>{
   api.scheduleSave=realSave;
   api.collabOnLocalChange=realBroadcast;
   api.coverageResult=null;
+  api.resetState();
+}
+
+/* 68. 交互提交判定 dragChanged / cancelActiveDrag：单击不写保存、不留空快照 --------------- */
+{
+  api.resetState();
+  const realSave=api.scheduleSave;
+  let saves=0;
+  api.scheduleSave=()=>{saves++;};
+
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  const mkPoint=(x,y)=>{ const o=api.baseObject('point','point.marker',{x,y}); api.state.objects=[o]; return o; };
+
+  /* 8.1 move：只有 updatedAt 变化不算改动；位置变化才算 */
+  let o=mkPoint(1,2), orig=clone(o);
+  api.setDrag({type:'move',start:[1,2],originals:new Map([[o.id,orig]]),moved:false});
+  eq('dragChanged-move 单击未移动', api.dragChanged(api.drag), false);
+  o.updatedAt='2026-01-01T00:00:00.000Z';
+  eq('dragChanged-move 仅 updatedAt 变化仍判未改', api.dragChanged(api.drag), false);
+  o.x=5;
+  eq('dragChanged-move 位置变化', api.dragChanged(api.drag), true);
+  o.x=1; o.updatedAt='2026-01-01T00:00:01.000Z';
+  eq('dragChanged-move 拖回原位（updatedAt 不同）', api.dragChanged(api.drag), false);
+  api.setDrag(null);
+
+  /* 8.2 手柄拖拽：几何不变/变化 */
+  o=mkPoint(1,2), orig=clone(o);
+  api.setDrag({type:'node',id:o.id,handle:{index:0},original:orig});
+  eq('dragChanged-node 未改', api.dragChanged(api.drag), false);
+  o.points=[[9,9]]; o.updatedAt='2026-01-01T00:00:02.000Z';
+  eq('dragChanged-node 改点', true===api.dragChanged(api.drag), true);
+  api.setDrag(null);
+
+  /* 8.3 场地形状深比较 */
+  api.state.site={id:'site',shape:{type:'rect',x:0,y:0,width:10,height:10}};
+  api.setDrag({type:'siteHandle',handle:{},originalShape:clone(api.state.site.shape)});
+  eq('dragChanged-siteHandle 未改', api.dragChanged(api.drag), false);
+  api.state.site.shape.width=12;
+  eq('dragChanged-siteHandle 改宽', api.dragChanged(api.drag), true);
+  api.setDrag(null);
+
+  /* 8.4 图片变换：transform 深比较 */
+  api.state.background={kind:'image',transform:[0,0,0,1,1,0]};
+  api.setDrag({type:'imageHandle',origin:[0,0,0,1,1,0],moved:true});
+  eq('dragChanged-imageHandle 未改', api.dragChanged(api.drag), false);
+  api.state.background.transform=[3,4,0,1,1,0];
+  eq('dragChanged-imageHandle 已改', api.dragChanged(api.drag), true);
+  api.setDrag(null);
+
+  /* 8.5 cancelActiveDrag：未移动不压栈/不落盘；已移动回滚并弹快照 */
+  o=mkPoint(1,2), orig=clone(o);
+  api.history.past=[];
+  api.setDrag({type:'move',start:[1,2],originals:new Map([[o.id,orig]]),moved:false});
+  const before=saves;
+  api.cancelActiveDrag();
+  eq('cancelActiveDrag 未移动不落盘', saves, before);
+  eq('cancelActiveDrag 未移动不动历史', api.history.past.length, 0);
+
+  o=mkPoint(1,2), orig=clone(o);
+  api.history.past=[{label:'drag'}];
+  api.setDrag({type:'move',start:[1,2],originals:new Map([[o.id,orig]]),moved:true});
+  o.x=9;
+  api.cancelActiveDrag();
+  eq('cancelActiveDrag 已移动回滚位置', o.x, 1);
+  eq('cancelActiveDrag 已移动弹出快照', api.history.past.length, 0);
+  eq('cancelActiveDrag 已移动只落盘一次（恢复后的状态）', saves, 1);
+
+  api.scheduleSave=realSave;
+  api.setDrag(null);
+  api.state.site=null;
   api.resetState();
 }
 
