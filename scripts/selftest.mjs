@@ -106,7 +106,7 @@ code += `\n;globalThis.__api = {
   parseRowsStub: DSV.parseRows,
   rowsToObjectsPlan, applyTableImport,
   siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints,
-  ellipseShapeFromCorners, sectorShapeFrom,
+  ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
   siteDescription, worldDims,
   hitPhysicalPoint, siteKindName,
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter,
@@ -4188,7 +4188,7 @@ asyncSuites.push((async()=>{
 }
 
 /* 63. 撤销/重做/增删楼层统一落盘（A-03 / 审计 P0-4） ---------------------------- */
-asyncSuites.push((async()=>{
+asyncSuites.push(async()=>{
   const origSave=api.scheduleSave;
   let calls=0, saved=null;
   api.scheduleSave=()=>{ calls++; saved=api.persistableState(); };
@@ -4223,10 +4223,10 @@ asyncSuites.push((async()=>{
     api.scheduleSave=origSave;
     api.history.past=[]; api.history.future=[]; api.resetState();
   }
-})());
+});
 
 /* 64. XLSX 导出：单元格一律 inlineStr（文本），不存在公式节点（A-07 的另一半） ---- */
-asyncSuites.push((async()=>{
+asyncSuites.push(async()=>{
   const bytes=api.Xlsx.build([['=cmd|calc','@SUM(1)'],['-1','普通文本']],'T');
   const entries=await api.Zip.readEntries(bytes);
   const sheet=api.Zip.readText(entries,'xl/worksheets/sheet1.xml')||'';
@@ -4236,9 +4236,55 @@ asyncSuites.push((async()=>{
   const rows=await api.Xlsx.readRows(bytes);
   eq('XLSX-注入串按原文保存', rows[0][0], '=cmd|calc');
   eq('XLSX-At 串按原文保存', rows[0][1], '@SUM(1)');
-})());
+});
+
+/* 65. A-12 快赢包：椭圆圆心 / 图标尺寸编辑 / 统计场地类型 / 文件 accept ---------- */
+{
+  /* 65.1 椭圆数值输入：半径不得兼作圆心（审计 P1-5） */
+  const es=api.ellipseShapeFromInput('40,25');
+  eq('椭圆-形状类型', es&&es.type, 'ellipse');
+  eq('椭圆-中心在原点', es&&[es.cx,es.cy], [0,0]);
+  eq('椭圆-半径正确', es&&[es.rx,es.ry], [40,25]);
+  eq('椭圆-非法输入返回 null', api.ellipseShapeFromInput('0,25'), null);
+  api.resetState();
+  api.applyVectorSite('ellipse',es);
+  const sb=api.siteBounds(api.state.site);
+  approx('椭圆-应用后左边界 -40', sb.minX, -40, 1e-6);
+  approx('椭圆-应用后上边界 -25', sb.minY, -25, 1e-6);
+  approx('椭圆-应用后宽度 80', sb.maxX-sb.minX, 80, 1e-6);
+  approx('椭圆-应用后高度 50', sb.maxY-sb.minY, 50, 1e-6);
+
+  /* 65.2 类型面板图标尺寸编辑：data-type-iconsize → dataset.typeIconsize（审计 P1-10） */
+  api.resetState();
+  api.state.objectTypes.push({id:'type.size',kind:'point',name:'尺寸测试',color:'#333333',icon:'custom',builtin:false,iconSize:1});
+  const iconInput={value:'2.5',dataset:{typeIconsize:'type.size'},onchange:null};
+  const typeEl={innerHTML:'',querySelectorAll:sel=>sel==='[data-type-iconsize]'?[iconInput]:[]};
+  const prevGet=documentStub.getElementById;
+  documentStub.getElementById=id=>id==='typeList'?typeEl:prevGet(id);
+  api.renderTypes();
+  ok('类型面板-已渲染图标尺寸输入', typeEl.innerHTML.includes('data-type-iconsize="type.size"'));
+  iconInput.onchange();
+  approx('类型面板-图标尺寸写入生效', api.state.objectTypes.find(t=>t.id==='type.size').iconSize, 2.5);
+  documentStub.getElementById=prevGet;
+
+  /* 65.3 统计面板场地类型：读 state.site.kind，而不是 background.kind（审计 P1-11） */
+  api.resetState();
+  api.applyVectorSite('ellipse',api.ellipseShapeFromInput('40,25'));
+  const statsEl={innerHTML:'',querySelectorAll:()=>[]};
+  documentStub.getElementById=id=>id==='statsPanel'?statsEl:prevGet(id);
+  api.renderStats();
+  documentStub.getElementById=prevGet;
+  ok('统计面板-显示椭圆场地', statsEl.innerHTML.includes('椭圆场地'));
+  ok('统计面板-不再误显示 empty', !statsEl.innerHTML.includes('empty'));
+
+  /* 65.4 文件选择 accept：DXF/PDF 可直接选择（审计 P2-24） */
+  const fileInputTag=(html.match(/id="fileInput"[^>]*accept="([^"]+)"/)||[])[1]||'';
+  ok('入口文件选择-含 .dxf', fileInputTag.includes('.dxf'));
+  ok('入口文件选择-含 .pdf', fileInputTag.includes('.pdf'));
+  api.resetState();
+}
 
 /* ---------------- 结果汇总 ---------------- */
-await Promise.all(asyncSuites);
+await Promise.all(asyncSuites.map(s=>typeof s==='function'?s():s));
 console.log(`\n${fail === 0 ? '✅' : '❌'} 逻辑层自测：${pass} 通过 / ${fail} 失败，共 ${pass + fail} 项断言（加载 ${srcs.length} 个脚本）`);
 if (fail) { failures.forEach(f => console.error('  - ' + f)); process.exit(1); }

@@ -204,10 +204,10 @@ function openSitePicker(){
     if(act==='ellipse-num'){
       const v=await showPrompt({title:L('椭圆场地'),label:L('长轴半径, 短轴半径（米，用逗号分隔），例如 40,25'),value:'40,25'});
       if(v===null) return;
-      const m=v.split(/[,，x×*\s]+/).map(Number);
-      if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast(L('请输入两个正数半径，如 40,25'),'error');
+      const shape=ellipseShapeFromInput(v);
+      if(!shape) return toast(L('请输入两个正数半径，如 40,25'),'error');
       closeModal();
-      applyVectorSite('ellipse',{type:'ellipse',cx:m[0],cy:m[1],rx:m[0],ry:m[1],angle:0});
+      applyVectorSite('ellipse',shape);
       return;
     }
     if(act==='rect-num'){
@@ -225,6 +225,13 @@ function openSitePicker(){
       closeModal(); applyVectorSite('circle',circleShapeFrom([0,0],r));
     }
   });
+}
+/** 椭圆数值输入解析（纯函数）：输入只提供长/短轴半径，中心固定在**世界原点**。
+ * 旧实现把 `m[0]/m[1]` 同时当半径与圆心，导致椭圆整体偏移 (rx,ry)（审计 P1-5）。 */
+function ellipseShapeFromInput(text){
+  const m=String(text||'').split(/[,，x×*\s]+/).map(Number);
+  if(m.length<2||!(m[0]>0)||!(m[1]>0)) return null;
+  return {type:'ellipse',cx:0,cy:0,rx:m[0],ry:m[1],angle:0};
 }
 /** 应用矢量场地：只更新独立 site 槽，保留图片底图、场地元数据（id/name/layer/visible/locked/annot/style） */
 function applyVectorSite(kind,shape){

@@ -168,7 +168,7 @@ function renderTypes(){
       <button class="icon-btn danger" data-type-delete="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+typeDisplayName(t))}">×</button>
     </div>`).join('')}`).join('');
   $('typeList').querySelectorAll('[data-type-color]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeColor); pushHistory(); t.color=i.value; commitChange(); });
-  $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.iconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });
+  $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeIconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });
   $('typeList').querySelectorAll('[data-type-rename]').forEach(b=>b.onclick=async()=>{
     const t=state.objectTypes.find(x=>x.id===b.dataset.typeRename); const v=await showPrompt({title:L('重命名类型'),label:L('名称'),value:t.name}); if(v){ pushHistory(); t.name=v; commitChange(); }
   });
@@ -282,7 +282,7 @@ function renderStats(){
       </tbody></table>
       <p class="hint-text">${esc(L('点击楼层行可切换；汇总覆盖全部楼层。'))}</p></div>`:''}
     <div class="section" style="margin-top:10px"><h3>${esc(L('工程信息'))}</h3><div class="kv-list">
-      <span>${esc(L('工程名称'))}</span><b>${esc(state.meta.name)}</b><span>${esc(L('场地'))}</span><b>${esc(L(siteKindName(state.background.kind)))}</b>
+      <span>${esc(L('工程名称'))}</span><b>${esc(state.meta.name)}</b><span>${esc(L('场地'))}</span><b>${esc(L(siteKindName(state.site?.kind||state.background.kind)))}</b>
       <span>${esc(L('场地参数'))}</span><b>${esc(siteDescription().split('：').slice(1).join('：'))}</b>
       <span>${esc(L('对象总数'))}</span><b>${state.objects.length}</b><span>${esc(L('最近更新'))}</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
     </div></div>
