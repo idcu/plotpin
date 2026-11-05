@@ -4,7 +4,7 @@
 
 ## 2026-11-05 · Phase 1：双槽模型（图片底图 + 矢量场地）
 
-- **Commit Hash**：见紧随其后的 `docs(changelog)` 提交（本条提交哈希无法在自身内容中自引用）。
+- **Commit Hash**：`86b1dc9953fccc308ace0e18111113fecb7bbe95`（feat(background): 图片底图与矢量场地双槽共存（Phase 1））。
 - **核心改动点**
   - `state.background` 收敛为图片栅格槽（`kind:'empty'|'image'`）；新增独立 `state.site` 矢量场地槽，每层最多 1 图 + 1 场地。
   - 场地不进 `state.objects`，不参与选择/框选/对象计数/O 编号/CSV/XLSX 行；新增 `id/name/layerId/visible/locked/annot/style/updatedAt`，不设 `typeId`。
