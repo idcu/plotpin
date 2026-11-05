@@ -4,7 +4,7 @@
 
 ## 2026-11-06 · A-01 资产可达集 + 工程命名空间（禁止跨工程 prune）
 
-- **Commit Hash**：`PENDING`（fix(assets): 资产回收按命名空间取可达集，禁止跨工程误删底图/照片）。
+- **Commit Hash**：`9424b26`（fix(assets): 资产回收按命名空间取可达集，禁止跨工程误删底图/照片）。
 - **核心改动点**
   - 新增公共抽象 `ContentAssets.collectAssetRefs(snapshot)`（`js/common/content-assets.js`）：一份工程快照里全部资产引用的**唯一**采集实现，覆盖顶层 `background.assetId`、各楼层 `background.assetId`、顶层与各楼层 `props.photoId`。纯函数、无副作用，GC 与自测共用同一份代码，杜绝「各扫各的」。
   - `js/core/persistence.js`：把只扫 `state + history` 的旧 `reachableBgAssetIds()` 拆成三层——
