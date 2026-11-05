@@ -1,27 +1,58 @@
 /* props.js —— 属性面板：逐对象参数、场地属性、标注开关、节点编辑器与批量属性 */
 /* -------------------- 属性面板 -------------------- */
-/** 折线/标注节点编辑器：坐标精确输入；折线可逐节点插入(＋)/删除(×)/↑↓排序，或拖抓手排序 */
-function renderNodeEditor(o){
-  const canEdit=isPolylineEditable(o);
-  const min=canEdit?lineMinNodes(o):0;
-  const n=(o.points||[]).length;
-  const rows=(o.points||[]).map((p,i)=>`
+/**
+ * 节点编辑器：坐标精确输入；可编辑时逐节点插入(＋)/删除(×)/↑↓排序，或拖抓手排序。
+ * 业务对象与矢量场地多边形共用同一套 DOM 与 data-node-* 事件契约：
+ *   renderNodeEditor(o, { points, canEdit, min, nodeLabel, hint }) —— opts 省略时按对象自身能力推导。
+ */
+function renderNodeEditor(o, opts){
+  opts=opts||{};
+  const points=opts.points||(o&&o.points)||[];
+  const canEdit=opts.canEdit===undefined?isPolylineEditable(o):!!opts.canEdit;
+  const min=opts.min===undefined?(canEdit?lineMinNodes(o):0):opts.min;
+  const nodeLabel=opts.nodeLabel||'节点';
+  const n=points.length;
+  const rows=points.map((p,i)=>`
     <div class="node-row" data-node-row="${i}" ${canEdit?'':''}>
       ${canEdit?`<span class="node-grip" draggable="true" data-node-grip="${i}" title="${esc(L('拖拽调整节点顺序'))}">⠿</span>`:'<span class="node-idx">#</span>'}
       <span class="node-idx">${i+1}</span>
-      <input type="number" step="0.1" title="${esc(L('节点 X（米，可为负）'))}" data-node-axis="x" data-node-index="${i}" value="${fmt(p[0])}">
-      <input type="number" step="0.1" title="${esc(L('节点 Y（米，可为负）'))}" data-node-axis="y" data-node-index="${i}" value="${fmt(p[1])}">
-      ${canEdit?`<button type="button" class="icon-btn" data-node-up="${i}" title="${esc(L('上移节点'))}" aria-label="${esc(L('上移节点'))}" ${i===0?'disabled':''}>↑</button>
-      <button type="button" class="icon-btn" data-node-down="${i}" title="${esc(L('下移节点'))}" aria-label="${esc(L('下移节点'))}" ${i===n-1?'disabled':''}>↓</button>
-      <button type="button" class="icon-btn" data-node-add="${i}" title="${esc(L('在此节点后插入一个节点'))}" aria-label="${esc(L('在此节点后插入一个节点'))}">＋</button>
-      <button type="button" class="icon-btn danger" data-node-del="${i}" title="${esc(L('删除该节点'))}" aria-label="${esc(L('删除该节点'))}" ${n<=min?'disabled':''}>×</button>`:''}
+      <input type="number" step="0.1" title="${esc(L(nodeLabel+' X（米，可为负）'))}" data-node-axis="x" data-node-index="${i}" value="${fmt(p[0])}">
+      <input type="number" step="0.1" title="${esc(L(nodeLabel+' Y（米，可为负）'))}" data-node-axis="y" data-node-index="${i}" value="${fmt(p[1])}">
+      ${canEdit?`<button type="button" class="icon-btn" data-node-up="${i}" title="${esc(L('上移'+nodeLabel))}" aria-label="${esc(L('上移'+nodeLabel))}" ${i===0?'disabled':''}>↑</button>
+      <button type="button" class="icon-btn" data-node-down="${i}" title="${esc(L('下移'+nodeLabel))}" aria-label="${esc(L('下移'+nodeLabel))}" ${i===n-1?'disabled':''}>↓</button>
+      <button type="button" class="icon-btn" data-node-add="${i}" title="${esc(L('在此'+nodeLabel+'后插入一个'+nodeLabel))}" aria-label="${esc(L('在此'+nodeLabel+'后插入一个'+nodeLabel))}">＋</button>
+      <button type="button" class="icon-btn danger" data-node-del="${i}" title="${esc(L('删除该'+nodeLabel))}" aria-label="${esc(L('删除该'+nodeLabel))}" ${n<=min?'disabled':''}>×</button>`:''}
     </div>`).join('');
-  const shapeName=o.kind==='dimension'?'测距链':(o.closed?'闭合区域':'开放折线');
-  const hint=canEdit
-    ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L('点'))}）；${esc(L('拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除'))}</div>`
-    : `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}；${esc(L('可在画布上拖节点手柄调整位置'))}</div>`;
+  const shapeName=opts.shapeName||(o&&o.kind==='dimension'?'测距链':(o&&o.closed?'闭合区域':'开放折线'));
+  const hint=opts.hint
+    ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L(opts.hintUnit||'点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L(opts.hintUnit||'点'))}）；${esc(L(opts.hint))}</div>`
+    : canEdit
+      ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L('点'))}）；${esc(L('拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除'))}</div>`
+      : `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}；${esc(L('可在画布上拖节点手柄调整位置'))}</div>`;
   /* span2：节点列表需跨满 form-grid 两列，否则会被压进 78px 的标签列导致坐标输入框仅剩几十像素 */
   return `<div class="node-list span2">${rows}${hint}</div>`;
+}
+/** 图层下拉的 option 列表（对象属性面板与场地属性面板共用，避免两份图层来源） */
+function layerOptionsHTML(currentId){
+  return state.layers.map(l=>`<option value="${esc(l.id)}" ${l.id===currentId?'selected':''}>${esc(l.name)}</option>`).join('');
+}
+/**
+ * 节点编辑器事件绑定（业务对象折线/区域与场地多边形共用）：
+ * spec = { points(), min(), setCoord(i,axis,v), insert(i), remove(i), move(i,dir), changed(), focusNode(i|null) }
+ */
+function bindNodeEditorEvents(box, spec){
+  const pts=()=>spec.points()||[];
+  box.querySelectorAll('[data-node-axis]').forEach(el=>{
+    el.addEventListener('input',()=>{ if(spec.setCoord(Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) spec.changed(); });
+    if(spec.focusNode){
+      el.addEventListener('focus',()=>spec.focusNode(Number(el.dataset.nodeIndex)));
+      el.addEventListener('blur',()=>spec.focusNode(null));
+    }
+  });
+  box.querySelectorAll('[data-node-add]').forEach(b=>b.onclick=()=>spec.insert(Number(b.dataset.nodeAdd)));
+  box.querySelectorAll('[data-node-del]').forEach(b=>b.onclick=()=>spec.remove(Number(b.dataset.nodeDel)));
+  box.querySelectorAll('[data-node-up]').forEach(b=>b.onclick=()=>spec.move(Number(b.dataset.nodeUp),-1));
+  box.querySelectorAll('[data-node-down]').forEach(b=>b.onclick=()=>spec.move(Number(b.dataset.nodeDown),1));
 }
 /**
  * 逐对象「图上标注」开关组（跨满两列）：点设备=编号/点坐标；区域=编号/基点/半径/边长/顶点/周长/面积；
@@ -65,19 +96,11 @@ function sitePropsHTML(site, mode){
   let params='';
   if(sh.type==='polygon'){
     const pts=sh.points||[];
-    /* span2：节点列表需跨满 form-grid 两列（否则会被压进 78px 的标签列） */
-    params=`<div class="node-list span2">${pts.map((p,i)=>`
-      <div class="node-row vtx" data-site-node-row="${i}">
-        <span class="node-idx">${i+1}</span>
-        <input type="number" step="0.1" title="${esc(L('顶点 X（米，可为负）'))}" data-site-node-axis="x" data-site-node-index="${i}" value="${fv(p[0])}">
-        <input type="number" step="0.1" title="${esc(L('顶点 Y（米，可为负）'))}" data-site-node-axis="y" data-site-node-index="${i}" value="${fv(p[1])}">
-        <button type="button" class="icon-btn" data-site-node-up="${i}" title="${esc(L('上移顶点'))}" ${i===0?'disabled':''}>↑</button>
-        <button type="button" class="icon-btn" data-site-node-down="${i}" title="${esc(L('下移顶点'))}" ${i===pts.length-1?'disabled':''}>↓</button>
-        <button type="button" class="icon-btn" data-site-node-add="${i}" title="${esc(L('在此顶点后插入一个顶点'))}">＋</button>
-        <button type="button" class="icon-btn danger" data-site-node-del="${i}" title="${esc(L('删除该顶点'))}" ${pts.length<=3?'disabled':''}>×</button>
-      </div>`).join('')}
-      <div class="hint-text">${esc(L('共'))} ${pts.length} ${esc(L('个顶点'))}（${esc(L('至少'))} 3）；${esc(L('画布上双击边插入顶点、双击顶点删除'))}</div>
-    </div>`;
+    /* 与折线/闭合区域共用节点编辑器：同一套 data-node-* DOM 与增删/排序/坐标输入契约 */
+    params=renderNodeEditor({kind:'site',closed:true,points:pts},{
+      points:pts, canEdit:true, min:3, nodeLabel:'顶点', hintUnit:'个顶点',
+      shapeName:'场地多边形', hint:'画布上双击边插入顶点、双击顶点删除'
+    });
   }else if(sh.type==='circle'){
     params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}`;
   }else if(sh.type==='ellipse'){
@@ -98,7 +121,7 @@ function sitePropsHTML(site, mode){
   const ap=siteAreaPerimeter(site);
   const siteMeta=`<div class="form-grid">
       <label>${esc(L('名称'))}</label><div><input type="text" data-site-meta="name" value="${esc(site.name||'场地')}"></div>
-      <label>${esc(L('图层'))}</label><div><select data-site-meta="layerId">${state.layers.map(l=>`<option value="${esc(l.id)}" ${l.id===site.layerId?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>
+      <label>${esc(L('图层'))}</label><div><select data-site-meta="layerId">${layerOptionsHTML(site.layerId)}</select></div>
       <label>${esc(L('显示'))}</label><div><input type="checkbox" data-site-meta="visible" ${site.visible!==false?'checked':''}></div>
       <label>${esc(L('锁定'))}</label><div><input type="checkbox" data-site-meta="locked" ${site.locked?'checked':''}></div>
     </div>`;
@@ -167,15 +190,19 @@ function bindSiteNodeEvents(box){
       changed();
     });
   });
-  box.querySelectorAll('[data-site-node-axis]').forEach(el=>el.addEventListener('input',()=>{
-    const pts=state.site?.shape?.points, i=Number(el.dataset.siteNodeIndex), n=Number(el.value);
-    if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return;
-    pts[i][el.dataset.siteNodeAxis==='y'?1:0]=n; changed();
-  }));
-  box.querySelectorAll('[data-site-node-add]').forEach(b=>b.onclick=()=>siteInsertNode(Number(b.dataset.siteNodeAdd)));
-  box.querySelectorAll('[data-site-node-del]').forEach(b=>b.onclick=()=>siteRemoveNode(Number(b.dataset.siteNodeDel)));
-  box.querySelectorAll('[data-site-node-up]').forEach(b=>b.onclick=()=>siteMoveNode(Number(b.dataset.siteNodeUp),-1));
-  box.querySelectorAll('[data-site-node-down]').forEach(b=>b.onclick=()=>siteMoveNode(Number(b.dataset.siteNodeDown),1));
+  /* 多边形顶点编辑与业务对象共用同一套 data-node-* 事件绑定；增删/排序仍走场地专用提交 */
+  bindNodeEditorEvents(box,{
+    points:()=>state.site?.shape?.points,
+    setCoord:(i,axis,v)=>{
+      const pts=state.site?.shape?.points, n=Number(v);
+      if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return false;
+      pts[i][axis==='y'?1:0]=n; return true;
+    },
+    insert:i=>siteInsertNode(i),
+    remove:i=>siteRemoveNode(i),
+    move:(i,dir)=>siteMoveNode(i,dir),
+    changed
+  });
   /* 图片底图属性面板的入口按钮：复用顶部同名按钮的处理逻辑 */
   const openB=box.querySelector('#siteOpenBtn'); if(openB) openB.onclick=()=>openSitePicker();
   const calB=box.querySelector('#siteCalibBtn'); if(calB) calB.onclick=()=>$('calibBtn').click();
@@ -223,7 +250,7 @@ function renderProps(){
   const row=(label,inner)=>`<label>${esc(L(label))}</label><div>${inner}</div>`;
   const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-field="${field}" value="${val}">`;
   const txt=(field,val)=>`<input type="text" data-field="${field}" value="${esc(val||'')}">`;
-  const layerSel=`<select data-field="layerId">${state.layers.map(l=>`<option value="${esc(l.id)}" ${l.id===o.layerId?'selected':''}>${esc(l.name)}</option>`).join('')}</select>`;
+  const layerSel=`<select data-field="layerId">${layerOptionsHTML(o.layerId)}</select>`;
   let typeSel='';
   if(['point','rect','line'].includes(o.kind)){
     typeSel=`<select data-field="typeId">${typesOfKind(o.kind).map(x=>`<option value="${esc(x.id)}" ${x.id===o.typeId?'selected':''}>${esc(typeDisplayName(x))}</option>`).join('')}</select>`;
@@ -414,27 +441,21 @@ function bindPropEvents(box,o){
     const key=Object.keys(o.props||{})[Number(el.dataset.propVal)];
     if(key!==undefined){ o.props[key]=el.value; changed(); }
   }));
-  box.querySelectorAll('[data-node-axis]').forEach(el=>{
-    el.addEventListener('input',()=>{
-      if(setNodeCoord(o,Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) changed();
-    });
-    el.addEventListener('focus',()=>setFocusNode({id:o.id,index:Number(el.dataset.nodeIndex)}));
-    el.addEventListener('blur',()=>setFocusNode(null));
-  });
-  box.querySelectorAll('[data-node-add]').forEach(b=>b.onclick=()=>{
-    const i=Number(b.dataset.nodeAdd), a=o.points[i], c=o.points[i+1];
-    const p=c?[(a[0]+c[0])/2,(a[1]+c[1])/2]:[a[0]+1,a[1]];
-    pushHistory(); insertLineNode(o,i,p); commitChange('已插入节点');
-  });
-  box.querySelectorAll('[data-node-del]').forEach(b=>b.onclick=()=>{
-    if(o.points.length<=lineMinNodes(o)) return toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn');
-    pushHistory(); removeLineNode(o,Number(b.dataset.nodeDel)); commitChange('已删除节点');
-  });
-  box.querySelectorAll('[data-node-up]').forEach(b=>b.onclick=()=>{
-    if(moveNodeStep(o,Number(b.dataset.nodeUp),-1)){ pushHistory(); commitChange('节点已上移'); }
-  });
-  box.querySelectorAll('[data-node-down]').forEach(b=>b.onclick=()=>{
-    if(moveNodeStep(o,Number(b.dataset.nodeDown),1)){ pushHistory(); commitChange('节点已下移'); }
+  bindNodeEditorEvents(box,{
+    points:()=>o.points,
+    setCoord:(i,axis,v)=>setNodeCoord(o,i,axis,v),
+    insert:i=>{
+      const a=o.points[i], c=o.points[i+1];
+      const p=c?[(a[0]+c[0])/2,(a[1]+c[1])/2]:[a[0]+1,a[1]];
+      pushHistory(); insertLineNode(o,i,p); commitChange('已插入节点');
+    },
+    remove:i=>{
+      if(o.points.length<=lineMinNodes(o)) return toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn');
+      pushHistory(); removeLineNode(o,i); commitChange('已删除节点');
+    },
+    move:(i,dir)=>{ if(moveNodeStep(o,i,dir)){ pushHistory(); commitChange(dir<0?'节点已上移':'节点已下移'); } },
+    changed,
+    focusNode:i=>setFocusNode(i===null?null:{id:o.id,index:i})
   });
   bindNodeRowDrag(box,o);
   box.querySelector('[data-action="duplicate"]').onclick=()=>duplicateSelected();

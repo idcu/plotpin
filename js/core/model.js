@@ -227,10 +227,15 @@ function createSiteSlot(shape){
 function isImageBackground(bg){ return !!(bg && bg.kind==='image'); }
 /** 场地形状（兼容旧 background 对象） */
 function siteShapeOf(site){ return (site && site.shape) || defaultSiteShape(); }
-/** 场地可见性（显式 false 才隐藏） */
-function siteIsVisible(site){ return !!(site && site.visible!==false); }
-/** 场地锁定（锁定后不渲染手柄/不可编辑） */
-function siteIsLocked(site){ return !!(site && site.locked); }
+/** 场地所属图层（缺失时返回始终可见/未锁定的占位层，避免旧工程无图层字段时报错） */
+function siteLayerOf(site){
+  const id = site && site.layerId;
+  return (state.layers||[]).find(l=>l.id===id) || { visible:true, locked:false };
+}
+/** 场地可见 = 自身可见且所属图层可见（与业务对象同一套图层语义） */
+function siteIsVisible(site){ return !!(site && site.visible!==false && siteLayerOf(site).visible!==false); }
+/** 场地锁定 = 自身锁定或所属图层锁定（锁定后不渲染手柄/不可编辑） */
+function siteIsLocked(site){ return !!(site && (site.locked || siteLayerOf(site).locked)); }
 /** 旧 background 场地对象兼容：非图片且带 shape/矢量 kind */
 function isSiteLike(v){ return !!(v && v.kind!=='image' && v.kind!=='empty' && (v.shape || v.kind)); }
 /** @param {ObjectKind} kind @returns {string} */

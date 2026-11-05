@@ -49,4 +49,25 @@
   - `siteHandleAt` 仍由 `interaction.js` 独立实现（命中阈值 9px），Phase 2B 合并到通用手柄分发。
   - 场地属性面板的多边形节点编辑仍是手写一套，Phase 2B 复用 `renderNodeEditor`。
 
-</content>
+## 2026-11-05 · Phase 2B：手柄/节点/属性/图层/锁定复用
+
+- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **核心改动点**
+  - 场地多边形顶点编辑改用 `renderNodeEditor(o, opts)`：与折线/闭合区域共用同一套 `data-node-*` DOM（坐标输入、＋/×、↑↓、抓手列），`props.js` 不再维护 `data-site-node-*` 这一套平行实现；提示文案按「个顶点 / 场地多边形」口径传入。
+  - 抽出 `bindNodeEditorEvents(box, spec)` 统一接管节点坐标输入与增删/排序按钮，业务对象与场地只提供各自提交回调（对象走 `setNodeCoord/insertLineNode/removeLineNode/moveNodeStep`，场地走 `siteInsertNode/siteRemoveNode/siteMoveNode`）。
+  - 抽出 `layerOptionsHTML(id)`，对象属性面板与场地属性面板共用图层下拉 option 来源。
+  - 抽出 `pickScreenHandle(list, screenP, radius)`：`handleAt`（对象手柄）与 `siteHandleAt`（场地手柄）共用 9px 屏幕命中循环，删除场地侧独立实现。
+  - `siteIsVisible/siteIsLocked` 叠加 `siteLayerOf(site)`：场地与业务对象同语义——图层隐藏→场地不渲染且不计入取景框；图层锁定→场地控制点不可拖拽/编辑。
+  - 删除 CSS 中不再使用的 `.node-row.vtx` 专用列模板。
+- **公共抽象**
+  - `renderNodeEditor(o, opts)` 新增可选第二参数（`points/canEdit/min/nodeLabel/hintUnit/shapeName/hint`），省略时与旧行为完全一致。
+  - 新增 `bindNodeEditorEvents / layerOptionsHTML / pickScreenHandle / siteLayerOf`。
+  - 影响范围：对象属性面板节点绑定改为共享 binder（行为等价）；场地多边形属性 DOM 从 `data-site-node-*` 变为 `data-node-*`（无外部依赖，仅自测断言同步）；`siteIsVisible/siteIsLocked` 语义增强会影响取景框、渲染、手柄/拖拽守卫（预期行为，已写文档）。
+- **实测验证数据（本机实测）**
+  - `node scripts/check.mjs`：通过（26 脚本语法/入口资源/离线/契约/API/分层）。
+  - `node scripts/selftest.mjs`：1558 通过 / 0 失败（Phase 2A 为 1551，净增 7）。
+  - `node scripts/bench.mjs`（2000 对象 / 1600×900）：静态层重建 21.63 ms；缓存命中 0.35 ms、P95 0.48 ms（< 8 ms）；直接全量 20.58 ms；heapUsed 13.15 MB；视口裁剪 99.4%；覆盖率分析 8.4 ms（< 300 ms）。
+- **遗留 TODO / 风险**
+  - 场地多边形节点行仍不支持抓手拖拽排序（沿用 ↑↓），与旧场地实现一致；Phase 3B 再评估是否开启。
+  - 图层隐藏导致取景框收缩属于行为变化，需在下一轮回归中关注用户习惯（已在 features.md 写明）。
+

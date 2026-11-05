@@ -87,12 +87,8 @@ function handleAt(p,screenP){
   if(selectedIds.size!==1) return null;
   const o=state.objects.find(x=>x.id===Array.from(selectedIds)[0]);
   if(!o) return null;
-  const hs=getHandles(o);
-  for(const h of hs){
-    const s=w2s([h.x,h.y]);
-    if(Math.hypot(s[0]-screenP[0],s[1]-screenP[1])<=9) return {object:o,...h};
-  }
-  return null;
+  const h=pickScreenHandle(getHandles(o),screenP,9);
+  return h?{object:o,...h}:null;
 }
 
 /* -------------------- 渲染 -------------------- */

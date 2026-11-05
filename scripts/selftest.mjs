@@ -140,8 +140,9 @@ code += `\n;globalThis.__api = {
   imageCornerWorld, imageWorldFrame, validImageTransform,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
-  worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
-  siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo,
+  worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s,
+  siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
+  siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
   sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
@@ -2002,6 +2003,21 @@ asyncSuites.push((async()=>{
   api.resizeSiteByHandle({mode:'vertex',index:0},[9,9]);
   eq('场地节点-隐藏场地不可拖拽', api.state.site.shape.points[0], [0,0]);
 
+  /* 图层语义复用：场地与业务对象同一套「图层可见/锁定」；手柄命中与对象手柄共用 pickScreenHandle */
+  api.state.layers=[{id:'layer.default',name:'默认',visible:true,locked:false},{id:'L.lock',name:'锁定层',visible:true,locked:true},{id:'L.hide',name:'隐藏层',visible:false,locked:false}];
+  api.state.site={kind:'polygon',layerId:'L.lock',visible:true,locked:false,shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  ok('场地节点-图层锁定即场地锁定', api.siteIsLocked(api.state.site));
+  api.resizeSiteByHandle({mode:'vertex',index:0},[-3,-3]);
+  eq('场地节点-图层锁定不可拖拽', api.state.site.shape.points[0], [0,0]);
+  api.state.site.layerId='L.hide';
+  ok('场地节点-图层隐藏即场地不可见', !api.siteIsVisible(api.state.site));
+  api.state.site.layerId='layer.default';
+  ok('场地节点-默认图层可见且未锁', api.siteIsVisible(api.state.site) && !api.siteIsLocked(api.state.site));
+  /* 手柄命中：同一世界点换算到屏幕后必中，偏移 20px 必不中 */
+  { const hs=api.siteHandleList(), sp=api.w2s([hs[0].x,hs[0].y]);
+    eq('场地节点-手柄命中(共用 pickScreenHandle)', api.pickScreenHandle(hs,sp,9).mode, 'vertex');
+    eq('场地节点-手柄命中阈值外为空', api.pickScreenHandle(hs,[sp[0]+20,sp[1]+20],9), null); }
+
   /* sanitizeShape：编辑后的负坐标/偏移在保存→重载后保留（不被打回原点） */
   const mp=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10]]}}});
   eq('场地节点-负坐标多边形重载保留', mp.site.shape.points, [[-10,-10],[10,-10],[10,10]]);
@@ -2035,11 +2051,12 @@ asyncSuites.push((async()=>{
   const hc=api.sitePropsHTML({kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}},'default');
   ok('场地属性-圆形含半径与圆心', hc.includes('data-site-field="r"') && hc.includes('data-site-field="cx"') && hc.includes('314.16'));
   const hp=api.sitePropsHTML({kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}},'default');
-  ok('场地属性-多边形顶点行数', (hp.match(/data-site-node-row=/g)||[]).length===4);
-  ok('场地属性-多边形含插入/删除顶点', hp.includes('data-site-node-add=') && hp.includes('data-site-node-del='));
-  /* 布局回归：节点列表需跨满 form-grid 两列，顶点行需用无抓手的 7 列模板（否则输入框被压进 78px 标签列） */
+  ok('场地属性-多边形顶点行数', (hp.match(/data-node-row=/g)||[]).length===4);
+  ok('场地属性-多边形含插入/删除顶点', hp.includes('data-node-add=') && hp.includes('data-node-del='));
+  ok('场地属性-多边形复用对象节点编辑器', hp.includes('data-node-axis="x"') && !hp.includes('data-site-node'));
+  /* 布局回归：节点列表需跨满 form-grid 两列；复用对象节点行（含抓手）后不再需要独立 vtx 模板 */
   ok('场地属性-多边形列表跨满整行', hp.includes('class="node-list span2"'));
-  ok('场地属性-多边形行采用顶点列模板', hp.includes('class="node-row vtx"'));
+  ok('场地属性-多边形提示为顶点口径', hp.includes('个顶点') && hp.includes('至少'));
   ok('场地属性-扇形含张角', api.sitePropsHTML({kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}},'default').includes('data-site-field="sweep"'));
   ok('场地属性-椭圆含两半径与旋转', (()=>{ const e=api.sitePropsHTML({kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}},'default'); return e.includes('data-site-field="rx"') && e.includes('data-site-field="ry"') && e.includes('data-site-field="angle"'); })());
   /* 图片底图：显示摘要 + 校准入口按钮；工具模式下给引导语 */

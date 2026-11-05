@@ -566,11 +566,7 @@ function resizeShapeByHandle(o,h,p){
 function siteHandleAt(wp,sp){
   const site=state.site;
   if(!site||!siteIsVisible(site)||siteIsLocked(site)) return null;
-  for(const h of siteHandleList()){
-    const s=w2s([h.x,h.y]);
-    if(Math.hypot(s[0]-sp[0],s[1]-sp[1])<=9) return h;
-  }
-  return null;
+  return pickScreenHandle(siteHandleList(),sp,9);
 }
 /** 拖拽场地控制点：实现见 geometry.js 的 siteHandleDragTo / resizeSiteByHandle（薄包装） */
 /** Esc 取消进行中的拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照 */

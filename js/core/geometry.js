@@ -647,6 +647,15 @@ function siteHandleDragTo(site,h,p){
     return;
   }
 }
+/** 屏幕空间控制点命中（对象手柄与场地手柄共用同一阈值/循环；返回命中的手柄或 null） */
+function pickScreenHandle(list,screenP,radius){
+  const r=Number.isFinite(radius)?radius:9;
+  for(const h of list||[]){
+    const s=w2s([h.x,h.y]);
+    if(Math.hypot(s[0]-screenP[0],s[1]-screenP[1])<=r) return h;
+  }
+  return null;
+}
 /** 拖拽当前场地控制点（旧签名薄包装：写 state.site，尊重可见/锁定） */
 function resizeSiteByHandle(h,p){
   const site=state.site;
