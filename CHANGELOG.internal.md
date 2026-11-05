@@ -138,7 +138,7 @@
 
 ## 2026-11-05 · 顶栏「清空当前楼层」
 
-- **Commit Hash**：`占位（本提交后回填）`（feat(clear): 顶栏清空当前楼层双槽/对象/标注并支持撤销）。
+- **Commit Hash**：`f5ad7f3`（feat(clear): 顶栏清空当前楼层双槽/对象/标注并支持撤销）。
 - **核心改动点**
   - `clearCurrentFloor()`（`persistence.js`）一次清空：图片底图槽、`state.site`、`state.objects`（含标注/测量/文字/照片引用）、校准点与仿射配对、`calibSelection/calibUndoStack`、`selectedIds`、草稿/拖拽/橡皮筋、捕捉与参考线运行时状态、覆盖率结果、运行时 `bgImage/bgDataUrl`；随后 `syncActiveFloor()`、`invalidateStatic()`、`resetFrameRef()`、`fitView()`，取景框回到默认空工程。
   - 清空对象逐个写入删除墓碑（协作合并不会复活）；楼层结构、图层、自定义类型、工程元数据名称不重置。
@@ -151,15 +151,15 @@
   - `node scripts/check.mjs`：通过。
   - `node scripts/selftest.mjs`：1614 通过 / 0 失败（前值 1584，净增 30，含导出双槽证据）。
   - `node scripts/badge.mjs`：README 同步 1614。
-  - 浏览器回归：待执行（本轮统一回归后回填结果）。
-  - `node scripts/bench.mjs`：清空为一次性操作，不在逐帧渲染路径；性能数据待统一 bench 后回填。
+  - 浏览器回归（真实 Chromium，`browser_use` 自动化，`http://127.0.0.1:8765`）：点「清空」弹出二次确认 → 确定后场地消失、属性面板显示「尚未设置矢量场地」、toast「已清空当前楼层」→ `Ctrl+Z` 后场地与 `100 × 70` 属性、对象与校准点全部恢复、toast「已撤销」；PASS。
+  - `node scripts/bench.mjs`（2000 对象 / 1600×900，提交前最末一次实测）：静态层重建 22.16 ms/帧；缓存命中 0.35 ms/帧、P95 0.44 ms（< 8 ms）；直接全量 21.19 ms/帧；heapUsed 12.92 MB；视口裁剪 99.4%（13/2000）；覆盖率分析 7.8 ms（< 300 ms，覆盖率 44.3%）。清空本身为一次性操作，不在逐帧渲染路径。
 - **遗留 TODO / 风险**
   - 清空会写入 2000 级对象墓碑（受 `TOMBSTONE_LIMIT` 限制），大工程合并时墓碑可能挤掉更早记录；这是既有墓碑策略，不在本次扩展。
   - 清空不可恢复除撤销外的备份；图片资产本体保留在 IndexedDB（供撤销重载），不会立即回收空间。
 
 ## 2026-11-05 · 导出双槽与场地标注实测核验
 
-- **Commit Hash**：`占位（本提交后回填）`（test(export): 双槽与场地标注导出证据断言）。
+- **Commit Hash**：`136aebf`（test(export): 双槽与场地标注导出证据断言）。
 - **核心改动点**
   - 未发现导出缺场地：JSON 走 `persistableState()`，顶层同时序列化 `background` 与 `site`；PNG/PDF 图纸页共用 `drawScene()`（含 `drawSite`）；SVG 的场地圆/多边形、节点、段长、半径、面积周长由 `buildSceneSvg` 输出；DXF 场地走 `siteDxfEntities()` 写入独立 `SITE` 图层闭合 `LWPOLYLINE`；CSV/XLSX 只遍历 `state.objects`，场地不产生行。
   - 新增 12 条真实产物断言：JSON 双槽键、SVG 圆半径 `10.00 m`、面积 `314.16 ㎡` / 周长 `62.83 m`、基点坐标、场地标注先于业务对象、DXF `SITE` 层与闭合折线、场地不进对象台账。
@@ -167,9 +167,10 @@
 - **实测验证数据（本机实测）**
   - `node scripts/selftest.mjs`：1614 通过 / 0 失败（前值 1602，净增 12）。
   - `node scripts/check.mjs` / `node scripts/badge.mjs`：通过，徽章 1614。
-  - PNG/PDF 的实际触发以浏览器回归为准（本轮回归后回填）。
+  - 浏览器回归（真实 Chromium）：JSON / PNG / SVG / PDF 导出均出现成功 toast；场地位于可见图层时 DXF 导出成功（toast「DXF 已导出（坐标单位：毫米，可用 AutoCAD/LibreCAD 打开）」）。首次 DXF 失败系上一轮留下的图层隐藏状态导致 `siteDxfEntities()` 返回空，恢复场地可见后通过，非代码缺陷。
 - **遗留 TODO / 风险**
-  - PNG/PDF 为位图产物，自测不比对像素；依赖 `drawScene` 与 SVG/画布共用绘制链。浏览器回归只验证导出成功提示与画布可见场地，不做像素级比对。
+  - PNG/PDF 为位图产物，自测不比对像素；依赖 `drawScene` 与 SVG/画布共用绘制链。浏览器回归只验证导出成功提示与画布可见场地，**未做像素级/文件内容核验**（下载目录中未取回导出的 .png/.pdf/.json/.svg/.dxf 文件）。
+  - 场地多边形顶点在画布上的真实拖拽未被浏览器自动化注册（应用侧 300ms 合成事件过滤），本轮以属性面板改顶点坐标（58.00 → 65.00，面积/周长同步变化）判定节点编辑逻辑；画布拖拽路径标记为未验证。
 
 
 
