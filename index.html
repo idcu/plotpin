@@ -10,6 +10,9 @@
 <meta name="theme-color" content="#1e293b">
 <meta name="application-name" content="图钉 PlotPin">
 <meta name="description" content="离线、零依赖、双击即用的通用图纸标注工具：底图校准、设备点位、真实比例区域/折线与尺寸标注">
+<!-- CSP：脚本只允许同源文件（单文件发行包由 build.mjs 追加内联脚本的 sha256 白名单）；
+     注入的 <script>、onerror= 等内联执行路径一律阻断。style 仍需 unsafe-inline（大量 style 属性）。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' file: data:; connect-src 'self' file:; manifest-src 'self' file:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="tool-select">

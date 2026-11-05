@@ -55,7 +55,7 @@
     const color = /^#[0-9a-fA-F]{6}$/.test(String(def.color || '')) ? String(def.color) : '#7c3aed';
     const t = {
       id, kind: def.kind, name, color,
-      icon: String(def.icon || (def.kind === 'point' ? 'custom' : def.kind)).slice(0, 30),
+      icon: normalizeIcon(def.icon, def.kind),
       builtin: false, plugin: true
     };
     if (def.kind === 'point') {

@@ -121,8 +121,9 @@ code += `\n;globalThis.__api = {
   annotToggleGroupHTML, bindAnnotToggleInputs, siteAnnotToggleKeys, renderSiteAnnotToggles,
   SITE_ANNOT_SETTING_KEYS, siteAnnotSettingOn, setSiteAnnotSetting,
   typeDisplayName, populateSelects,
+  normalizeIcon, TYPE_ICONS, mergeTypes,
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
-  $, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
+  $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
@@ -3152,9 +3153,9 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
-/* 56. 单文件发行包：内联、去外链、图标 data URI、真实入口构建 --------------- */
+/* 56. 单文件发行包：内联、去外链、图标 data URI、CSP 哈希白名单 ---------------- */
 {
-  const sample='<html><head><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="a.css"></head><body><script src="a.js"></script><script src="b.js"></script></body></html>';
+  const sample='<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; img-src \'self\' data:"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="a.css"></head><body><script src="a.js"></script><script src="b.js"></script></body></html>';
   const files={'a.css':'body{color:red}','a.js':'console.log("a")','b.js':'const x="</script>";','icon.svg':'<svg/>','manifest.webmanifest':'{}'};
   const out=buildStandalone(sample,p=>files[p]);
   ok('打包-样式内联', out.includes('<style>')&&out.includes('body{color:red}'));
@@ -3163,6 +3164,15 @@ asyncSuites.push((async()=>{
   ok('打包-manifest移除', !out.includes('manifest.webmanifest'));
   ok('打包-图标转dataURI', out.includes('data:image/svg+xml;base64,'));
   ok('打包-转义script闭合', out.includes('<\\/script'));
+  /* CSP：两个内联脚本 → 两条 sha256；不得出现 unsafe-inline */
+  const scriptSrc=(out.match(/script-src[^;]*/)||[''])[0];
+  eq('打包-CSP哈希数与内联脚本数一致', (scriptSrc.match(/'sha256-/g)||[]).length, 2);
+  ok('打包-CSP无unsafe-inline', !scriptSrc.includes('unsafe-inline'));
+  ok('打包-CSP保留原策略', out.includes("default-src 'self'")&&out.includes("img-src 'self'"));
+
+  let cspErr=null;
+  try{ buildStandalone('<html><head></head><body><script src="a.js"></script></body></html>',p=>files[p]||''); }catch(e){ cspErr=e; }
+  ok('打包-无CSP时拒绝构建', !!cspErr&&/Content-Security-Policy/.test(cspErr.message));
 
   const real=buildStandalone(readFileSync(join(root,'index.html'),'utf8'),p=>readFileSync(join(root,p),'utf8'));
   ok('打包-真实入口无外链脚本', !/<script\s+src=/.test(real));
@@ -3170,6 +3180,58 @@ asyncSuites.push((async()=>{
   ok('打包-真实入口无manifest', !/rel="manifest"/.test(real));
   ok('打包-真实入口包含核心脚本', real.includes('buildSceneSvg')&&real.includes('openFloorManager'));
   ok('打包-体积合理(>100KB)', real.length>100000);
+  /* 统计内联脚本时先剔除 HTML 注释（注释里也会出现文档性的 <script> 字样） */
+  const realInline=(real.replace(/<!--[\s\S]*?-->/g,'').match(/<script>/g)||[]).length;
+  const realHashes=(real.match(/'sha256-[A-Za-z0-9+/=]+'/g)||[]).length;
+  ok('打包-真实入口CSP哈希全覆盖', realInline>10&&realInline===realHashes);
+}
+
+/* 56.1 type.icon 白名单 + esc：4 条注入路径（审计 A-02） -------------------- */
+{
+  /* 1) normalizeIcon：任意字符串不得原样回传 */
+  eq('图标-白名单内保留', api.normalizeIcon('camera','point'), 'camera');
+  eq('图标-未知值按 kind 回退', api.normalizeIcon('evil"><img src=x>','point'), 'custom');
+  eq('图标-未知 rect 回退 rect', api.normalizeIcon('<script>','rect'), 'rect');
+  eq('图标-空值按 kind 回退', api.normalizeIcon('', 'line'), 'line');
+  eq('图标-非 point/rect/line 回退 marker', api.normalizeIcon('x','unknown'), 'marker');
+  ok('图标-白名单冻结', Object.isFrozen(api.TYPE_ICONS));
+
+  /* 2) 存档清洗（mergeTypes）：保存后再读，icon 已白名单化 */
+  const merged=api.mergeTypes([
+    {id:'type.evil', kind:'point', name:'注入', icon:'"><script>alert(1)</script>'},
+    {id:'type.ok', kind:'point', name:'正常', icon:'camera'}
+  ]);
+  const evil=merged.find(t=>t.id==='type.evil'), okType=merged.find(t=>t.id==='type.ok');
+  eq('图标-存档清洗后为白名单值', evil.icon, 'custom');
+  ok('图标-存档清洗不残留尖括号', !/<|>/.test(evil.icon));
+  eq('图标-合法存档值保持不变', okType.icon, 'camera');
+
+  /* 3) UI 渲染：renderTypes 生成的 HTML 中 raw 注入串必须被白名单/转义拦下 */
+  api.state.objectTypes.push({id:'type.evil2',kind:'point',name:'<b>pwn</b>',color:'#7c3aed',icon:'"><script>alert(1)</script>',builtin:false});
+  api.state.objectTypes.push({id:'type.evil3',kind:'point',name:'注入id',color:'#7c3aed',icon:'camera',builtin:false});
+  api.renderTypes();
+  const rendered=api.$('typeList').innerHTML||'';
+  ok('图标-类型列表已渲染', rendered.length>0);
+  ok('图标-列表不渲染原始注入串', !rendered.includes('<b>pwn</b>')&&!rendered.includes('<script>'));
+  ok('图标-列表名称已转义', rendered.includes('&lt;b&gt;pwn&lt;/b&gt;'));
+  ok('图标-列表图标为白名单值', rendered.includes('custom'));
+  api.state.objectTypes=api.state.objectTypes.filter(t=>t.id!=='type.evil2'&&t.id!=='type.evil3');
+
+  /* 4) 插件注册路径：PlotPin.registerObjectType 也要走同一套白名单清洗 */
+  const PP=api.PlotPin;
+  ok('插件-注册对象类型', PP.registerObjectType({id:'plugin.icon',kind:'point',name:'插件点',icon:'onerror=alert(1)'}));
+  const pluginType=(PP.state.objectTypes||[]).find(t=>t.id==='plugin.icon');
+  eq('图标-插件类型走白名单回退', pluginType&&pluginType.icon, 'custom');
+  ok('图标-插件类型不残留注入串', !/<|>|=alert/.test(String(pluginType&&pluginType.icon)));
+  PP.unregisterObjectType('plugin.icon');
+
+  /* 5) CSP 声明存在且不允许脚本内联 */
+  const indexHtml=readFileSync(join(root,'index.html'),'utf8');
+  ok('CSP-入口声明存在', /http-equiv="Content-Security-Policy"/i.test(indexHtml));
+  const csp=(indexHtml.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/i)||[])[1]||'';
+  ok('CSP-script-src不允许unsafe-inline', /script-src[^;]*/.test(csp)&&!/script-src[^;]*'unsafe-inline'/.test(csp));
+  ok('CSP-禁止object/base/form', /object-src 'none'/.test(csp)&&/base-uri 'none'/.test(csp)&&/form-action 'none'/.test(csp));
+  ok('CSP-不允许远程源', !/https?:/.test(csp));
 }
 
 /* 57. 插件注册点：导出器 / 导入器注册、校验、查找与注销 -------------------- */

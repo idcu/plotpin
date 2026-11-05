@@ -161,11 +161,11 @@ function renderTypes(){
   $('typeList').innerHTML=Object.entries(groups).map(([kind,label])=>`
     <h3>${label}</h3>
     ${typesOfKind(kind).map(t=>`<div class="type-row">
-      <div class="meta"><div class="name"><span class="dot" style="background:${t.color}"></span>${esc(typeDisplayName(t))}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${t.icon||''}${kind==='point'?' · '+esc(L(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none))+' · '+esc(L('图标'))+' '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
-      ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="默认图标大小（屏幕倍率）" value="${Number(t.iconSize)||1}" data-type-iconsize="${t.id}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
-      <input type="color" value="${t.color}" data-type-color="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+typeDisplayName(t))}">
-      <button class="icon-btn" data-type-rename="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+typeDisplayName(t))}">✎</button>
-      <button class="icon-btn danger" data-type-delete="${t.id}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+typeDisplayName(t))}">×</button>
+      <div class="meta"><div class="name"><span class="dot" style="background:${esc(t.color)}"></span>${esc(typeDisplayName(t))}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${esc(normalizeIcon(t.icon,t.kind))}${kind==='point'?' · '+esc(L(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none))+' · '+esc(L('图标'))+' '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
+      ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="默认图标大小（屏幕倍率）" value="${Number(t.iconSize)||1}" data-type-iconsize="${esc(t.id)}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
+      <input type="color" value="${esc(t.color)}" data-type-color="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+typeDisplayName(t))}">
+      <button class="icon-btn" data-type-rename="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+typeDisplayName(t))}">✎</button>
+      <button class="icon-btn danger" data-type-delete="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+typeDisplayName(t))}">×</button>
     </div>`).join('')}`).join('');
   $('typeList').querySelectorAll('[data-type-color]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeColor); pushHistory(); t.color=i.value; commitChange(); });
   $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.iconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });

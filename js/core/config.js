@@ -26,6 +26,16 @@ const APP_LIMITS = Object.freeze({
 /* 点类型的 scaleShape：设置对象“物理尺寸(m)”后按世界坐标渲染（随底图缩放），
  * none=始终屏幕固定图标（纯位置标识）；circle 圆 / square 方 / sector 扇形视场（fov 张角）/ bar 杆 */
 const POINT_SCALE_SHAPES = {none:'仅位置图标', circle:'圆形覆盖', square:'方形区域', sector:'扇形视场', bar:'杆/线段'};
+/* 图元图标白名单：与 render.js drawPoint 的绘制分支一一对应。
+ * type.icon 来自可编辑数据（导入 JSON / 插件 / 旧存档），任意字符串不得进入 UI 或导出。 */
+const TYPE_ICONS = Object.freeze(['marker','camera','dome','light','gate','charger','warning','custom','symbol','rect','line','text','dimension']);
+const DEFAULT_ICON_BY_KIND = Object.freeze({point:'custom', rect:'rect', line:'line'});
+/** 图标白名单化：未知值回退到 kind 默认值，绝不回传调用方传入的原始字符串 */
+function normalizeIcon(icon, kind){
+  const v=String(icon||'');
+  if(TYPE_ICONS.includes(v)) return v;
+  return DEFAULT_ICON_BY_KIND[kind]||'marker';
+}
 const BUILTIN_TYPES = [
   {id:'point.marker', kind:'point', name:'通用标记', color:'#2563eb', icon:'marker', scaleShape:'none', builtin:true},
   {id:'point.camera', kind:'point', name:'摄像头', color:'#dc2626', icon:'camera', scaleShape:'sector', fov:90, builtin:true},

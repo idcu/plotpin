@@ -752,7 +752,7 @@ function mergeTypes(saved){
     if(!t||typeof t!=='object'||!['point','rect','line'].includes(t.kind)) return;
     const id=safeId(t.id,'type'), name=String(t.name||'自定义类型').slice(0,30);
     const color=/^#[0-9a-fA-F]{6}$/.test(t.color)?t.color:'#7c3aed';
-    const savedType={id,name,kind:t.kind,color,icon:String(t.icon||(t.kind==='point'?'custom':t.kind)).slice(0,30),builtin:false};
+    const savedType={id,name,kind:t.kind,color,icon:normalizeIcon(t.icon,t.kind),builtin:false};
     if(t.kind==='point'){
       const iconSize=finiteNumber(t.iconSize,NaN);
       if(iconSize>=.5&&iconSize<=5) savedType.iconSize=iconSize;

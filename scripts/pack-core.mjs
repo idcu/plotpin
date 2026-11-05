@@ -2,19 +2,39 @@
  * pack-core.mjs —— 单文件 HTML 打包核心（纯函数，便于自测）
  * 把 <link rel="stylesheet"> 与 <script src> 内联，移除 PWA manifest，图标转 data URI。
  * 产物无任何外部引用，双击即可离线使用。
+ *
+ * 脚本内联后仍然是「内联脚本」：CSP 的 script-src 不含 'unsafe-inline'，
+ * 因此这里把每个内联脚本的 sha256 追加到页面 CSP（hash 由内容确定性计算，构建可复现）。
  */
+import { createHash } from 'node:crypto';
+
 export function buildStandalone(html, readFile) {
   let out = String(html);
+  const cspHashes = [];
 
   /* 样式内联 */
   out = out.replace(/<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/g,
     (_, href) => `<style>\n/* ${href} */\n${readFile(href)}\n</style>`);
 
-  /* 脚本内联（保持原有顺序）；转义 </script> 防止提前闭合 */
+  /* 脚本内联（保持原有顺序）；转义 </script> 防止提前闭合。
+     哈希必须按浏览器看到的**脚本文本内容**计算（含注释与换行）。 */
   out = out.replace(/<script\s+src="([^"]+)"><\/script>/g, (_, src) => {
     const code = String(readFile(src)).replace(/<\/script/gi, '<\\/script');
-    return `<script>\n/* ${src} */\n${code}\n</script>`;
+    const inner = `\n/* ${src} */\n${code}\n`;
+    cspHashes.push(createHash('sha256').update(inner, 'utf8').digest('base64'));
+    return `<script>${inner}</script>`;
   });
+
+  /* CSP 升级：只给内联脚本签哈希，其余策略原样保留 */
+  if (cspHashes.length) {
+    const add = cspHashes.map(h => `'sha256-${h}'`).join(' ');
+    const hasCsp = /http-equiv="Content-Security-Policy"/i.test(out);
+    if (!hasCsp) throw new Error('单文件打包要求入口声明 Content-Security-Policy（否则内联脚本无法受策略约束）');
+    if (!/script-src[^;]*'self'/.test(out)) {
+      throw new Error("单文件打包要求 CSP 的 script-src 含 'self'（由它派生内联脚本哈希白名单）");
+    }
+    out = out.replace(/script-src([^;]*)/i, (m, rest) => `script-src${rest} ${add}`);
+  }
 
   /* PWA manifest 在单文件模式下无意义，移除避免 404 */
   out = out.replace(/<link\s+rel="manifest"[^>]*>\s*/g, '');

@@ -55,6 +55,19 @@ if (!checkOnly) {
     errors.push(`构建不确定：连续两次构建哈希不同（${sha.slice(0, 12)}… / ${shaAgain.slice(0, 12)}…）`);
   }
 
+  /* CSP：脚本策略不得允许内联执行；每个内联脚本都必须有 sha256 白名单 */
+  if (!/http-equiv="Content-Security-Policy"/i.test(bundled)) {
+    errors.push('发行包缺少 Content-Security-Policy');
+  }
+  const scriptSrc = (bundled.match(/script-src[^;]*/i) || [''])[0];
+  if (/'unsafe-inline'/.test(scriptSrc)) errors.push("CSP script-src 含 'unsafe-inline'（内联注入路径未被封堵）");
+  /* 统计内联脚本时先剔除 HTML 注释（注释里也会出现文档性的 <script> 字样） */
+  const inlineScripts = (bundled.replace(/<!--[\s\S]*?-->/g, '').match(/<script>/g) || []).length;
+  const hashes = (bundled.match(/'sha256-[A-Za-z0-9+/=]+'/g) || []).length;
+  if (inlineScripts !== hashes) {
+    errors.push(`CSP 内联脚本哈希数不匹配：内联脚本 ${inlineScripts} 个 / 哈希 ${hashes} 个`);
+  }
+
   /* 真实比对产物：以 scripts/dist-manifest.json 为准（CI 无 dist/ 也能校验） */
   if (!existsSync(manifestPath)) {
     errors.push('缺少 scripts/dist-manifest.json（无法比对产物，请运行 node scripts/build.mjs 生成）');
