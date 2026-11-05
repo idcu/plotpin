@@ -4,7 +4,7 @@
 
 ## 2026-11-06 · A-13 质量门禁去假绿
 
-- **Commit Hash**：`PENDING`（test(gates): 门禁去假绿——P95/heap/重建阈值、产物哈希比对、缺文件必失败、门禁牙齿自测）。
+- **Commit Hash**：`4605c0d`（test(gates): 门禁去假绿——P95/heap/重建阈值、产物哈希比对、缺文件必失败、门禁牙齿自测）。
 - **核心改动点**
   - `scripts/bench.mjs`：新增 P50/P95/P99 采样与 `--gate` 语义（默认启用，`--no-gate` 本地快速跑）。阻断项：缓存帧 avg ≤ 8ms、**P95 ≤ 3ms**、**静态层重建 ≤ 60ms**、直接全量 ≤ 60ms、**heapUsed ≤ 64MB**、覆盖率 ≤ 300ms、裁剪 ≥ 60%；P99 ≤ 10ms 仅告警。失败时打印「实测值 / 阈值 / 超出比例」，不再只打印读数。
   - `scripts/build.mjs`：`--check` 从**源重建**并与 `scripts/dist-manifest.json`（新增，入库）比对 SHA256 + 字节数；断言体积 ≤ 750KB；断言**二次构建确定性**（同源两次构建哈希必须相同）；`dist/` 存在时额外逐字节比对。`node scripts/build.mjs` 同时刷新登记值。
