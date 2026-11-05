@@ -1,6 +1,10 @@
 /* A-14 真实 IndexedDB：v1→v2 回写 + 资产回收命名空间（A-01 六条路径） */
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { DB, idb, clickCanvasCenter } from './helpers.mjs';
+
+const PNG_A = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const PNG_B = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 const now = '2026-01-01T00:00:00.000Z';
 const point = id => ({
@@ -137,4 +141,51 @@ test('资产回收：草稿/历史两栈/剪贴板/拖拽/工程库六条命名�
     expect(keys).toContain(id);
   }
   expect(keys).not.toContain(ids.unreferenced);
+});
+
+test('照片资产全楼层：切层后导出仍内嵌，导入后两层照片都还原为资产', async ({ page }) => {
+  await openApp(page);
+  const floors = await page.evaluate(async ({ a, b }) => {
+    const mk = (x, du) => {
+      const o = baseObject('point', 'point.marker', { x, y: 0 });
+      o.props = Object.assign({}, o.props, { photoDataUrl: du });
+      return o;
+    };
+    state.objects.push(mk(0, a));
+    await ensureObjectPhotoAssets(state);
+    commitChange();
+    const f2 = await addFloor('F2');
+    state.objects.push(mk(1, b));
+    await ensureObjectPhotoAssets(state);   /* 新楼层对象同样要入资产库 */
+    commitChange();
+    const f1 = state.floors.find(f => f.id !== f2).id;
+    await switchFloor(f1);                   /* 只导出当前楼层曾会丢另一层的照片 */
+    return { f1, f2 };
+  }, { a: PNG_A, b: PNG_B });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.selectOption('#exportKind', 'json');
+  await page.click('#exportBtn');
+  const download = await downloadPromise;
+  const project = JSON.parse(readFileSync(await download.path(), 'utf8'));
+
+  expect(project.objects[0].props.photoDataUrl).toBe(PNG_A);
+  const floor2 = project.floors.find(f => f.id === floors.f2);
+  expect(floor2.objects[0].props.photoDataUrl).toBe(PNG_B);
+
+  const restored = await page.evaluate(async (text) => {
+    await importJsonFile(new File([text], 'roundtrip.json', { type: 'application/json' }));
+    const f2 = state.floors.find(f => f.name === 'F2');
+    return {
+      activePhotoId: state.objects[0].props.photoId || '',
+      activeDataUrl: state.objects[0].props.photoDataUrl || '',
+      floorPhotoId: f2.objects[0].props.photoId || '',
+      floorDataUrl: f2.objects[0].props.photoDataUrl || ''
+    };
+  }, JSON.stringify(project));
+
+  expect(restored.activePhotoId).toBeTruthy();
+  expect(restored.floorPhotoId).toBeTruthy();
+  expect(restored.activeDataUrl).toBe('');
+  expect(restored.floorDataUrl).toBe('');
 });

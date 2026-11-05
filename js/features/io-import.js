@@ -27,7 +27,8 @@ async function importJsonFile(f){
     history={past:[],future:[]};
     selectedIds.clear(); draft=null;
     await pruneBgAssets();
-    afterStateLoaded(); scheduleSave(); toast('工程已导入','success');
+    await afterStateLoaded();           /* 等全楼层照片 dataUrl→资产转换完成，导入才算提交 */
+    scheduleSave(); toast('工程已导入','success');
   }catch(err){
     if(swapped){
       state=prevState; history=prevHistory;              /* 提交阶段失败：完整回滚 */

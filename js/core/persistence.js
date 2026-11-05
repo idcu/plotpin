@@ -244,11 +244,7 @@ async function saveProjectAs(name){
 }
 /** 工程对象总数（顶层当前楼层 + 其余楼层），用于导入/打开的 OBJECTS_MAX 校验 */
 function countProjectObjects(p){
-  let n=Array.isArray(p&&p.objects)?p.objects.length:0;
-  (p&&p.floors||[]).forEach(f=>{
-    if(f&&f.id!==p.activeFloorId&&Array.isArray(f.objects)) n+=f.objects.length;
-  });
-  return n;
+  return projectObjectLists(p).reduce((n,list)=>n+list.length,0);
 }
 /** 打开工程库中的工程：先构建候选 → 准备资产 → 原子替换；任何失败保持当前现场（审计 P1-9） */
 async function openProjectById(id){
@@ -269,7 +265,7 @@ async function openProjectById(id){
     selectedIds.clear(); prevSelected.forEach(x=>selectedIds.add(x)); draft=prevDraft;
     throw e;
   }
-  afterStateLoaded(); scheduleSave();
+  await afterStateLoaded(); scheduleSave();
   return state;
 }
 async function renameProjectById(id,name){
@@ -538,17 +534,30 @@ async function ensureBackgroundAsset(st){
   }catch(e){ /* 保留 dataUrl，渲染层兼容该退化形态 */ }
 }
 /**
+ * 工程内全部对象列表（当前楼层 + 其余楼层）。
+ * 凡是“遍历对象”的工程级逻辑都必须用它，不能只扫 state.objects，否则非当前楼层会被静默漏掉（A-10）。
+ * @returns {Array<Array<object>>}
+ */
+function projectObjectLists(st){
+  const out=[];
+  if(st&&Array.isArray(st.objects)) out.push(st.objects);
+  (st&&st.floors||[]).forEach(f=>{ if(f&&f.id!==st.activeFloorId&&Array.isArray(f.objects)) out.push(f.objects); });
+  return out;
+}
+/**
  * JSON 工程内嵌的设备照片（dataUrl）→ 内容寻址资产库，并记录 photoId。
  * 与底图同样策略：IDB 不可用时保留 dataUrl（面板仍可显示），导入不失败。
+ * 全楼层处理并按内容哈希去重，避免同一张照片在多个楼层重复入库（A-10）。
  */
 async function ensureObjectPhotoAssets(st){
-  for(const o of (st&&st.objects)||[]){
+  const done=new Set();
+  for(const list of projectObjectLists(st)) for(const o of list){
     const du=o&&o.props&&o.props.photoDataUrl;
     if(!du) continue;
     try{
       const bin=dataUrlToBytes(du);
       const id=assetIdFor(bin.bytes);
-      await assetPut(id,{bytes:bin.bytes,mime:bin.mime||'image/jpeg'});
+      if(!done.has(id)){ await assetPut(id,{bytes:bin.bytes,mime:bin.mime||'image/jpeg'}); done.add(id); }
       o.props.photoId=id;
       delete o.props.photoDataUrl;
     }catch(_){ /* 保留 dataUrl，照片仍可在当前会话查看 */ }

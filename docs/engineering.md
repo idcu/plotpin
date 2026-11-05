@@ -117,8 +117,8 @@ node scripts/e2e.mjs               浏览器级测试（可选，devDependency�
 | `heapUsed` | ≤ 64 MB | 14.48–19.52 MB | bench 结束时读数，不含长跑斜率 |
 | 覆盖率分析 | ≤ 300 ms | 7.4–14.4 ms | 1000×1000m + 30 摄像头 |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 750 KB | 683.7 KB | 留约 10% 余量 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `bbb731d3…` | 从源重建、二次构建确定性一致 |
+| 单文件体积 | ≤ 750 KB | 684.6 KB | 留约 10% 余量 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `1926f0b7…` | 从源重建、二次构建确定性一致 |
 | CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 36 = 36 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
 | 断言数 | ≥ 1765 且 0 失败 | 1765 | 只增不减 |
 
@@ -135,7 +135,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | 文件 | 守什么 |
 |---|---|
 | `smoke.spec.mjs` | 页面加载无脚本错误 / 入口无远程引用 / CSP 声明；点工具落点与选择命中；JSON 导出真实下载可解析 |
-| `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删）；非法 JSON 导入失败后当前工程/撤销栈/选择不变 |
+| `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删）；非法 JSON 导入失败后现场不变；跨楼层照片导出/导入不丢 |
 | `csp.spec.mjs` | 4 条注入路径（导入 JSON / 旧存档 / 插件注册 / 类型列表渲染）在浏览器中确实无法执行 JS |
 | `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层、切换楼层后刷新与操作后状态一致 |
 | `interaction.spec.mjs` | 单击对象不落盘/不清覆盖率/不留空撤销快照；拖拽中 Esc 回滚到原位 |

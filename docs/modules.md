@@ -65,6 +65,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | ``modalBody`…` / safeHTML(html)`` | `js/features/ui-shell.js`（模态正文模板：插值默认转义；`safeHTML` 仅用于内部已逐项转义的片段） | `openProjectLibrary`、`openCollabPanel`；新增模态优先用 `modalBody`，禁止拼接未转义的用户数据 |
 | `sanitizeSiteStyle(raw)` | `js/core/persistence.js`（场地样式白名单唯一实现：`fill/stroke` 颜色、`fillAlpha`、`strokeWidth`） | `sanitizeSite`（载入/导入/合并）；导出层 `xmlEscape` 为第二道防线 |
 | `buildProject(p) / countProjectObjects(p)` | `js/core/persistence.js`（JSON→工程候选对象；不写全局 `state` / 对象总数统计） | `importJsonFile`、`openProjectById`、`duplicateProjectById` 的“先校验后替换”事务；`migrateProject` 仍 = `buildProject` + 立即替换 |
+| `projectObjectLists(st)` | `js/core/persistence.js`（工程级遍历对象的唯一入口：当前楼层 + 其余楼层） | `ensureObjectPhotoAssets`（全楼层照片转存）、`countProjectObjects`、JSON 导出（全楼层照片内嵌）；禁止工程级逻辑只扫 `state.objects` |
 | `importLimitErrors(spec) / importLimitMessage(errs)` | `js/core/config.js`（导入限值唯一校验入口与中文提示） | JSON/CSV/TSV/XLSX/DXF/PDF/图片/合并导入；限值来自 `APP_LIMITS` |
 | `markSurfaceSize(canvas, cssW, cssH) / surfaceCssSize(ctx)` | `js/core/render.js`（绘图表面逻辑尺寸的唯一来源） | `drawScreenTag` 的夹边、离屏静态层、PNG/PDF 导出画布。离屏 canvas 的 `clientWidth` 恒为 0，必须用登记尺寸，否则屏幕标签被压到 (2,2) |
 

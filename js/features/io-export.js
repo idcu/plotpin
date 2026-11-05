@@ -86,13 +86,18 @@ async function exportJSON(){
   const copy=persistableState();
   copy.meta.updatedAt=state.meta.updatedAt;
   if(bgDataUrl && isImageBackground(copy.background)) copy.background.dataUrl=bgDataUrl;
-  /* 设备照片同样内嵌 dataUrl，跨设备导入后由 ensureObjectPhotoAssets 转回资产库 */
-  for(const o of copy.objects||[]){
-    const id=o.props&&o.props.photoId;
+  /* 设备照片同样内嵌 dataUrl：遍历全楼层，同一 photoId 只读一次资产（A-10） */
+  const photoDataUrls=new Map();
+  for(const list of projectObjectLists(copy)) for(const o of list||[]){
+    const id=o&&o.props&&o.props.photoId;
     if(!id) continue;
     try{
-      const rec=await assetGet(id);
-      if(rec) o.props.photoDataUrl=bytesToDataUrl(rec.bytes,rec.mime||'image/jpeg');
+      if(!photoDataUrls.has(id)){
+        const rec=await assetGet(id);
+        photoDataUrls.set(id,rec?await bytesToDataUrl(rec.bytes,rec.mime||'image/jpeg'):'');
+      }
+      const du=photoDataUrls.get(id);
+      if(du) o.props.photoDataUrl=du;
     }catch(_){}
   }
   /* 非当前楼层的底图也内嵌，保证多楼层工程跨设备可移植 */
@@ -102,7 +107,7 @@ async function exportJSON(){
     if(!bg||!bg.assetId) continue;
     try{
       const rec=await assetGet(bg.assetId);
-      if(rec) bg.dataUrl=bytesToDataUrl(rec.bytes,rec.mime||'image/png');
+      if(rec) bg.dataUrl=await bytesToDataUrl(rec.bytes,rec.mime||'image/png');
     }catch(_){}
   }
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
