@@ -71,3 +71,25 @@
   - 场地多边形节点行仍不支持抓手拖拽排序（沿用 ↑↓），与旧场地实现一致；Phase 3B 再评估是否开启。
   - 图层隐藏导致取景框收缩属于行为变化，需在下一轮回归中关注用户习惯（已在 features.md 写明）。
 
+## 2026-11-05 · Phase 3A：校准控制点可拖拽/增删/撤销，提交时才求解
+
+- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **核心改动点**
+  - 比例尺校准不再在第二次点击时立刻弹距离输入：落点只记录控制点，`Enter` / 左侧 ✓ / 双击才提交；提交时才 `finishCalibration` 换算出 `metersPerPixel` 并 `scaleWorldAround`。
+  - 校准控制点统一可编辑：`calibHitAt(sp)` 按屏幕 9px 命中；比例尺点拖拽改世界坐标；仿射红点拖拽改图上像素 `(u,v)`、绿点拖拽改实地坐标 `(x,y)`；选中点画橙色环。
+  - `Delete/Backspace` 删除选中控制点；`Ctrl+Z` 在校准工具下优先回退控制点专用栈（`calibUndoStack`），不影响工程撤销；右键/Esc 取消整组校准并清空控制点。
+  - 仿射仍只在 `finishAffine` 提交时调用 `solveImageAffine` 与 `migrateObjectsByAffine`，拖拽/增删过程不迁移任何对象。
+  - 载入/撤销/重做（`afterStateLoaded`）与工具切换同步清空 `calibSelection/calibUndoStack`。
+  - 工具提示与中英文案同步更新（i18n 键成对改动）。
+- **公共抽象**
+  - 新增 `calibSnapshot / calibPushUndo / calibUndo / calibHitAt`（`interaction.js`），状态 `calibSelection / calibUndoStack` 收口在 `model.js`。
+  - 未改动 `solveImageAffine / migrateObjectsByAffine / finishAffine / finishCalibration` 的对外签名。
+- **实测验证数据（本机实测）**
+  - `node scripts/check.mjs`：通过（26 脚本语法/入口资源/离线/契约/API/分层，含中英键对齐）。
+  - `node scripts/selftest.mjs`：1558 通过 / 0 失败。
+  - `node scripts/bench.mjs`（2000 对象 / 1600×900）：静态层重建 21.54 ms；缓存命中 0.35 ms、P95 0.48 ms（< 8 ms）；直接全量 20.70 ms；heapUsed 13.13 MB；视口裁剪 99.4%；覆盖率分析 7.3 ms（< 300 ms）。
+- **遗留 TODO / 风险**
+  - 自测框架不模拟画布指针事件，控制点拖拽/Delete/Ctrl+Z 目前只有静态逻辑覆盖，需在浏览器中人工回归一次（校准工具：落点→拖动→Delete→Ctrl+Z→Enter）。
+  - 比例尺校准由「第二点自动提交」改为「显式提交」，属于交互行为变化，老用户可能找不到提交入口；已把工具提示与 features.md 写清楚，并保留双击提交。
+
+

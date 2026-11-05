@@ -21,6 +21,8 @@ let saveTimer = null;
 let dpr = 1;
 let coverageResult = null;   /* 视场覆盖率分析结果（含逐区域栅格），供画布叠加层与报告弹窗；对象/底图变更后清空 */
 let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(u,v y-down) → 实地(x,y y-up) */
+let calibSelection = null;   /* 校准中选中的控制点：{kind:'calibrate'|'affine',part?,index} */
+let calibUndoStack = [];     /* 校准控制点专用撤销栈（增/删/拖拽提交前快照；不污染工程撤销历史） */
 
 /* -------------------- 类型契约（JSDoc，供编辑器提示；不引入 TypeScript 依赖） -------------------- */
 /**

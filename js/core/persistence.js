@@ -816,6 +816,7 @@ function loadImageSrc(src){
 async function afterStateLoaded(fit=true){
   const seq=++bgLoadSeq;
   bgImage=null; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
+  calibSelection=null; calibUndoStack=[];                          /* 校准控制点的选中态与专用撤销栈同样清空 */
   invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
   resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
   if(typeof clearGuides==='function') clearGuides();   /* 临时参考线随工程载入/撤销清空，避免坐标错位 */

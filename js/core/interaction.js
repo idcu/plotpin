@@ -15,8 +15,9 @@ function syncToolButtons(tool){
 const TOOL_TITLES={
   select:'选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）',pan:'平移：拖拽移动画布',point:'点设备：单击放置（自动捕捉特征点，设置可关）',
   rect:'区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消',line:'折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）',
-  text:'文字：单击输入文字内容',dimension:'尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击',calibrate:'比例尺：依次点击图上两个已知点',
-  affine:'仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；按 Enter 或左侧 ✓ 求解，右键/Esc 取消',
+  text:'文字：单击输入文字内容',dimension:'尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击',
+  calibrate:'比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用',
+  affine:'仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消',
   'site-rect':'绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消',
   'site-circle':'绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消',
   'site-ellipse':'绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消',
@@ -34,6 +35,7 @@ function setTool(tool){
   if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
   else if(tool==='dimension'&&$('dimensionType').value==='ruler'){ $('dimensionType').value='distance'; }
   currentTool=tool; draft=null; calibPoints=[]; affinePairs=[]; rubber=null; drag=null;
+  calibSelection=null; calibUndoStack=[];
   lastCanvasHandledAt=0; lastCanvasPointerUpAt=0;
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   syncToolButtons(tool);
@@ -217,8 +219,9 @@ canvas.addEventListener('pointerdown',e=>{
   if(pinch||touchArm) return;   /* 手势进行中/收尾中：后续手指不再触发放置或框选 */
   const wp=resolveWorldPoint(e);
   /* 逐点录入中（测距/折线/标注/多边形场地）右键=取消当前草稿（百度地图式），已完成的测量不受影响；无草稿时右键仍平移 */
-  if(e.button===2 && (draft?.points?.length || (currentTool==='affine'&&affinePairs.length))){
-    if(currentTool==='affine'&&affinePairs.length){ affinePairs=[]; e.preventDefault(); requestRender(); toast('已取消仿射校准'); return; }
+  if(e.button===2 && (draft?.points?.length || (currentTool==='affine'&&affinePairs.length) || (currentTool==='calibrate'&&calibPoints.length))){
+    if(currentTool==='affine'&&affinePairs.length){ affinePairs=[]; calibSelection=null; calibUndoStack=[]; e.preventDefault(); requestRender(); toast('已取消仿射校准'); return; }
+    if(currentTool==='calibrate'&&calibPoints.length){ calibPoints=[]; calibSelection=null; calibUndoStack=[]; e.preventDefault(); requestRender(); toast('已取消比例尺校准'); return; }
     const wasRuler=draft.kind==='dimension'&&draft.subtype==='ruler';
     draft=null; e.preventDefault(); requestRender();
     toast(wasRuler?'已取消测距':'已取消当前绘制');
@@ -228,12 +231,18 @@ canvas.addEventListener('pointerdown',e=>{
     drag={type:'pan',start:sp,pan:deepClone(state.viewport)}; document.body.classList.add('panning'); e.preventDefault(); return;
   }
   if(currentTool==='calibrate'){
-    if(calibPoints.length>=2) return;
-    calibPoints.push(pointerWorld(e));
-    if(calibPoints.length===2) finishCalibration();
-    requestRender(); return;
+    if(!isImageBackground(state.background)){ toast('比例尺校准需要先载入图片底图','warn'); return; }
+    const hit=calibHitAt(sp);
+    if(hit){ calibPushUndo(); calibSelection=hit; drag={type:'calibPoint',hit,moved:false}; requestRender(); return; }
+    if(calibPoints.length>=2){ toast('已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点','warn'); return; }
+    calibPushUndo(); calibPoints.push(pointerWorld(e)); calibSelection=null; requestRender(); return;
   }
-  if(currentTool==='affine'){ pickAffinePoint(e); return; }
+  if(currentTool==='affine'){
+    if(!isImageBackground(state.background)){ toast('仿射校准需要先载入图片底图','warn'); return; }
+    const hit=calibHitAt(sp);
+    if(hit){ calibPushUndo(); calibSelection=hit; drag={type:'calibPoint',hit,moved:false}; requestRender(); return; }
+    pickAffinePoint(e); return;
+  }
   if(['site-rect','site-circle','site-ellipse','site-sector','site-parallelogram'].includes(currentTool)){
     const kindMap={'site-rect':'siteRect','site-circle':'siteCircle','site-ellipse':'siteEllipse','site-sector':'siteSector','site-parallelogram':'siteParallelogram'};
     draft={kind:kindMap[currentTool],start:wp,current:wp,pending:true};
@@ -380,6 +389,18 @@ canvas.addEventListener('pointermove',e=>{
     syncFramePan();               /* 形状变更后取景框随实际包围盒更新，pan 补偿使其它内容保持不动 */
     requestRender(); return;
   }
+  if(drag?.type==='calibPoint'){
+    const hit=drag.hit;
+    if(hit.kind==='calibrate'){ calibPoints[hit.index]=wp.slice(); }
+    else{
+      const p=affinePairs[hit.index];
+      if(p){
+        if(hit.part==='src'){ const px=bgWorldToPixel(state.background,wp); p.u=px[0]; p.v=px[1]; }
+        else { p.x=wp[0]; p.y=wp[1]; }
+      }
+    }
+    drag.moved=true; requestRender(); return;
+  }
   if(draft && draft.points){ draft.current=wp; requestRender(); }
   if(draft && ['rect','siteRect','siteCircle','siteEllipse','siteSector','siteParallelogram','areaCircle','areaEllipse','areaSector','areaParallelogram'].includes(draft.kind)){
     draft.current=wp; if(['rect','areaParallelogram'].includes(draft.kind)&&e.buttons===1) draft.pending=false; requestRender();
@@ -399,6 +420,10 @@ canvas.addEventListener('pointerup',e=>{
   }
   if(activePointers.size===0) touchArm=false;
   if(drag?.type==='pan'){ drag=null; document.body.classList.remove('panning'); return; }
+  if(drag?.type==='calibPoint'){
+    if(!drag.moved) calibUndoStack.pop();   /* 仅点选未拖动：弹出未变更的撤销快照 */
+    drag=null; requestRender(); return;
+  }
   if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
     const isSite=drag.type==='siteHandle';
     const changed=isSite
@@ -436,6 +461,7 @@ function dedupeDblClickPoint(){
   return true;
 }
 canvas.addEventListener('dblclick',e=>{
+  if(currentTool==='calibrate'){ finishDraft(); return; }
   if(draft&&draft.kind==='sitePolygon'){ dedupeDblClickPoint(); finishSiteDraft(); }
   else if(draft && draft.points && draft.points.length>1){
     dedupeDblClickPoint();
@@ -617,6 +643,7 @@ canvas.addEventListener('click',e=>{
 
 function finishDraft(){
   if(currentTool==='affine'){ finishAffine(); return; }
+  if(currentTool==='calibrate'){ finishCalibration(); return; }
   if(!draft) return;
   if(draft.kind==='sitePolygon') return finishSiteDraft();
   if(draft.kind==='rect'){
@@ -725,8 +752,42 @@ async function finishSiteDraft(){
     setTool('select'); requestRender();
   }
 }
+/* -------------------- 校准控制点：快照 / 撤销 / 命中 --------------------
+ * 校准点属于「未提交的临时输入」，不进工程撤销历史：增/删/拖拽前压入独立栈，
+ * Ctrl+Z 在校准工具下优先回退控制点，提交（Enter/✓）后才真正求解并迁移对象。 */
+function calibSnapshot(){ return {calib:calibPoints.map(p=>p.slice()), affine:affinePairs.map(p=>({...p}))}; }
+function calibPushUndo(){
+  calibUndoStack.push(calibSnapshot());
+  if(calibUndoStack.length>50) calibUndoStack.shift();
+}
+function calibUndo(){
+  const s=calibUndoStack.pop();
+  if(!s) return false;
+  calibPoints=s.calib; affinePairs=s.affine; calibSelection=null; requestRender(); return true;
+}
+/** 命中校准控制点（屏幕 9px，与对象/场地手柄同阈值）：比例尺点；仿射的红点(源)与绿点(目标) */
+function calibHitAt(sp){
+  if(currentTool==='calibrate'){
+    for(let i=0;i<calibPoints.length;i++){
+      const s=w2s(calibPoints[i]);
+      if(Math.hypot(s[0]-sp[0],s[1]-sp[1])<=9) return {kind:'calibrate',index:i};
+    }
+    return null;
+  }
+  if(currentTool==='affine'&&isImageBackground(state.background)){
+    for(let i=0;i<affinePairs.length;i++){
+      const p=affinePairs[i];
+      const src=w2s(bgPixelToWorld(state.background,[p.u,p.v]));
+      if(Math.hypot(src[0]-sp[0],src[1]-sp[1])<=9) return {kind:'affine',part:'src',index:i};
+      const dst=w2s([p.x,p.y]);
+      if(Math.hypot(dst[0]-sp[0],dst[1]-sp[1])<=9) return {kind:'affine',part:'dst',index:i};
+    }
+  }
+  return null;
+}
 async function finishCalibration(){
   if(!isImageBackground(state.background)){ calibPoints=[]; setTool('select'); toast('比例尺校准仅适用于图片底图','warn'); return; }
+  if(calibPoints.length<2){ toast('比例尺校准需要 2 个控制点（当前 '+calibPoints.length+' 个）','warn'); return; }
   const old=dist(calibPoints[0],calibPoints[1]);
   if(old<EPS){ calibPoints=[]; return; }
   const value=await showPrompt({title:L('比例尺校准'),label:L('两点之间的实际距离（米）'),value:fmt(old)});
@@ -888,7 +949,7 @@ window.addEventListener('keydown',e=>{
   /* 弹窗优先：Esc 在输入框内也能关闭；Tab 在弹窗内循环；其余快捷键不穿透遮罩 */
   if($('modalBackdrop').classList.contains('show')){ modalKeydown(e); return; }
   if(typing) return;
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!e.shiftKey&&(currentTool==='calibrate'||currentTool==='affine')&&calibUndo()) return; e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
@@ -901,6 +962,12 @@ window.addEventListener('keydown',e=>{
       if(removeLastGuideLine()){ toast('已删除上一条参考线'); e.preventDefault(); requestRender(); return; }
     }
   }
+  if((e.key==='Delete'||e.key==='Backspace')&&calibSelection&&(currentTool==='calibrate'||currentTool==='affine')){
+    calibPushUndo();
+    if(calibSelection.kind==='calibrate') calibPoints.splice(calibSelection.index,1);
+    else affinePairs.splice(calibSelection.index,1);
+    calibSelection=null; requestRender(); return;
+  }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }
@@ -909,7 +976,7 @@ window.addEventListener('keydown',e=>{
     if(cancelActiveDrag()){ requestRender(); return; }   /* 拖拽中 Esc：恢复到按下前，不动选择集 */
     draft=null; selectedIds.clear(); setTool('select'); refreshUI(); return;
   }
-  if(e.key==='Enter'&&onCanvas&&(currentTool==='affine'||(draft&&draft.points))){ finishDraft(); return; }
+  if(e.key==='Enter'&&onCanvas&&(currentTool==='affine'||currentTool==='calibrate'||(draft&&draft.points))){ finishDraft(); return; }
   if(e.key==='Backspace'&&onCanvas&&draft?.points?.length){ draft.points.pop(); requestRender(); return; }
   if(e.code==='Space'&&onCanvas){ e.preventDefault(); spaceDown=true; document.body.classList.add('panning'); canvas.style.cursor='grabbing'; return; }
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)&&selectedIds.size&&onCanvas){

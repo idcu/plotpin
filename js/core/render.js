@@ -927,7 +927,8 @@ function drawRubber(c){
 }
 function drawCalibration(c,toS){
   if(currentTool==='affine'){
-    /* 仿射校准：红点=图上已记录的像素位置，绿点=用户输入的实地坐标，虚线示意两者偏差 */
+    /* 仿射校准：红点=图上已记录的像素位置，绿点=用户输入的实地坐标，虚线示意两者偏差；
+       选中控制点画橙色环（可拖拽红点改像素、拖拽绿点改实地坐标，Delete 删除） */
     affinePairs.forEach((p,i)=>{
       const src=toS(bgPixelToWorld(state.background,[p.u,p.v])), dst=toS([p.x,p.y]);
       c.save();
@@ -935,6 +936,10 @@ function drawCalibration(c,toS){
       c.beginPath(); c.moveTo(src[0],src[1]); c.lineTo(dst[0],dst[1]); c.stroke(); c.setLineDash([]);
       c.fillStyle='#dc2626'; c.beginPath(); c.arc(src[0],src[1],5,0,Math.PI*2); c.fill();
       c.fillStyle='#16a34a'; c.beginPath(); c.arc(dst[0],dst[1],5,0,Math.PI*2); c.fill();
+      if(calibSelection&&calibSelection.kind==='affine'&&calibSelection.index===i){
+        const q=calibSelection.part==='dst'?dst:src;
+        c.strokeStyle='#f59e0b'; c.lineWidth=2; c.beginPath(); c.arc(q[0],q[1],8,0,Math.PI*2); c.stroke();
+      }
       c.fillStyle='#111827'; c.font='11px Consolas,Menlo,monospace'; c.fillText('A'+(i+1),src[0]+8,src[1]-8);
       c.restore();
     });
@@ -943,6 +948,9 @@ function drawCalibration(c,toS){
   if(currentTool!=='calibrate') return;
   calibPoints.forEach((p,i)=>{
     const s=toS(p); c.fillStyle=i?'#16a34a':'#dc2626'; c.beginPath(); c.arc(s[0],s[1],6,0,Math.PI*2); c.fill();
+    if(calibSelection&&calibSelection.kind==='calibrate'&&calibSelection.index===i){
+      c.strokeStyle='#f59e0b'; c.lineWidth=2; c.beginPath(); c.arc(s[0],s[1],9,0,Math.PI*2); c.stroke();
+    }
     c.fillStyle='#111827'; c.fillText('P'+(i+1),s[0]+9,s[1]-9);
   });
   if(calibPoints.length===2){

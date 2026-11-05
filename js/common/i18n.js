@@ -238,9 +238,10 @@
     '文字：单击输入文字内容':'Text: click to enter text',
     '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
-    '比例尺：依次点击图上两个已知点':'Scale: click two known points on the drawing',
-    '仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；按 Enter 或左侧 ✓ 求解，右键/Esc 取消':
-      'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); press Enter or ✓ to solve, right-click/Esc cancels',
+    '比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用':
+      'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
+    '仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消':
+      'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); red/green control points are draggable, Delete removes, Ctrl+Z undoes, press Enter or ✓ to solve, right-click/Esc cancels',
     '绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消':
       'Draw rectangle site: drag the diagonal (Shift = square), release to finish, Esc cancels',
     '绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消':
