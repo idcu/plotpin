@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-09 导入事务化与统一限值
+
+- **Commit Hash**：`2fc7606`（feat(import): 导入事务化与统一 APP_LIMITS 限值校验）。
+- **核心改动点**
+  - `buildProject(p)`：从 `migrateProject` 拆出，构建候选工程**不写全局 `state`**；`migrateProject` = 构建 + 立即替换（旧语义不变）。
+  - `importJsonFile` / `openProjectById`：候选构建 → 限值校验 → 资产准备 → **原子替换**；提交阶段（`pruneBgAssets`）失败时回滚工程、撤销栈、选择与草稿。
+  - `duplicateProjectById`：直接用 `buildProject`，删除原来“先存 `state` 再还原”的 hack。
+  - `APP_LIMITS`：文件 32MB、文本 32M 字符、表格 2 万行、实体 10 万、对象 10 万、单图 40MP、单资产 16MB、历史栈 20、墓碑 2000；新增 `importLimitErrors / importLimitMessage` 统一校验与中文提示，覆盖 JSON/CSV/TSV/XLSX/DXF/PDF/图片/合并导入。
+  - 底图导入：像素校验、dataUrl 生成、解码全部在改现场之前完成；`assetPut` 增加单资产字节上限。
+  - `scripts/selftest.mjs` §70（13 断言）；`tests/e2e/persistence.spec.mjs` 新增“非法 JSON 导入后现场不变”。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1765 通过 / 0 失败**（1756 + 13，含 9 条新断言前序合计）。
+  - `node scripts/e2e.mjs`：**17 passed / 0 failed（20.2s）**。
+  - `node scripts/bench.mjs`：avg **0.41 ms** / P95 **0.65 ms** / P99 1.23 ms / 重建 **30.3 ms** / 直接全量 27.54 ms / heapUsed **19.52 MB** / 覆盖率 **9.7 ms** / 裁剪 99.4%，全部达标。
+  - `node scripts/build.mjs --check`：**683.7 KB ≤ 750 KB**，SHA256 `bbb731d3049eda50d2c9bb99a7cc02268c8a2ec3f6a1ef44c52d27f73e76d048`。
+- **公共抽象 / 影响面**
+  - `buildProject / countProjectObjects`、`importLimitErrors / importLimitMessage` 登记到 `docs/modules.md`。
+  - 行为变化：导入失败不再静默“半导入”；超限文件/表格/图形/对象数在入口即被拒绝并给出中文原因。正常工程的导入语义与方法不变（仍清空撤销栈、不接管 `projectId`）。
+  - `pushHistory` 与墓碑截断改用 `APP_LIMITS.HISTORY_MAX / TOMBSTONE_MAX`，数值未变。
+  - 未新增运行时依赖，未改 schema。
+- **遗留 TODO / 风险**
+  - 提交阶段只有 `pruneBgAssets` 可能抛错；其余失败都在替换前发生。若 IDB 在替换后失败，回滚会重新装载旧底图，极端情况下会短暂闪回一次旧画面。
+  - XLSX 在解析后才做行数校验（解析本身已受文件 32MB 上限约束）；如需更早拦截可在解压前校验条目数。
+
 ## 2026-11-06 · A-08 转义与场地样式白名单
 
 - **Commit Hash**：`3532fa5`（fix(security): SVG/模态统一转义并白名单清洗场地样式）。
