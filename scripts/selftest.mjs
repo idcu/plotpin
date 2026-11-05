@@ -95,10 +95,12 @@ code += `\n;globalThis.__api = {
   createInitialState, migrateProject, baseObject,
   polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
-  boundsIntersect, scaleWorldAround, reachableBgAssetIds,
+  boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
   translateObject, alignObjects, distributeObjects, objectBounds,
   renumberObjects, restackObjects, allObjectNames,
   get history(){ return history; },
+  get clipboard(){ return clipboard; }, setClipboard(v){ clipboard=v; },
+  get drag(){ return drag; }, setDrag(v){ drag=v; },
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
@@ -1406,6 +1408,43 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('资产-无栈时仅当前', api.reachableBgAssetIds(), ['CUR']);
   api.state.background.assetId='';
   eq('资产-无引用空集合', api.reachableBgAssetIds().length, 0);
+}
+
+/* 32.1 资产可达集：命名空间覆盖历史/剪贴板/拖拽/多个工程记录（审计 P0-1） --- */
+{
+  api.resetState();
+  api.history.past.length=0; api.history.future.length=0;
+  api.setClipboard([]); api.setDrag(null);
+
+  const refs=api.ContentAssets.collectAssetRefs({
+    background:{assetId:'bg_top'},
+    objects:[{props:{photoId:'as_top_photo'}},{props:{}},{}],
+    floors:[{id:'f1',background:{assetId:'bg_floor'},objects:[{props:{photoId:'as_floor_photo'}}]}]
+  });
+  eq('可达-快照含顶层/楼层底图与照片', refs.slice().sort(), ['as_floor_photo','as_top_photo','bg_floor','bg_top'].sort());
+  eq('可达-无快照返回空', api.ContentAssets.collectAssetRefs(null), []);
+
+  api.state.background.assetId='CUR';
+  api.setClipboard([{props:{photoId:'clip_photo'},kind:'point',name:'C'}]);
+  api.setDrag({originals:new Map([['x',{props:{photoId:'drag_photo'}}]])});
+  const sets=api.assetRefsInMemory();
+  ok('可达-草稿命名空间', (sets.get('draft')||[]).includes('CUR'));
+  ok('可达-剪贴板命名空间', (sets.get('clipboard')||[]).includes('clip_photo'));
+  ok('可达-拖拽命名空间', (sets.get('drag.originals')||[]).includes('drag_photo'));
+
+  /* 双工程保活：A/B 各带底图与照片 → 并集全部保留；删除 B 的记录后只剩 A。
+     并集正是 prune 的 keepIds 输入，跨工程误删由此杜绝。 */
+  const ns=api.assetRefsInMemory();
+  ns.set('project:A', api.ContentAssets.collectAssetRefs({background:{assetId:'bg_A'},objects:[{props:{photoId:'as_A_photo'}}]}));
+  ns.set('project:B', api.ContentAssets.collectAssetRefs({background:{assetId:'bg_B'},objects:[{props:{photoId:'as_B_photo'}}]}));
+  const keepBoth=api.unionAssetRefs(ns);
+  ok('双工程-并集保留A底图/照片', keepBoth.includes('bg_A')&&keepBoth.includes('as_A_photo'));
+  ok('双工程-并集保留B底图/照片', keepBoth.includes('bg_B')&&keepBoth.includes('as_B_photo'));
+  ns.delete('project:B');
+  const keepA=api.unionAssetRefs(ns);
+  ok('双工程-删除B记录后只回收B资产', keepA.includes('bg_A')&&keepA.includes('as_A_photo')&&!keepA.includes('bg_B')&&!keepA.includes('as_B_photo'));
+
+  api.setClipboard([]); api.setDrag(null); api.resetState();
 }
 
 /* 33. 捕捉包围盒粗筛：500 个远处矩形不影响 tol 内交点/垂足命中（性能优化不改变结果） --- */

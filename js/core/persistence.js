@@ -1,25 +1,64 @@
 /* persistence.js —— 历史栈、IndexedDB 工程库、底图资产桥接、自动保存、迁移清洗、底图装载 */
 /* -------------------- 历史 / 保存 -------------------- */
-/** 当前工程与撤销/重做栈中所有仍被引用的底图与设备照片资产 ID（快照可达集合）。
- *  资产垃圾回收只能删这个集合之外的资产，否则撤销到旧背景时二进制已丢失（评估报告 5.2） */
-function reachableBgAssetIds(){
-  const ids=new Set();
-  const addPhoto=o=>{ const pid=o&&o.props&&o.props.photoId; if(pid) ids.add(pid); };
-  const add=s=>{
-    if(!s) return;
-    const id=s.background&&s.background.assetId; if(id) ids.add(id);
-    (s.floors||[]).forEach(f=>{
-      const fid=f&&f.background&&f.background.assetId; if(fid) ids.add(fid);
-      (f&&f.objects||[]).forEach(addPhoto);
-    });
-    (s.objects||[]).forEach(addPhoto);
-  };
-  add(state);
-  (history.past||[]).forEach(add);
-  (history.future||[]).forEach(add);
-  return Array.from(ids);
+/**
+ * 资产可达集按**命名空间**分组：草稿、撤销/重做栈每一帧、剪贴板、拖拽原件，
+ * 以及自动保存草稿（IndexedDB `current`）与工程库每个 `proj:<id>` 记录。
+ * prune 只删「并集之外」的资产：任一命名空间仍引用就绝不删。
+ * 只扫当前 state + history 会永久删除其他工程的底图/照片（审计 P0-1）。
+ * @returns {Promise<Map<string,string[]>>}
+ */
+async function assetRefsByNamespace(){
+  const ns=assetRefsInMemory();
+  /* 读不到工程库就不动资产：宁可晚回收，也不能删掉看不见的工程 */
+  const keys=await idbAllKeys();
+  for(const key of keys){
+    if(key!=='current'&&!String(key).startsWith(PROJECT_PREFIX)) continue;
+    let rec=null;
+    try{ rec=await idbGetKey(key); }catch(_){ continue; }
+    const ids=ContentAssets.collectAssetRefs(rec);
+    if(ids.length) ns.set(key==='current'?'autosave':`project:${key.slice(PROJECT_PREFIX.length)}`,ids);
+  }
+  return ns;
 }
-function pruneBgAssets(){ assetPrune(reachableBgAssetIds()).catch(()=>{}); }
+/**
+ * 内存内可达集（同步、纯函数）：当前草稿 + 撤销/重做栈 + 剪贴板 + 拖拽原件。
+ * 覆盖 `history.past/future`、`clipboard`、`drag.originals` 三类易漏命名空间。
+ * @returns {Map<string,string[]>}
+ */
+function assetRefsInMemory(){
+  const ns=new Map();
+  const put=(name,snapshot)=>{
+    const ids=ContentAssets.collectAssetRefs(snapshot);
+    if(ids.length) ns.set(name,ids);
+  };
+  put('draft',state);
+  (history.past||[]).forEach((s,i)=>put(`history.past[${i}]`,s));
+  (history.future||[]).forEach((s,i)=>put(`history.future[${i}]`,s));
+  if(Array.isArray(clipboard)&&clipboard.length) put('clipboard',{objects:clipboard});
+  if(drag&&drag.originals instanceof Map) put('drag.originals',{objects:Array.from(drag.originals.values())});
+  return ns;
+}
+/** 内存命名空间可达并集（同步；自测与诊断用） */
+function reachableBgAssetIds(){
+  return unionAssetRefs(assetRefsInMemory());
+}
+/** 命名空间并集：prune 的唯一判据。纯函数，工程库记录由调用方读入后一并传入。 */
+function unionAssetRefs(namespaces){
+  const all=new Set();
+  if(namespaces) namespaces.forEach(list=>list.forEach(id=>all.add(id)));
+  return Array.from(all);
+}
+/** 全库可达并集（内存命名空间 ∪ 工程库记录；prune 的唯一输入） */
+async function reachableAssetIds(){
+  return unionAssetRefs(await assetRefsByNamespace());
+}
+/** 资产 GC：失败（含 IndexedDB 不可用）时**不删除任何资产** */
+async function pruneBgAssets(){
+  try{
+    const keep=await reachableAssetIds();
+    return await assetPrune(keep);
+  }catch(_){ return []; }
+}
 /** 撤销/重做按钮可用态：空栈即置灰（禁用），避免点击后无反馈 */
 function updateHistoryButtons(){
   const u=$('undoBtn'), r=$('redoBtn');
@@ -172,9 +211,8 @@ async function openProjectById(id){
   state=p;
   history={past:[],future:[]};
   selectedIds.clear(); draft=null;
-  const keepAsset=state.background.assetId;
   await ensureBackgroundAsset(state);
-  if(keepAsset) assetPrune(reachableBgAssetIds()).catch(()=>{});
+  await pruneBgAssets();
   afterStateLoaded(); scheduleSave();
   return state;
 }
@@ -202,7 +240,7 @@ async function duplicateProjectById(id){
 async function deleteProjectById(id){
   await idbDeleteKey(projectKey(id));
   if(state.meta?.projectId===id){ state.meta.projectId=''; refreshUI(); scheduleSave(); }
-  pruneBgAssets();
+  await pruneBgAssets();
 }
 
 /* -------------------- 底图资产：通用内容寻址库实例（实现见 common/content-assets.js） -------------------- */

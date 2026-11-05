@@ -3,7 +3,8 @@
 $('newBtn').onclick=()=>showConfirm(L('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？')).then(ok=>{
   if(!ok)return;
   state=createInitialState(); selectedIds.clear(); history={past:[],future:[]};
-  assetPrune([]).catch(()=>{});
+  /* 只回收「任何命名空间都不再引用」的资产：其他工程库记录仍可达，绝不清空整库 */
+  pruneBgAssets().catch(()=>{});
   afterStateLoaded(); scheduleSave(); toast('已新建工程','success');
 });
 /* 清空当前楼层：图片底图 / 矢量场地 / 业务对象与标注 / 校准草稿 / 选中态 / 取景框，

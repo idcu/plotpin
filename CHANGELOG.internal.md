@@ -2,6 +2,37 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-01 资产可达集 + 工程命名空间（禁止跨工程 prune）
+
+- **Commit Hash**：`PENDING`（fix(assets): 资产回收按命名空间取可达集，禁止跨工程误删底图/照片）。
+- **核心改动点**
+  - 新增公共抽象 `ContentAssets.collectAssetRefs(snapshot)`（`js/common/content-assets.js`）：一份工程快照里全部资产引用的**唯一**采集实现，覆盖顶层 `background.assetId`、各楼层 `background.assetId`、顶层与各楼层 `props.photoId`。纯函数、无副作用，GC 与自测共用同一份代码，杜绝「各扫各的」。
+  - `js/core/persistence.js`：把只扫 `state + history` 的旧 `reachableBgAssetIds()` 拆成三层——
+    - `assetRefsInMemory()`：同步、纯函数，产出**命名空间 → 资产 id 列表**：`draft`、`history.past[i]`、`history.future[i]`、`clipboard`、`drag.originals`；
+    - `assetRefsByNamespace()`：在上者基础上读 IndexedDB 全部键，`current` → `autosave`、`proj:<id>` → `project:<id>`，逐个 `collectAssetRefs`；
+    - `unionAssetRefs(namespaces)`：并集，**prune 的唯一判据**；`reachableAssetIds()` / `pruneBgAssets()` 基于并集。
+    - `pruneBgAssets()` 读不到工程库时（异常）**不删除任何资产**，`assetPrune` 失败也不再吞掉后静默删库。
+  - 三处调用方从「清空整库」改为「按全库可达集回收」：`js/features/io.js`（新建工程，原 `assetPrune([])`）、`js/features/io-import.js`（导入工程，原 `assetPrune([keepAsset])`）、`openProjectById` / `deleteProjectById`（原只保留当前底图）。
+- **实测验证数据（本机 Windows / Node，2026-11-06）**
+  - `node scripts/selftest.mjs`：**1627 通过 / 0 失败**（+8 项，全部为本次新增断言）。
+  - 新增断言覆盖（selftest §32.1）：
+    - 快照采集：顶层/楼层底图 + 顶层/楼层照片 4 类 id 全部命中；`null` 快照返回空。
+    - 命名空间：`draft` / `clipboard` / `drag.originals` 各自命中（旧实现漏掉后两者）。
+    - 双工程保活：A/B 各带底图+照片 → 并集 4 个 id 全保留；删除 `project:B` 记录后并集只剩 A 的 2 个 → **B 的资产可回收、A 的不受影响**（跨工程误删的反向证明）。
+  - `node scripts/check.mjs --selftest`：通过（`--selftest 已执行：1627 通过 / 0 失败`）。
+  - `node scripts/bench.mjs`：avg 0.33–0.41ms / P95 0.43–0.66ms（≤3）/ 重建 21.7–39.3ms（≤60）/ heapUsed 12.09–19.09MB（≤64）/ 裁剪 99.4%，连续 3 次全部通过。
+  - `node scripts/build.mjs --check`：665.0KB ≤ 750KB，SHA256 `c4a27f5…` 与登记值一致，二次构建确定性一致。
+  - README 断言数经 `node scripts/badge.mjs` 同步为 1627（三处锚点一致）。
+- **公共抽象 / 影响面**
+  - 新增：`ContentAssets.collectAssetRefs`、`assetRefsInMemory`、`assetRefsByNamespace`、`unionAssetRefs`。
+  - 保留：`reachableBgAssetIds()`（语义收窄为「内存命名空间并集」，同步）；`pruneBgAssets()` 变为 async（原为 fire-and-forget 包装）。
+  - **影响调用方**：`io.js`、`io-import.js`、`persistence.js` 内部四处；`pruneBgAssets()` 现返回 Promise，调用方均已 `await`/`.catch`。无对外 API（`PlotPin.*`）变化。
+- **遗留 TODO / 风险**
+  - 回收时机仍是「打开/新建/导入/删除工程」的事件驱动，没有配额上限与 LRU；工程库很多时 `prune` 需遍历全部记录（每次 O(工程数)，当前规模可接受，未做索引）。
+  - `drag.originals` 只在拖拽进行中非空；若拖拽中途崩溃，未落盘的资产会在下次启动后被回收（属预期，无数据损失，仅需重导底图）。
+  - 照片附件资产（`props.photoId`）此前完全不在可达集内，本次一并纳入；但照片写入路径（`photoId` 生成）未在本轮验证，需在 A-04 的存储 v2 中复核。
+
+
 ## 2026-11-06 · A-13 质量门禁去假绿
 
 - **Commit Hash**：`4605c0d`（test(gates): 门禁去假绿——P95/heap/重建阈值、产物哈希比对、缺文件必失败、门禁牙齿自测）。

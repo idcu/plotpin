@@ -30,6 +30,33 @@
   }
 
   /**
+   * 收集一份工程快照（state 结构）引用的全部资产 id。
+   * 覆盖：顶层与各楼层底图 `background.assetId`、顶层与各楼层对象 `props.photoId`。
+   * 纯函数、无副作用；GC 的可达集与自测共用同一实现，避免「各扫各的」导致误删。
+   * @param {object|null} snapshot
+   * @returns {string[]}
+   */
+  function collectAssetRefs(snapshot) {
+    const ids = new Set();
+    const addBg = bg => { if (bg && typeof bg.assetId === 'string' && bg.assetId) ids.add(bg.assetId); };
+    const addObjects = list => {
+      (list || []).forEach(o => {
+        const pid = o && o.props && o.props.photoId;
+        if (typeof pid === 'string' && pid) ids.add(pid);
+      });
+    };
+    if (!snapshot) return [];
+    addBg(snapshot.background);
+    addObjects(snapshot.objects);
+    (snapshot.floors || []).forEach(f => {
+      if (!f) return;
+      addBg(f.background);
+      addObjects(f.objects);
+    });
+    return Array.from(ids);
+  }
+
+  /**
    * 打开（或复用）内容寻址资产库
    * @param {{dbName:string, storeName:string, version?:number, alsoCreate?:string[]}} opts
    */
@@ -72,5 +99,5 @@
     };
   }
 
-  global.ContentAssets = { idFor, dataUrlToBytes, bytesToDataUrl, open };
+  global.ContentAssets = { idFor, dataUrlToBytes, bytesToDataUrl, collectAssetRefs, open };
 })(typeof window !== 'undefined' ? window : globalThis);

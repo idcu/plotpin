@@ -7,12 +7,12 @@ async function importJsonFile(f){
     state=migrateProject(p);
     /* 跨设备导入的 JSON 不接管本机工程库绑定，避免覆盖同名工程；需要时可另存到工程库 */
     delete state.meta.projectId;
-    const keepAsset=state.background.assetId;
     await ensureBackgroundAsset(state);
-    /* 导入即新基线：清空撤销栈，避免 Ctrl+Z 把导入前的工程撤回来；回收不再引用的旧底图 */
+    /* 导入即新基线：清空撤销栈，避免 Ctrl+Z 把导入前的工程撤回来；
+       资产回收必须走全库可达集（其他工程库记录仍可达），不能只保留当前底图 */
     history={past:[],future:[]};
     selectedIds.clear(); draft=null;
-    if(keepAsset) assetPrune([keepAsset]).catch(()=>{});
+    await pruneBgAssets();
     afterStateLoaded(); scheduleSave(); toast('工程已导入','success');
   }catch(err){ toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error'); }
 }
