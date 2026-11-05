@@ -2,6 +2,28 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-06 交互提交判定与手势取消
+
+- **Commit Hash**：`942583e`（fix(interaction): 拖拽提交走深比较并统一手势取消）。
+- **核心改动点**
+  - `js/core/interaction.js`：新增 `sameSerializable / objectMovedFrom / dragChanged`；`pointerup` 的 move/手柄/图片/场地提交判定改用深比较（剔除 `updatedAt` 噪声），`move` 首次越过 **2px 屏幕阈值**才 `pushHistory`；未产生实际变更时弹出快照、不 `commitChange`。
+  - `cancelActiveDrag` 统一接管 `pointercancel`、`lostpointercapture`、第二指落下、Escape；新增 `calibPoint` 回滚分支（拖动过走 `calibUndo`，仅点选弹空快照）。`touchArm` 收尾期间 `pointerup` 提前返回，不落点、不推进草稿。
+  - 修饰键：`Ctrl/Meta` 点击与框选均增量选择；`f/F` 不再劫持 `Ctrl+F`。方向键连按/长按只在首次 `keydown` 压栈，`keyup` 复位，合并为一次撤销。
+  - `scripts/selftest.mjs` §68（15 断言）；`tests/e2e/interaction.spec.mjs`（2 条浏览器用例）。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1743 通过 / 0 失败**（1728 + 15）。
+  - `node scripts/e2e.mjs`：**16 passed / 0 failed（19.3s）**（新增 2 条：单击不落盘/不清覆盖率；拖拽 Esc 回滚）。
+  - 反向验证：把 `pointerup` 提交判定临时改为恒 `true`，单击用例 **1 failed**（`saves` 期望 0 实得 1）；恢复 `dragChanged` 后 2/2。
+  - `node scripts/bench.mjs` 连续 3 次：avg **0.34–0.45 ms** / P95 **0.42–0.70 ms** / 重建 **22.2–29.5 ms** / heapUsed **14.48–16.57 MB** / 覆盖率 **7.4–14.4 ms**，全部达标。
+  - `node scripts/build.mjs --check`：**676.0 KB ≤ 750 KB**，SHA256 `178275a8f684d98e2843f66f9bb1a8e86d93e2acf9a76f1a6f8cde9671af328a`，二次构建一致。
+- **公共抽象 / 影响面**
+  - 新增 `dragChanged` 作为拖拽提交判定的唯一入口，所有指针提交路径复用；深比较只发生在 `pointerup`（单个对象/形状），`pointermove` 仅多一次 `Math.hypot` 阈值判断。
+  - 行为变化（预期）：① 单击/手柄点选不再落盘与清覆盖率；② 双指捏合中止拖拽由「遗留半途修改」改为「回滚到按下前」；③ 方向键连续移动只留 1 个撤销快照。其余交互语义不变。
+  - `docs/modules.md` 登记抽象与调用方；`docs/features.md` 补充选择/撤销说明；`docs/engineering.md` 刷新断言数、体积、SHA 与 bench 3 次区间。
+- **遗留 TODO / 风险**
+  - 拖拽中切换工具（`setTool`）仍直接 `drag=null`，理论上可绕过回滚；工具按钮需先完成 pointerup 才可点击，暂未观察到可复现路径，下一批公共抽象再统一。
+  - `lostpointercapture` 在部分旧浏览器可能在正常 `pointerup` 后触发；此时 `drag` 已空，实现按空操作处理。
+
 ## 2026-11-06 · A-05 统一变更提交协议 markDirty
 
 - **Commit Hash**：`257e58d`（refactor(core): 统一 markDirty(kind) 变更提交协议）。
