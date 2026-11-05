@@ -2,6 +2,22 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-03 补口：切换楼层落盘
+
+- **Commit Hash**：`d2b5d52`（fix(persist): 切换楼层也安排落盘，刷新后回到上次活动楼层）。
+- **核心改动点**
+  - `js/core/persistence.js`：`switchFloor()` 成功后 `scheduleSave()`，与 `addFloor/deleteFloor` 策略一致。
+  - `tests/e2e/history.spec.mjs`：新增「切换→刷新→活动楼层保持」用例（1F→F-SWITCH→1F，双向切换均回读 `current` 并 reload）。
+  - `docs/features.md`：本地自动保存条目补充切换楼层说明。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/e2e.mjs tests/e2e/history.spec.mjs`：**4 passed / 0 failed（10.9s）**，首跑通过。
+  - 反向验证：临时注释 `switchFloor` 内 `scheduleSave`，切换用例 **1 failed**（7.3s，reload 后仍为 `floor.default`）；恢复后 4/4。
+  - `node scripts/check.mjs --selftest`：1710 通过 / 0 失败（加载 36 脚本）。
+- **公共抽象 / 影响面**
+  - 无新增抽象。`withFloor` 逐层导出会复用 `switchFloor` 并顺带安排保存；450ms 防抖合并写入，导出结束仍以最后一次调用落盘。
+- **遗留 TODO / 风险**
+  - e2e 依赖防抖时序（7s 轮询）；CI 极慢时可能抖动（失败会红，不假绿）。
+
 ## 2026-11-06 · A-14 撤销/重做 + 楼层操作后刷新一致
 
 - **Commit Hash**：`d35852a`（test(persist): 浏览器验证撤销/重做、新增楼层、删除当前楼层后刷新一致）。
