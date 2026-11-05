@@ -56,8 +56,8 @@ function mergeProjectData(currentRaw, incomingRaw){
   const outFloors = order.map(id => {
     const f = floors.get(id);
     const objs = mergeCloneObjects(f);
-    if (id === activeFloorId) return { id, name:f.name };
-    return { id, name:f.name, background:mergeClone(f.background || {}), site:mergeClone(f.site || null), viewport:mergeClone(f.viewport || {}), objects:objs };
+    if (id === activeFloorId) return { id, name:f.name, updatedAt:f.updatedAt || '' };
+    return { id, name:f.name, updatedAt:f.updatedAt || '', background:mergeClone(f.background || {}), site:mergeClone(f.site || null), viewport:mergeClone(f.viewport || {}), objects:objs };
   });
 
   const meta = Object.assign({}, mergeClone(B.meta || {}), mergeClone(A.meta || {}));
@@ -198,7 +198,9 @@ function mergeBlankMissingTimestamps(raw){
   };
   (raw && Array.isArray(raw.objects) ? raw.objects : []).forEach(stamp);
   (raw && Array.isArray(raw.floors) ? raw.floors : []).forEach(f => {
-    if (f && Array.isArray(f.objects)) f.objects.forEach(stamp);
+    if (!f || typeof f !== 'object') return;
+    stamp(f);                                  /* 楼层级 updatedAt（v2）缺失也按空串处理 */
+    if (Array.isArray(f.objects)) f.objects.forEach(stamp);
   });
   return raw;
 }

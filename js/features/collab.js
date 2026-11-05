@@ -88,7 +88,7 @@ function collabHandleMessage(msg,from){
     collabRefreshUI();
     return;
   }
-  if(msg.t==='snapshot'&&msg.project&&msg.project.schema===SCHEMA){
+  if(msg.t==='snapshot'&&msg.project&&isReadableSchema(msg.project.schema)){
     collabQueueApply(msg.project,from);
   }
 }

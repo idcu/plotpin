@@ -122,6 +122,7 @@ code += `\n;globalThis.__api = {
   SITE_ANNOT_SETTING_KEYS, siteAnnotSettingOn, setSiteAnnotSetting,
   typeDisplayName, populateSelects,
   normalizeIcon, TYPE_ICONS, mergeTypes,
+  SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange,
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
@@ -161,7 +162,7 @@ code += `\n;globalThis.__api = {
   get calibSelection(){ return calibSelection; }, set calibSelection(v){ calibSelection=v; },
   get calibUndoStack(){ return calibUndoStack; }, set calibUndoStack(v){ calibUndoStack=v; },
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
-  mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON,
+  mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -4281,6 +4282,49 @@ asyncSuites.push(async()=>{
   const fileInputTag=(html.match(/id="fileInput"[^>]*accept="([^"]+)"/)||[])[1]||'';
   ok('入口文件选择-含 .dxf', fileInputTag.includes('.dxf'));
   ok('入口文件选择-含 .pdf', fileInputTag.includes('.pdf'));
+  api.resetState();
+}
+
+/* 66. A-04 存储 v2 + 楼层 updatedAt + 统一 LWW ---------------------------------- */
+{
+  /* 66.1 schema v2 与 v1 兼容读取 */
+  eq('存储-当前 schema v2', api.SCHEMA, 'offline-drawing-annotation/v2');
+  ok('存储-v1 可读', api.isReadableSchema(api.SCHEMA_V1));
+  ok('存储-v2 可读', api.isReadableSchema(api.SCHEMA));
+  ok('存储-未知版本拒绝', !api.isReadableSchema('offline-drawing-annotation/v0'));
+  const fresh=api.createInitialState();
+  ok('存储-初始楼层带 ISO 时间', Number.isFinite(Date.parse(fresh.floors[0].updatedAt||'')));
+
+  /* 66.2 v1 迁移：升级 schema，保留/补空楼层时间 */
+  const m1=api.migrateProject({schema:api.SCHEMA_V1,floors:[{id:'floor.default',name:'1F'}]});
+  eq('迁移-v1 升级为 v2', m1.schema, api.SCHEMA);
+  eq('迁移-旧档缺失楼层时间置空', m1.floors[0].updatedAt, '');
+  const m2=api.migrateProject({schema:api.SCHEMA_V1,floors:[{id:'floor.default',name:'1F',updatedAt:'2026-01-01T00:00:00.000Z'}]});
+  eq('迁移-已有楼层时间保留', m2.floors[0].updatedAt, '2026-01-01T00:00:00.000Z');
+
+  /* 66.3 touchFloor：所有 commit 路径统一写楼层时间 */
+  api.resetState();
+  api.state.floors[0].updatedAt='2000-01-01T00:00:00.000Z';
+  const touched=api.touchFloor();
+  ok('楼层时间-返回 ISO', Number.isFinite(Date.parse(touched)));
+  ok('楼层时间-覆盖旧值', api.state.floors[0].updatedAt!=='2000-01-01T00:00:00.000Z');
+  api.state.floors[0].updatedAt='2000-01-01T00:00:00.000Z';
+  api.commitChange();
+  ok('楼层时间-commitChange 统一写入', api.state.floors[0].updatedAt!=='2000-01-01T00:00:00.000Z');
+  eq('楼层时间-保存快照保留', api.persistableState().floors[0].updatedAt, api.state.floors[0].updatedAt);
+
+  /* 66.4 合并 LWW：楼层名/时间取较新一方，且输出不丢 updatedAt */
+  const mkProj=(upd,name)=>({schema:api.SCHEMA,meta:{updatedAt:'2026-01-01T00:00:00.000Z'},activeFloorId:'f1',objects:[],
+    floors:[{id:'f1',name,updatedAt:upd}]});
+  const merged=api.mergeProjectData(mkProj('2026-01-01T00:00:00.000Z','A层'),mkProj('2026-02-01T00:00:00.000Z','B层')).project;
+  eq('合并-楼层名取较新', merged.floors[0].name, 'B层');
+  eq('合并-楼层时间保留较新', merged.floors[0].updatedAt, '2026-02-01T00:00:00.000Z');
+
+  /* 66.5 旧档入站时间补齐：楼层与对象都按空串，避免旧文件覆盖本地 */
+  const blank={floors:[{id:'f1',objects:[{}]}]};
+  api.mergeBlankMissingTimestamps(blank);
+  eq('合并-旧档楼层时间置空', blank.floors[0].updatedAt, '');
+  eq('合并-旧档对象时间置空', blank.floors[0].objects[0].updatedAt, '');
   api.resetState();
 }
 

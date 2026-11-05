@@ -3,7 +3,7 @@ function extOfFile(name){ const m=String(name||'').toLowerCase().match(/\.([a-z0
 async function importJsonFile(f){
   try{
     const p=JSON.parse(await f.text());
-    if(p.schema!==SCHEMA) throw new Error('schema');
+    if(!isReadableSchema(p.schema)) throw new Error('schema');
     state=migrateProject(p);
     /* 跨设备导入的 JSON 不接管本机工程库绑定，避免覆盖同名工程；需要时可另存到工程库 */
     delete state.meta.projectId;

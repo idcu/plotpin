@@ -3,7 +3,12 @@
  * 图钉 PlotPin —— 离线图纸标注工具
  * 零第三方依赖：状态 / 几何 / 渲染 / 交互 / 导入导出
  * ============================================================ */
-const SCHEMA = 'offline-drawing-annotation/v1';
+const SCHEMA = 'offline-drawing-annotation/v2';
+/* 旧版 v1 → v2：v2 为每个楼层补 `updatedAt`（协作 LWW 的楼层级时间戳），读取时迁移并回写。
+ * 旧档没有时间戳的楼层保留空串（""），避免「打开旧文件」被误判为最新写入而覆盖他人编辑。 */
+const SCHEMA_V1 = 'offline-drawing-annotation/v1';
+const SCHEMA_READABLE = Object.freeze([SCHEMA, SCHEMA_V1]);
+function isReadableSchema(schema){ return SCHEMA_READABLE.includes(String(schema||'')); }
 const LS_KEY = 'offline-drawing-annotation.project';
 const SETTINGS_KEY = 'offline-drawing-annotation.settings';
 const DB_NAME = 'offline_drawing_annotation';
