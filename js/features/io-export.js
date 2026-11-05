@@ -145,18 +145,27 @@ function objectRowsAll(){
     f.name
   ));
 }
-function exportDelimited(delim,ext,mime){
+/** 公式注入防护：`= + - @ Tab CR` 开头且**不是纯数字**的单元格加前导单引号，Excel/WPS 按文本处理。
+ * 纯数字（负数/科学计数/坐标与角度列表）原样输出，避免 CSV→导入往返时数值被当成文本（审计 P1-3）。 */
+const NUMERIC_CELL_RE=/^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*[,;，]\s*-?\d+(?:\.\d+)?)*$/;
+function formulaGuard(s){ return /^[=+\-@\t\r]/.test(s)&&!NUMERIC_CELL_RE.test(s); }
+/** 纯函数：生成 CSV/TSV 文本（导出与自测共用，不触发下载）；数据行统一带公式注入防护 */
+function delimitedText(delim){
   const rows=objectRowsAll(); const cols=TABLE_COLUMNS;
   /* 表头保持原样不转义；数据行用公共 DSV 写出（quoteChars 保留原 \t 触发规则） */
   const body=DSV.formatRows(rows.map(r=>cols.map(c=>r[c])),{
-    delimiter:delim,eol:'\n',bom:false,quoteChars:/[",\n\r\t]/
+    delimiter:delim,eol:'\n',bom:false,quoteChars:/[",\n\r\t]/,guardFormula:formulaGuard
   });
-  const text='\ufeff'+cols.join(delim)+'\n'+body;
-  downloadBlob(new Blob([text],{type:mime}),safeName()+'.'+ext);
+  return '\ufeff'+cols.join(delim)+'\n'+body;
+}
+/** 分隔文本导出（CSV/TSV） */
+function exportDelimited(delim,ext,mime){
+  downloadBlob(new Blob([delimitedText(delim)],{type:mime}),safeName()+'.'+ext);
 }
 /* 保留旧单格转义入口（自测与插件可能调用），实现委托公共 DSV */
-function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[",\n\r\t]/}); }
-/** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返） */
+function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[",\n\r\t]/,guardFormula:formulaGuard}); }
+/** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返）。
+ * 所有单元格写 `t="inlineStr"`（文本），即使值以 =/@ 开头也不会成为公式，与 CSV 防护互补。 */
 function exportXlsx(){
   const cols=TABLE_COLUMNS;
   const table=[cols,...objectRowsAll().map(r=>cols.map(c=>String(r[c]??'')))];
