@@ -130,10 +130,11 @@ node scripts/selftest.mjs
 npm test
 ```
 
-门禁与依赖自检（语法 / 入口资源 / 离线承诺 / 断言数 / 契约）走另一条：
+门禁与依赖自检（语法 / 入口资源 / 离线承诺 / 断言数 / 契约 / 分层 / 自测）走另一条：
 
 ```powershell
-npm run ci        # = node scripts/check.mjs，与 CI 同一条命令
+npm run ci        # check --selftest → bench → build --check，与 CI 同一条命令
+npm run gates     # 门禁牙齿：5 种人为破坏必须让对应门禁非 0（临时副本内构造）
 ```
 
 **契约判据**（`contracts/conventions.json`）守四件看不见的事：版本号三处一致、
@@ -143,7 +144,7 @@ npm run ci        # = node scripts/check.mjs，与 CI 同一条命令
 **插件 API 面**（`contracts/plugin-api.json`）是另一条：`PlotPin.*` 的每个键都必须在清单里登记，
 清单里的每个键也必须真的存在——`npm run api` 双向比对，`npm run api:selftest` 验证解析器。
 「代码有、清单没有」是 API 泄漏：插件一旦依赖，你改名就是静默破坏兼容。
-刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、渲染性能）逐一写在
+刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、真实浏览器渲染基线）逐一写在
 [docs/engineering.md](docs/engineering.md) 里——不设不是忘了，是明说不保证。
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
@@ -244,9 +245,10 @@ PlotPin.registerImporter({
 
 ```bash
 node scripts/selftest.mjs   # 1619 assertions, no dependencies
-node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁
-node scripts/bench.mjs      # 渲染与覆盖率性能基准（阈值不达标则退出码 1）
-node scripts/build.mjs --check   # 单文件发行包校验（无外链 + SHA256）
+node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁（CI 用 --selftest）
+node scripts/bench.mjs      # 渲染基准（avg/P95/重建/heapUsed 超阈值则退出码 1）
+node scripts/build.mjs --check   # 单文件发行包：源重建 ↔ dist-manifest 哈希比对 + 无外链 + 体积上限
+node scripts/check-gates.mjs     # 门禁牙齿：5 种人为破坏必须非 0
 ```
 
 ### License

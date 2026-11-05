@@ -8,18 +8,23 @@
 
 ---
 
-## 1. 一条命令：`npm run lint`
+## 1. 命令：`npm run ci`（CI 同一条）
 
 ```
-node scripts/check.mjs           语法 → 入口资源 → 离线承诺 → 断言数 → 契约
+node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 → 断言数 → 契约 → API → 分层 → 自测
         ├── scripts/badge.mjs --check        断言数三处一致（README 徽章/正文/命令注释）
-        └── scripts/check-contracts.mjs      契约判据（见下）
+        ├── scripts/check-contracts.mjs --selftest   契约判据 + 判据自己会红
+        ├── scripts/check-plugin-api.mjs --selftest  API 面 + 解析器会红
+        └── scripts/selftest.mjs            逻辑层自测（--selftest 显式执行，退出码纳入门禁）
+node scripts/bench.mjs              渲染基准（avg / P95 / 重建 / heapUsed / 裁剪 / 覆盖率阈值）
+node scripts/build.mjs --check      源重建 ↔ scripts/dist-manifest.json 登记哈希比对
+node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对应门禁非 0
 ```
 
-`npm run ci` 与 `npm run lint` 是同一条——本地与 CI 必须**同一套结论**，
-否则"本地绿、CI 红"会教人忽略门禁。
+`npm run ci` = 上面四条的顺序执行，与 `.github/workflows/ci.yml` 的 test job 一致。
+`npm run lint` 只跑 `check.mjs`（不带 `--selftest`），用于本地快速自检；CI 必须带 `--selftest`。
 
-单项也可以单独跑：`npm test`（check-ngm + selftest）、`npm run contracts`、`npm run bench`。
+单项也可以单独跑：`npm test`（check-ngm + selftest）、`npm run contracts`、`npm run bench`、`npm run gates`。
 
 ---
 
@@ -50,7 +55,8 @@ node scripts/check.mjs           语法 → 入口资源 → 离线承诺 → �
 |---|---|---|
 | `ngm.vendor/` | ✅（`linkMode: copy`，部署机不联网） | `scripts/check-ngm.mjs` 三角对账（vendor ↔ ngm.json ↔ ngm.lock） |
 | `ngm.mappings.json` | ✅ | 同上；它是依赖清单的投影，不入库就没有复现依据 |
-| `package.json` 指纹 / 单文件发行包 | ❌ | `scripts/build.mjs` 可重建；发行包出 SHA256 |
+| `scripts/dist-manifest.json` | ✅（单文件发行包的哈希登记） | `scripts/build.mjs --check` 从源重建并比对 SHA256 / 字节数；改 js/css/index.html 后必须运行 `node scripts/build.mjs` 刷新 |
+| `dist/` 实体产物 | ❌（gitignore） | `scripts/build.mjs` 可重建；存在时 `--check` 额外逐字节比对 |
 | 新增 `js/**/*.js` | ✅ | 必须被 `index.html` 引用（check.mjs 双向核对） |
 
 **判据问句**：删掉它，`npm run ci` 还能不能从源重建并得出结论？
@@ -85,11 +91,35 @@ node scripts/check.mjs           语法 → 入口资源 → 离线承诺 → �
 |---|---|---|
 | Service Worker 的 `CACHE` 版本号 | "改了 js 就必须 bump"没有可读的事实源：SW 的预缓存清单在运行时从 `index.html` 解析，构建期不知道"上一版是什么" | 靠发布纪律 + `sw.js` 注释；`pwa.test.mjs` 只守下限（版本号格式与 ≥ 基线） |
 | 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确 | selftest 覆盖"全量中英文案"路径；语义由评审看 |
-| 渲染性能 | `bench.mjs` 的 8ms 阈值在慢 runner 上会抖 | 只在 CI 的一个固定 job 上跑 `bench --assert`，不作为提交前门禁 |
+| 渲染性能的**真实浏览器基线** | `bench.mjs` 跑在 Node + canvas 桩上，没有 GPU / 真实 Canvas；绝对值阈值只能守住"明显退化"，证明不了真机流畅 | Node 桩下已有阻断门禁（见 §5.1）；真实浏览器 P50/P95/heap 基线待 A-14（Playwright 需用户批准 devDependency） |
 | 插件 API 的**向后兼容** | 需要契约测试 + 历史版本矩阵，成本高于当前收益 | 版本号三处一致由契约守；破坏性变更写进 README |
 
 **这一节比上面几节更重要**：把"没有判据"的区域写出来，读者才不会把绿色的
 `npm run ci` 当成"全部保证"。
+
+### 5.1 阻断阈值与门禁牙齿（A-13）
+
+阈值是**绝对值**，不是与上一版比对；改阈值必须在 commit body 写明「旧值 → 新值 + 理由 + 连续实测」。
+当前余量为实测值的 4–6 倍（本机 2026-11-06 实测：avg 0.34ms / P95 0.41ms / 重建 22.18ms / heap 14.73MB）。
+
+| 指标 | 阻断阈值 | 实测（Node 桩 / 2000 对象 / 1600×900） | 说明 |
+|---|---|---|---|
+| 缓存帧平均 | ≤ 8 ms | 0.34 ms | 50fps 预算的一半，下限保护 |
+| 缓存帧 P95 | ≤ 3 ms | 0.41 ms | 偶发卡顿不能靠平均帧掩盖 |
+| 缓存帧 P99 | ≤ 10 ms（仅告警） | 1.05 ms | 先积累数据，不阻断 |
+| 静态层重建 | ≤ 60 ms | 22.18 ms | 对象增删改时触发 |
+| 直接全量帧 | ≤ 60 ms | 21.02 ms | 导出/打印路径 |
+| `heapUsed` | ≤ 64 MB | 14.73 MB | bench 结束时读数，不含长跑斜率 |
+| 覆盖率分析 | ≤ 300 ms | 9.1 ms | 1000×1000m + 30 摄像头 |
+| 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
+| 单文件体积 | ≤ 750 KB | 662.3 KB | 留约 13% 余量 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `da3cfab…` | 从源重建、二次构建确定性一致 |
+| 断言数 | ≥ 1619 且 0 失败 | 1619 | 只增不减 |
+
+**门禁牙齿（`npm run gates`）**：上面这些判据本身也会假绿（只打印不比对、缺文件退 0、
+模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 5 种破坏——
+P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败——
+断言对应门禁全部非 0 退出。它不碰仓库本身，也不依赖任何第三方包。
 
 ---
 

@@ -302,13 +302,16 @@ if (project && lock) {
       console.log(`check-ngm: adapters ${listed.size} 条登记 / ${adapterFiles.length} 个实际适配层`);
     }
 
-    if (errors.length) {
-      console.error(`check-ngm: FAILED (${errors.length} error(s), ${warnings.length} warning(s))`);
-      for (const e of errors) console.error(`  - ${e}`);
-      for (const w of warnings) console.error(`  ! ${w}`);
-      process.exit(1);
-    }
     console.log(`check-ngm: OK (${declared.size} declared, ${locked.size} locked, ${found.size} vendor modules, ${refCount.size} referenced modules, ngm ${ngmVersion})`);
     for (const w of warnings) console.log(`  ! ${w}`);
   }
+}
+
+/* 失败汇总必须在 if 块之外：ngm.json / ngm.lock 缺失时 readJson 已经 fail，
+   若汇总留在 if(project&&lock) 里，缺文件反而退 0 —— 这正是「静默假绿」。 */
+if (errors.length) {
+  console.error(`check-ngm: FAILED (${errors.length} error(s), ${warnings.length} warning(s))`);
+  for (const e of errors) console.error(`  - ${e}`);
+  for (const w of warnings) console.error(`  ! ${w}`);
+  process.exit(1);
 }

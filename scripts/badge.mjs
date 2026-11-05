@@ -35,10 +35,25 @@ const count = Number(m[1]);
 
 const readmePath = join(root, 'README.md');
 const before = readFileSync(readmePath, 'utf8');
+
+/* 模板缺失必须失败：三处锚点都不存在时，下面的 replace 全是空操作，
+   旧实现会打印「无需更新」并退 0 —— 断言数漂移从此无人发现。 */
+const ANCHORS = [
+  { re: /(selftest-)\d+(%20assertions)/, desc: 'shields.io 徽章 selftest-N%20assertions' },
+  { re: /(当前共 \*\*)\d+( 项断言全部通过\*\*)/, desc: '正文「当前共 **N 项断言全部通过**」' },
+  { re: /(# )\d+( assertions, no dependencies)/, desc: '测试命令注释「# N assertions, no dependencies」' }
+];
+const missing = ANCHORS.filter(a => !a.re.test(before)).map(a => a.desc);
+if (missing.length) {
+  console.error('❌ README 缺少断言数模板锚点，无法校验/写入：');
+  missing.forEach(d => console.error('  - ' + d));
+  process.exit(1);
+}
+
 const after = before
-  .replace(/(selftest-)\d+(%20assertions)/, `$1${count}$2`)
-  .replace(/(当前共 \*\*)\d+( 项断言全部通过\*\*)/, `$1${count}$2`)
-  .replace(/(# )\d+( assertions, no dependencies)/, `$1${count}$2`);
+  .replace(ANCHORS[0].re, `$1${count}$2`)
+  .replace(ANCHORS[1].re, `$1${count}$2`)
+  .replace(ANCHORS[2].re, `$1${count}$2`);
 
 if (checkOnly) {
   if (after !== before) {

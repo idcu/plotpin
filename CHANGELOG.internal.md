@@ -2,6 +2,43 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-13 质量门禁去假绿
+
+- **Commit Hash**：`PENDING`（test(gates): 门禁去假绿——P95/heap/重建阈值、产物哈希比对、缺文件必失败、门禁牙齿自测）。
+- **核心改动点**
+  - `scripts/bench.mjs`：新增 P50/P95/P99 采样与 `--gate` 语义（默认启用，`--no-gate` 本地快速跑）。阻断项：缓存帧 avg ≤ 8ms、**P95 ≤ 3ms**、**静态层重建 ≤ 60ms**、直接全量 ≤ 60ms、**heapUsed ≤ 64MB**、覆盖率 ≤ 300ms、裁剪 ≥ 60%；P99 ≤ 10ms 仅告警。失败时打印「实测值 / 阈值 / 超出比例」，不再只打印读数。
+  - `scripts/build.mjs`：`--check` 从**源重建**并与 `scripts/dist-manifest.json`（新增，入库）比对 SHA256 + 字节数；断言体积 ≤ 750KB；断言**二次构建确定性**（同源两次构建哈希必须相同）；`dist/` 存在时额外逐字节比对。`node scripts/build.mjs` 同时刷新登记值。
+  - `scripts/check-ngm.mjs`：失败汇总从 `if (project && lock)` 块内移到块外——`ngm.json` / `ngm.lock` 缺失时 `readJson` 已 fail，但旧结构会让整个汇总被跳过而**退 0**。缺 manifest 现在必失败。
+  - `scripts/badge.mjs`：三处断言数锚点先校验存在性，任一缺失即退出码 1；旧实现锚点缺失时 `replace` 全是空操作、打印「无需更新」并退 0。
+  - `scripts/check.mjs`：新增 `--selftest`（同时给 `check-contracts.mjs` / `check-plugin-api.mjs` 传 `--selftest`，并显式执行 `selftest.mjs` 把退出码纳入门禁）；日志打印 `[门禁] --selftest 已执行：<通过数>`。
+  - `package.json`：`ci` 改为 `check --selftest && bench && build --check`；新增 `gates`。
+  - `.github/workflows/ci.yml`：test job 改为 `check --selftest` → `bench` → `build --check` → `check-gates`，四步任一非 0 即失败。
+  - **新增 `scripts/check-gates.mjs`（门禁牙齿）**：在系统临时目录整仓副本里构造 5 种人为破坏，断言对应门禁非 0，并打印**失败原因行**以证明红的是那条门禁而非顺带失败。仓库本身零改动（副本排除 `.git/dist/node_modules/.trae` 等）。
+- **实测验证数据（本机 Windows / Node，2026-11-06）**
+  - `node scripts/check.mjs --selftest`：通过；日志含 `[门禁] --selftest 已执行：✅ 逻辑层自测：1619 通过 / 0 失败`。
+  - `node scripts/selftest.mjs`：1619 通过 / 0 失败（断言数未变，本次只改门禁脚本）。
+  - `node scripts/bench.mjs`：avg 0.34ms（≤8）/ P50 0.32 / **P95 0.42ms（≤3）** / P99 1.05ms / **重建 21.49ms（≤60）** / 直接全量 21.02ms / **heapUsed 14.43MB（≤64）** / 裁剪 99.4% / 覆盖率 7.5ms。
+  - `node scripts/build.mjs --check`：662.3KB ≤ 750KB，SHA256 `da3cfab20d61379ed9a35fe6fccf6d69cd76fee6a838d9f692311e5bd0bd68ea` 与登记值一致，二次构建确定性一致。
+  - `node scripts/check-gates.mjs`：**5/5 破坏被拦截**，且失败原因逐条对上：
+    | # | 人为破坏 | 退出码 | 失败原因（实测输出） |
+    |---|---|---|---|
+    | 1 | 渲染入口注入 4ms 忙等（avg 仍 <8ms） | 1 | `缓存帧 P95：实测 4.53ms ≤ 阈值 3ms（超出 51.0%）` |
+    | 2 | `dist` 产物追加注释 | 1 | `单文件打包校验未通过` |
+    | 3 | 删除 `ngm.json` | 1 | `check-ngm: FAILED (1 error(s))` |
+    | 4 | README 徽章断言数模板改成 `selftest-unknown` | 1 | `README 缺少断言数模板锚点` |
+    | 5 | selftest 注入 `eq('门禁牙齿-人为失败',1,2)` | 1 | `工程自检未通过` |
+  - 破坏场景全部在临时副本内构造并清理；`git status` 仅含本次预期改动。
+- **公共抽象 / 影响面**
+  - 新增判据入口 `scripts/check-gates.mjs`（`npm run gates`）与登记文件 `scripts/dist-manifest.json`。
+  - **行为变化（需知悉）**：`npm run ci` 不再等价于 `npm run lint`；改 `js/**`、`css/style.css`、`index.html` 后必须运行 `node scripts/build.mjs` 刷新 `dist-manifest.json`，否则 `build --check` 会红。这是「产物可从源复现」的判据，不是提示。
+  - `bench.mjs` 阈值从 1 项（avg 8ms）扩到 7 项；本地想跳过门禁用 `--no-gate`。
+- **遗留 TODO / 风险**
+  - 阈值是 Node + canvas Proxy 桩下的绝对值，与真实浏览器/GPU 不可比；真实浏览器基线依赖 A-14（Playwright，需用户批准 devDependency，本轮未安装）。
+  - `heapUsed` 只取 bench 结束时单点，未覆盖「10 分钟长跑增长斜率」；需夜间任务。
+  - `check-gates.mjs` 整仓副本 + 5 次全量门禁，本机约 40–60s；CI 时长相应增加。
+  - `ci.yml` 的 `ngm-verify` 仍是「变量未配置则跳过」的可选 job（vendor 自检已必跑），未在本轮改为必失败——它依赖外部二进制下载，属需拍板项。
+
+
 ## 2026-11-05 · Phase 1：双槽模型（图片底图 + 矢量场地）
 
 - **Commit Hash**：`86b1dc9953fccc308ace0e18111113fecb7bbe95`（feat(background): 图片底图与矢量场地双槽共存（Phase 1））。

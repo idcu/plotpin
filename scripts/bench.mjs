@@ -7,8 +7,17 @@
  *   3) 直接帧：导出/打印路径（全量绘制，作为对照）
  *   4) 视口裁剪有效性：高倍缩放下应只绘制视野附近的对象
  *
- * 用法：node scripts/bench.mjs [--json]
- * 阈值：缓存帧平均 < 8ms（50fps 预算 20ms 的一半），超出退出码 1。
+ * 用法：node scripts/bench.mjs [--json] [--no-gate]
+ * 门禁（默认启用，--no-gate 仅本地快速跑时关闭）：
+ *   缓存帧平均 ≤ 8ms（50fps 预算 20ms 的一半，保留为下限保护）
+ *   缓存帧 P95    ≤ 3ms（偶发卡顿不能靠平均帧掩盖）
+ *   缓存帧 P99    ≤ 10ms（仅告警，不阻断）
+ *   静态层重建    ≤ 60ms（对象增删改时触发）
+ *   直接全量帧    ≤ 60ms（导出/打印路径）
+ *   heapUsed      ≤ 64MB
+ *   覆盖率分析    ≤ 300ms
+ *   视口裁剪      ≥ 60%
+ * 任一阻断项超出 → 退出码 1，并打印实测值 / 阈值 / 超出比例。
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -107,7 +116,7 @@ function timeSamples(n, fn) {
   return arr;
 }
 function avgOf(arr) { let s = 0; for (const v of arr) s += v; return s / arr.length; }
-function p95Of(arr) { const a = Array.from(arr).sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * 0.95))]; }
+function pctOf(arr, p) { const a = Array.from(arr).sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * p))]; }
 function timeIt(label, n, fn) { return avgOf(timeSamples(n, fn)); }
 
 /* 1) 重建帧：每次强制静态层失效 */
@@ -120,12 +129,14 @@ const cachedSamples = timeSamples(200, () => {
   api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: true, markerScale: 1 });
 });
 const cachedMs = avgOf(cachedSamples);
-const cachedP95Ms = p95Of(cachedSamples);
+const cachedP50Ms = pctOf(cachedSamples, 0.5);
+const cachedP95Ms = pctOf(cachedSamples, 0.95);
+const cachedP99Ms = pctOf(cachedSamples, 0.99);
 /* 3) 直接全量绘制（导出路径对照） */
 const directMs = timeIt('direct', 10, () => {
   api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: false, markerScale: 1.6 });
 });
-const out = { rebuildMs: +rebuildMs.toFixed(2), cachedMs: +cachedMs.toFixed(2), cachedP95Ms: +cachedP95Ms.toFixed(2), directMs: +directMs.toFixed(2), objects: 2000 };
+const out = { rebuildMs: +rebuildMs.toFixed(2), cachedMs: +cachedMs.toFixed(2), cachedP50Ms: +cachedP50Ms.toFixed(2), cachedP95Ms: +cachedP95Ms.toFixed(2), cachedP99Ms: +cachedP99Ms.toFixed(2), directMs: +directMs.toFixed(2), objects: 2000 };
 /* 4) 视口裁剪：放大到 6 倍后统计实际绘制的对象数 */
 const saved = { ...api.state.viewport };
 api.state.viewport = { zoom: 6, panX: 100, panY: 100 };
@@ -157,23 +168,41 @@ if (process.argv.includes('--json')) {
 } else {
   console.log('渲染基准（2000 对象 / 1600×900）');
   console.log(`  静态层重建：${out.rebuildMs} ms/帧（对象增删改时触发）`);
-  console.log(`  缓存命中帧：${out.cachedMs} ms/帧（P95 ${out.cachedP95Ms} ms，目标 < 8ms）`);
+  console.log(`  缓存命中帧：${out.cachedMs} ms/帧（P50 ${out.cachedP50Ms} / P95 ${out.cachedP95Ms} / P99 ${out.cachedP99Ms} ms）`);
   console.log(`  直接全量帧：${out.directMs} ms/帧（导出/打印对照）`);
   console.log(`  堆内存 heapUsed：${out.heapUsedMB} MB`);
   console.log(`  视口裁剪：放大 6 倍时绘制 ${out.drawnObjects} / 2000 个对象（裁剪 ${(out.culledRatio * 100).toFixed(1)}%）`);
   console.log(`  默认视图绘制对象：${out.baseDrawn} / 2000`);
   console.log(`  覆盖率分析：1000×1000m + 30 摄像头 ${out.coverageMs} ms（覆盖率 ${out.coverageRatio}%，目标 < 300ms）`);
 }
-if (out.cachedMs > 8) {
-  console.error(`❌ 缓存帧超过阈值：${out.cachedMs} ms > 8 ms`);
-  process.exit(1);
+
+/* 门禁：阻断项（超出一项即红），P99 仅告警。--no-gate 供本地快速跑。 */
+if (!process.argv.includes('--no-gate')) {
+  const gates = [
+    { name: '缓存帧平均', value: out.cachedMs, limit: 8, op: '≤', unit: 'ms' },
+    { name: '缓存帧 P95', value: out.cachedP95Ms, limit: 3, op: '≤', unit: 'ms' },
+    { name: '静态层重建', value: out.rebuildMs, limit: 60, op: '≤', unit: 'ms' },
+    { name: '直接全量帧', value: out.directMs, limit: 60, op: '≤', unit: 'ms' },
+    { name: 'heapUsed', value: out.heapUsedMB, limit: 64, op: '≤', unit: 'MB' },
+    { name: '覆盖率分析', value: out.coverageMs, limit: 300, op: '≤', unit: 'ms' },
+    { name: '视口裁剪率', value: out.culledRatio, limit: 0.6, op: '≥', unit: '' }
+  ];
+  const failed = [];
+  for (const g of gates) {
+    const bad = g.op === '≤' ? g.value > g.limit : g.value < g.limit;
+    if (bad) {
+      const ratio = g.op === '≤'
+        ? `超出 ${(((g.value / g.limit) - 1) * 100).toFixed(1)}%`
+        : `低于阈值 ${((1 - g.value / g.limit) * 100).toFixed(1)}%`;
+      failed.push(`❌ ${g.name}：实测 ${g.value}${g.unit} ${g.op} 阈值 ${g.limit}${g.unit}（${ratio}）`);
+    }
+  }
+  if (out.cachedP99Ms > 10) {
+    console.warn(`⚠️  缓存帧 P99 告警：${out.cachedP99Ms} ms > 10 ms（仅告警，不阻断）`);
+  }
+  if (failed.length) {
+    failed.forEach(f => console.error(f));
+    process.exit(1);
+  }
+  console.log(`✅ 渲染基准通过：缓存帧 avg ${out.cachedMs} ms ≤ 8 ms / P95 ${out.cachedP95Ms} ms ≤ 3 ms，重建 ${out.rebuildMs} ms ≤ 60 ms，heapUsed ${out.heapUsedMB} MB ≤ 64 MB，裁剪 ${(out.culledRatio * 100).toFixed(1)}% ≥ 60%，覆盖率 ${out.coverageMs} ms ≤ 300 ms`);
 }
-if (out.culledRatio < 0.6) {
-  console.error(`❌ 视口裁剪无效：仅裁剪 ${(out.culledRatio * 100).toFixed(1)}%（期望 ≥ 60%）`);
-  process.exit(1);
-}
-if (out.coverageMs > 300) {
-  console.error(`❌ 覆盖率分析超过阈值：${out.coverageMs} ms > 300 ms`);
-  process.exit(1);
-}
-console.log('✅ 渲染基准通过：缓存帧 ' + out.cachedMs + ' ms < 8 ms，裁剪有效，覆盖率分析 ' + out.coverageMs + ' ms < 300 ms');

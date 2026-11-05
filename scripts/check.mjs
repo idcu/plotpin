@@ -11,8 +11,9 @@
  * 7) 对外 API 面：PlotPin.* 的顶层键 ↔ contracts/plugin-api.json 双向比对
  * 8) 删除记录：docs/deletions.md 字段齐全、无假删除
  * 9) 模块分层：js/ 下只允许 common/core/features，且加载顺序按层非递减（docs/modules.md）
+ * 10) --selftest：显式执行逻辑层自测并把退出码纳入本门禁（CI 必须传）
  *
- * 用法：node scripts/check.mjs
+ * 用法：node scripts/check.mjs [--selftest]
  */
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -68,14 +69,15 @@ for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
 const badge = spawnSync(process.execPath, [join(root, 'scripts', 'badge.mjs'), '--check'], { encoding: 'utf8' });
 if (badge.status !== 0) errors.push((badge.stdout || badge.stderr || '断言数校验失败').trim());
 
-/* 6. 契约判据（版本 / i18n / 文件头 / 枚举） */
-const contracts = spawnSync(process.execPath, [join(root, 'scripts', 'check-contracts.mjs')], { encoding: 'utf8' });
+/* 6. 契约判据（版本 / i18n / 文件头 / 枚举）；--selftest 同时验证判据自己会红 */
+const withSelftest = process.argv.includes('--selftest');
+const contracts = spawnSync(process.execPath, [join(root, 'scripts', 'check-contracts.mjs'), ...(withSelftest ? ['--selftest'] : [])], { encoding: 'utf8' });
 if (contracts.status !== 0) {
   errors.push('契约判据未通过：\n' + (contracts.stdout || '').trim() + '\n' + (contracts.stderr || '').trim());
 }
 
 /* 7. 对外 API 承诺面（PlotPin.* 的键 ↔ contracts/plugin-api.json） */
-const api = spawnSync(process.execPath, [join(root, 'scripts', 'check-plugin-api.mjs')], { encoding: 'utf8' });
+const api = spawnSync(process.execPath, [join(root, 'scripts', 'check-plugin-api.mjs'), ...(withSelftest ? ['--selftest'] : [])], { encoding: 'utf8' });
 if (api.status !== 0) {
   errors.push('对外 API 面未守约：\n' + (api.stdout || '').trim() + '\n' + (api.stderr || '').trim());
 }
@@ -111,6 +113,15 @@ for (const src of layerSrcs) {
   if (lv < 0) { errors.push(`脚本不在任何已登记的层里：${src}`); continue; }
   if (lv < prev) errors.push(`层序倒退：${src} 属于第 ${lv} 层，却排在第 ${prev} 层之后（见 docs/modules.md）`);
   prev = Math.max(prev, lv);
+}
+
+/* 10. 逻辑层自测：--selftest 显式执行；未传时也由 badge --check 执行一次，
+   但本步保证 CI 日志里有独立的「--selftest 已执行」证据与退出码。 */
+if (withSelftest) {
+  const st = spawnSync(process.execPath, [join(root, 'scripts', 'selftest.mjs')], { encoding: 'utf8' });
+  const tail = (st.stdout || '').trim().split('\n').pop() || (st.stderr || '').trim().split('\n').pop() || '';
+  if (st.status !== 0) errors.push('逻辑层自测失败（--selftest）：\n' + (st.stdout || st.stderr || '').trim());
+  else console.log(`  [门禁] --selftest 已执行：${tail}`);
 }
 
 if (errors.length) {
