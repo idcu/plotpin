@@ -383,6 +383,7 @@ async function switchFloor(id){
   if(!switchFloorData(id)) return false;
   await afterStateLoaded(false);
   fitView(); requestRender(); renderProps();
+  scheduleSave();                  /* 切换也是一次状态变更：刷新后回到上次活动楼层（审计 P0-4 补口） */
   return true;
 }
 /** 在指定楼层内执行异步任务（如逐层导出/打印），结束后恢复原楼层、视口与选择集 */

@@ -99,6 +99,40 @@ test('新增楼层：新层绘制对象后刷新，楼层/活动层/对象都保
   }))).toEqual({ floors: 2, active: added.id, objects: 1, name: 'F2-E2E', firstObjects: 0 });
 });
 
+test('切换楼层：单纯切换后刷新，活动楼层保持', async ({ page }) => {
+  await openApp(page);
+
+  /* 先建第二层（自动化会切到新层），再切回 1F */
+  await page.click('#floorBtn');
+  await page.click('#floorAdd');
+  await page.fill('#promptInput', 'F-SWITCH');
+  await page.click('#modalFooter .primary');
+  await expect.poll(() => page.evaluate(() => state.floors.length)).toBe(2);
+  const addedId = await page.evaluate(() => state.activeFloorId);
+  await closeModalIfOpen(page);
+
+  await page.click('#floorBtn');
+  await page.locator('.proj-row[data-floor="floor.default"] button[data-fop="switch"]').click();
+  await expect.poll(() => page.evaluate(() => state.activeFloorId)).toBe('floor.default');
+  await waitSaved(page, r => r.activeFloorId, 'floor.default');
+
+  await page.reload();
+  await expect.poll(() => page.evaluate(id => ({
+    floors: state.floors.length,
+    active: state.activeFloorId,
+    hasAdded: state.floors.some(f => f.id === id)
+  }), addedId)).toEqual({ floors: 2, active: 'floor.default', hasAdded: true });
+
+  /* 再切回第二层并刷新，验证双向切换都落盘 */
+  await page.click('#floorBtn');
+  await page.locator(`.proj-row[data-floor="${addedId}"] button[data-fop="switch"]`).click();
+  await expect.poll(() => page.evaluate(() => state.activeFloorId)).toBe(addedId);
+  await waitSaved(page, r => r.activeFloorId, addedId);
+  await page.reload();
+  await expect.poll(() => page.evaluate(id => ({ active: state.activeFloorId, hasAdded: state.floors.some(f => f.id === id) }), addedId))
+    .toEqual({ active: addedId, hasAdded: true });
+});
+
 test('删除当前楼层：删除后刷新不复活，活动层回到 1F', async ({ page }) => {
   await openApp(page);
 
