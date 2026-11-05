@@ -2,6 +2,28 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-10 照片资产全楼层化与 JSON 内嵌统一
+
+- **Commit Hash**：`6d7df54`（feat(export): 照片资产全楼层化并统一 JSON 内嵌策略）。
+- **核心改动点**
+  - `js/core/persistence.js`：新增 `projectObjectLists(st)` 作为「工程级对象列表」唯一入口（当前楼层 `state.objects` + 其余楼层 `f.objects`），`ensureObjectPhotoAssets` 与 `countProjectObjects` 复用；照片按内容哈希去重写入资产库，全楼层 `photoDataUrl → photoId`。
+  - `js/features/io-export.js`：`exportJSON` 遍历全楼层对象内嵌 `photoDataUrl`，同一 `photoId` 只读一次资产；**修复真实缺陷**——照片与非当前楼层底图的 `bytesToDataUrl` 原本未 `await`，导出 JSON 里是序列化后的 `{}`。
+  - `js/features/io-import.js`：提交阶段 `await afterStateLoaded()`，全楼层照片转换完成才判定导入成功。
+  - `tests/e2e/persistence.spec.mjs`：新增「1F/F2 各一张照片 → 切回 1F → 真实 UI 导出 → 两层 `photoDataUrl` 等于原图 → 再导入 → 两层 `photoId` 存在且 `photoDataUrl` 清空」。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1765 通过 / 0 失败**（加载 36 脚本）。
+  - `node scripts/e2e.mjs`：**18 passed / 0 failed（21.4s）**（新增跨楼层照片用例 15 号）。
+  - `node scripts/build.mjs --check`：**684.6 KB ≤ 750 KB**，SHA256 `1926f0b704adec1c7a5299ecfbcf91ed1268b605c253a1aafe7e7535fe0208e6`，二次构建一致。
+  - 反向验证：临时让 `projectObjectLists` 只返回当前楼层，新用例 **1 failed**（F2 `photoDataUrl` undefined）；恢复后 18/18。
+  - 未重跑 bench：本项只改导出/导入的数据遍历与 await，不进入渲染热路径。
+- **公共抽象 / 影响面**
+  - 新增 `projectObjectLists`（`docs/modules.md` 已登记）；`countProjectObjects` 内部改用它，返回值等价、签名不变。
+  - `ensureObjectPhotoAssets` 处理范围由「当前楼层」扩为「全楼层」，属本次修复；导出体积随楼层数增长（同图按 id 去重只内嵌一份）。
+  - 未新增运行时依赖，未改存储 schema。
+- **遗留 TODO / 风险**
+  - 照片内嵌使 JSON 体积与楼层数/照片数成正比，受 `APP_LIMITS.IMPORT_FILE_MAX_BYTES`（32MB）反压；极端工程仍可能导出后无法回导。
+  - `ensureObjectPhotoAssets` 的 `catch` 分支保留 `photoDataUrl` 以便当前会话可见，这类对象下次导出会再内嵌一次（不丢数据，仅体积冗余）。
+
 ## 2026-11-06 · A-09 导入事务化与统一限值
 
 - **Commit Hash**：`2fc7606`（feat(import): 导入事务化与统一 APP_LIMITS 限值校验）。
