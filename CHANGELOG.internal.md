@@ -2,6 +2,41 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-14 CSP 浏览器 PoC：4 条注入路径 + 内联兜底
+
+- **Commit Hash**：`2330ab7`（test(security): 浏览器 PoC 验证 4 条注入路径与 CSP 兜底均无法执行 JS）。
+- **核心改动点**
+  - `tests/e2e/csp.spec.mjs`：以 `window.__pwned` 哨兵 + DOM `#typeList img` 计数为判据，覆盖：
+    1. 导入 JSON 的恶意 `type.name/icon`；2. IndexedDB 旧存档 v1 `current`；3. `PlotPin.registerObjectType`；4. 绕过上游直接 `state.objectTypes.push` + `renderTypes()`。
+  - 额外 CSP 兜底：运行时注入内联 `<script>`、`onclick` 属性、`img onerror`，断言均未执行且捕获到 CSP 违规日志。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/e2e.mjs tests/e2e/csp.spec.mjs`：**5 passed / 0 failed（3.9s）**。
+  - 首次运行 3 失败：断言未考虑 `mergeTypes`/插件按约定把类型名截断到 30 字符（非安全问题）；改为 `PAYLOAD.slice(0,30)` 后 5/5，未放宽安全断言。
+  - 关键断言：哨兵未定义；`#typeList img` = 0；`violations.length > 0`；导入/插件路径 `icon === 'custom'`。
+- **公共抽象 / 影响面**
+  - 复用 `tests/e2e/helpers.mjs` 的 IndexedDB 工具；运行时代码零改动。
+- **遗留 TODO / 风险**
+  - 未覆盖 `javascript:` 伪协议与 SVG `<use>` 等更冷门载荷；当前仅覆盖审计列出的 4 条路径 + 3 种内联兜底。
+  - CSP 违规依赖 Chromium 控制台文案匹配（`Content Security Policy|Refused to`），文案若变动会误报失败（不会假绿）。
+
+## 2026-11-06 · A-14 真实 IndexedDB：v1→v2 回写 + 资产六命名空间保活
+
+- **Commit Hash**：`e6507a2`（test(e2e): 真实 IndexedDB 验证 v1→v2 回写与六命名空间资产保活）。
+- **核心改动点**
+  - `tests/e2e/helpers.mjs`：公共测试工具 `idb(page,{store,mode,op,key,value})`、`clickCanvasCenter`、`savedObjectCount`。
+  - `tests/e2e/persistence.spec.mjs`：
+    - 写入 v1 记录到 `projects/current` → reload → 断言 `state.schema` 升为 v2、两楼层 `updatedAt` 均为 `''`（旧档不伪装成最新写入）。
+    - 用点工具真实单击画布触发 `scheduleSave`，回读 `current`：schema=v2、活动楼层 `updatedAt` 非空、非活动楼层保持 `''`、活动对象 2 / F2 对象 1 不丢。
+    - 6 条命名空间各写一个独立资产（草稿 / history.past / history.future / clipboard / drag.originals / `proj:PRJ_E2E`），另加 1 个未引用资产；断言 `assetRefsByNamespace()` 恰好 6 个标签、`pruneBgAssets()` 只删未引用项。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/e2e.mjs tests/e2e/persistence.spec.mjs`：**2 passed / 0 failed（2.9s）**。
+  - 关键断言：`namespaces` 恰为 6 项且包含 6 个预期标签；`pruned = ['as_e2e_gone']`；资产库余键 6 个。
+- **公共抽象 / 影响面**
+  - 新增测试侧公共工具 `tests/e2e/helpers.mjs`（仅开发期，运行时代码零改动）。
+- **遗留 TODO / 风险**
+  - 该测试只覆盖 IndexedDB 数据层与真实落盘时序，不覆盖底图字节解码渲染（需真实图片资产）。
+  - 工程库记录为手工构造的最小结构，未覆盖真实「另存到工程库」UI 流程。
+
 ## 2026-11-06 · A-14 Playwright 冒烟骨架（3 条用例）
 
 - **Commit Hash**：`600a915`（test(e2e): 引入 Playwright 冒烟骨架）。
