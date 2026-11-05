@@ -174,7 +174,7 @@
 
 ## 2026-11-05 · 修复场地标注开关「切了没反应」
 
-- **Commit Hash**：`待回填（本提交）`（fix(site): 离屏画布屏幕标签按登记尺寸定位）。
+- **Commit Hash**：`753dfce`（fix(site): 离屏画布屏幕标签按登记尺寸定位）。
 - **现象**：选中场地后切「节点坐标」「段长」两个开关，场地周围不出现/不消失任何文字；面积/周长正常。真实 Chromium 复现：`state.settings.siteNodes=true`、`siteSegLen=true` 且复选框已勾选，画布上只有面积/周长胶囊，顶点与边中点无标签。
 - **根因（代码位置）**
   - `js/core/render.js` 的 `drawScreenTag()` 用 `c.canvas.clientWidth / clientHeight` 做标签夹边。静态层由 `ensureStaticLayer()` 用 `document.createElement('canvas')` 创建且**从不插入文档**，离屏 canvas 的 `clientWidth/clientHeight` 恒为 0，于是 `Math.max(2, Math.min(x, 0-w-2)) = 2`，全部标签被压到静态层左上角 (2,2) 并叠成一团（多数被左上角提示浮层遮住），表现为「在哪里都看不到」。
