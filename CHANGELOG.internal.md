@@ -2,6 +2,26 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-05 统一变更提交协议 markDirty
+
+- **Commit Hash**：`257e58d`（refactor(core): 统一 markDirty(kind) 变更提交协议）。
+- **核心改动点**
+  - `js/core/persistence.js`：`MARK_DIRTY_PROFILES` + `markDirty(kind)`，一次完成清覆盖率 → 重建静态层 → 落盘 → 广播 → 按 kind 刷 UI/重绘。
+  - 收敛 `commitChange/commitObjectEdit/clearCurrentFloor/undo/redo/deleteFloor` 五类提交点；`switchFloorData` 保持只清覆盖率/静态层，落盘由 `switchFloor` 负责。
+  - `scripts/selftest.mjs`：新增 18 项断言（落盘次数、覆盖率清空、广播矩阵、未知 kind 回退、两个 commit 函数走同一协议）。
+  - `docs/modules.md` 登记 `markDirty(kind)` 唯一实现与调用方约束；`scripts/dist-manifest.json` 重建（含 A-03 变更）。
+- **实测验证数据（Windows / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1728 通过 / 0 失败**。
+  - `node scripts/build.mjs --check`：672.7 KB ≤ 750 KB，SHA256 `4a23ebfe…`，二次构建一致。
+  - `node scripts/e2e.mjs`：**14 passed / 0 failed（18.1s）**。
+  - 首跑 selftest 6 失败：`__api` 后置同名属性把 `collabOnLocalChange` 的 getter/setter 覆盖成数据属性，spy 未生效；删除重复属性后 1728/0（未放宽断言）。
+- **公共抽象 / 影响面**
+  - 新增 `markDirty` / `MARK_DIRTY_PROFILES`；`commitChange`、`commitObjectEdit`、`undo/redo`、`clearCurrentFloor`、`deleteFloor` 改为调用它。
+  - 等价性：object/objectEdit 的 UI 粒度与广播不变；clear/floor 仍不广播；restore 仅补落盘+广播；switchFloorData 行为不变。
+- **遗留 TODO / 风险**
+  - `props.js` 的场地参数微调仍自行组合 `coverageResult/scheduleSave/requestRender`，未纳入协议（下一批公共抽象再评估）。
+  - `markDirty('restore')` 会重复一次幂等 invalidate/requestRender（无观察差异，轻微冗余）。
+
 ## 2026-11-06 · A-03 补口：切换楼层落盘
 
 - **Commit Hash**：`d2b5d52`（fix(persist): 切换楼层也安排落盘，刷新后回到上次活动楼层）。
