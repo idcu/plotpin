@@ -2,6 +2,28 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-14 Playwright 冒烟骨架（3 条用例）
+
+- **Commit Hash**：`600a915`（test(e2e): 引入 Playwright 冒烟骨架）。
+- **核心改动点**
+  - `package.json` / `package-lock.json`：新增 **devDependency** `@playwright/test@^1.65.0`；`npm run test:e2e`；`npm run ci` 路径未改动。
+  - `scripts/serve.mjs`：零依赖静态服务器（仅 e2e），同源 http 下 IndexedDB 可用（file:// 被浏览器禁用）。
+  - `playwright.config.mjs`：`tests/e2e/*.spec.mjs`、Chromium、workers=1，自动拉起本地服务器。
+  - `scripts/e2e.mjs`：缺 `@playwright/test` 或 Chromium 二进制时打印 `[SKIP]` 并**退 2**，不假绿。
+  - `tests/e2e/smoke.spec.mjs`：页面加载（无 pageerror/console error、入口无跨源引用、CSP 无 unsafe-inline）、点工具落点与选择命中+属性面板、JSON 导出真实下载并解析。
+  - `.gitignore`：忽略 `test-results/`、`playwright-report/`、`blob-report/`。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/e2e.mjs`：**3 passed / 0 failed（2.4s）**；首次运行 1 失败（测试自身把同源绝对 URL 误判为远程引用），改为 `origin` 比对后复跑 3/3。
+  - `node scripts/check.mjs`：通过（26 个脚本语法正确、入口资源完整、离线引用合规）。
+  - `node scripts/build.mjs --check`：671.6 KB ≤ 750 KB，SHA256 `f9b54ef2…` 与登记值一致。
+- **公共抽象 / 影响面**
+  - 新增 `scripts/serve.mjs`（仅开发期）；运行时代码零改动，单文件产物不引用 `tests/` 与依赖。
+  - 依赖变更：仅 devDependency，`package-lock.json` 入库；无运行时依赖增加。
+- **遗留 TODO / 风险**
+  - Chromium 二进制由 `npx playwright install chromium` 下载到用户目录，不随仓库分发；CI 若接入需单独安装。
+  - `[SKIP]` 退 2 的路径已实现，但本机未构造「缺浏览器」场景验证（需临时移走二进制，未执行）。
+  - 真实浏览器渲染性能基线仍未采集（本项只做功能 e2e）。
+
 ## 2026-11-06 · A-04 存储 v2 + 楼层 updatedAt + touchFloor 统一 LWW（审计 P0-3）
 
 - **Commit Hash**：`b423dbd`（feat(schema): 存储 v2 + 楼层 updatedAt + touchFloor 统一 LWW）。
