@@ -19,12 +19,17 @@ node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 →
 node scripts/bench.mjs              渲染基准（avg / P95 / 重建 / heapUsed / 裁剪 / 覆盖率阈值）
 node scripts/build.mjs --check      源重建 ↔ scripts/dist-manifest.json 登记哈希比对
 node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对应门禁非 0
+node scripts/e2e.mjs               浏览器级测试（可选，devDependency；**不在 ci 路径**）
 ```
 
 `npm run ci` = 上面四条的顺序执行，与 `.github/workflows/ci.yml` 的 test job 一致。
 `npm run lint` 只跑 `check.mjs`（不带 `--selftest`），用于本地快速自检；CI 必须带 `--selftest`。
 
-单项也可以单独跑：`npm test`（check-ngm + selftest）、`npm run contracts`、`npm run bench`、`npm run gates`。
+单项也可以单独跑：`npm test`（check-ngm + selftest）、`npm run contracts`、`npm run bench`、`npm run gates`、`npm run test:e2e`。
+
+`npm run test:e2e` 需要 `@playwright/test` + Chromium 二进制（仅 devDependency）。缺依赖或缺浏览器时
+`scripts/e2e.mjs` 打印 `[SKIP]` 原因并**退 2**（不是 0），避免把「没跑」当成「通过」；`npm run ci`
+不调用它，离线门禁与构建不依赖浏览器。
 
 ---
 
@@ -91,7 +96,7 @@ node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对
 |---|---|---|
 | Service Worker 的 `CACHE` 版本号 | "改了 js 就必须 bump"没有可读的事实源：SW 的预缓存清单在运行时从 `index.html` 解析，构建期不知道"上一版是什么" | 靠发布纪律 + `sw.js` 注释；`pwa.test.mjs` 只守下限（版本号格式与 ≥ 基线） |
 | 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确 | selftest 覆盖"全量中英文案"路径；语义由评审看 |
-| 渲染性能的**真实浏览器基线** | `bench.mjs` 跑在 Node + canvas 桩上，没有 GPU / 真实 Canvas；绝对值阈值只能守住"明显退化"，证明不了真机流畅 | Node 桩下已有阻断门禁（见 §5.1）；真实浏览器 P50/P95/heap 基线待 A-14（Playwright 需用户批准 devDependency） |
+| 渲染性能的**真实浏览器基线** | `bench.mjs` 跑在 Node + canvas 桩上，没有 GPU / 真实 Canvas；绝对值阈值只能守住"明显退化"，证明不了真机流畅 | Node 桩下已有阻断门禁（见 §5.1）；Playwright 只做**功能** e2e（§5.2），不采集真机 FPS/heap 基线 |
 | 插件 API 的**向后兼容** | 需要契约测试 + 历史版本矩阵，成本高于当前收益 | 版本号三处一致由契约守；破坏性变更写进 README |
 
 **这一节比上面几节更重要**：把"没有判据"的区域写出来，读者才不会把绿色的
@@ -121,6 +126,22 @@ node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对
 模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 5 种破坏——
 P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败——
 断言对应门禁全部非 0 退出。它不碰仓库本身，也不依赖任何第三方包。
+
+### 5.2 浏览器级测试（A-14，可选）
+
+`tests/e2e/*.spec.mjs` 经本地静态服务器（`scripts/serve.mjs`，零依赖）在真实 Chromium 中执行，
+覆盖 Node 桩无法证明的部分：
+
+| 文件 | 守什么 |
+|---|---|
+| `smoke.spec.mjs` | 页面加载无脚本错误 / 入口无远程引用 / CSP 声明；点工具落点与选择命中；JSON 导出真实下载可解析 |
+| `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删） |
+| `csp.spec.mjs` | 4 条注入路径（导入 JSON / 旧存档 / 插件注册 / 类型列表渲染）在浏览器中确实无法执行 JS |
+| `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层后刷新与操作后状态一致 |
+
+**边界**：`@playwright/test` 只允许出现在 `devDependencies`；`build.mjs` 的单文件产物不引用
+`tests/` 与 `node_modules/`。`npm run ci` 不含 e2e——无浏览器环境不会因此变红，但显式运行
+`npm run test:e2e` 时缺依赖/缺浏览器会以 `[SKIP]` + 退出码 2 明确失败，而不是假绿。
 
 ---
 

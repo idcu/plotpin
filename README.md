@@ -137,6 +137,16 @@ npm run ci        # check --selftest → bench → build --check，与 CI 同一
 npm run gates     # 门禁牙齿：5 种人为破坏必须让对应门禁非 0（临时副本内构造）
 ```
 
+浏览器级测试是可选的开发期依赖（不进发行包、不在 `npm run ci` 路径）：
+
+```powershell
+npm install -D @playwright/test
+npx playwright install chromium
+npm run test:e2e
+```
+
+缺依赖或缺浏览器时脚本打印 `[SKIP]` 原因并**退 2**，不会把「没跑」冒充成「通过」。
+
 **契约判据**（`contracts/conventions.json`）守四件看不见的事：版本号三处一致、
 中英文案键对齐、每个脚本恰好一行文件头、枚举同源。判据自己也有牙齿：
 `npm run contracts:selftest` 会用一棵必然违约的临时树证明它真的会红。

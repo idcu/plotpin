@@ -16,7 +16,8 @@
     "build": "node scripts/build.mjs",
     "ci": "node scripts/check.mjs --selftest && node scripts/bench.mjs && node scripts/build.mjs --check",
     "gates": "node scripts/check-gates.mjs",
-    "discipline": "node scripts/check-discipline.mjs"
+    "discipline": "node scripts/check-discipline.mjs",
+    "test:e2e": "node scripts/e2e.mjs"
   },
   "keywords": [
     "canvas",
@@ -28,5 +29,8 @@
     "cad",
     "site-plan"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
+  }
 }
