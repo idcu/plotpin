@@ -1,28 +1,58 @@
 /* io-import.js —— 文件导入路由、DXF/PDF/图片底图、底图/场地选择 */
 function extOfFile(name){ const m=String(name||'').toLowerCase().match(/\.([a-z0-9]+)$/); return m?m[1]:''; }
+/**
+ * 导入 JSON 工程（事务化）：先构建候选、校验限值、转存资产，全部成功后才替换 state；
+ * 提交阶段失败回滚到导入前现场（审计 P1-9 / P1-14）。
+ */
 async function importJsonFile(f){
+  const prevState=state, prevHistory=history, prevSelected=new Set(selectedIds), prevDraft=draft;
+  let swapped=false;
   try{
-    const p=JSON.parse(await f.text());
-    if(!isReadableSchema(p.schema)) throw new Error('schema');
-    state=migrateProject(p);
+    const fileErrs=importLimitErrors({bytes:f.size});
+    if(fileErrs.length) throw new Error('超限：'+importLimitMessage(fileErrs));
+    const text=await f.text();
+    const textErrs=importLimitErrors({chars:text.length});
+    if(textErrs.length) throw new Error('超限：'+importLimitMessage(textErrs));
+    const p=JSON.parse(text);
+    if(!isReadableSchema(p.schema)) throw new Error('SCHEMA');
+    const next=buildProject(p);
     /* 跨设备导入的 JSON 不接管本机工程库绑定，避免覆盖同名工程；需要时可另存到工程库 */
-    delete state.meta.projectId;
-    await ensureBackgroundAsset(state);
+    delete next.meta.projectId;
+    const objErrs=importLimitErrors({objects:countProjectObjects(next)});
+    if(objErrs.length) throw new Error('超限：'+importLimitMessage(objErrs));
+    await ensureBackgroundAsset(next);      /* 候选状态上准备资产；失败不影响当前现场 */
+    state=next; swapped=true;
     /* 导入即新基线：清空撤销栈，避免 Ctrl+Z 把导入前的工程撤回来；
        资产回收必须走全库可达集（其他工程库记录仍可达），不能只保留当前底图 */
     history={past:[],future:[]};
     selectedIds.clear(); draft=null;
     await pruneBgAssets();
     afterStateLoaded(); scheduleSave(); toast('工程已导入','success');
-  }catch(err){ toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error'); }
+  }catch(err){
+    if(swapped){
+      state=prevState; history=prevHistory;              /* 提交阶段失败：完整回滚 */
+      selectedIds.clear(); prevSelected.forEach(x=>selectedIds.add(x)); draft=prevDraft;
+      afterStateLoaded(false); requestRender();
+    }
+    const msg=String(err&&err.message||'');
+    if(msg==='SCHEMA') toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error');
+    else if(msg.startsWith('超限：')) toast('工程导入失败：'+msg.slice(3),'error');
+    else toast('工程导入失败（已回滚）：'+msg,'error');
+  }
 }
 async function handleImportFile(f){
   const ext=extOfFile(f.name);
+  const fileErrs=importLimitErrors({bytes:f.size});
+  if(fileErrs.length) return toast('导入失败：'+importLimitMessage(fileErrs),'error');
   if(ext==='json') return importJsonFile(f);
   if(ext==='csv'||ext==='tsv'||ext==='txt'){
     try{
       const text=await f.text();
+      const textErrs=importLimitErrors({chars:text.length});
+      if(textErrs.length) return toast('表格导入失败：'+importLimitMessage(textErrs),'error');
       const rows=DSV.parseRows(text,ext==='tsv'?'\t':DSV.detectDelimiter(text));
+      const rowErrs=importLimitErrors({rows:rows.length});
+      if(rowErrs.length) return toast('表格导入失败：'+importLimitMessage(rowErrs),'error');
       showTableImportPreview(f.name,rowsToObjectsPlan(rows));
     }catch(e){ toast('表格读取失败：'+e.message,'error'); }
     return;
@@ -31,6 +61,8 @@ async function handleImportFile(f){
     try{
       const rows=await Xlsx.readRows(await f.arrayBuffer());
       if(!rows.length) return toast('XLSX 中没有可导入的工作表','warn');
+      const rowErrs=importLimitErrors({rows:rows.length});
+      if(rowErrs.length) return toast('表格导入失败：'+importLimitMessage(rowErrs),'error');
       showTableImportPreview(f.name,rowsToObjectsPlan(rows));
     }catch(e){ toast('XLSX 解析失败：'+e.message,'error'); }
     return;
@@ -53,6 +85,8 @@ async function importDxfFile(f){
   catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
   const ents=parsed.entities;
   if(!ents.length) return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
+  const entErrs=importLimitErrors({entities:ents.length});
+  if(entErrs.length) return toast('DXF 导入失败：'+importLimitMessage(entErrs),'error');
   pushHistory();
   /* DXF 图层：缺失的自动创建（锁定/可见默认） */
   ents.map(e=>e.layer).forEach(n=>{
@@ -105,6 +139,8 @@ async function importPdfFile(f){
   if(!pdf.paths.length && !pdf.texts.length && !pdf.images.length){
     return toast('PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）','error');
   }
+  const pdfErrs=importLimitErrors({entities:pdf.paths.length+pdf.texts.length});
+  if(pdfErrs.length) return toast('PDF 导入失败：'+importLimitMessage(pdfErrs),'error');
   /* 扫描件/带底图的 PDF：最大内嵌图作为图片底图 */
   let bgNote='';
   if(pdf.images.length){
@@ -266,6 +302,8 @@ async function prepareBackgroundBytes(f){
   const url=URL.createObjectURL(new Blob([raw],{type:mime}));
   let img;
   try{ img=await loadImageSrc(url); }finally{ URL.revokeObjectURL(url); }
+  const errs=importLimitErrors({pixels:img.naturalWidth*img.naturalHeight});
+  if(errs.length) throw new Error(importLimitMessage(errs)+'（'+img.naturalWidth+'×'+img.naturalHeight+'）');
   const plan=backgroundScalePlan(img.naturalWidth,img.naturalHeight,mime,raw.length);
   if(plan){
     const c=document.createElement('canvas'); c.width=plan.width; c.height=plan.height;
@@ -283,6 +321,13 @@ async function importBackgroundFile(f){
   let prepared;
   try{ prepared=await prepareBackgroundBytes(f); }
   catch(e){ return toast('底图读取失败：'+e.message,'error'); }
+  /* 先完成解码与 dataUrl 生成，再改现场：失败不留半更新状态（审计 P1-9） */
+  let dataUrl;
+  try{ dataUrl=await bytesToDataUrl(prepared.bytes,prepared.mime); }
+  catch(e){ return toast('底图读取失败：'+e.message,'error'); }
+  let image;
+  try{ image=await loadImageSrc(dataUrl); }
+  catch(e){ return toast('底图读取失败：'+e.message,'error'); }
   const id=assetIdFor(prepared.bytes);
   let stored=true;
   try{ await assetPut(id,{bytes:prepared.bytes,mime:prepared.mime}); }
@@ -297,9 +342,10 @@ async function importBackgroundFile(f){
   if(!calibrated) state.background.metersPerPixel=0.05;
   /* 不立即删除旧资产：pushHistory 的撤销快照仍引用它，立即删会导致撤销后底图无法恢复；
      待历史栈不再可达时由 pruneBgAssets 统一回收（评估报告 5.2） */
-  bgDataUrl=await bytesToDataUrl(prepared.bytes,prepared.mime).catch(()=> '');
+  bgDataUrl=dataUrl;
   const seq=++bgLoadSeq;
-  try{ bgImage=await loadImageSrc(bgDataUrl); if(seq===bgLoadSeq) requestRender(); }catch(e){ bgImage=null; }
+  bgImage=image;
+  if(seq===bgLoadSeq) requestRender();
   fitView(); pruneBgAssets(); commitChange('底图已导入');
   if(!stored) toast('浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存','warn');
   else if(prepared.note) toast(prepared.note,'warn');

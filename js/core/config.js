@@ -20,13 +20,39 @@ const EPS = 1e-8;
 const BG_MAX_EDGE = 3000;
 const BG_JPEG_QUALITY = 0.85;
 const BG_RECOMPRESS_LIMIT = 6 * 1024 * 1024;
-/* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限），避免魔法数字散落各处 */
+/* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限/导入限值），避免魔法数字散落各处 */
 const APP_LIMITS = Object.freeze({
   ZOOM_MIN: 0.02, ZOOM_MAX: 200,
   ICON_SCALE_MIN: 0.2, ICON_SCALE_MAX: 8,
   SEG_LABEL_MIN_PX: 26, SEG_LABEL_MIN_PX_MIN: 10, SEG_LABEL_MIN_PX_MAX: 60,
-  BG_MAX_EDGE, BG_JPEG_QUALITY, BG_RECOMPRESS_LIMIT
+  BG_MAX_EDGE, BG_JPEG_QUALITY, BG_RECOMPRESS_LIMIT,
+  BG_MAX_DECODE_PIXELS: 40 * 1000 * 1000,   /* 单张图片解码像素上限（约 40MP），防大图冻结主线程 */
+  ASSET_MAX_BYTES: 16 * 1024 * 1024,        /* 单个内容寻址资产（底图/照片）字节上限 */
+  IMPORT_FILE_MAX_BYTES: 32 * 1024 * 1024,  /* 导入文件字节上限（JSON/CSV/XLSX/DXF/PDF/图片） */
+  IMPORT_TEXT_MAX_CHARS: 32 * 1024 * 1024,  /* 文本类导入字符上限（JSON/CSV 先读入内存） */
+  IMPORT_ROWS_MAX: 20000,                   /* 表格导入行数上限 */
+  IMPORT_ENTITIES_MAX: 100000,              /* DXF/PDF 实体上限 */
+  OBJECTS_MAX: 100000,                      /* 单工程对象上限（含所有楼层） */
+  HISTORY_MAX: 20,                          /* 撤销栈深度 */
+  TOMBSTONE_MAX: 2000                       /* 删除墓碑保留上限 */
 });
+/** 导入限值统一校验：传 {bytes,chars,rows,entities,objects,pixels} 的已知项，返回超限字段列表（空=通过） */
+function importLimitErrors(spec){
+  const s=spec||{}, errs=[];
+  const over=(key,val,max)=>{ if(Number(val)>max) errs.push(key); };
+  over('file', s.bytes, APP_LIMITS.IMPORT_FILE_MAX_BYTES);
+  over('text', s.chars, APP_LIMITS.IMPORT_TEXT_MAX_CHARS);
+  over('rows', s.rows, APP_LIMITS.IMPORT_ROWS_MAX);
+  over('entities', s.entities, APP_LIMITS.IMPORT_ENTITIES_MAX);
+  over('objects', s.objects, APP_LIMITS.OBJECTS_MAX);
+  over('pixels', s.pixels, APP_LIMITS.BG_MAX_DECODE_PIXELS);
+  return errs;
+}
+/** 超限提示：字段名 → 中文可读提示（与 importLimitErrors 的键一一对应） */
+function importLimitMessage(errs){
+  const map={file:'文件过大',text:'文本过长',rows:'表格行数过多',entities:'图形实体过多',objects:'对象数量过多',pixels:'图片像素过大'};
+  return (errs||[]).map(k=>map[k]||k).join('、');
+}
 
 /* 点类型的 scaleShape：设置对象“物理尺寸(m)”后按世界坐标渲染（随底图缩放），
  * none=始终屏幕固定图标（纯位置标识）；circle 圆 / square 方 / sector 扇形视场（fov 张角）/ bar 杆 */

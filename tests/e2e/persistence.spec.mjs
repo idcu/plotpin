@@ -66,6 +66,27 @@ test('IndexedDB v1→v2：迁移后写回 v2，楼层补 updatedAt 且不丢楼�
   expect(saved.floors.find(f => f.id === 'floor.f2').objects.length).toBe(1);
 });
 
+test('导入事务化：非法 JSON 失败后当前工程、撤销栈与选择不变', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickCanvasCenter(page);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+
+  const before = await page.evaluate(() => ({
+    name: state.meta.name, objects: state.objects.length,
+    hist: history.past.length, selected: selectedIds.size
+  }));
+  const after = await page.evaluate(async () => {
+    const f = new File(['{"schema":"not-plotpin"}'], 'bad.json', { type: 'application/json' });
+    await importJsonFile(f);
+    return {
+      name: state.meta.name, objects: state.objects.length,
+      hist: history.past.length, selected: selectedIds.size
+    };
+  });
+  expect(after).toEqual(before);
+});
+
 test('资产回收：草稿/历史两栈/剪贴板/拖拽/工程库六条命名空间全部保活', async ({ page }) => {
   await openApp(page);
   await expect.poll(() => page.evaluate(() => typeof pruneBgAssets)).toBe('function');

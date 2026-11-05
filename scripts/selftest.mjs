@@ -92,7 +92,8 @@ vm.createContext(sandbox);
 code += `\n;globalThis.__api = {
   get state(){ return state; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
-  createInitialState, migrateProject, baseObject,
+  createInitialState, migrateProject, buildProject, countProjectObjects, baseObject,
+  importLimitErrors, importLimitMessage,
   polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
@@ -4481,6 +4482,32 @@ asyncSuites.push(async()=>{
 
   eq('modalBody 默认转义插值', api.modalBody(['<b>','</b>'],'<x>'), '<b>&lt;x&gt;</b>');
   eq('modalBody safeHTML 保留片段', api.modalBody(['<div>','</div>'], api.safeHTML('<i>ok</i>')), '<div><i>ok</i></div>');
+}
+
+/* 70. A-09 导入限值与事务化原语 ------------------------------------------------------------- */
+{
+  eq('APP_LIMITS 已冻结', Object.isFrozen(api.APP_LIMITS), true);
+  eq('APP_LIMITS 历史栈上限', api.APP_LIMITS.HISTORY_MAX, 20);
+  eq('importLimitErrors 全通过', api.importLimitErrors({bytes:1,chars:1,rows:1,entities:1,objects:1,pixels:1}), []);
+  const L=api.APP_LIMITS;
+  eq('importLimitErrors 逐项识别',
+    api.importLimitErrors({bytes:L.IMPORT_FILE_MAX_BYTES+1,chars:L.IMPORT_TEXT_MAX_CHARS+1,
+      rows:L.IMPORT_ROWS_MAX+1,entities:L.IMPORT_ENTITIES_MAX+1,objects:L.OBJECTS_MAX+1,
+      pixels:L.BG_MAX_DECODE_PIXELS+1}),
+    ['file','text','rows','entities','objects','pixels']);
+  eq('importLimitMessage 中文提示', api.importLimitMessage(['file','objects']), '文件过大、对象数量过多');
+
+  eq('countProjectObjects 顶层+非活动楼层',
+    api.countProjectObjects({activeFloorId:'f1',objects:[{},{}],
+      floors:[{id:'f1',objects:[{},{}]},{id:'f2',objects:[{},{},{}]}]}), 5);
+
+  api.resetState();
+  const kept=api.state.meta.name;
+  const built=api.buildProject({schema:'offline-drawing-annotation/v1',meta:{name:'BUILT'}});
+  ok('buildProject 不修改当前 state', api.state.meta.name===kept);
+  eq('buildProject 返回候选工程', built.meta.name, 'BUILT');
+  eq('migrateProject 仍替换当前 state', api.migrateProject({schema:'offline-drawing-annotation/v1',meta:{name:'MIG'}}).meta.name, 'MIG');
+  api.resetState();
 }
 
 /* ---------------- 结果汇总 ---------------- */

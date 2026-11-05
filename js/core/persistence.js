@@ -67,7 +67,7 @@ function updateHistoryButtons(){
 }
 function pushHistory(){
   history.past.push(deepClone(state));
-  if(history.past.length>20){ history.past.shift(); pruneBgAssets(); }
+  if(history.past.length>APP_LIMITS.HISTORY_MAX){ history.past.shift(); pruneBgAssets(); }
   history.future=[];
   updateHistoryButtons();
 }
@@ -242,16 +242,33 @@ async function saveProjectAs(name){
   await idbPutKey(projectKey(state.meta.projectId),persistableState());
   return state.meta.projectId;
 }
-/** 打开工程库中的工程：迁移、清空撤销栈（避免撤回到别的工程）、装载底图资产 */
+/** 工程对象总数（顶层当前楼层 + 其余楼层），用于导入/打开的 OBJECTS_MAX 校验 */
+function countProjectObjects(p){
+  let n=Array.isArray(p&&p.objects)?p.objects.length:0;
+  (p&&p.floors||[]).forEach(f=>{
+    if(f&&f.id!==p.activeFloorId&&Array.isArray(f.objects)) n+=f.objects.length;
+  });
+  return n;
+}
+/** 打开工程库中的工程：先构建候选 → 准备资产 → 原子替换；任何失败保持当前现场（审计 P1-9） */
 async function openProjectById(id){
   const raw=await idbGetKey(projectKey(id));
   if(!raw||!isReadableSchema(raw.schema)) throw new Error('工程不存在或已损坏');
-  const p=migrateProject(raw);
-  state=p;
+  const errs=importLimitErrors({objects:countProjectObjects(raw)});
+  if(errs.length) throw new Error('工程超出上限：'+importLimitMessage(errs));
+  const next=buildProject(raw);
+  await ensureBackgroundAsset(next);          /* 在候选状态上转存资产，不动当前 state */
+  const prevState=state, prevHistory=history, prevSelected=new Set(selectedIds), prevDraft=draft;
+  state=next;
   history={past:[],future:[]};
   selectedIds.clear(); draft=null;
-  await ensureBackgroundAsset(state);
-  await pruneBgAssets();
+  try{
+    await pruneBgAssets();
+  }catch(e){
+    state=prevState; history=prevHistory;           /* 提交阶段失败：回滚到打开前 */
+    selectedIds.clear(); prevSelected.forEach(x=>selectedIds.add(x)); draft=prevDraft;
+    throw e;
+  }
   afterStateLoaded(); scheduleSave();
   return state;
 }
@@ -266,10 +283,8 @@ async function renameProjectById(id,name){
 async function duplicateProjectById(id){
   const raw=await idbGetKey(projectKey(id));
   if(!raw) throw new Error('工程不存在');
-  /* migrateProject 有写全局 state 的副作用，复制不切换现场，先存后还原 */
-  const cur=state;
-  const p=migrateProject(raw);
-  state=cur;
+  /* 非当前楼层的副本：只构建候选对象，不触碰当前 state */
+  const p=buildProject(raw);
   p.meta.projectId=uid('PRJ');
   p.meta.name=(p.meta.name||'未命名工程')+' 副本';
   p.meta.createdAt=nowISO(); p.meta.updatedAt=nowISO();
@@ -285,7 +300,10 @@ async function deleteProjectById(id){
 /* -------------------- 底图资产：通用内容寻址库实例（实现见 common/content-assets.js） -------------------- */
 const bgAssetsReady = ContentAssets.open({ dbName: DB_NAME, storeName: DB_ASSETS, version: DB_VERSION, alsoCreate: [DB_STORE] });
 function assetIdFor(bytes){ return ContentAssets.idFor(bytes, 'bg'); }
-async function assetPut(id, rec){ return (await bgAssetsReady).putId(id, rec); }
+async function assetPut(id, rec){
+  if(rec&&rec.bytes&&rec.bytes.length>APP_LIMITS.ASSET_MAX_BYTES) throw new Error('资产超过单个大小上限');
+  return (await bgAssetsReady).putId(id, rec);
+}
 async function assetGet(id){ return (await bgAssetsReady).getId(id); }
 async function assetRemove(id){ return (await bgAssetsReady).removeId(id); }
 async function assetPrune(keepIds){ return (await bgAssetsReady).prune(keepIds); }
@@ -550,7 +568,8 @@ async function ensureFloorBackgroundAssets(st){
     }catch(_){}
   }
 }
-function migrateProject(p){
+/** 由原始 JSON 构建清洗后的工程对象；不写全局 state，供导入/打开工程做“先校验后替换”的事务 */
+function buildProject(p){
   const base=createInitialState();
   const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
   meta.name=typeof meta.name==='string'&&meta.name.trim()?meta.name:base.meta.name;
@@ -610,11 +629,15 @@ function migrateProject(p){
   let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
   if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
   /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
-  state=Object.assign(base,p,{schema:SCHEMA,meta,settings,background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+  return Object.assign(base,p,{schema:SCHEMA,meta,settings,background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+}
+/** 迁移并立即替换当前状态（旧调用方语义）；需要失败回滚的路径请用 buildProject */
+function migrateProject(p){
+  state=buildProject(p);
   return state;
 }
 /** 删除墓碑清洗：按 (kind,id) 去重取最晚删除时间；非法/无时间的条目丢弃，并限制总量 */
-const TOMBSTONE_LIMIT=2000;
+const TOMBSTONE_LIMIT=APP_LIMITS.TOMBSTONE_MAX;
 function sanitizeTombstones(arr){
   const latest=new Map();
   (Array.isArray(arr)?arr:[]).forEach(raw=>{

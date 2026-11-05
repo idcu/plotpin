@@ -118,7 +118,15 @@ async function openProjectLibrary(){
       const f=input.files&&input.files[0];
       if(!f) return;
       try{
-        const stats=await mergeProjectJSON(JSON.parse(await f.text()));
+        const fileErrs=importLimitErrors({bytes:f.size});
+        if(fileErrs.length) throw new Error(L('文件超限')+'：'+importLimitMessage(fileErrs));
+        const text=await f.text();
+        const textErrs=importLimitErrors({chars:text.length});
+        if(textErrs.length) throw new Error(L('文件超限')+'：'+importLimitMessage(textErrs));
+        const incoming=JSON.parse(text);
+        const objErrs=importLimitErrors({objects:countProjectObjects(incoming)});
+        if(objErrs.length) throw new Error(L('文件超限')+'：'+importLimitMessage(objErrs));
+        const stats=await mergeProjectJSON(incoming);
         closeModal();
         const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded;
         const conflict=stats.conflicts?`；${L('冲突')} ${stats.conflicts} ${L('项按较新版本保留')}`:'';
