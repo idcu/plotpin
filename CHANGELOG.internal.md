@@ -2,6 +2,24 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-14 撤销/重做 + 楼层操作后刷新一致
+
+- **Commit Hash**：`d35852a`（test(persist): 浏览器验证撤销/重做、新增楼层、删除当前楼层后刷新一致）。
+- **核心改动点**
+  - `tests/e2e/history.spec.mjs`：真实 UI 驱动（`#undoBtn/#redoBtn`、`#floorBtn`/`#floorAdd`/`#promptInput`/`#modalFooter`），每步都回读 IndexedDB `projects/current` 再 reload 复验。
+    - 撤销/重做：2→撤销 1→reload 仍 1；再画→撤销→重做 2→reload 仍 2；刷新后历史栈清空，按钮禁用。
+    - 新增楼层：新层 `F2-E2E` 画点 → current 与 reload 后均 floors=2 / active=新层 / objects=1 / 首层 0。
+    - 删除当前楼层：删除后 state 与 current 均 floors=1 / active=`floor.default` / objects=0 / 被删层不存在 → reload 不复活。
+- **实测验证数据（本机 Windows / Chromium 1254 / 2026-11-06）**
+  - `node scripts/e2e.mjs tests/e2e/history.spec.mjs`：**3 passed / 0 failed（8.2s）**，首跑即通过。
+  - 全量 `node scripts/e2e.mjs`：**13 passed / 0 failed（14.9s）**（smoke 3 + persistence 2 + csp 5 + history 3）。
+  - `node scripts/check.mjs`：通过。
+- **公共抽象 / 影响面**
+  - 复用 `tests/e2e/helpers.mjs` 的 `idb`；运行时代码零改动。
+- **遗留 TODO / 风险**
+  - 未覆盖「切换楼层后刷新」与「非当前楼层删除后刷新」；审计已知风险「切换楼层不落盘」仍未在本轮修复/验证范围内。
+  - 依赖 450ms 防抖落盘，用 7s 轮询断言；极慢 CI 仍可能抖动（失败会红，不会假绿）。
+
 ## 2026-11-06 · A-14 CSP 浏览器 PoC：4 条注入路径 + 内联兜底
 
 - **Commit Hash**：`2330ab7`（test(security): 浏览器 PoC 验证 4 条注入路径与 CSP 兜底均无法执行 JS）。
