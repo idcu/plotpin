@@ -73,7 +73,7 @@
 
 ## 2026-11-05 · Phase 3A：校准控制点可拖拽/增删/撤销，提交时才求解
 
-- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **Commit Hash**：`d37724f`（feat(calibrate): 校准控制点可拖拽/增删/撤销，提交时才求解仿射（Phase 3A））。
 - **核心改动点**
   - 比例尺校准不再在第二次点击时立刻弹距离输入：落点只记录控制点，`Enter` / 左侧 ✓ / 双击才提交；提交时才 `finishCalibration` 换算出 `metersPerPixel` 并 `scaleWorldAround`。
   - 校准控制点统一可编辑：`calibHitAt(sp)` 按屏幕 9px 命中；比例尺点拖拽改世界坐标；仿射红点拖拽改图上像素 `(u,v)`、绿点拖拽改实地坐标 `(x,y)`；选中点画橙色环。
