@@ -97,14 +97,14 @@ async function openProjectLibrary(){
   }).join('')||`<p class="hint-text">${esc(L('工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。'))}</p>`;
   const boundName=state.meta.projectId?(state.meta.name||L('当前工程')):'';
   openModal(L('工程库（保存在本机浏览器）'),
-    `<div class="proj-current">${esc(L('当前草稿：'))}<b>${esc(state.meta.name)}</b>${boundName?` · ${esc(L('已绑定工程库'))}`:''}　${esc(L('对象'))} ${state.objects.length} ${esc(L('个'))}</div>
+    modalBody`<div class="proj-current">${L('当前草稿：')}<b>${state.meta.name}</b>${boundName?` · ${L('已绑定工程库')}`:''}　${L('对象')} ${state.objects.length} ${L('个')}</div>
      <div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap">
-       <button class="primary" id="projSaveAs">💾 ${esc(L('把当前图纸另存到工程库'))}</button>
-       <button id="projMerge">⇄ ${esc(L('合并他人工程…'))}</button>
+       <button class="primary" id="projSaveAs">💾 ${L('把当前图纸另存到工程库')}</button>
+       <button id="projMerge">⇄ ${L('合并他人工程…')}</button>
      </div>
-     <div class="proj-list">${rows}</div>
-     <p class="hint-text">${esc(L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。'))}<br>
-       ${esc(L('离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。'))}</p>`,
+     <div class="proj-list">${safeHTML(rows)}</div>
+     <p class="hint-text">${L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。')}<br>
+       ${L('离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。')}</p>`,
     [{text:L('关闭'),click:closeModal}]);
   $('projSaveAs').onclick=async()=>{
     const v=await showPrompt({title:L('另存到工程库'),label:L('工程名称'),value:state.meta.name||L('未命名图纸工程')});

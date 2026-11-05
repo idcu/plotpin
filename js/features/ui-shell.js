@@ -135,3 +135,15 @@ function toast(msg,type=''){
 function esc(s){
   return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
+/** XML 文本/属性转义：与 esc 同一实现，单独命名以表达用途；禁止再写第二份替换表（审计 P1-8） */
+function xmlEscape(s){ return esc(s); }
+/** 安全模态正文模板：插值默认转义；需要嵌入受控 HTML 片段时用 safeHTML() 显式标记（审计 P2-28） */
+function modalBody(strings,...values){
+  return strings.reduce((html,chunk,i)=>{
+    if(!i) return chunk;
+    const v=values[i-1];
+    return html+(v&&v.__html?String(v.value):esc(v??''))+chunk;
+  },'');
+}
+/** 标记已受控的 HTML 片段（仅用于内部生成且已逐项转义的片段） */
+function safeHTML(value){ return {__html:true,value:String(value??'')}; }

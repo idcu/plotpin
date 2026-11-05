@@ -246,26 +246,26 @@ function openCollabPanel(){
   let stored='draft';
   try{ stored=localStorage.getItem('plotpin.collab.channel')||state.meta.projectId||'draft'; }catch(_){ stored=state.meta.projectId||'draft'; }
   openModal(L('实时协作'),
-    `<div class="hint-text">${esc(L('同一浏览器多标签页即时同步；跨设备可用 WebRTC 手动信令，无需服务器。'))}</div>
-     <div class="section" style="margin-top:8px"><h3>${esc(L('本机标签页同步'))}</h3>
-       <div class="form-grid"><label>${esc(L('频道名称'))}</label><input id="collabChannel" value="${esc(stored)}"></div>
-       <div class="form-actions"><button class="primary" id="collabLocalBtn">${esc(L('启用本机同步'))}</button>
-       <button id="collabStopBtn">${esc(L('断开'))}</button></div>
+    modalBody`<div class="hint-text">${L('同一浏览器多标签页即时同步；跨设备可用 WebRTC 手动信令，无需服务器。')}</div>
+     <div class="section" style="margin-top:8px"><h3>${L('本机标签页同步')}</h3>
+       <div class="form-grid"><label>${L('频道名称')}</label><input id="collabChannel" value="${stored}"></div>
+       <div class="form-actions"><button class="primary" id="collabLocalBtn">${L('启用本机同步')}</button>
+       <button id="collabStopBtn">${L('断开')}</button></div>
      </div>
-     <div class="section"><h3>${esc(L('跨设备直连（WebRTC）'))}</h3>
-       <div class="hint-text">${esc(L('主机生成邀请 → 客机粘贴后生成应答 → 主机把应答粘贴回来。SDP 含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。'))}</div>
+     <div class="section"><h3>${L('跨设备直连（WebRTC）')}</h3>
+       <div class="hint-text">${L('主机生成邀请 → 客机粘贴后生成应答 → 主机把应答粘贴回来。SDP 含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。')}</div>
        <div class="form-actions">
-         <button id="collabOfferBtn">${esc(L('生成邀请（主机）'))}</button>
-         <button id="collabAcceptBtn">${esc(L('应用对方信令 / 生成应答'))}</button>
-         <button id="collabCopyBtn">${esc(L('复制本机信令'))}</button>
+         <button id="collabOfferBtn">${L('生成邀请（主机）')}</button>
+         <button id="collabAcceptBtn">${L('应用对方信令 / 生成应答')}</button>
+         <button id="collabCopyBtn">${L('复制本机信令')}</button>
        </div>
        <div class="form-grid" style="margin-top:6px">
-         <label>${esc(L('本机信令（发给对方）'))}</label><textarea id="collabSignalOut" readonly rows="4" style="width:100%;font-family:Consolas,monospace;font-size:11px"></textarea>
-         <label>${esc(L('对方信令（粘贴）'))}</label><textarea id="collabSignalIn" rows="4" placeholder="${esc(L('粘贴邀请或应答 SDP'))}" style="width:100%;font-family:Consolas,monospace;font-size:11px"></textarea>
+         <label>${L('本机信令（发给对方）')}</label><textarea id="collabSignalOut" readonly rows="4" style="width:100%;font-family:Consolas,monospace;font-size:11px"></textarea>
+         <label>${L('对方信令（粘贴）')}</label><textarea id="collabSignalIn" rows="4" placeholder="${L('粘贴邀请或应答 SDP')}" style="width:100%;font-family:Consolas,monospace;font-size:11px"></textarea>
        </div>
      </div>
-     <div class="hint-text">${esc(L('底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。'))}</div>
-     <div id="collabStatus" class="hint-text">${esc(collabLastStatus||L('尚未连接'))}</div>`,
+     <div class="hint-text">${L('底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。')}</div>
+     <div id="collabStatus" class="hint-text">${collabLastStatus||L('尚未连接')}</div>`,
     [{text:L('关闭'),click:closeModal}]);
   $('collabLocalBtn').onclick=()=>{
     if(collabMode==='local'&&collabActive) collabStopAll();

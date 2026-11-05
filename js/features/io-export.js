@@ -204,18 +204,18 @@ function buildSceneSvg(){
     if(t){
       /* 按仿射系数把图像像素空间直接映射到 SVG 坐标（支持旋转/不等比/切变） */
       const m=`matrix(${t.a*ppu} ${-t.d*ppu} ${t.b*ppu} ${-t.e*ppu} ${X(t.c)} ${Y(t.f)})`;
-      shapes.push(`<image x="0" y="0" width="${bg.width}" height="${bg.height}" transform="${m}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
+      shapes.push(`<image x="0" y="0" width="${bg.width}" height="${bg.height}" transform="${m}" href="${xmlEscape(bgDataUrl)}" xlink:href="${xmlEscape(bgDataUrl)}"/>`);
     }else{
       /* 轴对齐图片：按自身像素×m/px 尺寸绘制，不能用并集取景框尺寸（否则有场地时会被拉伸 */
       const ww=Math.max(.01,Number(bg.width)*positiveNumber(bg.metersPerPixel,0.1));
       const hh=Math.max(.01,Number(bg.height)*positiveNumber(bg.metersPerPixel,0.1));
-      shapes.push(`<image x="${X(0)}" y="${Y(hh)}" width="${ww*ppu}" height="${hh*ppu}" href="${bgDataUrl}" xlink:href="${bgDataUrl}"/>`);
+      shapes.push(`<image x="${X(0)}" y="${Y(hh)}" width="${ww*ppu}" height="${hh*ppu}" href="${xmlEscape(bgDataUrl)}" xlink:href="${xmlEscape(bgDataUrl)}"/>`);
     }
   }
   /* 矢量场地层：独立于图片槽，SVG 中始终叠加在图片之上 */
   if(site&&siteIsVisible(site)){
     const sh=siteShapeOf(site), st=site.style||{};
-    const fill=st.fill||'#eef2f7', stroke=st.stroke||'#3b82f6';
+    const fill=xmlEscape(st.fill||'#eef2f7'), stroke=xmlEscape(st.stroke||'#3b82f6');
     if(sh.type==='circle'){
       shapes.push(`<circle cx="${X(sh.cx)}" cy="${Y(sh.cy)}" r="${sh.r*ppu}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
     }else if(sh.type==='ellipse'){

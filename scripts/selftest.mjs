@@ -128,6 +128,7 @@ code += `\n;globalThis.__api = {
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
+  xmlEscape, modalBody, safeHTML, sanitizeSiteStyle,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, formatNodeCoords, parseNodeCoords,
@@ -4454,6 +4455,32 @@ asyncSuites.push(async()=>{
   api.setDrag(null);
   api.state.site=null;
   api.resetState();
+}
+
+/* 69. A-08 转义与场地样式白名单 ------------------------------------------------------------ */
+{
+  eq('xmlEscape 转义五类字符', api.xmlEscape(`<&>"'`), '&lt;&amp;&gt;&quot;&#39;');
+  eq('xmlEscape 空值', api.xmlEscape(null), '');
+  const style=api.sanitizeSiteStyle({fill:'#abc',stroke:'rgb(1,2,3)',fillAlpha:2,strokeWidth:0,evil:'x'});
+  eq('sanitizeSiteStyle 保留合法 fill', style.fill, '#abc');
+  eq('sanitizeSiteStyle 保留合法 stroke', style.stroke, 'rgb(1,2,3)');
+  eq('sanitizeSiteStyle 透明度夹紧', style.fillAlpha, 1);
+  eq('sanitizeSiteStyle 线宽下限', style.strokeWidth, .01);
+  eq('sanitizeSiteStyle 丢弃未知键', 'evil' in style, false);
+  const bad=api.sanitizeSiteStyle({fill:'"><script>',stroke:'url(x)'});
+  eq('sanitizeSiteStyle 丢弃属性注入 fill', 'fill' in bad, false);
+  eq('sanitizeSiteStyle 丢弃 url() stroke', 'stroke' in bad, false);
+
+  /* 防御纵深：即使运行时样式绕过清洗（插件直接写 state.site.style），SVG 也不得出现原始引号/尖括号 */
+  api.state.site={id:'S',kind:'rect',name:'s',layerId:'layer.default',visible:true,locked:false,
+    style:{fill:'"><x',stroke:'red'},shape:{type:'rect',x:0,y:0,width:10,height:10},annot:{},updatedAt:''};
+  const svg=api.buildSceneSvg();
+  ok('SVG 场地 fill 已转义', svg.includes('fill="&quot;&gt;&lt;x"'));
+  ok('SVG 不包含原始注入串', !svg.includes('"><x'));
+  api.state.site=null;
+
+  eq('modalBody 默认转义插值', api.modalBody(['<b>','</b>'],'<x>'), '<b>&lt;x&gt;</b>');
+  eq('modalBody safeHTML 保留片段', api.modalBody(['<div>','</div>'], api.safeHTML('<i>ok</i>')), '<div><i>ok</i></div>');
 }
 
 /* ---------------- 结果汇总 ---------------- */

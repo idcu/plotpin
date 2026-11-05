@@ -687,6 +687,19 @@ function sanitizeImageBackground(rawBg){
     transform:validImageTransform(rawBg.transform)
   };
 }
+/** 场地样式白名单：仅保留可安全写入 SVG 的填充/描边/透明度/线宽（审计 P1-8） */
+const SITE_COLOR_RE=/^(#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\(\s*[0-9.,%\s/+-]+\)|transparent|[a-zA-Z]{3,20})$/i;
+function sanitizeSiteStyle(raw){
+  const out={};
+  if(!raw||typeof raw!=='object') return out;
+  const color=v=>typeof v==='string'&&SITE_COLOR_RE.test(v.trim())?v.trim():'';
+  const fill=color(raw.fill), stroke=color(raw.stroke);
+  if(fill) out.fill=fill;
+  if(stroke) out.stroke=stroke;
+  if(raw.fillAlpha!==undefined) out.fillAlpha=Math.min(1,Math.max(0,finiteNumber(raw.fillAlpha,.15)));
+  if(raw.strokeWidth!==undefined) out.strokeWidth=Math.min(20,Math.max(.01,finiteNumber(raw.strokeWidth,2)));
+  return out;
+}
 /**
  * 矢量场地槽清洗：复用 sanitizeShape 的形状规则，补独立元数据（id/name/layerId/visible/locked/annot/style）。
  * 场地不进 objects，不设 typeId；kind 始终等于 shape.type。
@@ -706,7 +719,7 @@ function sanitizeSite(rawSite,layers){
   site.visible=rawSite.visible!==false;
   site.locked=!!rawSite.locked;
   site.annot=typeof rawSite.annot==='object'&&rawSite.annot?rawSite.annot:{};
-  site.style=typeof rawSite.style==='object'&&rawSite.style?rawSite.style:{};
+  site.style=sanitizeSiteStyle(rawSite.style);
   site.updatedAt=typeof rawSite.updatedAt==='string'?rawSite.updatedAt:'';
   site.kind=shape.type;
   return site;

@@ -61,6 +61,9 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | `clearCurrentFloor()` | `js/core/persistence.js`（当前楼层全清并恢复默认取景框，返回清理摘要） | 顶栏「清空」按钮（先 `pushHistory` 再调用）；自测直接调用。影响：清空写入对象墓碑、同步当前楼层条目、清空校准运行时状态，不重置图层/类型/楼层结构 |
 | `markDirty(kind)` | `js/core/persistence.js`（变更提交协议唯一实现：清覆盖率 → 重建静态层 → 落盘 → 广播 → 按 kind 刷 UI/重绘） | `commitChange`（object）、`commitObjectEdit`（objectEdit）、`clearCurrentFloor`（clear，不广播）、`undo/redo`（restore）、`deleteFloor`（floor，不广播）；`switchFloorData` 仍只清覆盖率/静态层，落盘由 `switchFloor` 负责，避免载入资产前提前写盘 |
 | `sameSerializable / objectMovedFrom / dragChanged / cancelActiveDrag` | `js/core/interaction.js`（拖拽提交判定与取消的唯一实现：深比较剔除 `updatedAt`，未变更不落盘、不留空快照） | `pointerup` 的 move/手柄/图片/场地提交判定；`pointerdown` 第二指、`pointercancel`、`lostpointercapture`、Escape 统一走 `cancelActiveDrag` |
+| `xmlEscape(s)` | `js/features/ui-shell.js`（与 `esc` 共用同一替换表，按 XML/SVG 用途命名） | `io-export.js` 的底图 `href`、场地 `fill/stroke`；任何新增 XML 文本/属性写入必须复用它 |
+| ``modalBody`…` / safeHTML(html)`` | `js/features/ui-shell.js`（模态正文模板：插值默认转义；`safeHTML` 仅用于内部已逐项转义的片段） | `openProjectLibrary`、`openCollabPanel`；新增模态优先用 `modalBody`，禁止拼接未转义的用户数据 |
+| `sanitizeSiteStyle(raw)` | `js/core/persistence.js`（场地样式白名单唯一实现：`fill/stroke` 颜色、`fillAlpha`、`strokeWidth`） | `sanitizeSite`（载入/导入/合并）；导出层 `xmlEscape` 为第二道防线 |
 | `markSurfaceSize(canvas, cssW, cssH) / surfaceCssSize(ctx)` | `js/core/render.js`（绘图表面逻辑尺寸的唯一来源） | `drawScreenTag` 的夹边、离屏静态层、PNG/PDF 导出画布。离屏 canvas 的 `clientWidth` 恒为 0，必须用登记尺寸，否则屏幕标签被压到 (2,2) |
 
 影响范围：`siteHandleList/siteAreaPerimeter/siteBoundaryPoints/siteShapeCenter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；`resizeSiteByHandle(h,p)` 是写 `state.site` 的薄包装，新代码应优先用 `siteHandleDragTo(site,h,p)`，它不读全局、便于单测。删除重复后 `render.js` 不再声明 `siteBoundaryPoints/siteShapeCenter/siteAreaPerimeter/siteBasePoint/siteRadiusText`，`interaction.js` 不再声明 `siteHandleList/resizeSiteByHandle`——同名函数只保留 `geometry.js` 一份，避免两份实现漂移。
