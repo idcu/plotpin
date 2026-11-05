@@ -45,7 +45,7 @@
       ariaTypeColor: '类型颜色', ariaTypeRename: '重命名类型', ariaTypeDelete: '删除类型',
       ariaBatchLayer: '批量移动到图层', ariaBatchDx: 'X 方向平移距离', ariaBatchDy: 'Y 方向平移距离', ariaBatchAngle: '旋转角度',
       /* HUD / 清单 / 图层与类型 */
-      typeLabel: '类型', shapeLabel: '形状', closedArea: '闭合区域', labelsToggle: '标签', pointSize: '点大小',
+      typeLabel: '类型', shapeLabel: '形状', closedArea: '闭合区域', pointSize: '点大小',
       hintText: '滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉类型；可拖拽文件到画布导入；按 ? 查看全部快捷键',
       allObjects: '全部对象', allLayers: '全部图层',
       filterPoint: '点设备', filterArea: '矩形/区域', filterLine: '线段/折线', filterText: '文字', filterDimension: '尺寸标注',
@@ -62,10 +62,8 @@
       dimDistance: '两点距离', dimRuler: '测距（多点总长）', dimArea: '面积', dimAngle: '角度',
       /* 设置面板 */
       projectName: '工程名称', gridSpacing: '网格间距', enableSnap: '启用捕捉', showGrid: '显示网格',
-      showLabelsSetting: '显示标签', crosshair: '十字准星/坐标', segLenSetting: '段长度标注', segLabelMinPxSetting: '段长标注最小像素',
-      areaTagSetting: '图上显示面积', siteNodesSetting: '场地节点坐标', siteSegLenSetting: '场地段长',
-      siteBaseSetting: '场地基点坐标', siteRadiusSetting: '场地半径', siteAreaSetting: '场地面积',
-      sitePerimeterSetting: '场地周长', osnapSetting: '对象捕捉', polarSetting: '极轴追踪',
+      crosshair: '十字准星/坐标', segLabelMinPxSetting: '段长标注最小像素',
+      osnapSetting: '对象捕捉', polarSetting: '极轴追踪',
       polarStepSetting: '极轴角', precisionSetting: '坐标精度', runtimeSetting: '运行环境',
       siteBgSetting: '场地/底图', languageLabel: '界面语言'
     },
@@ -104,7 +102,7 @@
       ariaLayerRename: 'Rename layer', ariaLayerDelete: 'Delete layer',
       ariaTypeColor: 'Type color', ariaTypeRename: 'Rename type', ariaTypeDelete: 'Delete type',
       ariaBatchLayer: 'Move selection to layer', ariaBatchDx: 'X offset', ariaBatchDy: 'Y offset', ariaBatchAngle: 'Rotation angle',
-      typeLabel: 'Type', shapeLabel: 'Shape', closedArea: 'Closed area', labelsToggle: 'Labels', pointSize: 'Marker size',
+      typeLabel: 'Type', shapeLabel: 'Shape', closedArea: 'Closed area', pointSize: 'Marker size',
       hintText: 'Wheel to zoom; right/middle drag or Space+drag to pan; Delete to remove; Tab cycles snap types; drop files to import; press ? for shortcuts',
       allObjects: 'All objects', allLayers: 'All layers',
       filterPoint: 'Point', filterArea: 'Rect/Area', filterLine: 'Polyline', filterText: 'Text', filterDimension: 'Dimension',
@@ -120,10 +118,8 @@
       shapeRect: 'Rectangle', shapeCircle: 'Circle', shapeEllipse: 'Ellipse', shapeSector: 'Sector', shapeParallelogram: 'Parallelogram',
       dimDistance: 'Two-point distance', dimRuler: 'Measure (total length)', dimArea: 'Area', dimAngle: 'Angle',
       projectName: 'Project name', gridSpacing: 'Grid spacing', enableSnap: 'Enable snapping', showGrid: 'Show grid',
-      showLabelsSetting: 'Show labels', crosshair: 'Crosshair / coordinates', segLenSetting: 'Segment lengths', segLabelMinPxSetting: 'Min segment label (px)',
-      areaTagSetting: 'Show area on drawing', siteNodesSetting: 'Site node coordinates', siteSegLenSetting: 'Site segment lengths',
-      siteBaseSetting: 'Site base coordinates', siteRadiusSetting: 'Site radius', siteAreaSetting: 'Site area',
-      sitePerimeterSetting: 'Site perimeter', osnapSetting: 'Object snap', polarSetting: 'Polar tracking',
+      crosshair: 'Crosshair / coordinates', segLabelMinPxSetting: 'Min segment label (px)',
+      osnapSetting: 'Object snap', polarSetting: 'Polar tracking',
       polarStepSetting: 'Polar angle', precisionSetting: 'Coordinate precision', runtimeSetting: 'Runtime',
       siteBgSetting: 'Site / base map', languageLabel: 'Interface language'
     }

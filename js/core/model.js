@@ -407,3 +407,19 @@ function setAnnot(o,key,val){
   o.annot[key]=v; o.updatedAt=nowISO();
   return changed;
 }
+/* 场地标注显示开关：沿用 state.settings 原键（不改 schema、不做迁移），
+   控件已从工程设置搬进场地属性面板；六项含义与 drawSiteAnnotations / SVG 导出同口径。 */
+const SITE_ANNOT_SETTING_KEYS=['siteNodes','siteSegLen','siteBase','siteRadius','siteArea','sitePerimeter'];
+/** 某场地标注开关的当前值（缺省按已有工程默认口径） */
+function siteAnnotSettingOn(key){
+  if(!SITE_ANNOT_SETTING_KEYS.includes(key)) return false;
+  return !!(state.settings&&state.settings[key]);
+}
+/** 写入场地标注开关（仅接受已登记键与布尔值），返回是否变化 */
+function setSiteAnnotSetting(key,val){
+  if(!SITE_ANNOT_SETTING_KEYS.includes(key)) return false;
+  state.settings=state.settings||{};
+  const v=!!val, changed=state.settings[key]!==v;
+  state.settings[key]=v;
+  return changed;
+}

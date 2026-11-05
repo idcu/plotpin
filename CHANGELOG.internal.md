@@ -114,5 +114,27 @@
   - 图片变换与比例尺/仿射校准共用 `background.transform`，变换后如需重新校准，建议先「重置校准」再打点，避免旧映射叠加；已在工具提示中不承诺自动合并。
   - 自测仍未模拟画布指针，图片手柄拖拽的浏览器手测需补一次。
 
+## 2026-11-05 · 标注显示开关从全局设置搬进属性面板
+
+- **Commit Hash**：`占位（本提交后回填）`（feat(props): 标注显示开关迁入场地/对象属性面板）。
+- **核心改动点**
+  - 场地六项标注开关（节点坐标 / 段长 / 基点坐标 / 半径 / 面积 / 周长）从「工程设置」弹窗搬进**场地属性面板**；按形状只显示有效项（圆/椭圆/扇形无节点与段长，多边形/圆/椭圆/扇形无基点，矩形/平行四边形/多边形无半径），无场地时不渲染开关组，锁定（含所属图层锁定）时 `disabled`。
+  - 点设备 / 区域 / 折线的「图上标注」开关原本就在各自属性面板内，本提交仅把全局重复入口移除：设置弹窗的「显示标签 / 段长度标注 / 图上显示面积」与顶部工具栏「标签」复选框一并删除，**避免同一开关出现两处**。
+  - 存储不变：六个场地开关仍写 `state.settings.siteNodes / siteSegLen / siteBase / siteRadius / siteArea / sitePerimeter`；对象开关仍写对象 `annot`；`showLabels / showSegLen / showAreaTag` 保留为旧工程与未单独配置对象的缺省值。无 schema 变更、无迁移、旧工程读取不受影响。
+  - 渲染/导出读取路径未改，仍与 `drawSiteAnnotations`、SVG 场地标注同口径。
+- **公共抽象**
+  - 新增 `annotToggleGroupHTML(items, opts)`（标注开关组 HTML 唯一模板，`attr` 区分 `data-annot` / `data-site-annot`）与 `bindAnnotToggleInputs(box, spec)`（事件绑定唯一实现，`apply` 负责回写）。
+  - 新增 `siteAnnotToggleKeys(site)` / `renderSiteAnnotToggles(site)`（`props.js`）与 `SITE_ANNOT_SETTING_KEYS / siteAnnotSettingOn / setSiteAnnotSetting`（`model.js`）。
+  - 影响范围：`renderAnnotToggles(o)` 改为复用模板，输出 DOM 键与文案不变；对象/场地属性面板的开关绑定统一走 `bindAnnotToggleInputs`，后续新增开关只传 `items`，禁止复制循环。设置弹窗与工具栏旧入口删除后，`state.settings` 上述键不再有 UI，但读取逻辑全部保留。
+- **实测验证数据（本机实测）**
+  - `node scripts/check.mjs`：通过（26 脚本语法/入口资源/离线/契约/API/分层，含中英键对齐）。
+  - `node scripts/selftest.mjs`：1584 通过 / 0 失败（Phase 3B 为 1569，净增 15）。
+  - `node scripts/badge.mjs`：README 断言数已同步为 1584。
+  - `node scripts/bench.mjs`：**本次未跑**。改动仅涉及属性面板 DOM 渲染与设置弹窗删减，不触碰画布逐帧渲染、缓存键、几何或导出路径；按口径不强制。若后续改动 `drawSiteAnnotations` 或 `renderSiteProps` 的每帧调用链，需补跑。
+- **遗留 TODO / 风险**
+  - 顶部工具栏全局「标签」移除后，不再有一键全局隐藏编号的入口；用户需在对象属性面板逐对象关闭。`showLabels` 缺省值仍为 `true`，旧工程中该值为 `false` 的对象无显式 `annot.name` 时仍按缺省隐藏（行为兼容），但新 UI 无法再修改这个缺省。
+  - 自测仅校验生成的 HTML 与 settings 写入，未模拟真实点击 `change` 事件；场地开关在浏览器中的勾选/禁用需人工回归一次（选中场地 → 切换六项 → 隐藏/锁定图层再切换）。
+  - 设置弹窗删掉三行后布局更紧凑，未做 320px 窄屏截图回归；文案沿用现有中英字典，无新增硬编码。
+
 
 

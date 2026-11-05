@@ -48,7 +48,6 @@ $('coverageBtn').addEventListener('click',runCoverageAnalysis);
 $('zoomInBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.2));
 $('zoomOutBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1/1.2));
 $('zoomFitBtn').addEventListener('click',fitView);
-$('showLabels').addEventListener('change',e=>{ state.settings.showLabels=e.target.checked; scheduleSave(); requestRender(); });
 $('markerScaleInput')?.addEventListener('input',e=>{
   state.settings.markerScale=Math.min(2.5,Math.max(.5,Number(e.target.value)||1));
   $('markerScaleLabel').textContent=Number(state.settings.markerScale).toFixed(1)+'×';
@@ -403,7 +402,6 @@ async function runPlacementOptimization(){
 /* -------------------- 统一刷新 -------------------- */
 function refreshUI(){
   populateSelects();
-  $('showLabels').checked=!!state.settings.showLabels;
   const msEl=$('markerScaleInput');
   if(msEl) msEl.value=String(Number(state.settings.markerScale)||1);
   const msLbl=$('markerScaleLabel');

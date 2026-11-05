@@ -116,6 +116,8 @@ code += `\n;globalThis.__api = {
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
   annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
+  annotToggleGroupHTML, bindAnnotToggleInputs, siteAnnotToggleKeys, renderSiteAnnotToggles,
+  SITE_ANNOT_SETTING_KEYS, siteAnnotSettingOn, setSiteAnnotSetting,
   typeDisplayName, populateSelects,
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
   $, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
@@ -2088,6 +2090,28 @@ asyncSuites.push((async()=>{
   /* 布局回归：节点列表需跨满 form-grid 两列；复用对象节点行（含抓手）后不再需要独立 vtx 模板 */
   ok('场地属性-多边形列表跨满整行', hp.includes('class="node-list span2"'));
   ok('场地属性-多边形提示为顶点口径', hp.includes('个顶点') && hp.includes('至少'));
+  /* 场地标注开关已从工程设置搬进场地属性面板：仍写 state.settings 原键，按形状只列有效项 */
+  ok('场地属性-矩形含节点/段长/基点/面积/周长开关',
+    ['siteNodes','siteSegLen','siteBase','siteArea','sitePerimeter'].every(k=>h1.includes(`data-site-annot="${k}"`)) && !h1.includes('data-site-annot="siteRadius"'));
+  ok('场地属性-圆形含基点/半径不含节点/段长',
+    hc.includes('data-site-annot="siteBase"') && hc.includes('data-site-annot="siteRadius"') &&
+    !hc.includes('data-site-annot="siteNodes"') && !hc.includes('data-site-annot="siteSegLen"'));
+  ok('场地属性-多边形无基点/半径',
+    !hp.includes('data-site-annot="siteBase"') && !hp.includes('data-site-annot="siteRadius"') && hp.includes('data-site-annot="siteNodes"'));
+  ok('场地属性-开关组复用对象面板模板跨满两列', h1.includes('class="annot-chks span2"'));
+  eq('场地标注开关-矩形键集合', api.siteAnnotToggleKeys(rectBG).map(x=>x[0]), ['siteNodes','siteSegLen','siteBase','siteArea','sitePerimeter']);
+  eq('场地标注开关-圆形键集合', api.siteAnnotToggleKeys({kind:'circle',shape:{type:'circle',cx:0,cy:0,r:5}}).map(x=>x[0]), ['siteBase','siteRadius','siteArea','sitePerimeter']);
+  eq('场地标注开关-无场地无开关组', api.renderSiteAnnotToggles(null), '');
+  ok('场地标注开关-锁定禁用', api.renderSiteAnnotToggles({kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:10},locked:true}).includes('disabled'));
+  ok('场地标注开关-未锁定可用', !api.renderSiteAnnotToggles(rectBG).includes('disabled'));
+  eq('场地标注开关-默认六键', api.SITE_ANNOT_SETTING_KEYS.map(k=>api.siteAnnotSettingOn(k)), [true,true,false,false,true,true]);
+  ok('场地标注开关-写入生效', api.setSiteAnnotSetting('siteBase',true) && api.siteAnnotSettingOn('siteBase')===true);
+  ok('场地标注开关-非法键拒绝', api.setSiteAnnotSetting('showLabels',false)===false && api.state.settings.siteNodes===true);
+  api.setSiteAnnotSetting('siteBase',false);
+  ok('场地标注开关-关闭后不勾选', !/data-site-annot="siteBase"[^>]*checked/.test(api.renderSiteAnnotToggles(rectBG)));
+  /* 旧入口已移除：设置弹窗不再渲染场地/标签/段长/面积开关，工具栏不再有全局「标签」 */
+  ok('旧入口-设置弹窗已无场地与全局标注开关', !code.includes('id="setSiteNodes"') && !code.includes('id="setLabels"') && !code.includes('id="setSegLen"') && !code.includes('id="setAreaTag"'));
+  ok('旧入口-工具栏已无全局标签复选框', !html.includes('id="showLabels"'));
   ok('场地属性-扇形含张角', api.sitePropsHTML({kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:0,a1:90}},'default').includes('data-site-field="sweep"'));
   ok('场地属性-椭圆含两半径与旋转', (()=>{ const e=api.sitePropsHTML({kind:'ellipse',shape:{type:'ellipse',cx:0,cy:0,rx:20,ry:10,angle:0}},'default'); return e.includes('data-site-field="rx"') && e.includes('data-site-field="ry"') && e.includes('data-site-field="angle"'); })());
   /* 图片底图：显示摘要 + 校准入口按钮；工具模式下给引导语 */

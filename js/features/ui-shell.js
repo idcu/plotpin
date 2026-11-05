@@ -8,17 +8,8 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('gridSpacing'))}</label><input id="setGrid" type="number" min="0.1" step="0.1" value="${state.settings.gridSize}">
       <label>${esc(T('enableSnap'))}</label><input id="setSnap" type="checkbox" ${state.settings.snap?'checked':''}>
       <label>${esc(T('showGrid'))}</label><input id="setGridVisible" type="checkbox" ${state.settings.gridVisible?'checked':''}>
-      <label>${esc(T('showLabelsSetting'))}</label><input id="setLabels" type="checkbox" ${state.settings.showLabels?'checked':''} title="未单独设置「编号」开关的对象默认显示编号；已单独设置的对象始终按自身配置">
       <label>${esc(T('crosshair'))}</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
-      <label>${esc(T('segLenSetting'))}</label><input id="setSegLen" type="checkbox" ${state.settings.showSegLen?'checked':''} title="未单独设置「段长/周长」的折线默认显示；已单独设置的对象始终按自身配置">
       <label>${esc(T('segLabelMinPxSetting'))}</label><input id="setSegLabelMinPx" type="number" min="${APP_LIMITS.SEG_LABEL_MIN_PX_MIN}" max="${APP_LIMITS.SEG_LABEL_MIN_PX_MAX}" step="1" value="${state.settings.segLabelMinPx}" title="屏幕上短于该像素长度的线段不显示段长标注，避免拥挤">
-      <label>${esc(T('areaTagSetting'))}</label><input id="setAreaTag" type="checkbox" ${state.settings.showAreaTag?'checked':''} title="未单独设置「面积/周长」的区域与闭合折线默认显示；已单独设置的对象始终按自身配置">
-      <label>${esc(T('siteNodesSetting'))}</label><input id="setSiteNodes" type="checkbox" ${state.settings.siteNodes?'checked':''} title="矢量场地边界各节点显示世界坐标（矩形/多边形）">
-      <label>${esc(T('siteSegLenSetting'))}</label><input id="setSiteSegLen" type="checkbox" ${state.settings.siteSegLen?'checked':''} title="矢量场地相邻节点之间显示边长">
-      <label>${esc(T('siteBaseSetting'))}</label><input id="setSiteBase" type="checkbox" ${state.settings.siteBase?'checked':''} title="矢量场地显示基点/圆心坐标">
-      <label>${esc(T('siteRadiusSetting'))}</label><input id="setSiteRadius" type="checkbox" ${state.settings.siteRadius?'checked':''} title="圆/椭圆/扇形场地显示半径">
-      <label>${esc(T('siteAreaSetting'))}</label><input id="setSiteArea" type="checkbox" ${state.settings.siteArea?'checked':''} title="矢量场地中心显示面积">
-      <label>${esc(T('sitePerimeterSetting'))}</label><input id="setSitePerimeter" type="checkbox" ${state.settings.sitePerimeter?'checked':''} title="矢量场地中心显示周长">
       <label>${esc(T('osnapSetting'))}</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）">
       <label>${esc(T('polarSetting'))}</label><input id="setPolar" type="checkbox" ${state.settings.polar?'checked':''} title="逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）">
       <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="极轴追踪的角度步长">${[15,30,45,90].map(x=>`<option value="${x}" ${Number(state.settings.polarStep)===x?'selected':''}>${x}°</option>`).join('')}</select>
@@ -32,9 +23,7 @@ $('settingsBtn').onclick=()=>{
       state.meta.name=$('setName').value.trim()||'未命名图纸工程';
       state.settings.gridSize=Math.max(.01,Number($('setGrid').value)||1);
       state.settings.snap=$('setSnap').checked; state.settings.gridVisible=$('setGridVisible').checked;
-      state.settings.showLabels=$('setLabels').checked;
       state.settings.showCursor=$('setCursor').checked;
-      state.settings.showSegLen=$('setSegLen').checked;
       const segMin=Number($('setSegLabelMinPx').value);
       state.settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
         Math.round(Number.isFinite(segMin)?segMin:APP_LIMITS.SEG_LABEL_MIN_PX)));
@@ -45,13 +34,6 @@ $('settingsBtn').onclick=()=>{
       I18N.setLang(state.settings.lang); I18N.apply(document); refreshUI(); refreshI18nRuntimeText();
       if(!state.settings.osnap) osnapMode=null;
       updateOsnapChip();
-      state.settings.showAreaTag=$('setAreaTag').checked;
-      state.settings.siteNodes=$('setSiteNodes').checked;
-      state.settings.siteSegLen=$('setSiteSegLen').checked;
-      state.settings.siteBase=$('setSiteBase').checked;
-      state.settings.siteRadius=$('setSiteRadius').checked;
-      state.settings.siteArea=$('setSiteArea').checked;
-      state.settings.sitePerimeter=$('setSitePerimeter').checked;
       state.settings.precision=Math.max(0,Math.min(6,Number($('setPrecision').value)||2));
       closeModal(); commitChange('设置已保存');
     }}

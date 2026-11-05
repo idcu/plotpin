@@ -70,11 +70,60 @@ function annotToggleKeys(o){
   if(o.kind==='line' && !o.closed) return keys.filter(k=>k!=='area');
   return keys;
 }
+/**
+ * 标注开关组（对象属性面板与场地属性面板共用）：items=[{key,label,checked,disabled?}]，
+ * opts={attr:'data-annot'|'data-site-annot', heading:'图上标注'}；无条目时返回空串。
+ */
+function annotToggleGroupHTML(items, opts){
+  items=items||[];
+  if(!items.length) return '';
+  const attr=(opts&&opts.attr)||'data-annot';
+  const heading=(opts&&opts.heading)||'图上标注';
+  const chks=items.map(it=>{
+    const label=L(it.label);
+    return `<label class="annot-chk" title="${esc(L('在图上显示'))} ${esc(label)}"><input type="checkbox" ${attr}="${esc(it.key)}" ${it.checked?'checked':''} ${it.disabled?'disabled':''}> ${esc(label)}</label>`;
+  }).join('');
+  return `<label class="span2">${esc(L(heading))}</label><div class="annot-chks span2">${chks}</div>`;
+}
+/** 标注开关事件绑定（对象/场地共用）：attr 定位控件，apply(key,checked) 写回，changed() 触发重绘 */
+function bindAnnotToggleInputs(box, spec){
+  const attr=spec.attr||'data-annot';
+  box.querySelectorAll('['+attr+']').forEach(el=>el.addEventListener('change',()=>{
+    if(spec.apply(el.getAttribute(attr),el.checked)) spec.changed();
+  }));
+}
 function renderAnnotToggles(o){
   const keys=annotToggleKeys(o);
   if(!keys.length) return '';
-  const chks=keys.map(k=>`<label class="annot-chk" title="${esc(L('在图上显示'))} ${esc(L(annotLabel(o,k)))}"><input type="checkbox" data-annot="${k}" ${annotOn(o,k)?'checked':''}> ${esc(L(annotLabel(o,k)))}</label>`).join('');
-  return `<label class="span2">${esc(L('图上标注'))}</label><div class="annot-chks span2">${chks}</div>`;
+  return annotToggleGroupHTML(keys.map(k=>({key:k,label:annotLabel(o,k),checked:annotOn(o,k)})));
+}
+/**
+ * 场地标注开关组（数据仍写 state.settings 原键，不写对象 annot）：
+ * 只列出该形状有意义的开关——矩形/平行四边形/多边形有节点与段长；
+ * 矩形/平行四边形/圆/椭圆/扇形有基点；圆/椭圆/扇形有半径；面积/周长始终可用。
+ * 场地锁定（含所属图层锁定）时禁用，与业务对象属性面板的锁定语义一致。
+ */
+function siteAnnotToggleKeys(site){
+  const t=siteShapeOf(site).type;
+  const hasPts=(t==='rect'||t==='parallelogram'||t==='polygon');
+  const hasBase=(t==='rect'||t==='parallelogram'||t==='circle'||t==='ellipse'||t==='sector');
+  const hasRadius=(t==='circle'||t==='ellipse'||t==='sector');
+  return [
+    ['siteNodes','节点坐标',hasPts],
+    ['siteSegLen','段长',hasPts],
+    ['siteBase','基点坐标',hasBase],
+    ['siteRadius','半径',hasRadius],
+    ['siteArea','面积',true],
+    ['sitePerimeter','周长',true]
+  ].filter(x=>x[2]).map(x=>[x[0],x[1]]);
+}
+function renderSiteAnnotToggles(site){
+  site=site===undefined?state.site:site;
+  if(!site) return '';
+  const locked=siteIsLocked(site);
+  return annotToggleGroupHTML(siteAnnotToggleKeys(site).map(([key,label])=>({
+    key,label,checked:siteAnnotSettingOn(key),disabled:locked
+  })),{attr:'data-site-annot'});
 }
 /* -------------------- 场地属性 / 场地节点编辑 -------------------- */
 /**
@@ -135,6 +184,7 @@ function sitePropsHTML(site, mode){
       <label>${esc(L('面积'))}</label><div><b id="siteAreaVal">${fmt(ap.area)}</b> ㎡</div>
       <label>${esc(L('周长'))}</label><div><b id="sitePerimVal">${fmt(ap.perimeter)}</b> m</div>
     </div>
+    <div class="form-grid">${renderSiteAnnotToggles(site)}</div>
     <div class="hint-text">${esc(L(hint))}</div>
     ${tool?'':`<div class="hint-text">${esc(L('提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。'))}</div>`}
   </div>`;
@@ -190,6 +240,8 @@ function bindSiteNodeEvents(box){
       changed();
     });
   });
+  /* 场地标注开关写回 state.settings 原键（不发对象 annot）；与对象面板共用同一绑定实现 */
+  bindAnnotToggleInputs(box,{attr:'data-site-annot',apply:(key,val)=>setSiteAnnotSetting(key,val),changed});
   /* 多边形顶点编辑与业务对象共用同一套 data-node-* 事件绑定；增删/排序仍走场地专用提交 */
   bindNodeEditorEvents(box,{
     points:()=>state.site?.shape?.points,
@@ -424,8 +476,8 @@ function bindPropEvents(box,o){
   box.addEventListener('focusin',()=>pushHistory(),{once:true});
   const changed=()=>{ o.updatedAt=nowISO(); commitObjectEdit(); };
   box.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>applyField(el,o,changed)));
-  /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘 */
-  box.querySelectorAll('[data-annot]').forEach(el=>el.addEventListener('change',()=>{ if(setAnnot(o,el.dataset.annot,el.checked)) changed(); }));
+  /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘（与场地面板共用同一绑定实现） */
+  bindAnnotToggleInputs(box,{apply:(key,val)=>setAnnot(o,key,val),changed});
   box.querySelectorAll('[data-style]').forEach(el=>el.addEventListener('input',()=>{
     const k=el.dataset.style; o.style=o.style||{};
     if(k==='noFill'){ o.style.fillAlpha=el.checked?0:.15; }
