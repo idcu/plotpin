@@ -72,6 +72,7 @@ let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(
  * @property {string} createdAt
  * @property {string} updatedAt
  * @typedef {Object} Site
+ * @property {string} type 固定为 'site'（与图片栅格槽区分）
  * @property {string} id
  * @property {string} name
  * @property {string} layerId
@@ -219,7 +220,7 @@ function defaultSiteShape(){ return { type:'rect', w:100, h:70 }; }
  */
 function createSiteSlot(shape){
   const sh = shape || defaultSiteShape();
-  return { id:'site.default', name:'场地', layerId:'layer.default', visible:true, locked:false,
+  return { type:'site', id:'site.default', name:'场地', layerId:'layer.default', visible:true, locked:false,
     annot:{}, style:{}, updatedAt:nowISO(), kind: sh.type || 'rect', shape: deepClone(sh) };
 }
 /** 图片底图判定：只有 kind==='image' 的槽才承载栅格 */

@@ -46,10 +46,11 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 |---|---|---|
 | `createEmptyBackground / createSiteSlot / isImageBackground / siteShapeOf / siteIsVisible / siteIsLocked` | `js/core/model.js` | 全仓 |
 | `siteDomainOf / siteBounds / siteOutlinePoints / imageWorldFrame` | `js/core/geometry.js` | 视口、渲染、导出、交互 |
-| `siteHandleList / resizeSiteByHandle / siteAreaPerimeter` | `js/core/interaction.js`（展示/命中/拖拽层，几何内核来自 geometry） | 渲染、属性面板 |
+| `siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` | `js/core/geometry.js`（场地几何唯一实现） | `render.js` 标注、`io-export.js` SVG、属性面板 |
+| `siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` | `js/core/geometry.js`（手柄几何唯一实现；交互层只做命中与事件分发） | `render.js` 手柄绘制、`interaction.js` 拖拽 |
 | `applyVectorSite / siteDxfEntities` | `js/features/io-import.js` / `js/features/io-export.js` | 仅功能域内部 |
 
-影响范围：`siteHandleList/siteAreaPerimeter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；新增 `siteOutlinePoints` 供 SVG/DXF 共用形状边界。
+影响范围：`siteHandleList/siteAreaPerimeter/siteBoundaryPoints/siteShapeCenter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；`resizeSiteByHandle(h,p)` 是写 `state.site` 的薄包装，新代码应优先用 `siteHandleDragTo(site,h,p)`，它不读全局、便于单测。删除重复后 `render.js` 不再声明 `siteBoundaryPoints/siteShapeCenter/siteAreaPerimeter/siteBasePoint/siteRadiusText`，`interaction.js` 不再声明 `siteHandleList/resizeSiteByHandle`——同名函数只保留 `geometry.js` 一份，避免两份实现漂移。
 
 ## 加一个新功能时
 

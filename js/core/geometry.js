@@ -496,6 +496,163 @@ function siteOutlinePoints(site){
   const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), h=positiveNum(sh.h,70);
   return [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
 }
+/* -------------------- 矢量场地几何统一（渲染 / 交互 / 导出共用） --------------------
+ * 以下函数是场地几何的唯一实现：render.js 只负责画，interaction.js 只负责事件分发，
+ * io-export.js 只负责拼装产物。参数既接受 state.site，也接受旧版矢量 background
+ * （{kind:'rect',shape:{...}}），旧签名调用保持不变。 */
+/** 场地边界折点（世界坐标，Y 向上）：矩形/平行四边形→四角；多边形→顶点；圆/椭圆/扇形无折点返回 null */
+function siteBoundaryPoints(site){
+  const sh=(site&&site.shape)||{};
+  if(sh.type==='polygon') return (sh.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
+  if(sh.type==='parallelogram'){
+    return parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
+  }
+  if(!sh.type||sh.type==='rect'){
+    const b=siteBounds(site);
+    return [[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]];
+  }
+  return null;
+}
+/** 场地几何中心：圆/椭圆/扇形取圆心，其余取边界折点均值（与区域面积标签同口径） */
+function siteShapeCenter(site){
+  const sh=(site&&site.shape)||{};
+  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
+  const pts=siteBoundaryPoints(site);
+  if(pts&&pts.length) return [pts.reduce((s,p)=>s+p[0],0)/pts.length, pts.reduce((s,p)=>s+p[1],0)/pts.length];
+  const d=siteDomainOf(site); return [d.w/2,d.h/2];
+}
+/** 场地基点坐标：圆/椭圆/扇形取圆心；矩形/平行四边形取基点；多边形无基点（返回 null） */
+function siteBasePoint(site){
+  const sh=(site&&site.shape)||{};
+  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
+  if(!sh.type||sh.type==='rect'||sh.type==='parallelogram') return [Number(sh.x)||0,Number(sh.y)||0];
+  return null;
+}
+/** 场地半径文案：圆/扇形→R；椭圆→Rx/Ry；矩形/多边形无半径（返回空串） */
+function siteRadiusText(site){
+  const sh=(site&&site.shape)||{};
+  if(sh.type==='circle'||sh.type==='sector') return fmt(sh.r)+' m';
+  if(sh.type==='ellipse') return 'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry);
+  return '';
+}
+/** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/平行四边形/圆/椭圆/扇形） */
+function siteAreaPerimeter(site){
+  if(!site) return {area:0,perimeter:0};
+  const sh=site.shape||{};
+  if(sh.type==='polygon'){
+    const ps=(sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
+    if(ps.length<3) return {area:0,perimeter:ps.length===2?polylineLength(ps):0};
+    return {area:polygonArea(ps), perimeter:polylineLength(ps.concat([ps[0]]))};
+  }
+  if(sh.type==='parallelogram'){
+    const o={shape:{type:'parallelogram',skew:sh.skew},x:Number(sh.x)||0,y:Number(sh.y)||0,
+      width:positiveNum(sh.w,100),height:positiveNum(sh.h,70),angle:0};
+    return {area:shapeArea(o), perimeter:shapePerimeter(o)};
+  }
+  const d=siteDomainOf(site);
+  const o={shape:Object.assign({type:'rect'},sh), x:Number(sh.cx)||0, y:Number(sh.cy)||0, angle:Number(sh.angle)||0, width:d.w, height:d.h};
+  return {area:shapeArea(o), perimeter:shapePerimeter(o)};
+}
+/** 场地控制点清单（世界坐标，Y 向上）：与渲染手柄、命中、拖拽共用同一基准 */
+function siteHandlesOf(site){
+  if(!site||site.kind==='image'||site.kind==='empty') return [];
+  const sh=site.shape||{}, out=[];
+  if(sh.type==='polygon'){
+    (sh.points||[]).forEach((p,i)=>out.push({type:'siteNode',mode:'vertex',index:i,x:Number(p[0])||0,y:Number(p[1])||0}));
+    return out;
+  }
+  const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+  if(sh.type==='circle'){
+    const r=Number(sh.r)||0;
+    out.push({type:'siteNode',mode:'center',x:cx,y:cy});
+    out.push({type:'siteNode',mode:'radius',x:cx+r,y:cy});
+    return out;
+  }
+  if(sh.type==='ellipse'){
+    const rx=Number(sh.rx)||0, ry=Number(sh.ry)||0, a=(Number(sh.angle)||0)*Math.PI/180, b=a+Math.PI/2;
+    out.push({type:'siteNode',mode:'center',x:cx,y:cy});
+    out.push({type:'siteNode',mode:'rx',x:cx+Math.cos(a)*rx,y:cy+Math.sin(a)*rx});
+    out.push({type:'siteNode',mode:'ry',x:cx+Math.cos(b)*ry,y:cy+Math.sin(b)*ry});
+    const off=Math.max(.55,30/state.viewport.zoom);
+    out.push({type:'siteNode',mode:'rotate',x:cx+Math.cos(b)*off,y:cy+Math.sin(b)*off});
+    return out;
+  }
+  if(sh.type==='sector'){
+    const r=Number(sh.r)||0, a0=Number(sh.a0)||0, sw=sectorSweep(sh), a1=a0+sw;
+    const p=deg=>[cx+r*Math.cos(deg*Math.PI/180),cy+r*Math.sin(deg*Math.PI/180)];
+    out.push({type:'siteNode',mode:'center',x:cx,y:cy});
+    out.push({type:'siteNode',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
+    out.push({type:'siteNode',mode:'edge1',x:p(a1)[0],y:p(a1)[1]});
+    out.push({type:'siteNode',mode:'radius',x:p(a0+sw/2)[0],y:p(a0+sw/2)[1]});
+    return out;
+  }
+  if(sh.type==='parallelogram'){
+    const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
+    const pts=parallelogramPoints(x,y,w,hh,sh.skew);
+    pts.forEach((p,i)=>out.push({type:'siteNode',mode:'corner',index:i,x:p[0],y:p[1]}));
+    out.push({type:'siteNode',mode:'skew',x:(pts[2][0]+pts[3][0])/2,y:(pts[2][1]+pts[3][1])/2});
+    return out;
+  }
+  const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
+  [[x,y],[x+w,y],[x+w,y+hh],[x,y+hh]].forEach((p,i)=>out.push({type:'siteNode',mode:'corner',index:i,x:p[0],y:p[1]}));
+  return out;
+}
+/** 场地控制点清单（默认 state.site；显式传旧 background 仍可用） */
+function siteHandleList(bg){
+  bg=bg===undefined?state.site:bg;
+  return siteHandlesOf(bg);
+}
+/** 拖拽场地控制点：按模式改写给定 site 的 shape 参数（世界坐标米）。不落历史，由调用方负责 */
+function siteHandleDragTo(site,h,p){
+  if(!site||!h) return;
+  const sh=siteShapeOf(site);
+  if(h.mode==='vertex'){ sh.points[h.index]=[p[0],p[1]]; return; }
+  if(h.mode==='corner'){
+    const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
+    /* 平行四边形：顶边两角含错切位移，先扣回未错切坐标再按对角固定规则反解 */
+    const isPara=sh.type==='parallelogram';
+    const skew=isPara?parallelogramSkew(sh)*Math.PI/180:0;
+    const pull=(v,i)=> i>=2 && isPara ? v-Math.tan(skew)*(p[1]-y) : v;
+    const fixed=[[x,y],[x+w,y],[x+w,y+hh],[x,y+hh]][(h.index+2)%4];
+    const lx=pull(p[0],h.index);
+    sh.x=Math.min(fixed[0],lx); sh.y=Math.min(fixed[1],p[1]);
+    sh.w=Math.max(.05,Math.abs(lx-fixed[0])); sh.h=Math.max(.05,Math.abs(p[1]-fixed[1]));
+    return;
+  }
+  if(h.mode==='skew'){
+    /* 场地平行四边形顶边中点横向拖拽：只改倾角，底×高不变 */
+    const x=Number(sh.x)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
+    const off=p[0]-x-w/2;
+    sh.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,Math.atan2(off,hh)*180/Math.PI));
+    return;
+  }
+  if(h.mode==='center'){ sh.cx=p[0]; sh.cy=p[1]; return; }
+  if(h.mode==='radius'){ sh.r=Math.max(.05,dist([Number(sh.cx)||0,Number(sh.cy)||0],p)); return; }
+  if(h.mode==='rx'||h.mode==='ry'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0, q=rotatePoint(p,[cx,cy],-(Number(sh.angle)||0));
+    if(h.mode==='rx') sh.rx=Math.max(.05,Math.abs(q[0]-cx));
+    else sh.ry=Math.max(.05,Math.abs(q[1]-cy));
+    return;
+  }
+  if(h.mode==='rotate'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+    sh.angle=normalizeAngle(Math.round(Math.atan2(p[1]-cy,p[0]-cx)*180/Math.PI-90));
+    return;
+  }
+  if(h.mode==='edge0'||h.mode==='edge1'){
+    const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
+    sh.r=Math.max(.05,dist([cx,cy],p));
+    const deg=normalizeAngle(Math.round(Math.atan2(p[1]-cy,p[0]-cx)*180/Math.PI));
+    if(h.mode==='edge0') sh.a0=deg; else sh.a1=deg;
+    return;
+  }
+}
+/** 拖拽当前场地控制点（旧签名薄包装：写 state.site，尊重可见/锁定） */
+function resizeSiteByHandle(h,p){
+  const site=state.site;
+  if(!site||!siteIsVisible(site)||siteIsLocked(site)) return;
+  siteHandleDragTo(site,h,p);
+}
 /** 把任意位置的两个角点规整为原点矩形 {type:'rect',w,h} */
 function rectShapeFromCorners(a,b){
   return {type:'rect',w:Math.max(.05,Math.abs(a[0]-b[0])),h:Math.max(.05,Math.abs(a[1]-b[1]))};

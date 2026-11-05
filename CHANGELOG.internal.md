@@ -27,4 +27,26 @@
   - 旧版 App 忽略 `site`，回写后场地丢失；已写入 `README.md` 与 `docs/features.md`，不做双写。
   - Phase 2A 待办：场地几何内核仍分散在 `render.js/interaction.js/geometry.js`，需统一并删除 `siteBoundaryPoints/siteShapeCenter` 重复实现；`siteDomainOf` 多边形负坐标已在本提交修复，但需补负坐标断言。
   - Phase 2B/3A/3B 待办：节点编辑复用、校准点拖拽/增删/撤销、图片变换手柄与场地吸附、SVG 标注进一步对齐。
+
+## 2026-11-05 · Phase 2A：场地几何统一 + schema 对象化 + 负坐标修复
+
+- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **核心改动点**
+  - 场地几何内核收口到 `js/core/geometry.js`：`siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` 从 `render.js` 迁出；`siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` 从 `interaction.js` 迁出，`render.js` 与 `interaction.js` 不再声明同名函数（各删一份重复实现）。
+  - 新增纯内核 `siteHandleDragTo(site,h,p)`：只改传入 site，不读全局，便于单测；旧 `resizeSiteByHandle(h,p)` 保留为写 `state.site` 的薄包装，并保持可见/锁定守卫。
+  - `state.site` 新增 `type:'site'` schema 标记（`createSiteSlot` 统一下发，`sanitizeSite` 经工厂自动继承），`kind=shape.type` 继续兼容旧断言。
+  - `siteDomainOf` 多边形负坐标改用 `max−min`（Phase 1 已修，本提交补断言锁定：`[[-10,-10],[10,-10],[10,10],[-10,10]]` → 20×20）。
+  - 旧签名重载全部保留：`siteDomainOf / siteBounds / siteHandleList / siteAreaPerimeter / siteBoundaryPoints / siteShapeCenter` 仍可直接传旧 `kind` 矢量 background 对象。
+- **公共抽象**
+  - 新增 `siteHandlesOf`（纯清单，不读全局）、`siteHandleDragTo`（纯写入手柄几何）。
+  - 删除重复：`render.js` 的 `siteBoundaryPoints/siteShapeCenter/siteBasePoint/siteRadiusText/siteAreaPerimeter`；`interaction.js` 的 `siteHandleList/resizeSiteByHandle`。
+  - 影响范围：渲染标注、SVG 导出、属性面板、场地节点拖拽全部改为调用 `geometry.js` 同名函数，调用点签名不变；`scripts/selftest.mjs` 新增 7 条断言（负坐标域、type 标记、同源手柄、纯内核写入、锁定/隐藏不可拖拽）。
+- **实测验证数据（本机实测）**
+  - `node scripts/check.mjs`：通过（26 脚本语法/入口资源/离线/契约/API/分层）。
+  - `node scripts/selftest.mjs`：1551 通过 / 0 失败（Phase 1 为 1544，净增 7）。
+  - `node scripts/bench.mjs`（2000 对象 / 1600×900）：静态层重建 21.45 ms；缓存命中 0.34 ms、P95 0.40 ms（< 8 ms）；直接全量 21.02 ms；heapUsed 17.05 MB；视口裁剪 99.4%；覆盖率分析 7.5 ms（< 300 ms）。
+- **遗留 TODO / 风险**
+  - `siteHandleAt` 仍由 `interaction.js` 独立实现（命中阈值 9px），Phase 2B 合并到通用手柄分发。
+  - 场地属性面板的多边形节点编辑仍是手写一套，Phase 2B 复用 `renderNodeEditor`。
+
 </content>

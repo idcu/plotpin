@@ -141,7 +141,8 @@ code += `\n;globalThis.__api = {
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds,
-  siteHandleList, siteHandleAt, resizeSiteByHandle, sitePropsHTML, imagePropsHTML,
+  siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo,
+  sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
@@ -1954,6 +1955,12 @@ asyncSuites.push((async()=>{
     eq('场地节点-扇形手柄数', hs.length, 4);
     eq('场地节点-扇形模式', hs.map(h=>h.mode), ['center','edge0','edge1','radius']); }
   eq('场地节点-图片底图无手柄', api.siteHandleList({kind:'image',shape:{}}), []);
+  /* 负坐标多边形：域尺寸与包围盒同口径（max−min，不钳到 0） */
+  eq('场地节点-负坐标多边形域 20×20', api.siteDomainOf({kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10],[-10,10]]}}), {w:20,h:20});
+  /* schema 标记与统一手柄内核 */
+  eq('场地节点-场地槽 type 标记', api.createInitialState().site.type, 'site');
+  eq('场地节点-迁移后 type 标记', api.migrateProject({}).site.type, 'site');
+  eq('场地节点-siteHandlesOf=siteHandleList 同源', api.siteHandlesOf(api.state.site).length, api.siteHandleList().length);
 
   /* resizeSiteByHandle：按模式改写规格参数 */
   api.resetState();
@@ -1983,6 +1990,17 @@ asyncSuites.push((async()=>{
   approx('场地节点-拖拽扇形边0角度', api.state.site.shape.a0, 90, 1e-9);
   api.resizeSiteByHandle({mode:'edge1'},[-30,0]);
   approx('场地节点-拖拽扇形边1角度', api.state.site.shape.a1, 180, 1e-9);
+
+  /* 统一内核 siteHandleDragTo：只改传入 site，不读全局；resizeSiteByHandle 为写 state.site 的薄包装 */
+  { const site={type:'site',kind:'polygon',locked:false,visible:true,shape:{type:'polygon',points:[[0,0],[10,0],[10,10]]}};
+    api.siteHandleDragTo(site,{mode:'vertex',index:0},[-2,-4]);
+    eq('场地节点-内核改写传入 site', site.shape.points[0], [-2,-4]); }
+  api.state.site={kind:'polygon',locked:true,shape:{type:'polygon',points:[[0,0],[10,0],[10,10]]}};
+  api.resizeSiteByHandle({mode:'vertex',index:0},[9,9]);
+  eq('场地节点-锁定场地不可拖拽', api.state.site.shape.points[0], [0,0]);
+  api.state.site={kind:'polygon',visible:false,shape:{type:'polygon',points:[[0,0],[10,0],[10,10]]}};
+  api.resizeSiteByHandle({mode:'vertex',index:0},[9,9]);
+  eq('场地节点-隐藏场地不可拖拽', api.state.site.shape.points[0], [0,0]);
 
   /* sanitizeShape：编辑后的负坐标/偏移在保存→重载后保留（不被打回原点） */
   const mp=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10]]}}});

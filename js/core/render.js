@@ -460,60 +460,10 @@ function drawGuideLines(c,v,d,cssW,cssH,toS){
   if(guideDraft&&guideDraft.length===2) draw(guideDraft[0],guideDraft[1]);
   c.restore();
 }
-/* -------------------- 矢量场地标注（节点坐标 / 段长 / 周长面积，可配置） -------------------- */
-/** 场地边界折点（世界坐标，Y 向上）：矩形/平行四边形→四角；多边形→顶点；圆/椭圆/扇形无折点返回 null */
-function siteBoundaryPoints(bg){
-  const sh=(bg&&bg.shape)||{};
-  if(sh.type==='polygon') return (sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
-  if(sh.type==='parallelogram'){
-    return parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
-  }
-  if(!sh.type||sh.type==='rect'){
-    const b=siteBounds(bg);
-    return [[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]];
-  }
-  return null;
-}
-/** 场地几何中心：圆/椭圆/扇形取圆心，其余取边界折点均值（与区域面积标签同口径） */
-function siteShapeCenter(bg){
-  const sh=(bg&&bg.shape)||{};
-  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
-  const pts=siteBoundaryPoints(bg);
-  if(pts&&pts.length) return [pts.reduce((s,p)=>s+p[0],0)/pts.length, pts.reduce((s,p)=>s+p[1],0)/pts.length];
-  const d=siteDomainOf(bg); return [d.w/2,d.h/2];
-}
-/** 场地基点坐标：圆/椭圆/扇形取圆心；矩形/平行四边形取基点；多边形无基点（返回 null） */
-function siteBasePoint(bg){
-  const sh=(bg&&bg.shape)||{};
-  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
-  if(!sh.type||sh.type==='rect'||sh.type==='parallelogram') return [Number(sh.x)||0,Number(sh.y)||0];
-  return null;
-}
-/** 场地半径文案：圆/扇形→R；椭圆→Rx/Ry；矩形/多边形无半径（返回空串） */
-function siteRadiusText(bg){
-  const sh=(bg&&bg.shape)||{};
-  if(sh.type==='circle'||sh.type==='sector') return fmt(sh.r)+' m';
-  if(sh.type==='ellipse') return 'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry);
-  return '';
-}
-/** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/平行四边形/圆/椭圆/扇形） */
-function siteAreaPerimeter(bg){
-  if(!bg) return {area:0,perimeter:0};
-  const sh=bg.shape||{};
-  if(sh.type==='polygon'){
-    const ps=(sh.points||[]).map(p=>[Number(p[0])||0,Number(p[1])||0]);
-    if(ps.length<3) return {area:0,perimeter:ps.length===2?polylineLength(ps):0};
-    return {area:polygonArea(ps), perimeter:polylineLength(ps.concat([ps[0]]))};
-  }
-  if(sh.type==='parallelogram'){
-    const o={shape:{type:'parallelogram',skew:sh.skew},x:Number(sh.x)||0,y:Number(sh.y)||0,
-      width:positiveNum(sh.w,100),height:positiveNum(sh.h,70),angle:0};
-    return {area:shapeArea(o), perimeter:shapePerimeter(o)};
-  }
-  const d=siteDomainOf(bg);
-  const o={shape:Object.assign({type:'rect'},sh), x:Number(sh.cx)||0, y:Number(sh.cy)||0, angle:Number(sh.angle)||0, width:d.w, height:d.h};
-  return {area:shapeArea(o), perimeter:shapePerimeter(o)};
-}
+/* -------------------- 矢量场地标注（节点坐标 / 段长 / 周长面积，可配置） --------------------
+ * 边界折点 / 几何中心 / 基点 / 半径文案 / 面积周长统一由 geometry.js 提供
+ * （siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter），
+ * 本文件只负责把它们画到画布与屏幕上。 */
 /**
  * 绘制矢量场地标注：边界节点世界坐标、相邻节点段长、基点/半径、周长/面积胶囊。
  * 各项由工程设置中的独立开关控制（场地节点坐标 / 场地段长 / 场地基点坐标 / 场地半径 / 场地面积 / 场地周长）；
