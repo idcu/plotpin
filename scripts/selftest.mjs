@@ -137,7 +137,7 @@ code += `\n;globalThis.__api = {
   cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
   optimizeCameraPlacement,
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
-  imageCornerWorld, imageWorldFrame, validImageTransform,
+  imageCornerWorld, imageWorldFrame, validImageTransform, imageHandleList, imageHandleDragTo,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s,
@@ -936,11 +936,11 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   st.objects.push(line,circ,pt);
 
   const cands=api.collectSnapCandidates(st);
-  eq('捕捉-候选总数 3+2+1+4+1=11', cands.length, 11);
+  eq('捕捉-候选总数 3+2+1+4+1=11 + 场地4角=15', cands.length, 15);
   eq('捕捉-类型标签中文', api.OSNAP_LABELS.midpoint, '中点');
 
   const byType=t=>cands.filter(c=>c.type===t).length;
-  eq('捕捉-端点数 折线3+点1=4', byType('endpoint'), 4);
+  eq('捕捉-端点数 折线3+点1+场地4角=8', byType('endpoint'), 8);
   eq('捕捉-中点数 2', byType('midpoint'), 2);
   eq('捕捉-圆心率 1', byType('center'), 1);
   eq('捕捉-象限点数 4', byType('quadrant'), 4);
@@ -977,7 +977,7 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   const st3=api.createInitialState();
   const hidden=api.baseObject('point','point.marker',{x:0,y:0,visible:false});
   st3.objects.push(hidden);
-  eq('捕捉-隐藏点无候选', api.collectSnapCandidates(st3,o=>o.visible!==false).length, 0);
+  eq('捕捉-隐藏点无候选', api.collectSnapCandidates(st3,o=>o.visible!==false).filter(c=>c.id===hidden.id).length, 0);
 
   /* Tab 类型锁定：仅命中指定类型，其余类型即使更近也被过滤 */
   const hitF1=api.findOsnap(st,[5.1,0.1],0.5,null,null,'midpoint');
@@ -2018,6 +2018,37 @@ asyncSuites.push((async()=>{
     eq('场地节点-手柄命中(共用 pickScreenHandle)', api.pickScreenHandle(hs,sp,9).mode, 'vertex');
     eq('场地节点-手柄命中阈值外为空', api.pickScreenHandle(hs,[sp[0]+20,sp[1]+20],9), null); }
 
+  /* 图片变换手柄：平移/旋转/等比缩放/切变；平移角点吸附场地边角（只改图片，不动对象） */
+  { api.resetState(); api.resetFrameRef();
+    const bg={kind:'image',fileName:'t.png',assetId:'a',width:100,height:50,origin:[0,0],metersPerPixel:0.1,calibrated:true,transform:null};
+    api.state.background=bg;
+    api.state.site={kind:'rect',layerId:'layer.default',visible:true,locked:false,shape:{type:'rect',x:10,y:5,w:20,h:10}};
+    api.resetFrameRef();
+    eq('图片手柄-四类手柄', api.imageHandleList(bg).map(h=>h.mode), ['move','rotate','scale','skew']);
+    const corners=api.imageCornerWorld(bg), origin=api.imageTransformOf(bg);
+    /* 平移 +0.3m：右上角 (10,5) 与场地左上角重合 → 精确吸附 */
+    const mv=api.imageHandleDragTo(bg,{mode:'move',start:[0,0],origin,originCorners:corners},[0.3,0.3]);
+    eq('图片手柄-平移吸附场地边角', api.bgPixelToWorld(Object.assign({},bg,{transform:mv.T}),[100,0]), [10,5]);
+    ok('图片手柄-吸附返回场地角点', Array.isArray(mv.snap));
+    /* 旋转 +90°：右上角绕中心 (5,2.5) → (2.5,7.5) */
+    const rt=api.imageHandleDragTo(bg,{mode:'rotate',start:[10,2.5],origin,originCorners:corners},[5,10]);
+    const rp=api.bgPixelToWorld(Object.assign({},bg,{transform:rt.T}),[100,0]);
+    approx('图片手柄-旋转90° X', rp[0], 2.5, 1e-9);
+    approx('图片手柄-旋转90° Y', rp[1], 7.5, 1e-9);
+    /* 等比缩放 2×（锚点左上角）：右下角 (10,0) → (20,-5) */
+    const sc=api.imageHandleDragTo(bg,{mode:'scale',start:[10,0],origin,originCorners:corners},[20,-5]);
+    const sp2=api.bgPixelToWorld(Object.assign({},bg,{transform:sc.T}),[100,50]);
+    approx('图片手柄-等比缩放 2x', sp2[0], 20, 1e-9);
+    approx('图片手柄-等比缩放 2x Y', sp2[1], -5, 1e-9);
+    /* 切变：顶边中点右移 1m，底边不动 */
+    const sk=api.imageHandleDragTo(bg,{mode:'skew',start:[5,5],origin,originCorners:corners},[6,5]);
+    approx('图片手柄-切变顶边位移', api.bgPixelToWorld(Object.assign({},bg,{transform:sk.T}),[50,0])[0], 6, 1e-9);
+    approx('图片手柄-切变底边不动', api.bgPixelToWorld(Object.assign({},bg,{transform:sk.T}),[50,50])[0], 5, 1e-9);
+    /* 场地边角参与对象捕捉 */
+    const cand=api.collectSnapCandidates(api.state,o=>true).filter(c=>c.id==='site');
+    eq('场地捕捉-四角进入捕捉候选', cand.length, 4);
+    ok('场地捕捉-类型为端点', cand.every(c=>c.type==='endpoint')); }
+
   /* sanitizeShape：编辑后的负坐标/偏移在保存→重载后保留（不被打回原点） */
   const mp=api.migrateProject({schema:'offline-drawing-annotation/v1',background:{kind:'polygon',shape:{type:'polygon',points:[[-10,-10],[10,-10],[10,10]]}}});
   eq('场地节点-负坐标多边形重载保留', mp.site.shape.points, [[-10,-10],[10,-10],[10,10]]);
@@ -2871,7 +2902,7 @@ asyncSuites.push((async()=>{
   eq('双槽-图片槽仍为空', ps.background.kind, 'empty');
   const svgDual=api.buildSceneSvg();
   ok('双槽-SVG 含场地多边形', svgDual.includes('<polygon points='));
-  ok('双槽-SVG 含场地节点标注', svgDual.includes('P1 (-5.00,-5.00)'));
+  ok('双槽-SVG 含场地节点标注', svgDual.includes('P1 (-5.00, -5.00)'));
   ok('双槽-SVG 含场地段长标注', svgDual.includes(' m'));
   const dxfEnts=api.siteDxfEntities();
   eq('双槽-DXF 场地实体数', dxfEnts.length, 1);
@@ -3556,7 +3587,7 @@ asyncSuites.push((async()=>{
   Object.assign(api.state.settings,{precision:2,showLabels:true,showSegLen:true,showAreaTag:true,markerScale:1,unit:'m'});
   const scene=api.buildSceneSvg();
   const sceneHash=createHash('sha256').update(scene).digest('hex');
-  eq('视觉快照-SVG 场景哈希', sceneHash, '623d4b6f480e34c3ae6f96c4097f14af0e6e7c05df2b85d3c1386e6928e1e2fe');
+  eq('视觉快照-SVG 场景哈希', sceneHash, 'e6ba5542046cb68f42e8cf9639dbb3e2061914e4a3f79bebf2513fde308b97bf');
   ok('视觉快照-SVG 输出非空', typeof scene==='string' && scene.length>1000);
   ok('视觉快照-平行四边形与扇形路径存在', scene.includes('<polygon') && scene.includes(' A'));
   eq('视觉快照-重复导出稳定', createHash('sha256').update(api.buildSceneSvg()).digest('hex'), sceneHash);

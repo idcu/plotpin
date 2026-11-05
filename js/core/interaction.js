@@ -25,6 +25,7 @@ const TOOL_TITLES={
   'site-parallelogram':'绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）',
   'site-polygon':'绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消',
   'site-node':'场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除',
+  'image-transform':'图片变换：橙色中心=平移，蓝点=旋转，右下角=等比缩放，顶边中点=切变；只改图片，不动任何标注对象；图片角点靠近场地边角时自动吸附',
   'guide':'参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出'
 };
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
@@ -243,6 +244,13 @@ canvas.addEventListener('pointerdown',e=>{
     if(hit){ calibPushUndo(); calibSelection=hit; drag={type:'calibPoint',hit,moved:false}; requestRender(); return; }
     pickAffinePoint(e); return;
   }
+  if(currentTool==='image-transform'){
+    if(!isImageBackground(state.background)){ toast('图片变换需要先载入图片底图','warn'); return; }
+    const h=imageHandleAt(sp);
+    if(h) drag={type:'imageHandle',mode:h.mode,start:wp,moved:false,snap:null,
+      origin:imageTransformOf(state.background).slice(),originCorners:imageCornerWorld(state.background)};
+    return;
+  }
   if(['site-rect','site-circle','site-ellipse','site-sector','site-parallelogram'].includes(currentTool)){
     const kindMap={'site-rect':'siteRect','site-circle':'siteCircle','site-ellipse':'siteEllipse','site-sector':'siteSector','site-parallelogram':'siteParallelogram'};
     draft={kind:kindMap[currentTool],start:wp,current:wp,pending:true};
@@ -401,6 +409,12 @@ canvas.addEventListener('pointermove',e=>{
     }
     drag.moved=true; requestRender(); return;
   }
+  if(drag?.type==='imageHandle'){
+    if(!drag.moved){ pushHistory(); drag.moved=true; }
+    const r=imageHandleDragTo(state.background,drag,wp);
+    state.background.transform=r.T; drag.snap=r.snap;
+    requestRender(); return;
+  }
   if(draft && draft.points){ draft.current=wp; requestRender(); }
   if(draft && ['rect','siteRect','siteCircle','siteEllipse','siteSector','siteParallelogram','areaCircle','areaEllipse','areaSector','areaParallelogram'].includes(draft.kind)){
     draft.current=wp; if(['rect','areaParallelogram'].includes(draft.kind)&&e.buttons===1) draft.pending=false; requestRender();
@@ -423,6 +437,10 @@ canvas.addEventListener('pointerup',e=>{
   if(drag?.type==='calibPoint'){
     if(!drag.moved) calibUndoStack.pop();   /* 仅点选未拖动：弹出未变更的撤销快照 */
     drag=null; requestRender(); return;
+  }
+  if(drag?.type==='imageHandle'){
+    if(!drag.moved){ drag=null; requestRender(); return; }
+    drag=null; commitChange('图片已变换'); return;
   }
   if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
     const isSite=drag.type==='siteHandle';
@@ -594,6 +612,10 @@ function siteHandleAt(wp,sp){
   if(!site||!siteIsVisible(site)||siteIsLocked(site)) return null;
   return pickScreenHandle(siteHandleList(),sp,9);
 }
+/** 图片变换手柄命中：与对象/场地手柄共用 pickScreenHandle 的 9px 阈值 */
+function imageHandleAt(sp){
+  return pickScreenHandle(imageHandleList(state.background),sp,9);
+}
 /** 拖拽场地控制点：实现见 geometry.js 的 siteHandleDragTo / resizeSiteByHandle（薄包装） */
 /** Esc 取消进行中的拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照 */
 function cancelActiveDrag(){
@@ -613,6 +635,8 @@ function cancelActiveDrag(){
     if(state.site) state.site.shape=deepClone(d.originalShape);
     syncFramePan();                 /* 形状还原后同步取景框，视野回到拖拽前 */
     history.past.pop();
+  }else if(d.type==='imageHandle'){
+    if(d.moved){ state.background.transform=deepClone(d.origin); history.past.pop(); }
   }else return true;
   commitChange(); return true;
 }

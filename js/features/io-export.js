@@ -239,11 +239,18 @@ function buildSceneSvg(){
     }
     const bp=siteBoundaryPoints(site);
     if(bp&&bp.length){
-      if(S.siteNodes) bp.forEach((p,i)=>markers.push(`<text x="${X(p[0])+5}" y="${Y(p[1])-5}" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P${i+1} (${fmt(p[0])},${fmt(p[1])})</text>`));
+      if(S.siteNodes) bp.forEach((p,i)=>markers.push(`<text x="${X(p[0])+5}" y="${Y(p[1])-5}" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P${i+1} (${fmt(p[0])}, ${fmt(p[1])})</text>`));
       if(S.siteSegLen) bp.forEach((p,i)=>{
-        const q=bp[(i+1)%bp.length], len=dist(p,q), mx=(p[0]+q[0])/2, my=(p[1]+q[1])/2;
+        const q=bp[(i+1)%bp.length], len=dist(p,q);
+        if(len*ppu<segLabelMinPx()) return;   /* 与画布同口径：屏幕上过短的段不标 */
+        const mx=(p[0]+q[0])/2, my=(p[1]+q[1])/2;
         markers.push(`<text x="${X(mx)}" y="${Y(my)}" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">${fmt(len)} m</text>`);
       });
+    }
+    /* 基点坐标（矩形/平行四边形/圆/椭圆/扇形）：画布 drawSiteAnnotations 同口径 */
+    if(S.siteBase){
+      const b=siteBasePoint(site);
+      if(b) markers.push(`<text x="${X(b[0])+7}" y="${Y(b[1])-16}" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">(${fmt(b[0])}, ${fmt(b[1])})</text>`);
     }
   }
   /* 逐对象标注条目 → SVG 文本（与画布 drawObjectAnnotations 共用同一数据源，导出所见一致） */

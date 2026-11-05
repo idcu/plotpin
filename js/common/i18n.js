@@ -12,7 +12,7 @@
       new: '新建', projects: '📁 工程库', floors: '🏢 楼层', import: '导入', export: '导出',
       print: '打印/PDF', settings: '设置',
       select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', text: '文字',
-      ruler: '测距', dimension: '标注', siteNode: '场地节点', guide: '参考线', finish: '完成',
+      ruler: '测距', dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
       tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabStats: '统计',
       exportJson: 'JSON 工程', exportPng: 'PNG 高清图', exportSvg: 'SVG 矢量图',
       exportPdf: 'PDF 矢量（图纸+清单）', exportDxf: 'DXF（CAD 互通）',
@@ -74,7 +74,7 @@
       new: 'New', projects: '📁 Projects', floors: '🏢 Floors', import: 'Import', export: 'Export',
       print: 'Print/PDF', settings: 'Settings',
       select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', text: 'Text',
-      ruler: 'Measure', dimension: 'Dimension', siteNode: 'Site nodes', guide: 'Guides', finish: 'Finish',
+      ruler: 'Measure', dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
       tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabStats: 'Statistics',
       exportJson: 'JSON project', exportPng: 'PNG (high-res)', exportSvg: 'SVG (vector)',
       exportPdf: 'PDF (drawing + list)', exportDxf: 'DXF (CAD)',
@@ -238,6 +238,8 @@
     '文字：单击输入文字内容':'Text: click to enter text',
     '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
+    '图片变换：橙色中心=平移，蓝点=旋转，右下角=等比缩放，顶边中点=切变；只改图片，不动任何标注对象；图片角点靠近场地边角时自动吸附':
+      'Image transform: orange center = move, blue dot = rotate, bottom-right = uniform scale, top-edge midpoint = shear; affects the image only (objects stay put); image corners snap to site corners',
     '比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用':
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     '仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消':

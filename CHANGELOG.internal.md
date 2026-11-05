@@ -92,4 +92,27 @@
   - 自测框架不模拟画布指针事件，控制点拖拽/Delete/Ctrl+Z 目前只有静态逻辑覆盖，需在浏览器中人工回归一次（校准工具：落点→拖动→Delete→Ctrl+Z→Enter）。
   - 比例尺校准由「第二点自动提交」改为「显式提交」，属于交互行为变化，老用户可能找不到提交入口；已把工具提示与 features.md 写清楚，并保留双击提交。
 
+## 2026-11-05 · Phase 3B：图片变换手柄 + 场地边角吸附 + SVG 标注补齐
+
+- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **核心改动点**
+  - 新增左侧「🖼 图片变换」工具：`imageHandleList` 输出四类手柄——橙色中心=平移、蓝色圆点=旋转、右下角=等比缩放（锚点左上角）、顶边中点=切变；**不提供四角自由拖拽**。
+  - 新增 `imageHandleDragTo(bg,drag,wp)` 纯函数：返回新 `transform` 与吸附目标，不直接写状态；`affTranslate / affRotateAbout / affScaleAbout / affShearX` 为世界空间仿射构造，渲染/命中/拖拽共用。
+  - 图片变换只改 `state.background.transform`，不迁移任何业务对象；首次拖动才 `pushHistory`，Esc 还原并弹出快照，抬手 `commitChange`。
+  - 场地边角吸附：平移/缩放时图片角点与场地边角屏幕距离 ≤12px 自动对齐；场地折点/圆心同时加入 `collectSnapCandidates`，绘制/移动业务对象可直接吸附到场地角点（图层隐藏时不参与）。
+  - SVG 场地标注补齐：新增基点坐标文本、段长按画布同阈值（`segLabelMinPx`）跳过过短段、节点坐标格式与画布对齐（`P1 (x, y)`）。
+  - 新增 UI 按钮、工具提示与中英词条（`imageXform` / 图片变换长提示成对更新）。
+- **公共抽象**
+  - 新增 `imageHandleList / imageHandleDragTo / affTranslate / affRotateAbout / affScaleAbout / affShearX / siteCornerPoints`（`geometry.js`），`imageHandleAt`（`interaction.js`，复用 `pickScreenHandle`）。
+  - 影响范围：`collectSnapCandidates` 现在会追加场地候选，**所有依赖候选总数的测试/调用方都会多出「场地折点 4 个 + 圆心 1 个」**；已同步更新自测期望（11→15、端点 4→8、隐藏点断言改为按对象 id 过滤）。SVG 文本格式变化会改变视觉快照哈希，已更新为实测值。
+- **实测验证数据（本机实测）**
+  - `node scripts/check.mjs`：通过（26 脚本语法/入口资源/离线/契约/API/分层）。
+  - `node scripts/selftest.mjs`：1569 通过 / 0 失败（Phase 3A 为 1558，净增 11）。
+  - `node scripts/bench.mjs`（2000 对象 / 1600×900）：静态层重建 21.32 ms；缓存命中 0.35 ms、P95 0.48 ms（< 8 ms）；直接全量 20.37 ms；heapUsed 13.21 MB；视口裁剪 99.4%；覆盖率分析 8 ms（< 300 ms）。
+- **遗留 TODO / 风险**
+  - 旋转未做角度吸附（仅场地角点吸附），后续如需正交/15° 吸附再补。
+  - 图片变换与比例尺/仿射校准共用 `background.transform`，变换后如需重新校准，建议先「重置校准」再打点，避免旧映射叠加；已在工具提示中不承诺自动合并。
+  - 自测仍未模拟画布指针，图片手柄拖拽的浏览器手测需补一次。
+
+
 

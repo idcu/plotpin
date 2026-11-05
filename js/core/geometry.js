@@ -54,6 +54,18 @@ function collectSnapCandidates(st,vis){
       }
     }
   });
+  /* 矢量场地边角也参与捕捉（场地不在 objects，需单独追加）：
+     折点→端点；圆/椭圆/扇形→圆心（center）。图层隐藏时不参与。 */
+  const site=st.site;
+  if(site){
+    const layer=(st.layers||[]).find(l=>l.id===site.layerId)||{visible:true};
+    if(site.visible!==false && layer.visible!==false){
+      const bp=siteBoundaryPoints(site);
+      if(bp) bp.forEach(p=>push('site',p,'endpoint'));
+      const sh=siteShapeOf(site);
+      if(sh.type==='circle'||sh.type==='ellipse'||sh.type==='sector') push('site',[Number(sh.cx)||0,Number(sh.cy)||0],'center');
+    }
+  }
   return out;
 }
 /** 收集"可垂足/可交点"的线段边：折线含闭合边；非矩形区域以采样多边形近似；
@@ -997,6 +1009,94 @@ function bgWorldToPixel(bg,p){
 function imageCornerWorld(bg){
   const w=Number(bg.width)||0, h=Number(bg.height)||0;
   return [[0,0],[w,0],[w,h],[0,h]].map(px=>bgPixelToWorld(bg,px));
+}
+/* -------------------- 图片变换手柄（「图片变换」工具） --------------------
+ * 只做平移 / 旋转 / 等比缩放 / 切变四类整体变换，不提供四角自由拖拽（避免图片被拉成任意四边形）。
+ * 手柄与几何在同一处定义，渲染、命中、拖拽共用；变换不改动任何业务对象（与场地优先校准一致）。 */
+function imageHandleList(bg){
+  if(!isImageBackground(bg)) return [];
+  const cs=imageCornerWorld(bg);
+  const top=[(cs[0][0]+cs[1][0])/2,(cs[0][1]+cs[1][1])/2];
+  const bot=[(cs[3][0]+cs[2][0])/2,(cs[3][1]+cs[2][1])/2];
+  const ctr=[(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2];
+  let dir=[top[0]-ctr[0],top[1]-ctr[1]], len=Math.hypot(dir[0],dir[1]);
+  if(len<1e-9){ dir=[0,1]; len=1; }
+  const off=30/state.viewport.zoom, ux=dir[0]/len, uy=dir[1]/len;
+  return [
+    {mode:'move',x:ctr[0],y:ctr[1]},
+    {mode:'rotate',x:top[0]+ux*off,y:top[1]+uy*off},
+    {mode:'scale',x:cs[2][0],y:cs[2][1]},
+    {mode:'skew',x:top[0],y:top[1]}
+  ];
+}
+/** 世界空间仿射构造：平移 / 绕点旋转 / 绕点等比缩放 / 以水平线为基准的切变 */
+function affTranslate(dx,dy){ return [1,0,dx,0,1,dy]; }
+function affRotateAbout(deg,cx,cy){
+  const r=deg*Math.PI/180, co=Math.cos(r), si=Math.sin(r);
+  return [co,-si,cx-co*cx+si*cy,si,co,cy-si*cx-co*cy];
+}
+function affScaleAbout(k,cx,cy){ return [k,0,cx*(1-k),0,k,cy*(1-k)]; }
+function affShearX(k,baseY){ return [1,k,-k*baseY,0,1,0]; }
+/** 站点（场地）边角世界坐标：平移/缩放吸附用 */
+function siteCornerPoints(site){
+  if(!site) return [];
+  const bp=siteBoundaryPoints(site);
+  if(bp&&bp.length>=3) return bp;
+  const sh=siteShapeOf(site);
+  if(sh.type==='circle'||sh.type==='ellipse'){
+    const rx=sh.type==='circle'?(Number(sh.r)||0):(Number(sh.rx)||0);
+    const ry=sh.type==='circle'?(Number(sh.r)||0):(Number(sh.ry)||0);
+    return [[sh.cx-rx,sh.cy],[sh.cx+rx,sh.cy],[sh.cx,sh.cy-ry],[sh.cx,sh.cy+ry]];
+  }
+  return [];
+}
+/**
+ * 拖拽图片手柄：返回新 transform（不写 bg，便于撤销/单测）。
+ * drag: {mode,start,origin,originCorners}；wp=当前世界坐标。
+ * 平移时若图片角点与场地边角屏幕距离 ≤12px，则吸附加固；返回 {T, snap}。
+ */
+function imageHandleDragTo(bg,drag,wp){
+  const o=drag.origin;
+  const T=Array.isArray(o)?o.slice():[o.a,o.b,o.c,o.d,o.e,o.f];
+  const cs=drag.originCorners;
+  const ctr=[(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2];
+  const top=[(cs[0][0]+cs[1][0])/2,(cs[0][1]+cs[1][1])/2];
+  const bot=[(cs[3][0]+cs[2][0])/2,(cs[3][1]+cs[2][1])/2];
+  let out=T.slice(), snap=null;
+  if(drag.mode==='move'){
+    let dx=wp[0]-drag.start[0], dy=wp[1]-drag.start[1];
+    const site=state.site, corners=siteCornerPoints(site);
+    if(corners.length){
+      let best=null;
+      cs.forEach(c=>{
+        corners.forEach(v=>{
+          const sx=w2s([c[0]+dx,c[1]+dy]), sv=w2s(v), dd=Math.hypot(sx[0]-sv[0],sx[1]-sv[1]);
+          if(dd<=12 && (!best||dd<best.d)) best={d:dd,dx:v[0]-c[0],dy:v[1]-c[1],v};
+        });
+      });
+      if(best){ dx=best.dx; dy=best.dy; snap=best.v; }
+    }
+    out=affMul(affTranslate(dx,dy),T);
+  }else if(drag.mode==='rotate'){
+    const a0=Math.atan2(drag.start[1]-ctr[1],drag.start[0]-ctr[0]);
+    const a1=Math.atan2(wp[1]-ctr[1],wp[0]-ctr[0]);
+    out=affMul(affRotateAbout((a1-a0)*180/Math.PI,ctr[0],ctr[1]),T);
+  }else if(drag.mode==='scale'){
+    const anchor=cs[0], base=Math.hypot(cs[2][0]-anchor[0],cs[2][1]-anchor[1])||1;
+    let k=Math.max(.05,Math.hypot(wp[0]-anchor[0],wp[1]-anchor[1])/base);
+    const site=state.site, corners=siteCornerPoints(site);
+    if(corners.length){
+      let best=null;
+      corners.forEach(v=>{ const sx=w2s(wp), sv=w2s(v), dd=Math.hypot(sx[0]-sv[0],sx[1]-sv[1]);
+        if(dd<=12&&(!best||dd<best.d)) best={d:dd,k:Math.max(.05,Math.hypot(v[0]-anchor[0],v[1]-anchor[1])/base),v}; });
+      if(best){ k=best.k; snap=best.v; }
+    }
+    out=affMul(affScaleAbout(k,anchor[0],anchor[1]),T);
+  }else if(drag.mode==='skew'){
+    const hgt=(top[1]-bot[1])||1;
+    out=affMul(affShearX((wp[0]-drag.start[0])/hgt,bot[1]),T);
+  }
+  return {T:{a:out[0],b:out[1],c:out[2],d:out[3],e:out[4],f:out[5]}, snap};
 }
 /* 2x3 仿射 [a,b,c;d,e,f] 行优先拼长度 6 */
 function affApply(T,p){ return __geo.affineApply(T,p); }

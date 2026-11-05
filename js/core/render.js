@@ -174,6 +174,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawCursorCross(c,v,d,cssW,cssH);
     drawTrackLine(c,v,d,cssW,cssH,toS);
     drawSiteHandles(c,v,toS);
+    drawImageHandles(c,v,toS);
     drawNodeFocus(c,toS);
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
@@ -201,6 +202,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawCursorCross(c,v,d,cssW,cssH);
     drawTrackLine(c,v,d,cssW,cssH,toS);
     drawSiteHandles(c,v,toS);
+    drawImageHandles(c,v,toS);
     drawNodeFocus(c,toS);
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
@@ -229,6 +231,35 @@ function drawSiteHandles(c,v,toS){
   if(drag && drag.type==='siteHandle'){
     const cur=hs.find(x=>x.mode===drag.handle.mode && x.index===drag.handle.index);
     if(cur){ const s=toS([cur.x,cur.y]); drawScreenTag(c,s[0]+12,s[1]-28,`X ${fmt(cur.x)}  Y ${fmt(cur.y)}`); }
+  }
+  c.restore();
+}
+/** 图片变换手柄（「图片变换」工具激活时）：橙=平移，蓝=旋转，白方=等比缩放，白菱=切变 */
+function drawImageHandles(c,v,toS){
+  if(currentTool!=='image-transform') return;
+  const bg=state.background;
+  if(!isImageBackground(bg)||!(Number(bg.width)>0)||!(Number(bg.height)>0)) return;
+  const hs=imageHandleList(bg); if(!hs.length) return;
+  c.save();
+  hs.forEach(h=>{
+    const s=toS([h.x,h.y]);
+    if(h.mode==='move'){
+      c.fillStyle='#f59e0b'; c.strokeStyle='#b45309'; c.lineWidth=1.5;
+      c.beginPath(); c.rect(s[0]-6,s[1]-6,12,12); c.fill(); c.stroke();
+    }else if(h.mode==='rotate'){
+      c.fillStyle='#2563eb'; c.strokeStyle='#1d4ed8'; c.lineWidth=1.5;
+      c.beginPath(); c.arc(s[0],s[1],5.5,0,Math.PI*2); c.fill(); c.stroke();
+    }else if(h.mode==='scale'){
+      c.fillStyle='#ffffff'; c.strokeStyle='#2563eb'; c.lineWidth=1.6;
+      c.beginPath(); c.rect(s[0]-5,s[1]-5,10,10); c.fill(); c.stroke();
+    }else{
+      c.fillStyle='#ffffff'; c.strokeStyle='#0f766e'; c.lineWidth=1.6;
+      c.beginPath(); c.moveTo(s[0],s[1]-6); c.lineTo(s[0]+6,s[1]); c.lineTo(s[0],s[1]+6); c.lineTo(s[0]-6,s[1]); c.closePath(); c.fill(); c.stroke();
+    }
+  });
+  if(drag&&drag.type==='imageHandle'&&drag.snap){
+    const s=toS(drag.snap); c.strokeStyle='#16a34a'; c.lineWidth=2;
+    c.beginPath(); c.arc(s[0],s[1],8,0,Math.PI*2); c.stroke();
   }
   c.restore();
 }
