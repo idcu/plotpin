@@ -126,6 +126,7 @@ function ensureStaticLayer(cssW,cssH){
   if(!staticCanvas){ staticCanvas=document.createElement('canvas'); staticCtx=staticCanvas.getContext('2d'); }
   const w=Math.max(1,Math.round(cssW*k)), h=Math.max(1,Math.round(cssH*k));
   if(staticCanvas.width!==w||staticCanvas.height!==h){ staticCanvas.width=w; staticCanvas.height=h; staticKey=''; }
+  markSurfaceSize(staticCanvas,cssW,cssH);
   staticCtx.setTransform(k,0,0,k,0,0);
   return staticCtx;
 }
@@ -263,14 +264,30 @@ function drawImageHandles(c,v,toS){
   }
   c.restore();
 }
+/**
+ * 登记离屏画布的逻辑 CSS 尺寸。离屏 canvas 不在文档中，clientWidth/clientHeight 恒为 0，
+ * 屏幕标注若按它夹边会被压到 (2,2)；静态层与导出画布在创建时登记真实逻辑尺寸。
+ */
+function markSurfaceSize(canvas,cssW,cssH){
+  if(canvas){ canvas.__cssW=cssW; canvas.__cssH=cssH; }
+  return canvas;
+}
+/** 绘图表面逻辑尺寸：DOM 画布取 clientWidth/Height，离屏画布退回 markSurfaceSize 登记值 */
+function surfaceCssSize(c){
+  const cv=c&&c.canvas;
+  if(!cv) return [0,0];
+  return [cv.clientWidth||Number(cv.__cssW)||0, cv.clientHeight||Number(cv.__cssH)||0];
+}
 /** 深色胶囊小标签（屏幕固定字号），(x,y) 为标签左上角；段长度/十字坐标共用 */
 function drawScreenTag(c,x,y,text){
   c.save();
   c.font='11px Consolas,Menlo,monospace';
   const padX=5, padY=3, m=c.measureText(text);
   const w=m.width+padX*2, h=15+padY;
-  x=Math.max(2,Math.min(x,c.canvas.clientWidth-w-2));
-  y=Math.max(2,Math.min(y,c.canvas.clientHeight-h-2));
+  /* 仅有可信尺寸时才夹边，避免离屏画布尺寸未知时把标签压到原点 */
+  const [sw,sh]=surfaceCssSize(c);
+  if(sw>0) x=Math.max(2,Math.min(x,sw-w-2));
+  if(sh>0) y=Math.max(2,Math.min(y,sh-h-2));
   c.fillStyle='rgba(15,23,42,.82)';
   c.beginPath(); c.roundRect?c.roundRect(x,y,w,h,4):c.rect(x,y,w,h); c.fill();
   c.fillStyle='#e2e8f0'; c.textBaseline='middle'; c.textAlign='left';

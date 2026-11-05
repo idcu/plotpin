@@ -59,12 +59,15 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | `siteAnnotToggleKeys(site) / renderSiteAnnotToggles(site)` | `js/features/props.js`（按场地形状筛选有效开关） | 场地属性面板；无场地返回空串，锁定（含图层锁定）时 `disabled` |
 | `SITE_ANNOT_SETTING_KEYS / siteAnnotSettingOn / setSiteAnnotSetting` | `js/core/model.js`（仍写 `state.settings` 原键，不改 schema） | 场地属性面板、`drawSiteAnnotations`、SVG 导出、`selftest.mjs` |
 | `clearCurrentFloor()` | `js/core/persistence.js`（当前楼层全清并恢复默认取景框，返回清理摘要） | 顶栏「清空」按钮（先 `pushHistory` 再调用）；自测直接调用。影响：清空写入对象墓碑、同步当前楼层条目、清空校准运行时状态，不重置图层/类型/楼层结构 |
+| `markSurfaceSize(canvas, cssW, cssH) / surfaceCssSize(ctx)` | `js/core/render.js`（绘图表面逻辑尺寸的唯一来源） | `drawScreenTag` 的夹边、离屏静态层、PNG/PDF 导出画布。离屏 canvas 的 `clientWidth` 恒为 0，必须用登记尺寸，否则屏幕标签被压到 (2,2) |
 
 影响范围：`siteHandleList/siteAreaPerimeter/siteBoundaryPoints/siteShapeCenter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；`resizeSiteByHandle(h,p)` 是写 `state.site` 的薄包装，新代码应优先用 `siteHandleDragTo(site,h,p)`，它不读全局、便于单测。删除重复后 `render.js` 不再声明 `siteBoundaryPoints/siteShapeCenter/siteAreaPerimeter/siteBasePoint/siteRadiusText`，`interaction.js` 不再声明 `siteHandleList/resizeSiteByHandle`——同名函数只保留 `geometry.js` 一份，避免两份实现漂移。
 
 Phase 2B 影响范围：`renderNodeEditor(o, opts)` 新增可选第二参数，省略时行为与旧实现一致（对象节点行 DOM 不变）；场地多边形改用它生成 `data-node-*` 行，`props.js` 内不再有 `data-site-node-*` 这一套。`bindNodeEditorEvents(box, spec)` 统一接管节点坐标输入与增删/排序按钮，业务对象与场地只提供各自的提交回调。`pickScreenHandle` 统一对象/场地手柄的屏幕命中阈值（9px），`handleAt` 与 `siteHandleAt` 不再各写一份循环。`siteIsVisible/siteIsLocked` 现在叠加所属图层的可见/锁定状态，**会影响所有依赖这两个判定的调用点**（取景框、渲染、手柄守卫、拖拽守卫）：图层隐藏时场地不出现在取景框，图层锁定时场地不可编辑，这是与业务对象一致的预期行为。CSS 中不再使用的 `.node-row.vtx` 模板一并删除。
 
 标注开关搬迁影响范围：`ui-shell.js` 的设置弹窗不再渲染 `setLabels / setSegLen / setAreaTag / setSiteNodes / setSiteSegLen / setSiteBase / setSiteRadius / setSiteArea / setSitePerimeter` 这些控件；`index.html` 顶部工具栏的全局「标签」复选框（`id="showLabels"`）同步移除，`ui-panels.js` 的绑定与 `refreshUI()` 回填一并删除。`state.settings` 的 `showLabels / showSegLen / showAreaTag` 与六个 `site*` 键仍保留：前者继续作为未单独配置对象的缺省值，后者改由场地属性面板写入；旧工程无需迁移，`persistence.js` 的清洗逻辑不变。对象面板的 `renderAnnotToggles` 与场地面板的 `renderSiteAnnotToggles` 共用 `annotToggleGroupHTML` 模板（`data-annot` / `data-site-annot` 区分回写目标），事件绑定统一走 `bindAnnotToggleInputs`，禁止再写第二套循环。
+
+屏幕标签定位影响范围：`drawScreenTag` 的夹边尺寸改由 `surfaceCssSize` 提供——DOM 画布仍读 `clientWidth/clientHeight`，行为不变；离屏静态层与 PNG/PDF 导出画布在创建时用 `markSurfaceSize` 登记逻辑尺寸。离屏 canvas 不在文档中，`clientWidth` 恒为 0，此前会把节点坐标/段长等标签压到画布左上角 (2,2)。**后续新增任何离屏画布并调用 `drawScene` 的代码，必须同样登记尺寸**，否则同类标签会再次堆到原点。
 
 ## 加一个新功能时
 

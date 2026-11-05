@@ -146,7 +146,7 @@ code += `\n;globalThis.__api = {
   siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
   siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
   sitePropsHTML, imagePropsHTML,
-  drawObject, drawLabel, drawAreaTag,
+  drawObject, drawLabel, drawAreaTag, drawScreenTag, surfaceCssSize, markSurfaceSize,
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   clearCurrentFloor,
@@ -2114,6 +2114,35 @@ asyncSuites.push((async()=>{
   ok('场地标注开关-非法键拒绝', api.setSiteAnnotSetting('showLabels',false)===false && api.state.settings.siteNodes===true);
   api.setSiteAnnotSetting('siteBase',false);
   ok('场地标注开关-关闭后不勾选', !/data-site-annot="siteBase"[^>]*checked/.test(api.renderSiteAnnotToggles(rectBG)));
+  /* 屏幕标签定位回归：离屏静态层/导出画布不在文档中，clientWidth 恒为 0，必须按登记的逻辑尺寸夹边 */
+  eq('离屏画布-登记尺寸可读', api.surfaceCssSize({canvas:api.markSurfaceSize({},900,600)}), [900,600]);
+  eq('DOM 画布-clientWidth 优先', api.surfaceCssSize({canvas:{clientWidth:1200,clientHeight:800,__cssW:900,__cssH:600}}), [1200,800]);
+  const tagLog=[];
+  const tagCtx={canvas:api.markSurfaceSize({},400,300),save(){},restore(){},measureText:()=>({width:40}),
+    beginPath(){},rect(){},roundRect(){},fill(){},fillText(t,x,y){tagLog.push([t,Math.round(x),Math.round(y)]);}};
+  api.drawScreenTag(tagCtx,1000,1000,'T');
+  /* 记录的是 fillText 落点：x+padX(5)、y+h/2(9.5→取整 290)，即标签盒夹到 (348,280) */
+  eq('离屏画布-标签按登记尺寸夹边', tagLog[0], ['T',353,290]);
+  const freeLog=[];
+  const freeCtx={canvas:{},save(){},restore(){},measureText:()=>({width:40}),
+    beginPath(){},rect(){},roundRect(){},fill(){},fillText(t,x,y){freeLog.push([Math.round(x),Math.round(y)]);}};
+  api.drawScreenTag(freeCtx,123,77,'T');
+  eq('尺寸未知-标签不压到原点', freeLog[0], [128,87]);
+  /* 六项场地标注开关都必须进入静态层缓存签名，否则关闭后静态层不重建＝「切了没反应」 */
+  const prevSite=api.state.site;
+  api.state.site={kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:70},updatedAt:'t'};
+  const dims=api.worldDims();
+  const keyOf=()=>api.sceneStaticKey(api.state.viewport,900,600,dims);
+  const keyChanged=api.SITE_ANNOT_SETTING_KEYS.map(k=>{
+    const before=api.siteAnnotSettingOn(k);
+    const k1=keyOf();
+    api.setSiteAnnotSetting(k,!before);
+    const diff=keyOf()!==k1;
+    api.setSiteAnnotSetting(k,before);
+    return diff;
+  });
+  eq('静态层缓存键-六项场地标注开关均参与签名', keyChanged, [true,true,true,true,true,true]);
+  api.state.site=prevSite;
   /* 旧入口已移除：设置弹窗不再渲染场地/标签/段长/面积开关，工具栏不再有全局「标签」 */
   ok('旧入口-设置弹窗已无场地与全局标注开关', !code.includes('id="setSiteNodes"') && !code.includes('id="setLabels"') && !code.includes('id="setSegLen"') && !code.includes('id="setAreaTag"'));
   ok('旧入口-工具栏已无全局标签复选框', !html.includes('id="showLabels"'));

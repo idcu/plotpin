@@ -172,5 +172,36 @@
   - PNG/PDF 为位图产物，自测不比对像素；依赖 `drawScene` 与 SVG/画布共用绘制链。浏览器回归只验证导出成功提示与画布可见场地，**未做像素级/文件内容核验**（下载目录中未取回导出的 .png/.pdf/.json/.svg/.dxf 文件）。
   - 场地多边形顶点在画布上的真实拖拽未被浏览器自动化注册（应用侧 300ms 合成事件过滤），本轮以属性面板改顶点坐标（58.00 → 65.00，面积/周长同步变化）判定节点编辑逻辑；画布拖拽路径标记为未验证。
 
+## 2026-11-05 · 修复场地标注开关「切了没反应」
+
+- **Commit Hash**：`待回填（本提交）`（fix(site): 离屏画布屏幕标签按登记尺寸定位）。
+- **现象**：选中场地后切「节点坐标」「段长」两个开关，场地周围不出现/不消失任何文字；面积/周长正常。真实 Chromium 复现：`state.settings.siteNodes=true`、`siteSegLen=true` 且复选框已勾选，画布上只有面积/周长胶囊，顶点与边中点无标签。
+- **根因（代码位置）**
+  - `js/core/render.js` 的 `drawScreenTag()` 用 `c.canvas.clientWidth / clientHeight` 做标签夹边。静态层由 `ensureStaticLayer()` 用 `document.createElement('canvas')` 创建且**从不插入文档**，离屏 canvas 的 `clientWidth/clientHeight` 恒为 0，于是 `Math.max(2, Math.min(x, 0-w-2)) = 2`，全部标签被压到静态层左上角 (2,2) 并叠成一团（多数被左上角提示浮层遮住），表现为「在哪里都看不到」。
+  - 只有走 `drawScreenTag` 的项受影响：`siteNodes / siteSegLen / siteBase / siteRadius`（后两项默认关闭，所以用户只报前两项）；`siteArea / sitePerimeter` 走 `drawAreaTag`，不做 clientWidth 夹边，所以正常。
+  - 开关写回链路本身正常：`setSiteAnnotSetting` 写 `state.settings` 原键 → `changed()` 触发 `requestRender()`；`sceneStaticKey` 含 `JSON.stringify(state.settings)`，本身已纳入六项开关。故不是缓存键漏项。
+  - 同一缺陷也影响 PNG/PDF 导出画布（离屏）与未选中对象的图上标注（画在静态层）：导出图里的标签同样会被压到左上角。
+- **修复**：新增 `markSurfaceSize(canvas, cssW, cssH)` / `surfaceCssSize(ctx)`（`js/core/render.js`，绘图表面逻辑尺寸唯一来源）。`ensureStaticLayer`、`renderToDataURL`、PDF 图纸页画布在创建时登记逻辑尺寸；`drawScreenTag` 改用 `surfaceCssSize`，尺寸未知时不夹边（不再压到原点）。DOM 画布仍优先读 `clientWidth/clientHeight`，行为不变。六项开关继续共用 `SITE_ANNOT_SETTING_KEYS / siteAnnotSettingOn / setSiteAnnotSetting` 与 `annotToggleGroupHTML / bindAnnotToggleInputs`，未改键名、未做 schema 迁移。
+- **实测验证数据（真实 Chromium，`browser_use` 自动化，http://127.0.0.1:8765）**
+  - 修复前：12 顶点多边形，`siteNodes=true` 且 `siteSegLen=true` 时画布无任何节点/段长标签（只有面积/周长胶囊）。
+  - 修复后逐项「关→开」各一次（矩形 100×70；矩形没有半径项、圆形没有节点/段长项，属形状设计如此）：
+    | 开关 | 形状 | 画布实际变化 | 结果 |
+    |---|---|---|---|
+    | 节点坐标 | 矩形 | 顶点出现 `(100.00, 70.00)`、`(100.00, 0.00)`，关闭后消失 | PASS |
+    | 段长 | 矩形 | 上/右/下边中点出现 `100.00 m`、`70.00 m`、`100.00 m`，关闭后消失 | PASS |
+    | 基点坐标 | 矩形 | 基点角出现 `(0.00, 0.00)`，关闭后消失 | PASS |
+    | 面积 | 矩形 | 中心出现 `面积 7000.00 ㎡`，关闭后消失 | PASS |
+    | 周长 | 矩形 | 中心出现 `周长 340.00 m`，关闭后消失 | PASS |
+    | 半径 | 圆形 r=50 | 圆心旁出现 `R 50.00 m`，关闭后消失 | PASS |
+    | 基点坐标 | 圆形 r=50 | 圆心出现 `(50.00, 50.00)`，关闭后消失 | PASS |
+  - `node scripts/selftest.mjs`：**1619 通过 / 0 失败**（前值 1614，净增 5）。新增断言：离屏画布登记尺寸可读、DOM 画布 `clientWidth` 优先、离屏画布标签按登记尺寸夹边（实际落点 353,290）、尺寸未知时不压到原点、六项场地标注开关逐个进入 `sceneStaticKey`。
+  - `node scripts/check.mjs`：通过（26 个脚本、入口资源、离线引用、断言数一致 1619、契约、插件 API、模块分层）；`node scripts/badge.mjs` 已同步徽章。
+  - `node scripts/bench.mjs`（2000 对象 / 1600×900）：静态层重建 21.79 ms/帧；缓存命中 0.34 ms/帧（P95 0.39 ms < 8 ms）；直接全量 21.19 ms/帧；heapUsed 14.3 MB；视口裁剪 99.4%（13/2000）；覆盖率分析 8 ms < 300 ms。修复仅多两次属性读取，无逐帧开销变化。
+- **遗留 TODO / 风险**
+  - 任何新增的离屏画布若调用 `drawScene`，必须调用 `markSurfaceSize` 登记尺寸，否则同类标签会再次堆到原点（已写入 `docs/modules.md` 影响范围）。
+  - 基点标签位于画布边缘时会被夹边到画布内侧，可能落在左上角提示浮层下方；这是既有夹边策略，不是本次回归。
+  - 本轮验证只覆盖画布静态层与导出画布定位逻辑，未对 PNG/PDF 导出文件做像素级核验。
+
+
 
 

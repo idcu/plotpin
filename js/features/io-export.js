@@ -169,6 +169,7 @@ function renderToDataURL(scale=2){
   const z=Math.min(2600/d.w,1800/d.h,60);
   const cw=d.w*z+margin*2, ch=d.h*z+margin*2;
   const c=document.createElement('canvas'); c.width=Math.round(cw*scale); c.height=Math.round(ch*scale);
+  markSurfaceSize(c,cw,ch);
   const cc=c.getContext('2d'); cc.scale(scale,scale);
   drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6});
   return c.toDataURL('image/png');
@@ -437,7 +438,7 @@ function canvasToJpegBase64(canvas,quality=.92){
 }
 async function renderPdfDrawingPage(floorName){
   const W=1748,H=1240;   /* A4 横向 150dpi 像素 */
-  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const c=document.createElement('canvas'); c.width=W; c.height=H; markSurfaceSize(c,W,H);
   const cc=c.getContext('2d'); cc.fillStyle='#fff'; cc.fillRect(0,0,W,H);
   const d=worldDims(), margin=36;
   const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
