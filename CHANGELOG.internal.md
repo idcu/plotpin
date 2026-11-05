@@ -30,7 +30,7 @@
 
 ## 2026-11-05 · Phase 2A：场地几何统一 + schema 对象化 + 负坐标修复
 
-- **Commit Hash**：`见紧随其后的 docs(changelog) 提交（本条提交哈希无法在自身内容中自引用）`
+- **Commit Hash**：`bbf7862`（refactor(site): 场地几何内核收口到 geometry.js（Phase 2A））。
 - **核心改动点**
   - 场地几何内核收口到 `js/core/geometry.js`：`siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` 从 `render.js` 迁出；`siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` 从 `interaction.js` 迁出，`render.js` 与 `interaction.js` 不再声明同名函数（各删一份重复实现）。
   - 新增纯内核 `siteHandleDragTo(site,h,p)`：只改传入 site，不读全局，便于单测；旧 `resizeSiteByHandle(h,p)` 保留为写 `state.site` 的薄包装，并保持可见/锁定守卫。
