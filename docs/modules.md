@@ -4,7 +4,7 @@
 
 ## 为什么是分目录，不是可插拔模块
 
-PlotPin 是**双击 `index.html` 即用**的离线单页工具：39 个 classic `<script>` 共享同一个全局词法作用域，
+PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic `<script>` 共享同一个全局词法作用域，
 `const SCHEMA`、`state`、`I18N` 都是裸标识符，文件之间直接引用。改 `<script type="module">`
 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
 
@@ -86,11 +86,15 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：39 个 classic 
 | `stats.floorMetaUpdated / stats.floorsDeleted` | `js/common/merge.js`（合并统计新增字段：前者只在远端确实覆盖本地不同的楼层元数据时 +1，后者统计整层墓碑删除） | `collabQueueApply` 的冲突行与覆盖提示、`mergeHistoryNeeded`；`mergeProjectData` 既有字段不变，调用方按新字段可选读取 |
 | `EXPORT_FIELD_DEFS / buildExportRow / exportShapeSummary / exportParamText / xlsxExportTable / TABLE_COLUMNS / PDF_COLS / REPORT_LIST_COLS / LEDGER_FIELDS` | `js/features/io-fields.js`（导出字段描述表与行渲染器唯一实现：列名、取值、台账映射、形状外接盒/参数与「参数」合成列都在此；CSV/TSV/XLSX/PDF 清单/打印报告只保留列布局，不得再各自拼装对象字段） | `io-export.js` 的 `objectRows / delimitedText / exportXlsx / renderPdfListPages / reportListPageHtml`；`io-table.js` 的 `applyLedgerCells`（`LEDGER_FIELDS` 由字段表 `ledger` 标记派生，导入导出同一映射） |
 | `dimensionMeasure(o) / dimensionAngleDeg(points)` | `js/features/io-fields.js` / `js/core/geometry.js`（尺寸标注读数唯一源：测距链总长、两点距离、面积+周长、三点夹角；文本模板仍由各格式决定） | `io-export.js` 的 SVG 标注与 DXF 文字、`render.js` 的 `drawDimension` 角度；禁止再各自算一份 |
+| `quoteTable(catalog) / QUOTE_FIELD_DEFS` | `js/features/io-fields.js`（报价表唯一字段源与跨楼层 BOM 聚合：按 `厂商+型号` 聚合数量，仅填型号时按目录唯一型号自动绑定；无目录降级为「名称、数量」） | `io-export.js` 的 `exportQuote`（CSV/XLSX 共用）、`selftest.mjs`；CSV 经 `delimitedFromTable`（`guardFormula`），XLSX 经 `Xlsx.build` |
+| `catalogValidate(raw) / importCatalog(raw, save?) / catalogLoad()` | `js/features/catalog.js`（产品目录 schema 校验与事务化导入唯一实现：校验 → `idbPutKey('catalog:current')` → 才替换内存；任一步失败 IDB 与内存均保持原值；`save` 供自测注入失败） | `io-import.js` 的 JSON 导入路由（按 schema 分流）、`app.js` 首屏恢复、导出下拉的目录导出/删除、`selftest.mjs` |
 | `BLIND_SPOT_FIELDS / buildBlindSpotGeoJson(cov)` | `js/features/io-fields.js`（盲区 GeoJSON 属性与 `coverageSpec` 的唯一生成器；纯函数，无盲区返回 `null`） | `exportBlindSpotsGeoJson()`（只负责提示与下载）、`selftest.mjs` |
 
 B-06 影响范围：`mergeProjectJSON(raw, opts)` 新增 `opts.history:'overwrite'`——只有 `mergeHistoryNeeded(stats)` 为真（发生 LWW 覆盖）才 `pushHistory()`，纯新增合并不再占用撤销栈；既有调用不传 `history` 时行为不变。`mergeProjectData` 的 `stats` 新增 `floorMetaUpdated / floorsDeleted` 两个字段，既有字段与返回值结构不变，旧调用方忽略新字段即可。`qrSvg` 从 `io-export.js` 上移到 `js/common/qr.js`，唯一调用方签名不变（新增可选像素宽度）；`collab.js` 不再各自实现二维码渲染。
 
 B-08 影响范围：`objectRows(objs, floorName)`、`objectRowsAll()`、`delimitedText(delim)`、`exportDelimited`、`exportXlsx`、`exportSVG/PDF/DXF/PNG`、`exportBlindSpotsGeoJson` 的签名与下载行为不变。`TABLE_COLUMNS` 的 27 个表头及顺序原样保留；`PDF_COLS` 与 `REPORT_LIST_COLS` 从 `io-export.js` 移到 `io-fields.js`，名称/取值/顺序不变。`LEDGER_FIELDS` 从 `io-table.js` 移到 `io-fields.js`，改为由字段表派生（值仍为 `[['型号','model'],['安装高度','mountHeight'],['IP','ip'],['责任人','owner']]`）。**唯一可观察行为变化**：打印报告清单的「参数」列此前因 `objectRows` 未提供该键而恒为空白，现在改用与 PDF 清单同一合成值（矩形/圆形/闭合/标注类型），属于补齐列语义而非删字段；8 种导出产物 golden 对比不受影响（报告不在 8 种内）。新文件位于 `js/features/`（层 2），`index.html` 插在 `io-table.js` 与 `io-export.js` 之间。
+
+B-05 影响范围：新增 `js/features/catalog.js`（层 2，`index.html` 插在 `io-export.js` 之后，全局 classic 脚本 39→40）。`delimitedText(delim)` 与既有 CSV/TSV 台账导出的行为不变，DSV 写出改由新增 `delimitedFromTable(table, delim)` 统一承担（CSV 报价复用 `guardFormula`）。属性面板「型号」输入新增可选 `list="catModels"`（仅在载入目录时渲染 datalist），`applyField('propModel')` 在型号变化时删除旧的 `props.vendor`；新增可选 `props.qty`（缺省在 BOM 中按 1 计）。未载入目录时面板与旧版一致（仅多「数量」输入），导出下拉新增 4 项（CSV 报价 / Excel 报价 / 导出目录 / 删除目录），既有导出项不变。`bomGroups` 未作为独立 API 暴露：BOM 聚合直接由 `quoteTable` 完成，避免第二套聚合/字段路径。
 
 影响范围：`siteHandleList/siteAreaPerimeter/siteBoundaryPoints/siteShapeCenter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；`resizeSiteByHandle(h,p)` 是写 `state.site` 的薄包装，新代码应优先用 `siteHandleDragTo(site,h,p)`，它不读全局、便于单测。删除重复后 `render.js` 不再声明 `siteBoundaryPoints/siteShapeCenter/siteAreaPerimeter/siteBasePoint/siteRadiusText`，`interaction.js` 不再声明 `siteHandleList/resizeSiteByHandle`——同名函数只保留 `geometry.js` 一份，避免两份实现漂移。
 

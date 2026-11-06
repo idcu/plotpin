@@ -2,6 +2,49 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-05 设备产品库 + BOM/报价导出
+
+- **Commit Hash**：本条提交（`feat(catalog): 产品目录 JSON 导入导出与跨楼层 BOM 报价`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="B-05" -1 --format=%H`。
+- **核心改动点（目录模型与校验 / BOM 与导出，同一原子提交）**
+  - 新增 `js/features/catalog.js`（层 2，`index.html` 插在 `io-export.js` 之后，classic 脚本 39→40）：`CATALOG_SCHEMA='plotpin-catalog/v1'`、`CATALOG_KEY='catalog:current'`、`catalogValidate`、`importCatalog(raw, save?)`、`catalogLoad`、`exportCatalogJSON`、`deleteCatalog`、`roundMoney`。
+  - 存储复用 `persistence.js` 的 `projects` 对象仓键值接口 `idbPutKey / idbGetKey / idbDeleteKey`，**不升级 `DB_VERSION`**（目录不是工程记录，不参与工程库/资产回收）。
+  - 事务化导入：`catalogValidate`（纯函数）→ 写 IDB → 成功后才替换内存 `currentCatalog`；任一步抛错则 IDB 与内存保持原值。`save` 参数仅自测注入失败用。
+  - JSON 导入路由：`io-import.js` 在 `JSON.parse` 后按 `p.schema === CATALOG_SCHEMA` 先分流到 `importCatalog`，失败只 toast、不再落到工程导入；非目录 JSON 走原有工程路径不变。
+  - 绑定与数量：`props.js` 给「型号」输入加 `list="catModels"`（仅载入目录时渲染 `<datalist>`），新增「数量」写 `props.qty`（缺省在 BOM 中按 1 计）；`applyField` 校验空/负值时删除该键；型号变化时删除旧 `props.vendor`。未做顶栏产品库按钮/预览弹窗（体积取舍，复用 `#fileInput` 与导出下拉）。
+  - BOM 聚合：`io-fields.js` 新增 `QUOTE_FIELD_DEFS` 与 `quoteTable(catalog)`（唯一聚合器），先 `syncActiveFloor()`，再遍历全部楼层按 `厂商+型号` 聚合数量；对象只填型号且该型号在目录中唯一时自动绑定厂商/单价（跨厂商重名不绑定）；末行「合计」数量求和、金额仅在全部行有价时求和。
+  - 导出：`io-export.js` 新增 `exportQuote(kind)`，CSV/XLSX 共用 `quoteTable`；CSV 走新增 `delimitedFromTable(table, delim)`（唯一 DSV 写出入口，沿用 `DSV.formatRows` + `guardFormula` 公式注入防护），XLSX 走 `ensureVendor('Xlsx').build`。`delimitedText(delim)` 改为委托 `delimitedFromTable`，台账导出行为不变。导出下拉新增「CSV 报价表 / Excel 报价表 / 导出目录 / 删除目录」。
+  - 首屏：`app.js` 在恢复工程后 `await catalogLoad()`（内部已 catch，损坏记录不会阻断启动）。
+  - **不新增运行时依赖、不读取/修改 `camera-*`、未 push。**
+- **目录 schema 与校验规则**
+  - 根：`{ schema:'plotpin-catalog/v1', items:[...] }`；型号项 `vendor / model / category? / unit? / price / params?`（`name/updatedAt` 不属于 schema，导出只回写规范化结果）。
+  - 拒绝：根非对象/数组、`schema` 不精确匹配、`items` 空或 >2000、单项非对象、`vendor` 或 `model` 去空白后为空、`price` 非有限数或 `<0` 或 `>1e9`、`params` 出现但非非数组对象、`vendor+model` 重复。
+  - 规范化：`category` 缺省「其他」并截断 40 字符、`unit` 缺省「台」并截断 10 字符、`params` 缺省 `{}`、字符串字段 `trim`。
+- **BOM 复算样本（selftest 固定样本）**
+  - F1 海康 `DS-2CD` ×3 @1,200 = 3,600；F1 大华 `DH-1` ×1 @350 = 350；F2 西门子 `SM-9` ×2 @900 = 1,800。
+  - 合计数量 3+1+2 = **6**；合计金额 3,600+350+1,800 = **5,750**（`roundMoney` 两位小数）。表头 5 列：厂商、名称、数量、单价、小计。
+  - e2e 另一组：F1 `DS-2CD` ×5 + F2 同型号 ×2 = 数量 **7**、小计 **8,400**。
+- **实测验证数据（本机实测）**
+  - 体积：基线 worktree（HEAD `58999c7`）构建 **762,512 B（744.6 KB）** → 当前 **767,954 B（750.0 KB）**，**+5,442 B（+0.71%）**；`MAX_BYTES=768,000` 门禁通过，**余量 46 B**。产物 SHA256 `97f4c402225a…`，`build.mjs --check` 一致。
+  - selftest：**1944 → 1982 通过 / 0 失败**（B-05 新增 38 条：目录合法/非法逐条校验、失败回滚、跨楼层聚合、5 列表头、无目录降级、CSV/XLSX 数值往返、公式防护）。
+  - e2e：**35 passed / 1 skipped**（前值 34 passed / 1 skipped，新增 `tests/e2e/catalog.spec.mjs` 1 条）；该 spec 单独运行 **1 passed (1.5s)**。
+  - `node scripts/check.mjs`（30 个脚本、入口、离线引用、断言数 1982、契约、插件 API、分层）通过；`npm run ci`、`npm run gates`、`npm run discipline`（13/13 → L4）通过。
+- **未验证项**
+  - **Excel / WPS 人工打开未验证**：XLSX 只验证 OOXML 可生成、`Xlsx.readRows` 数值往返与文件非空，未在桌面 Excel/WPS 中打开核验显示格式。
+  - 大目录（接近 2000 型号）导入耗时与 `<datalist>` 长列表在各浏览器的表现未做压力测试。
+  - 报价表未包含类别/单位/楼层列（体积取舍），跨层分布只能回台账查看。
+  - CSV 数值往返用 `DSV.parseRows` 验证，未在 Excel 中验证编码/BOM 显示。
+- **遗留 TODO / 风险**
+  - **体积余量仅 46 B**：任何后续新增都会先撞 750 KB 门禁，必须先压缩或替换等量内容。
+  - 绑定只依据 `props.model`，`props.vendor` 无 UI 入口；跨厂商重名型号不会自动绑定，BOM 该行「厂商」为空。
+  - 单价实时取自当前目录，对象不存单价快照；替换目录后重导报价会变化，已导出文件也不记录目录版本。
+  - `quoteTable` 每层遍历全量对象，属导出时一次性计算（不在渲染路径）；超大工程（万级对象）未实测耗时。
+- **受影响调用方**
+  - 行为不变：`delimitedText(delim)`、`exportDelimited`、`objectRows/objectRowsAll`、`exportXlsx`、`exportSVG/PDF/DXF/PNG`、`exportQuote` 之外的既有导出入口。
+  - 签名扩展（可选参数，旧调用不变）：`txt(field, val, attr='')`（`props.js` 内部）、`importCatalog(raw, save?)`。
+  - 新增全局符号：`CATALOG_SCHEMA / CATALOG_KEY / currentCatalog / catalogValidate / importCatalog / catalogLoad / exportCatalogJSON / deleteCatalog / roundMoney / quoteTable / QUOTE_FIELD_DEFS / delimitedFromTable`；`index.html` 新增 `<script src="js/features/catalog.js">`，加载顺序仍在层 2。
+  - `io-import.js` 的 JSON 导入新增目录分支；导入其他 schema 的路径不变。
+- **文档同步**：`docs/engineering.md`（门禁表 750.0 KB / SHA / CSP 40=40 / 断言 1982、B-05 章节、e2e 表新增 catalog 行）、`docs/features.md`（产品库与 BOM 报价条目）、`docs/modules.md`（脚本 39→40、两行抽象表、B-05 影响范围）、`README.md`（徽章 1982、路线图已交付条目）、本文件。
+
 ## 2026-11-06 · B-08 导出/表格统一「字段描述表 + 行渲染器」
 
 - **Commit Hash**：本条提交（`refactor(export): 统一导出字段描述表与行渲染器`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="B-08" -1 --format=%H`。

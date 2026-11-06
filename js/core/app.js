@@ -5,6 +5,7 @@
   const saved=await loadSavedProject();
   if(saved) state=saved;
   try{ const ss=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); Object.assign(state.settings,ss); }catch(e){}
+  await catalogLoad();
   /* 界面语言先于首屏渲染：动态面板/ARIA 标签也按当前语言生成 */
   I18N.setLang(state.settings.lang);
   I18N.apply(document);

@@ -85,6 +85,28 @@ function dimensionMeasure(o){
   if(o.subtype==='angle') return {kind:'angle',deg:dimensionAngleDeg(ps)};
   return {kind:o.subtype||''};
 }
+const QUOTE_FIELD_DEFS=[
+  {key:'厂商',p:1,get:r=>r.vendor},{key:'名称',get:r=>r.model},{key:'数量',get:r=>r.qty},
+  {key:'单价',p:1,get:r=>r.item?r.item.price:''},{key:'小计',p:1,get:r=>r.amount===undefined?'':r.amount}
+];
+function quoteTable(cat){
+  const g=new Map(),idx=new Map(),byModel=new Map();
+  ((cat&&cat.items)||[]).forEach(x=>{idx.set(x.vendor+'\u0001'+x.model,x);byModel.set(x.model,byModel.has(x.model)?null:x)});
+  syncActiveFloor();
+  (state.floors||[]).forEach(f=>(f.id===state.activeFloorId?state.objects:f.objects||[]).forEach(o=>{
+    const p=(o&&o.props)||{},v=String(p.vendor||'').trim(),m=String(p.model||'').trim();
+    if(!v&&!m)return;
+    const it=idx.get(v+'\u0001'+m)||(!v&&m?byModel.get(m):null),gk=it?it.vendor+'\u0001'+it.model:v+'\u0001'+m;
+    const x=g.get(gk)||{vendor:it?it.vendor:v,model:it?it.model:m,item:it,qty:0},q=Number(p.qty);
+    x.qty+=Number.isFinite(q)&&q>=0?q:1;g.set(gk,x);
+  }));
+  const rows=Array.from(g.values());
+  rows.forEach(x=>{if(x.item)x.amount=roundMoney(x.qty*x.item.price)});
+  const d=QUOTE_FIELD_DEFS.filter(f=>!f.p||!!(cat&&cat.items&&cat.items.length));
+  if(rows.length)rows.push({vendor:'',model:'合计',qty:rows.reduce((n,x)=>n+x.qty,0),
+    amount:rows.every(x=>x.item)?roundMoney(rows.reduce((n,x)=>n+x.amount,0)):''});
+  return [d.map(f=>f.key),...rows.map(x=>d.map(f=>f.get(x)))];
+}
 /** 盲区 GeoJSON 属性字段表（导出唯一来源） */
 const BLIND_SPOT_FIELDS=[
   {key:'region',get:(r)=>r.regionName},

@@ -11,6 +11,10 @@ $('exportBtn').onclick=()=>{
   if(kind==='csv') exportDelimited(',','csv','text/csv;charset=utf-8');
   if(kind==='tsv') exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8');
   if(kind==='xlsx') exportXlsx();
+  if(kind==='quote-csv') exportQuote('csv');
+  if(kind==='quote-xlsx') exportQuote('xlsx');
+  if(kind==='catalog-json') exportCatalogJSON();
+  if(kind==='catalog-delete') deleteCatalog();
   if(kind==='labels') exportLabelSheet();
 };
 function downloadBlob(blob,name){
@@ -116,14 +120,24 @@ function objectRowsAll(){
  * 纯数字（负数/科学计数/坐标与角度列表）原样输出，避免 CSV→导入往返时数值被当成文本（审计 P1-3）。 */
 const NUMERIC_CELL_RE=/^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*[,;，]\s*-?\d+(?:\.\d+)?)*$/;
 function formulaGuard(s){ return /^[=+\-@\t\r]/.test(s)&&!NUMERIC_CELL_RE.test(s); }
-/** 纯函数：生成 CSV/TSV 文本（导出与自测共用，不触发下载）；数据行统一带公式注入防护 */
-function delimitedText(delim){
-  const rows=objectRowsAll(); const cols=TABLE_COLUMNS;
-  /* 表头保持原样不转义；数据行用公共 DSV 写出（quoteChars 保留原 \t 触发规则） */
-  const body=DSV.formatRows(rows.map(r=>cols.map(c=>r[c])),{
+function delimitedFromTable(table,delim){
+  const cols=table[0];
+  const body=DSV.formatRows(table.slice(1),{
     delimiter:delim,eol:'\n',bom:false,quoteChars:/[",\n\r\t]/,guardFormula:formulaGuard
   });
   return '\ufeff'+cols.join(delim)+'\n'+body;
+}
+/** 纯函数：生成 CSV/TSV 文本（导出与自测共用，不触发下载） */
+function delimitedText(delim){
+  return delimitedFromTable([TABLE_COLUMNS,...objectRowsAll().map(r=>TABLE_COLUMNS.map(c=>r[c]))],delim);
+}
+function exportQuote(kind){
+  const t=quoteTable(currentCatalog),csv=kind==='csv';
+  if(t.length<2)return toast('无可汇总型号：先绑定型号并填数量','warn');
+  downloadBlob(new Blob([csv?delimitedFromTable(t,','):ensureVendor('Xlsx').build(t,'产品报价')],
+    {type:csv?'text/csv;charset=utf-8':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
+    safeName()+'-产品报价.'+(csv?'csv':'xlsx'));
+  toast('报价表已导出','success');
 }
 /** 分隔文本导出（CSV/TSV） */
 function exportDelimited(delim,ext,mime){

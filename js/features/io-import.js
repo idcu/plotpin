@@ -14,6 +14,11 @@ async function importJsonFile(f){
     const textErrs=importLimitErrors({chars:text.length});
     if(textErrs.length) throw new Error('超限：'+importLimitMessage(textErrs));
     const p=JSON.parse(text);
+    if(p.schema===CATALOG_SCHEMA){
+      try{ await importCatalog(p); renderProps(); toast('目录已导入：'+currentCatalog.items.length+' 个型号','success'); }
+      catch(e){ toast('目录导入失败：'+e.message,'error'); }
+      return;
+    }
     if(!isReadableSchema(p.schema)) throw new Error('SCHEMA');
     const next=buildProject(p);
     /* 跨设备导入的 JSON 不接管本机工程库绑定，避免覆盖同名工程；需要时可另存到工程库 */

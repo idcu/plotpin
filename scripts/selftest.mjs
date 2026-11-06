@@ -183,6 +183,9 @@ code += `\n;globalThis.__api = {
   get calibUndoStack(){ return calibUndoStack; }, set calibUndoStack(v){ calibUndoStack=v; },
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
+  CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
+  quoteTable, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
+  get currentCatalog(){ return currentCatalog; }, setCurrentCatalog(v){ currentCatalog=v; },
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -5029,6 +5032,117 @@ asyncSuites.push(async()=>{
 
   api.resetState(); api.history.past = []; api.history.future = [];
 }
+
+/* 75. B-05 产品目录校验 / BOM 聚合 / 报价字段表与数值往返 ---------------- */
+{
+  /* 75.1 合法目录规范化：去空白、缺省类别/单位、params 白名单 */
+  const raw = { schema:'plotpin-catalog/v1', items:[
+    { vendor:' 海康 ', model:'DS-2CD', price:'1200', params:{ 像素:'400万' } },
+    { vendor:'大华', model:'DH-1', price:350, unit:'个', category:'摄像机' },
+    { vendor:'西门子', model:'SM-9', price:900 }
+  ] };
+  const cat = api.catalogValidate(raw);
+  eq('目录-schema 保留', cat.schema, api.CATALOG_SCHEMA);
+  eq('目录-型号数', cat.items.length, 3);
+  eq('目录-去空白+默认类别/单位', [cat.items[0].vendor, cat.items[0].category, cat.items[0].unit, cat.items[0].price], ['海康','其他','台',1200]);
+  eq('目录-显式单位/类别保留', [cat.items[1].unit, cat.items[1].category], ['个','摄像机']);
+  eq('目录-params 白名单保留', cat.items[0].params, { 像素:'400万' });
+
+  /* 75.2 非法目录逐项拒绝（校验必须在写入前整体失败） */
+  const bad = (r, part) => { try { api.catalogValidate(r); return false; } catch(e) { return String(e.message).includes(part); } };
+  ok('目录-拒绝 schema 错误', bad({ schema:'x', items:[{ vendor:'A', model:'B', price:1 }] }, 'schema'));
+  ok('目录-拒绝空 items', bad({ schema:'plotpin-catalog/v1', items:[] }, 'items'));
+  ok('目录-拒绝超上限', bad({ schema:'plotpin-catalog/v1', items:Array.from({ length:2001 }, ()=>({ vendor:'A', model:'B', price:1 })) }, '上限'));
+  ok('目录-拒绝厂商为空', bad({ schema:'plotpin-catalog/v1', items:[{ vendor:' ', model:'B', price:1 }] }, '厂商'));
+  ok('目录-拒绝负单价', bad({ schema:'plotpin-catalog/v1', items:[{ vendor:'A', model:'B', price:-1 }] }, '单价'));
+  ok('目录-拒绝非数单价', bad({ schema:'plotpin-catalog/v1', items:[{ vendor:'A', model:'B', price:'abc' }] }, '单价'));
+  ok('目录-拒绝 params 非对象', bad({ schema:'plotpin-catalog/v1', items:[{ vendor:'A', model:'B', price:1, params:'x' }] }, 'params'));
+  ok('目录-拒绝重复厂商+型号', bad({ schema:'plotpin-catalog/v1', items:[{ vendor:'A', model:'B', price:1 }, { vendor:'A', model:'B', price:2 }] }, '重复'));
+
+  /* 75.3 BOM 跨楼层聚合：F1 两对象（A×3 + B×1），F2 一对象（C×2） */
+  api.setCurrentCatalog(cat);
+  const st = api.resetState();
+  st.objects.push(
+    api.baseObject('point','point.marker',{ name:'P1', x:1, y:1 }),
+    api.baseObject('point','point.marker',{ name:'P2', x:2, y:2 })
+  );
+  st.objects[0].props = { vendor:'海康', model:'DS-2CD', qty:3 };
+  st.objects[1].props = { vendor:'大华', model:'DH-1', qty:1 };
+  const p3 = api.baseObject('point','point.marker',{ name:'P3', x:3, y:3 });
+  p3.props = { vendor:'西门子', model:'SM-9', qty:2 };
+  st.floors.push({ id:'f2', name:'F2', objects:[p3] });
+
+  const table = api.quoteTable(cat);
+  eq('报价-有目录表头', table[0], ['厂商','名称','数量','单价','小计']);
+  eq('报价-行数(3型号+合计)', table.length, 5);
+  const rowOf = m => table.slice(1,-1).find(r=>r[1]===m);
+  const rA = rowOf('DS-2CD'), rB = rowOf('DH-1'), rC = rowOf('SM-9');
+  eq('BOM-跨楼层数量(3+1/2)', [rA[2],rB[2],rC[2]], [3,1,2]);
+  eq('BOM-A 单价/小计', [rA[3],rA[4]], [1200,3600]);
+  eq('BOM-B 单价/小计', [rB[3],rB[4]], [350,350]);
+  eq('BOM-C 单价/小计', [rC[3],rC[4]], [900,1800]);
+  eq('BOM-数量合计6', table[4][2], 6);
+  eq('BOM-金额合计5750', table[4][4], 5750);
+
+  /* 75.4 CSV 写出后解析回来：数量/单价/小计数值完全一致 */
+  const text = api.delimitedFromTable(table, ',');
+  const parsed = api.DSV.parseRows(text, ',');
+  const pA = parsed.find(r=>r[1]==='DS-2CD');
+  eq('报价-CSV 数值往返', [Number(pA[2]),Number(pA[3]),Number(pA[4])], [3,1200,3600]);
+  const pT = parsed[parsed.length-1];
+  eq('报价-CSV 合计往返', [Number(pT[2]),Number(pT[4])], [6,5750]);
+
+  /* 75.5 无目录降级：仅名称/数量，金额不臆造 */
+  const t2 = api.quoteTable(null);
+  eq('降级-表头仅名称数量', t2[0], ['名称','数量']);
+  eq('降级-行数(3型号+合计)', t2.length, 5);
+  eq('降级-合计行', t2[4], ['合计',6]);
+
+  /* 75.6 公式注入：目录厂商写成 =SUM(A1) 时 CSV 单元格加前导单引号 */
+  const evil = api.catalogValidate({ schema:'plotpin-catalog/v1', items:[{ vendor:'=SUM(A1)', model:'EVIL', price:10 }] });
+  const pe = api.baseObject('point','point.marker',{ name:'PE', x:4, y:4 });
+  pe.props = { vendor:'=SUM(A1)', model:'EVIL', qty:1 };
+  st.objects.push(pe);
+  const evilText = api.delimitedFromTable(api.quoteTable(evil), ',');
+  ok('报价-CSV 公式防护', evilText.includes("'=SUM(A1)"));
+}
+
+asyncSuites.push((async()=>{
+  /* 75.8 事务回滚：校验失败/落盘失败都不能替换当前目录 */
+  const oldCat = api.catalogValidate({ schema:'plotpin-catalog/v1', items:[{ vendor:'OLD', model:'OLD', price:5 }] });
+  api.setCurrentCatalog(oldCat);
+  let threw = false;
+  try { await api.importCatalog({ schema:'plotpin-catalog/v1', items:[{ vendor:'A', model:'B', price:-1 }] }); }
+  catch(_) { threw = true; }
+  ok('回滚-校验失败抛错', threw);
+  eq('回滚-校验失败目录不变', api.currentCatalog.items[0].vendor, 'OLD');
+  let threw2 = false;
+  try { await api.importCatalog({ schema:'plotpin-catalog/v1', items:[{ vendor:'NEW', model:'N', price:1 }] }, async()=>{ throw new Error('磁盘失败'); }); }
+  catch(_) { threw2 = true; }
+  ok('回滚-落盘失败抛错', threw2);
+  eq('回滚-落盘失败目录不变', api.currentCatalog.items[0].vendor, 'OLD');
+  await api.importCatalog({ schema:'plotpin-catalog/v1', items:[{ vendor:'NEW', model:'N', price:1 }] }, async()=>{});
+  eq('目录-成功导入替换', api.currentCatalog.items[0].vendor, 'NEW');
+
+  /* 75.9 XLSX 数值往返：同一 quoteTable → Xlsx.build → Xlsx.readRows */
+  const cat = api.catalogValidate({ schema:'plotpin-catalog/v1', items:[{ vendor:'海康', model:'DS-2CD', price:1200 }] });
+  api.setCurrentCatalog(cat);
+  const st = api.resetState();
+  const o = api.baseObject('point','point.marker',{ name:'X1', x:0, y:0 });
+  o.props = { vendor:'海康', model:'DS-2CD', qty:3 };
+  st.objects.push(o);
+  const table = api.quoteTable(cat);
+  const rows = await api.Xlsx.readRows(api.Xlsx.build(table, '产品报价'));
+  eq('XLSX-行数一致', rows.length, table.length);
+  eq('XLSX-表头一致', rows[0], table[0]);
+  const iQty = table[0].indexOf('数量'), iPrice = table[0].indexOf('单价'), iAmt = table[0].indexOf('小计');
+  eq('XLSX-数量往返', String(rows[1][iQty]), String(table[1][iQty]));
+  eq('XLSX-单价往返', String(rows[1][iPrice]), String(table[1][iPrice]));
+  eq('XLSX-小计往返', String(rows[1][iAmt]), String(table[1][iAmt]));
+  eq('XLSX-合计往返', [String(rows[2][iQty]),String(rows[2][iAmt])], [String(table[2][iQty]),String(table[2][iAmt])]);
+  api.setCurrentCatalog(null);
+  api.resetState();
+})());
 
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites.map(s=>typeof s==='function'?s():s));

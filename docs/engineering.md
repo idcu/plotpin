@@ -126,10 +126,10 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 750 KB | 744.6 KB（762,500 B） | 留约 0.72% 余量（B-08 新增字段表模块 +3,444 B） |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `88c92ea8…` | 从源重建、二次构建确定性一致 |
-| CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 39 = 39 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 1944 | 只增不减 |
+| 单文件体积 | ≤ 750 KB | 750.0 KB（767,954 B） | 留 46 B 余量（B-05 目录/BOM 净增 +5,442 B，已压缩目录 UI 与提示文案） |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `97f4c402225a…` | 从源重建、二次构建确定性一致 |
+| CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 40 = 40 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
+| 断言数 | ≥ 1870 且 0 失败 | 1982 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在
@@ -211,6 +211,31 @@ GeoJSON 249,101 B、PNG 786,440 B、PDF 339,954 B、SVG 17,062 B、DXF 7,249 B�
 删除各格式重复拼装（`objectRows` 内联分支、PDF `param`、GeoJSON 属性、`angleDimDeg`）后净增 3.4 KB；
 ≤750 KB 门禁仍通过（余量 5,500 B）。
 
+**设备产品库与 BOM 报价（B-05，2026-11）**：新增 `js/features/catalog.js`（层 2，`index.html` 插在
+`io-export.js` 之后）。目录 JSON schema 为 `plotpin-catalog/v1`，根为 `{schema, items:[...]}`，
+型号项字段 `vendor / model / category? / unit? / price / params?`（`name/updatedAt` 不属于 schema，
+导出只回写规范化结果）。`catalogValidate` 的校验规则：根必须是非数组对象；`schema` 必须精确匹配；
+`items` 必须非空数组且 ≤2000 项；每项必须是对象；`vendor` / `model` 去空白后非空；
+`price` 必须是有限数且在 `0…1e9`；`params` 可省略，出现时必须是非数组对象；`vendor+model` 不得重复。
+通过后规范化：`category` 缺省「其他」并截断 40 字符，`unit` 缺省「台」并截断 10 字符，`params` 缺省 `{}`。
+存储复用 `persistence.js` 的 `projects` 对象仓，键为 `catalog:current`（不升级 `DB_VERSION`）；
+导入走 `importCatalog`：**校验 → `idbPutKey` → 才替换内存目录**，任一步失败 IDB 与内存均保持原值
+（selftest 用注入的落盘函数模拟写入失败）。删除/导出走导出下拉的「删除目录 / 导出目录」。
+属性面板「型号」输入在载入目录时挂 `list="catModels"`（datalist 列出型号），「数量」写 `props.qty`
+（缺省按 1 计）。`quoteTable(catalog)` 是 BOM 的唯一聚合器：先 `syncActiveFloor()`，再遍历全部楼层
+（含非活动楼层 `f.objects`）按 `厂商+型号` 聚合数量；对象只有型号时，若该型号在目录中唯一则自动绑定
+厂商/单价，型号跨厂商重名且未填厂商时不带价。报价字段表 `QUOTE_FIELD_DEFS` 与对象字段表同处
+`io-fields.js`，CSV 经 `delimitedFromTable`（沿用 `guardFormula` 公式注入防护）、XLSX 经
+`Xlsx.build`，两者只消费 `quoteTable`，不另写表头/行渲染。
+可复算样本（selftest 断言）：F1 海康 `DS-2CD` ×3 @1,200 = 3,600；F1 大华 `DH-1` ×1 @350 = 350；
+F2 西门子 `SM-9` ×2 @900 = 1,800；合计数量 **6**、合计金额 **5,750**。e2e 另测 F1 ×5 + F2 ×2
+= **7** @1,200 = **8,400**。导出字段为「厂商、名称、数量、单价、小计」+「合计」行；未载入目录时
+降级为「名称、数量」两列且不臆造金额。体积 **762,512 → 767,954 B（+5,442 B / +0.71%）**，750 KB
+门禁通过（余量 46 B）；selftest 1944 → **1982 通过 / 0 失败**（B-05 新增 38 项断言）；e2e 新增
+`catalog.spec.mjs` 1 个用例（导入目录 → 填型号/数量 → 加 F2 同型号 → CSV/XLSX 导出 → 非法目录导入
+回滚 → 刷新后目录恢复）。CSV/XLSX 均做解析回读数值往返；**Excel/WPS 人工打开未验证**（只验证
+OOXML 结构与数值往返）。详见 CHANGELOG.internal.md。
+
 **门禁牙齿（`npm run gates`）**：上面这些判据本身也会假绿（只打印不比对、缺文件退 0、
 模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 5 种破坏——
 P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败——
@@ -231,6 +256,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `interaction.spec.mjs` | 单击对象不落盘/不清覆盖率/不留空撤销快照；拖拽中 Esc 回滚到原位 |
 | `snapshot.spec.mjs` | 1000 对象快照 < 2s、体积实测；内嵌照片转为 `photoId` 引用；删除快照不影响工程；回滚进入撤销栈且可撤销/重做、回滚后可继续编辑；构造样本六类差异分类与 0 误报；叠加开关与关闭清理；**快照资产保活/删除后可回收**；20 快照（7.64MB）可达集扫描 41.5–42.6ms |
 | `collab.spec.mjs` | B-06：双标签等待→已连接→对端断开可见；消息层 TTL/key 上限/重复 hello 去重/`send` 抛错不冒泡/异常断开进 `error`；LWW 覆盖写撤销栈且 `Ctrl+Z` 恢复本地值、冲突行可见；离线短间隔重连不丢本地修改；邀请串三步建连 + 邀请串超 42 字节时只提示不渲染二维码（**同机双标签，不代表双设备 WebRTC**）；`COLLAB_SOAK=1` 时额外跑 5 分钟离线浸泡 |
+| `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（表头/数值/合计校验）→ 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 |
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 §5.4。
