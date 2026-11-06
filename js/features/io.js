@@ -90,6 +90,7 @@ async function openProjectLibrary(){
         <span class="hint-text">${p.objectCount} ${esc(L('个对象'))} · ${esc(L(bg))} · ${esc(dt)}</span></div>
       <div class="proj-ops">
         <button data-op="open" ${p.bound?'disabled':''}>${esc(L('打开'))}</button>
+        <button data-op="snap" title="${esc(L('版本快照：生成 / 列表 / 删除 / 回滚 / A-B 对比'))}">${esc(L('版本'))}</button>
         <button data-op="rename">${esc(L('重命名'))}</button>
         <button data-op="copy">${esc(L('复制'))}</button>
         <button data-op="del" class="danger">${esc(L('删除'))}</button>
@@ -142,6 +143,9 @@ async function openProjectLibrary(){
       try{
         if(op==='open'){
           closeModal(); await openProjectById(id); toast(L('已打开工程：')+(state.meta.name||''),'success');
+        }else if(op==='snap'){
+          const cur=projects.find(p=>p.id===id);
+          closeModal(); await openSnapshotManager(id,cur?.name||'');
         }else if(op==='rename'){
           const cur=projects.find(p=>p.id===id);
           const v=await showPrompt({title:L('重命名工程'),label:L('工程名称'),value:cur?.name||''});

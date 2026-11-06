@@ -2,6 +2,42 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-04 版本快照 + 图纸对比/叠加
+
+- **Commit Hash**：本条提交（`feat(snapshot): 版本快照与 A/B 差异对比`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用写入本文件，复盘时用 `git log -1 --format=%h` 取本条唯一提交。
+- **核心改动点**
+  - 新增 `js/core/snapshot.js`：快照命名空间 `snap:<projectId>:<snapshotId>`；`snapshotProjectData()` 调 `persistableState()` 后剥离 `props.photoDataUrl`（保留 `photoId` / 底图 `assetId`）；`createSnapshot` 生成前 `ensureObjectPhotoAssets(state)`；`pruneSnapshots` 按 `SNAPSHOT_MAX_PER_PROJECT=20` 与 `SNAPSHOT_MAX_BYTES_PER_PROJECT=16MB` 淘汰最旧（至少留 1）；`listSnapshots / getSnapshot / deleteSnapshot / deleteSnapshotsForProject`。
+  - 回滚 `restoreSnapshotById`：先 `pushHistory()`（回滚前现场进入撤销栈、`future` 清空），再 `buildProject` 原子替换、`ensureBackgroundAsset` / `ensureFloorBackgroundAssets`，最后 `afterStateLoaded(false)` + `markDirty('restore')` 立即落盘；回滚后仍可继续编辑。
+  - A/B 差异：`snapshotObjectIndex` 跨楼层按对象 id 索引；`objectDiffFields` 忽略 `id/z/createdAt/updatedAt/photoDataUrl`（含 `props.photoDataUrl` 嵌套剥离）；`diffCategoryOf` 优先级 新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改；`diffSnapshots` 返回 `items/counts/unchanged`，每条含可读字段、楼层与 A/B 对象。
+  - 叠加：`diffOverlay` + `setDiffOverlay/clearDiffOverlay`；`render.js` 新增 `drawDiffOverlay`，在动态层绘制当前楼层差异（新增绿/删除红虚线/修改琥珀/移动蓝/换楼层紫/类型变更青），**不参与静态层缓存、不进 PNG/SVG/PDF 导出**。
+  - UI：新增 `js/features/snapshot-ui.js`（快照列表/生成/删除/回滚确认、A/B 选择与差异清单、叠加开关）；工程库每行新增「版本」按钮；`openModal` 新增可选 `opts.onClose`，确保 Esc/遮罩/关闭都清理叠加态；`deleteProjectById` 删除该工程快照链（`snap:<pid>:`），不影响其它工程。
+  - `APP_LIMITS` 新增 `SNAPSHOT_MAX_PER_PROJECT` / `SNAPSHOT_MAX_BYTES_PER_PROJECT`（唯一源），`index.html` 增加两个脚本（core 层 `snapshot.js` 在 `persistence.js` 之后，features 层 `snapshot-ui.js` 在 `io.js` 之后）。
+- **实测验证数据（真实 Chromium，本机 Windows，2026-11-06）**
+  - 1000 对象生成快照：**wall 14.8 / 16.5ms**（meta 14.7 / 16.4ms），快照数据 **400779 B ≈ 391.4KB**（约 400B/对象），目标 <2s 达成。
+  - 照片：1000 对象中塞入 50KB `data:image`，快照 JSON 内 **无 `data:image`**，`props.photoId` 存在；照片按内容寻址复用，不随快照线性膨胀。
+  - 删除快照：`snap:` 键 1→0，`proj:` 主记录仍存在（对象数 1000），当前 `state` 与工程数据不变。
+  - 回滚与撤销：3 对象 → 回滚到 2 对象快照，`history.past` >0；`undo` 回 3，`redo` 回 2；回滚后再新增对象成功（3），`undoBtn` 可用；UI 回滚按钮先弹确认框（文案含「撤销栈」「Ctrl+Z」）。
+  - 构造样本（20 个未变 + 新增/删除/属性修改/移动/换楼层/类型变更各 1）：`counts={added:1,removed:1,modified:1,moved:1,floorChanged:1,typeChanged:1,total:6}`、`unchanged=20`、**误报 0/20（0%）**、六类分类全部正确；字段断言 `name/x/typeId/floorId` 精确。
+  - 叠加开关：开启时 `diffOverlay.on=true` / 6 条；取消勾选关闭、重新勾选开启；`closeModal()`（Esc/关闭/遮罩同路径）后 `on=false`、`items=[]`。
+  - selftest：1827 → **1867 通过 / 0 失败**（新增 40 条 B-04 断言）。
+  - e2e：19 → **22/22（22.3s）**，新增 `snapshot.spec.mjs` 3 个用例。
+  - `build --check`：**717.0KB**，SHA256 `bdaa0d8c…`，二次构建确定；`npm run ci` check / bench / build / gates 全绿。
+- **回滚与当前未保存状态 / 撤销栈的关系（明确口径）**
+  - 回滚前若当前有未保存修改：`pushHistory()` 深拷贝当前 `state` 到 `history.past`，随后 `markDirty('restore')` 立即落盘；因此 **Ctrl+Z 能回到回滚前现场**，`history.future` 被清空（与常规编辑一致）。
+  - 回滚不是“只读预览”：替换后 `afterStateLoaded(false)` 刷新 UI 与静态层，仍可继续绘制/编辑并自动保存。
+  - 回滚只允许对**当前打开的工程**执行（其他工程行回滚按钮禁用）；生成快照要求当前工程已绑定工程库，否则提示先另存。
+- **公共抽象 / 影响面**
+  - 新增公共抽象：`snapshotProjectData / createSnapshot / listSnapshots / getSnapshot / deleteSnapshot / deleteSnapshotsForProject / restoreSnapshotById`；`snapshotObjectIndex / objectDiffFields / diffCategoryOf / diffSnapshots / diffFieldLabel / diffValueText`；`setDiffOverlay / clearDiffOverlay`。均已登记 `docs/modules.md`。
+  - `openModal(title, body, buttons, opts)` 新增可选第四参数（既有三参调用不变）；`render.drawScene` 新增动态层叠加（`diffOverlay.on=false` 时零开销）；`deleteProjectById` 新增快照清理（仅 `snap:<pid>:`）。
+  - 快照命名空间**不进入** A-01 资产可达集（`assetRefsByNamespace` 只扫 `current` + `proj:*`），因此资产 GC 行为不变；代价是若工程后续不再引用某资产，快照中的该引用可能失效（见风险）。
+  - 文档同步：`docs/engineering.md`（§5.1 体积/SHA/断言数、快照口径与实测、§5.2 e2e、§5.3 上限）、`docs/features.md`、`docs/modules.md`、`README.md`（徽章/特性数/路线图）、本文件。
+- **遗留 TODO / 风险**
+  - **50 条人工差异样本误报率：未验证**。本轮只有构造样本（20 未变 + 6 变更，误报 0/20），没有真实图纸上人工标注的 50 条差异清单；不得把构造样本当作人工样本指标。后续需在真实多层工程上由人工逐条核对 A/B 差异。
+  - 快照只存 `assetId/photoId` 引用；若工程之后删改引用并触发资产 GC，旧快照对应的底图/照片可能无法显示（快照记录本身仍完整）。若需要“快照永远可还原资产”，需把快照引用纳入资产可达集或单独保留资产，代价是资产无法及时回收。
+  - 叠加层每次渲染遍历全部差异并在屏幕绘制轮廓；1000 对象级差异实测无卡顿，但万级差异 + 长期开启未做专门压测。
+  - 快照上限按 `meta.bytes` 累加，单条超 16MB 时会保留最新一条（“至少留 1”策略），极端大工程可能超出软上限。
+  - 差异字段按 `JSON.stringify` 深比较，`props` 大对象（除照片 base64）会逐条序列化；本轮 1000 对象场景未成为瓶颈，超大对象属性未压测。
+
 ## 2026-11-06 · B-09 覆盖率可信度（口径 v2）
 
 - **Commit Hash**：本条提交（`fix(coverage): 覆盖率口径 v2，固定格数消除缩放差异`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用写入本文件，复盘时用 `git log -1 --format=%h` 取本条唯一提交。

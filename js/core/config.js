@@ -40,7 +40,9 @@ const APP_LIMITS = Object.freeze({
   COVERAGE_TARGET_CELLS: 18000,             /* 覆盖率栅格固定目标总格数（按区域面积分配，与视口缩放无关） */
   COVERAGE_MAX_CELLS: 200000,               /* 单次覆盖率分析的栅格总格数上限（大场地性能护栏） */
   COVERAGE_CELL_MIN_M: 0.03,                /* 覆盖率格边下限（m），防止极小区域产生过量格 */
-  COVERAGE_CELL_MAX_M: 10                   /* 覆盖率格边上限（m），防止超大场地粗于 10m（超格数上限时仍会统一放大） */
+  COVERAGE_CELL_MAX_M: 10,                  /* 覆盖率格边上限（m），防止超大场地粗于 10m（超格数上限时仍会统一放大） */
+  SNAPSHOT_MAX_PER_PROJECT: 20,             /* 每个工程保留的版本快照上限（超出淘汰最旧） */
+  SNAPSHOT_MAX_BYTES_PER_PROJECT: 16*1048576 /* 每个工程快照数据总量上限（16MB，超出淘汰最旧；单条超限仍保留） */
 });
 /** 导入限值统一校验：传 {bytes,chars,rows,entities,objects,pixels} 的已知项，返回超限字段列表（空=通过） */
 function importLimitErrors(spec){

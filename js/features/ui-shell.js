@@ -42,6 +42,8 @@ $('settingsBtn').onclick=()=>{
 
 /* -------------------- 通用弹窗 / Toast -------------------- */
 let modalReturnFocus=null;
+/* 弹窗关闭回调（可选）：Esc / 遮罩点击 / 页脚按钮统一走 closeModal，确保叠加层等临时态不会悬挂 */
+let modalCloseHook=null;
 /** 弹窗内可聚焦控件：Tab 循环只在弹窗内部移动，避免焦点逃到被遮罩的背景界面 */
 function modalFocusables(){
   const box=$('modalBox');
@@ -53,7 +55,8 @@ function modalFocusables(){
     catch(_){ return true; }
   });
 }
-function openModal(title,body,buttons=[]){
+function openModal(title,body,buttons=[],opts={}){
+  modalCloseHook=typeof opts.onClose==='function'?opts.onClose:null;
   if(!$('modalBackdrop').classList.contains('show')){
     const active=document.activeElement;
     modalReturnFocus=active&&typeof active.focus==='function'?active:null;
@@ -66,9 +69,11 @@ function openModal(title,body,buttons=[]){
   if(target&&typeof target.focus==='function'){ try{ target.focus(); }catch(_){} }
 }
 function closeModal(){
+  const hook=modalCloseHook; modalCloseHook=null;
   $('modalBackdrop').classList.remove('show');
   const back=modalReturnFocus; modalReturnFocus=null;
   if(back&&typeof back.focus==='function'){ try{ back.focus(); }catch(_){} }
+  if(hook){ try{ hook(); }catch(_){} }
 }
 /** 弹窗键盘策略：Esc 关闭、Tab 在弹窗内循环；返回 true 表示事件已由弹窗处理 */
 function modalKeydown(e){

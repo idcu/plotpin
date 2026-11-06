@@ -167,6 +167,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     state.objects.filter(o=>isVisible(o)&&selectedIds.has(o.id))
       .sort((a,b)=>a.z-b.z)
       .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
+    drawDiffOverlay(c,v,toS);
     drawDraft(c,v,d,toS);
     drawCalibration(c,toS);
     drawGuideLines(c,v,d,cssW,cssH,toS);
@@ -194,6 +195,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
   const view=visibleWorldRect(v,d,cssW,cssH);
   visible.forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
+  if(opt.interactive) drawDiffOverlay(c,v,toS);   /* 差异叠加仅屏幕预览，不进入 PNG/SVG/PDF 导出 */
   drawDraft(c,v,d,toS);
   drawCalibration(c,toS);
   if(opt.interactive){
@@ -852,6 +854,55 @@ function drawLabel(c,o,x,y,color,toS,fontSize=12){
   const tw=c.measureText(o.name).width;
   c.fillStyle='rgba(255,255,255,.82)'; c.fillRect(x-tw/2-4,y-9,tw+8,18);
   c.fillStyle=color; c.fillText(o.name,x,y); c.restore();
+}
+/* -------------------- 快照差异叠加 -------------------- */
+const DIFF_OVERLAY_COLORS=Object.freeze({added:'#16a34a',removed:'#dc2626',modified:'#f59e0b',moved:'#2563eb',floorChanged:'#7c3aed',typeChanged:'#0891b2'});
+/** 差异对象轮廓顶点（point 为屏幕圆，不返回世界点） */
+function diffOverlayPoints(o){
+  if(!o) return [];
+  if(o.kind==='rect') return shapeWorldPoints(o)||[];
+  if(o.kind==='text') return textCorners(o)||[];
+  if(Array.isArray(o.points)) return o.points;
+  return [];
+}
+/**
+ * 差异叠加层（画在动态层，不参与静态层缓存，关闭即消失）：
+ * 只绘制当前楼层的差异对象，新增=绿、删除=红虚线、属性修改=琥珀、移动=蓝、换楼层=紫、类型变更=青。
+ */
+function drawDiffOverlay(c,v,toS){
+  if(!diffOverlay.on||!diffOverlay.items.length) return;
+  const active=state.activeFloorId;
+  c.save();
+  diffOverlay.items.forEach(it=>{
+    if(active&&it.floorIds&&it.floorIds.length&&!it.floorIds.includes(active)) return;
+    const src=(it.bFloorId===active?it.b:null)||(it.aFloorId===active?it.a:null)||it.b||it.a;
+    if(!src) return;
+    const color=DIFF_OVERLAY_COLORS[it.category]||'#f59e0b';
+    c.strokeStyle=color; c.fillStyle=color; c.lineWidth=2.5; c.lineJoin='round';
+    if(src.kind==='point'){
+      const s=toS([src.x,src.y]);
+      c.globalAlpha=.9;
+      c.beginPath(); c.arc(s[0],s[1],15*pointIconScale(src),0,Math.PI*2); c.stroke();
+      c.globalAlpha=.12; c.fill(); c.globalAlpha=.9;
+      c.beginPath(); c.arc(s[0],s[1],3,0,Math.PI*2); c.fill();
+      c.globalAlpha=1;
+      return;
+    }
+    const pts=diffOverlayPoints(src);
+    if(pts.length){
+      const closed=src.kind==='rect'||src.kind==='text'||!!src.closed||(src.kind==='dimension'&&src.subtype==='area');
+      c.beginPath();
+      pts.map(toS).forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
+      if(closed){ c.closePath(); c.globalAlpha=.10; c.fill(); c.globalAlpha=1; }
+      if(it.category==='removed') c.setLineDash([6,4]);
+      c.stroke(); c.setLineDash([]);
+      return;
+    }
+    const b=objectBounds(src);
+    const p0=toS([b.minX,b.maxY]),p1=toS([b.maxX,b.minY]);
+    c.strokeRect(p0[0],p1[1],p1[0]-p0[0],p0[1]-p1[1]);
+  });
+  c.restore();
 }
 function drawSelection(c,v,toS){
   state.objects.filter(o=>selectedIds.has(o.id)&&isVisible(o)).forEach(o=>{

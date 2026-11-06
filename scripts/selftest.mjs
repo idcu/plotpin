@@ -162,6 +162,10 @@ code += `\n;globalThis.__api = {
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
+  snapshotKey, snapshotIdOfKey, snapshotProjectData, utf8Length, snapshotObjectIndex,
+  objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
+  DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
+  get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   clearCurrentFloor,
   get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
@@ -4739,6 +4743,101 @@ asyncSuites.push(async()=>{
   eq('A-15 索引命中', idx.get('IDX_A')===api.state.objects[0], true);
   eq('A-15 索引大小', idx.size, 2);
   eq('A-15 索引缺失返回 undefined', idx.get('NOPE'), undefined);
+  api.resetState();
+}
+
+/* 73. B-04 版本快照：独立命名空间、照片引用化、A/B 差异分类与误报 --------------- */
+{
+  eq('B-04 快照命名空间独立', api.snapshotKey('PRJ4321','SNAP1'), 'snap:PRJ4321:SNAP1');
+  eq('B-04 快照键解析', api.snapshotIdOfKey('snap:PRJ4321:SNAP1'), 'SNAP1');
+  eq('B-04 快照条数上限', api.APP_LIMITS.SNAPSHOT_MAX_PER_PROJECT, 20);
+  eq('B-04 快照字节上限 16MB', api.APP_LIMITS.SNAPSHOT_MAX_BYTES_PER_PROJECT, 16*1048576);
+  eq('B-04 utf8 体积', api.utf8Length('快照'), 6);
+
+  /* 快照数据：剥离照片 base64、保留 photoId；深拷贝不回写当前 state */
+  api.resetState();
+  api.state.meta.projectId='PRJ_B04';
+  const p=api.baseObject('point','point.marker',{id:'PH1',name:'PH1',x:1,y:1});
+  p.props={photoDataUrl:'data:image/png;base64,AAAA',photoId:'as_photo_1'};
+  api.state.objects=[p];
+  const snapData=api.snapshotProjectData();
+  eq('B-04 快照剥离 photoDataUrl', 'photoDataUrl' in (snapData.objects[0].props||{}), false);
+  eq('B-04 快照保留 photoId 引用', snapData.objects[0].props.photoId, 'as_photo_1');
+  eq('B-04 快照深拷贝不回写当前状态', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
+  eq('B-04 快照对象总数', api.countProjectObjects(snapData), 1);
+
+  /* 构造样本：20 个未变对象 + 新增/删除/属性修改/移动/换楼层/类型变更各 1 条 */
+  const NOW='2026-01-01T00:00:00.000Z';
+  const ob=(id,patch)=>Object.assign({
+    id, name:id, kind:'point', typeId:'point.marker', layerId:'layer.default',
+    x:0, y:0, points:[], width:0, height:0, angle:0, phys:0, iconSize:1,
+    style:{}, props:{}, annot:{}, visible:true, locked:false, z:0, createdAt:NOW, updatedAt:NOW
+  }, patch||{});
+  const unchanged=Array.from({length:20},(_,i)=>ob('U'+i));
+  const removedObj=ob('E_REMOVE');
+  const modifiedA=ob('E_MODIFY',{name:'改属性-旧'});
+  const moveA=ob('E_MOVE',{x:0,y:5});
+  const typeA=ob('E_TYPE',{typeId:'point.marker'});
+  const floorObj=ob('E_FLOOR',{x:30,y:30});
+  const A={
+    activeFloorId:'floor.1', objects:[].concat(unchanged,[removedObj,modifiedA,moveA,typeA,floorObj]),
+    floors:[{id:'floor.1',name:'1F',updatedAt:NOW},{id:'floor.2',name:'F2',updatedAt:NOW,objects:[]}]
+  };
+  const modifiedB=ob('E_MODIFY',{name:'改属性-新'});
+  const moveB=ob('E_MOVE',{x:12,y:5});
+  const typeB=ob('E_TYPE',{typeId:'point.camera'});
+  const addedObj=ob('E_ADDED',{name:'新增'});
+  /* 未变对象同步改运行时字段（updatedAt/z/photoDataUrl）：必须被忽略，不产生差异 */
+  const unchangedB=unchanged.map((o,i)=>i===0?Object.assign({},o,{
+    updatedAt:'2026-02-01T00:00:00.000Z', z:99, props:{photoDataUrl:'data:image/png;base64,BBBB'}
+  }):o);
+  const B={
+    activeFloorId:'floor.1', objects:[].concat(unchangedB,[modifiedB,moveB,typeB,addedObj]),
+    floors:[{id:'floor.1',name:'1F',updatedAt:NOW},{id:'floor.2',name:'F2',updatedAt:NOW,objects:[floorObj]}]
+  };
+  const diff=api.diffSnapshots(A,B);
+  eq('B-04 差异总数', diff.counts.total, 6);
+  eq('B-04 分类-新增', diff.counts.added, 1);
+  eq('B-04 分类-删除', diff.counts.removed, 1);
+  eq('B-04 分类-属性修改', diff.counts.modified, 1);
+  eq('B-04 分类-移动', diff.counts.moved, 1);
+  eq('B-04 分类-换楼层', diff.counts.floorChanged, 1);
+  eq('B-04 分类-类型变更', diff.counts.typeChanged, 1);
+  eq('B-04 未变对象数', diff.unchanged, 20);
+  const byId=Object.fromEntries(diff.items.map(it=>[it.id,it]));
+  eq('B-04 新增对象归类', byId.E_ADDED && byId.E_ADDED.category, 'added');
+  eq('B-04 删除对象归类', byId.E_REMOVE && byId.E_REMOVE.category, 'removed');
+  eq('B-04 属性修改归类', byId.E_MODIFY && byId.E_MODIFY.category, 'modified');
+  eq('B-04 移动归类', byId.E_MOVE && byId.E_MOVE.category, 'moved');
+  eq('B-04 换楼层归类', byId.E_FLOOR && byId.E_FLOOR.category, 'floorChanged');
+  eq('B-04 类型变更归类', byId.E_TYPE && byId.E_TYPE.category, 'typeChanged');
+  eq('B-04 属性修改字段', byId.E_MODIFY.fields, ['name']);
+  eq('B-04 移动字段', byId.E_MOVE.fields, ['x']);
+  eq('B-04 类型变更字段', byId.E_TYPE.fields, ['typeId']);
+  eq('B-04 换楼层字段', byId.E_FLOOR.fields, ['floorId']);
+  eq('B-04 换楼层来源/目标', [byId.E_FLOOR.aFloorId,byId.E_FLOOR.bFloorId], ['floor.1','floor.2']);
+  eq('B-04 新增对象可读字段', api.diffFieldLabel('typeId')+'='+api.diffValueText(byId.E_ADDED.b.typeId), '类型=point.marker');
+  /* 误报统计（构造样本）：20 个未变对象中 0 个被判为差异；6 条变更全部命中正确分类 */
+  const falsePositives=diff.items.filter(it=>it.id.startsWith('U')).length;
+  eq('B-04 构造样本误报数', falsePositives, 0);
+  eq('B-04 构造样本误报率(%)', falsePositives/20*100, 0);
+  eq('B-04 构造样本分类准确率', diff.items.filter(it=>['E_ADDED','E_REMOVE','E_MODIFY','E_MOVE','E_FLOOR','E_TYPE'].includes(it.id)).length, 6);
+  eq('B-04 忽略运行时字段', api.DIFF_IGNORE_KEYS.includes('updatedAt')&&api.DIFF_IGNORE_KEYS.includes('photoDataUrl')&&api.DIFF_IGNORE_KEYS.includes('z'), true);
+  eq('B-04 移动字段集合', api.DIFF_MOVE_KEYS.includes('x')&&api.DIFF_MOVE_KEYS.includes('points')&&api.DIFF_MOVE_KEYS.includes('shape'), true);
+
+  /* 跨楼层索引：同一活动楼层用顶层 objects，其余楼层用 f.objects */
+  const idx=api.snapshotObjectIndex(B);
+  eq('B-04 跨楼层索引总数', idx.size, 25);
+  eq('B-04 跨楼层索引楼层', idx.get('E_FLOOR').floorId, 'floor.2');
+
+  /* 叠加态：开启/关闭，关闭后不残留条目 */
+  api.setDiffOverlay(true,diff.items,{aId:'A1',bId:'B1'});
+  eq('B-04 叠加开启', api.diffOverlay.on, true);
+  eq('B-04 叠加条目', api.diffOverlay.items.length, 6);
+  eq('B-04 叠加 A/B 标记', [api.diffOverlay.aId,api.diffOverlay.bId], ['A1','B1']);
+  api.clearDiffOverlay();
+  eq('B-04 叠加关闭后条目清空', [api.diffOverlay.on,api.diffOverlay.items.length], [false,0]);
+
   api.resetState();
 }
 

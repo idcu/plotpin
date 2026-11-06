@@ -289,6 +289,8 @@ async function duplicateProjectById(id){
 }
 async function deleteProjectById(id){
   await idbDeleteKey(projectKey(id));
+  /* 工程删除后其快照链不再有归属：一并清理（snapshot.js 定义，独立命名空间，不影响其它工程） */
+  if(typeof deleteSnapshotsForProject==='function') await deleteSnapshotsForProject(id);
   if(state.meta?.projectId===id){ state.meta.projectId=''; refreshUI(); scheduleSave(); }
   await pruneBgAssets();
 }
