@@ -98,7 +98,7 @@ code += `\n;globalThis.__api = {
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
   translateObject, alignObjects, distributeObjects, objectBounds,
-  renumberObjects, restackObjects, allObjectNames,
+  renumberObjects, restackObjects, allObjectNames, nextObjectId, objectNameScopeFor, beginObjectNameScope, withObjectNameScope,
   get history(){ return history; },
   get clipboard(){ return clipboard; }, setClipboard(v){ clipboard=v; },
   get drag(){ return drag; }, setDrag(v){ drag=v; },
@@ -4105,6 +4105,41 @@ asyncSuites.push((async()=>{
   reset();
   api.restackObjects(all,new Set([o4.id,o1.id]),'front');
   eq('层级-多选保持相对视觉顺序', all.map(o=>o.name), ['o2','o3','o1','o4']);
+
+  /* 编号作用域：批量取号与旧 nextObjectId 语义一致，且不重复扫描全量 state（B-01 导入 O(N²) 护栏） */
+  api.resetState();
+  const seed=new Set(['O0001','O0003','A001']);
+  const scope=api.objectNameScopeFor(seed);
+  eq('编号作用域-起点沿用数量+1并跳过占用', [scope.reserve(),scope.reserve()], ['O0004','O0005']);
+  eq('编号作用域-新编号回写占用集合', seed.has('O0005'), true);
+
+  const guardArr=[];
+  const guard=new Proxy(guardArr,{ get(t,p,r){ if(p==='map') throw new Error('扫描全量 state.objects'); return Reflect.get(t,p,r); } });
+  api.state.objects=guard;
+  let named=null, scanErr=null;
+  try{ named=api.baseObject('point','point.marker',{name:'KEEP'}); }catch(e){ scanErr=e.message; }
+  api.state.objects=guardArr;
+  eq('编号-显式 name 不触发全量扫描', scanErr, null);
+  eq('编号-显式 name 保持原值', named&&named.name, 'KEEP');
+
+  /* buildProject：缺编号对象跨楼层唯一，且不与已有/载荷编号冲突 */
+  api.resetState();
+  const init=api.createInitialState();
+  api.state.objects.push(api.baseObject('point','point.marker',{name:'O0002',x:0,y:0}));
+  api.syncActiveFloor();
+  const payload=Object.assign({},init,{
+    schema:init.schema,
+    objects:[{kind:'point',name:'O0009',x:1,y:1},{kind:'point',x:2,y:2},{kind:'line',points:[[0,0],[1,0]]}],
+    floors:[{id:'floor.default',name:'1F',updatedAt:''},
+      {id:'floor.F2',name:'2F',updatedAt:'',objects:[{kind:'point',x:3,y:3}]}],
+    activeFloorId:'floor.default', tombstones:[]
+  });
+  const built=api.buildProject(payload);
+  const names1=built.objects.map(o=>o.name);
+  const names2=built.floors.find(f=>f.id==='floor.F2').objects.map(o=>o.name);
+  ok('编号-导入缺编号对象跨层唯一', new Set([...names1,...names2]).size===names1.length+names2.length);
+  ok('编号-导入保留载荷已有编号', names1.includes('O0009'));
+  ok('编号-导入缺编号对象避开已有与载荷编号', !names1.includes('O0001') && !names1.includes('O0002'));
   api.resetState();
 }
 

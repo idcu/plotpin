@@ -957,9 +957,10 @@ function duplicateSelected(){
   const olds=state.objects.filter(o=>selectedIds.has(o.id)); if(!olds.length) return;
   pushHistory();
   const fresh=[];
-  olds.forEach(o=>{
+  /* 批量复制：编号作用域一次建立，避免每个副本都全量扫描 state.objects */
+  withObjectNameScope(allObjectNames(), () => olds.forEach(o=>{
     const n=deepClone(o); n.id=uid('OBJ'); n.name=nextObjectId(); n.x+=1;n.y+=1; if(n.points)n.points=n.points.map(p=>[p[0]+1,p[1]+1]); n.z=state.objects.length; state.objects.push(n); fresh.push(n.id);
-  });
+  }));
   selectedIds=new Set(fresh); commitChange('已复制对象');
 }
 function copySelected(){
@@ -970,13 +971,13 @@ function pasteClipboard(){
   if(!clipboard.length) return;
   pushHistory();
   const fresh=[];
-  clipboard.forEach(o=>{
+  withObjectNameScope(allObjectNames(), () => clipboard.forEach(o=>{
     const n=deepClone(o);
     n.id=uid('OBJ'); n.name=nextObjectId();
     n.x+=1;n.y+=1; if(n.points)n.points=n.points.map(p=>[p[0]+1,p[1]+1]);
     n.createdAt=nowISO(); n.updatedAt=nowISO();
     state.objects.push(n); fresh.push(n.id);
-  });
+  }));
   selectedIds=new Set(fresh); commitChange(`已粘贴 ${fresh.length} 个对象`);
 }
 function openShortcutsHelp(){

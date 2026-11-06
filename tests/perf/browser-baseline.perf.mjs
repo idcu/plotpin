@@ -22,15 +22,14 @@ const REPORT_FILE = join(OUT_DIR, 'perf-browser-baseline.json');
 const results = [];
 const NO_GATE = process.env.PERF_NO_GATE === '1';
 
-/* 门禁阈值：2026-11-06 本机两轮实测值留约 2 倍余量（明细见 docs/engineering.md §5.4）。
+/* 门禁阈值：2026-11-06 本机实测值留约 2 倍余量（明细见 docs/engineering.md §5.4）。
  * 真机/CI 机器性能差异大，本套件默认不进 npm run ci，只在显式 perf:browser 时生效。
- * importOverExistingMs 阈值偏松：当前已知「当前工程已有 N 个对象时导入 N 个对象」是 O(N²)
- *（buildProject → baseObject → nextObjectId 每次扫全量 state），见 B-09 前置结论。 */
+ * 导入 O(N²) 已修（B-01 后续），「已有工程内导入」阈值随实测收紧，不再靠松阈值放行。 */
 const GATES = {
-  '2000@1': { frameP95: 16.7, rebuildP95: 100, heapPeakMB: 64, importEmptyMs: 300, importOverExistingMs: 450, staticMB: 8 },
-  '5000@1': { frameP95: 16.7, rebuildP95: 250, heapPeakMB: 128, importEmptyMs: 500, importOverExistingMs: 2200, staticMB: 8 },
-  '10000@1': { frameP95: 16.7, rebuildP95: 450, heapPeakMB: 200, importEmptyMs: 900, importOverExistingMs: 10000, staticMB: 8 },
-  '5000@2': { frameP95: 33.3, rebuildP95: 500, heapPeakMB: 128, importEmptyMs: 600, importOverExistingMs: 2500, staticMB: 32 }
+  '2000@1': { frameP95: 16.7, rebuildP95: 100, heapPeakMB: 64, importEmptyMs: 300, importOverExistingMs: 250, staticMB: 8 },
+  '5000@1': { frameP95: 16.7, rebuildP95: 250, heapPeakMB: 128, importEmptyMs: 500, importOverExistingMs: 400, staticMB: 8 },
+  '10000@1': { frameP95: 16.7, rebuildP95: 450, heapPeakMB: 200, importEmptyMs: 900, importOverExistingMs: 900, staticMB: 8 },
+  '5000@2': { frameP95: 33.3, rebuildP95: 500, heapPeakMB: 128, importEmptyMs: 600, importOverExistingMs: 600, staticMB: 32 }
 };
 
 function round(v, n = 2) {

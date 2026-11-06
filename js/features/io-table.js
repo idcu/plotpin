@@ -238,7 +238,7 @@ function rowsToObjectsPlan(rows){
       const closed=kind==='line'&&tableBool(c('闭合'));
       if(closed&&pts.length<3){ warnings.push(where+'：闭合折线至少需要 3 个节点，已按开放折线处理'); }
       const cr={kind,x,y,closed:closed&&pts.length>=3,subtype,points:pts,cell:c,floorId:ctx.id};
-      const cnd=baseObject(kind);
+      const cnd=baseObject(kind,null,{name:'__表格校验__'});
       cnd.points=pts;
       if(kind==='line') cnd.closed=cr.closed; else cnd.subtype=subtype;
       syncFirstPoint(cnd);
@@ -256,13 +256,13 @@ function rowsToObjectsPlan(rows){
         warnings.push(where+'：'+AREA_SHAPE_LABELS[shape]+'缺少有效宽度'+(needH?'/高度':'')+'，已跳过');
         return;
       }
-      const cnd=baseObject(kind);
+      const cnd=baseObject(kind,null,{name:'__表格校验__'});
       applyRowShape(cnd,AREA_SHAPE_LABELS[shape],{x,y,w,h,angle:tableNum(c('角度')),params:parseShapeParams(c('形状参数'))});
       check(where,c,cnd);
       creates.push({kind,x,y,shape,cell:c,floorId:ctx.id});
       return;
     }
-    check(where,c,baseObject(kind));   /* 点设备/文字：长度面积应为空或 0 */
+    check(where,c,baseObject(kind,null,{name:'__表格校验__'}));   /* 点设备/文字：长度面积应为空或 0 */
     creates.push({kind,x,y,cell:c,floorId:ctx.id});
   });
   return {updates,creates,warnings};
@@ -346,7 +346,8 @@ function applyTableImport(plan){
     applyLedgerCells(o,c);
     o.updatedAt=nowISO(); updated++;
   });
-  plan.creates.forEach(cr=>{
+  /* 批量新增行统一建立编号作用域，避免逐行 baseObject → nextObjectId 全量扫描（O(N²)） */
+  withObjectNameScope(allObjectNames(), () => plan.creates.forEach(cr=>{
     const c=cr.cell;
     const type=state.objectTypes.find(x=>x.kind===cr.kind&&x.name===c('业务类型'));
     const o=baseObject(cr.kind,type?type.id:defaultTypeId(cr.kind));
@@ -374,7 +375,7 @@ function applyTableImport(plan){
     const list=target||state.objects;
     o.z=list.length;
     list.push(o); created++;
-  });
+  }));
   selectedIds.clear();
   commitChange('表格导入完成：更新 '+updated+' 项，新增 '+created+' 项');
 }

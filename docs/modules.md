@@ -59,6 +59,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | `outlineOf(o)` | `js/core/geometry.js`（对象轮廓顶点唯一源：rect 形状族 → `shapeWorldPoints` 采样多边形，line/dimension → 节点副本，point/text → `[]`；每次返回新数组） | `io-export.js` 的 SVG 区域/折线/标注与 DXF `LWPOLYLINE`；顶点数与坐标由 `selftest` §72 golden 断言锁定 |
 | `dxfEntitiesForExport()` | `js/features/io-export.js`（纯函数：按当前工程组装 DXF 实体+图层，不触发下载） | `exportDXF()` 与 `selftest`（DXF golden：实体序列与顶点数） |
 | `objectIndexById(list?)` | `js/core/model.js`（id → 对象索引；缺省索引当前楼层 `state.objects`，重复 id 保留首个） | `interaction.js` 拖拽起点、批量移动、位移判定、Esc 回滚：把 N 次 `find` 收敛为一次建索引 |
+| `objectNameScopeFor / beginObjectNameScope / withObjectNameScope` | `js/core/model.js`（批量取号作用域：一次聚集已占用编号，作用域内 `reserve()` 为集合查找；起点与旧 `nextObjectId` 一致＝“已占用数量+1”后跳号） | `buildProject`（JSON 导入/打开工程）、`importDxfFile`、`importPdfFile`、`rowsToObjectsPlan`/`applyTableImport`、`duplicateSelected`/`pasteClipboard`、覆盖率建议批量落点；影响：编号唯一性与起始号语义不变，已有工程内导入从 O(N²) 降为线性；单次交互创建仍走一次全量扫描（O(N)，可接受） |
 | `ensureVendor(name)` | `js/core/config.js`（第三方公共模块可用性唯一检查点；缺失抛「公共模块未加载：<中文名>」） | `io-export.js`（Dxf/Xlsx/Pdf/Qr）、`io-import.js`（Xlsx/Dxf/PdfRead） |
 | `siteAnnotToggleKeys(site) / renderSiteAnnotToggles(site)` | `js/features/props.js`（按场地形状筛选有效开关） | 场地属性面板；无场地返回空串，锁定（含图层锁定）时 `disabled` |
 | `SITE_ANNOT_SETTING_KEYS / siteAnnotSettingOn / setSiteAnnotSetting` | `js/core/model.js`（仍写 `state.settings` 原键，不改 schema） | 场地属性面板、`drawSiteAnnotations`、SVG 导出、`selftest.mjs` |

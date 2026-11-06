@@ -387,11 +387,11 @@ async function runPlacementOptimization(){
     buttons.unshift({text:L('应用建议（新增')+` ${res.suggestions.length} ${L('台）')}`,class:'primary',click:()=>{
       pushHistory();
       const typeId=defaultTypeId('point')==='point.marker'?'point.camera':defaultTypeId('point');
-      res.suggestions.forEach(s=>{
+      withObjectNameScope(allObjectNames(), () => res.suggestions.forEach(s=>{
         const o=baseObject('point',state.objectTypes.some(t=>t.id==='point.camera')?'point.camera':typeId,
           {x:Math.round(s.x*100)/100,y:Math.round(s.y*100)/100,angle:s.angle,phys:s.phys});
         state.objects.push(o);
-      });
+      }));
       closeModal(); commitChange(L('已按建议新增')+' '+res.suggestions.length+' '+L('台摄像头'));
       runCoverageAnalysis();
     }});

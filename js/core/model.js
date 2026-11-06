@@ -148,16 +148,40 @@ function createInitialState(){
 function uid(prefix='O'){
   return prefix + '_' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,7).toUpperCase();
 }
+/** 当前生效的编号作用域（批量创建时由 beginObjectNameScope 建立） */
+let objectNameScope = null;
+/**
+ * 编号作用域：一次性聚集合法的已占用编号，作用域内 reserve() 只做集合查找。
+ * 起点沿用旧 nextObjectId 的语义：从“已占用数量 + 1”开始找空位并跳过已占用编号。
+ * @param {Set<string>|string[]} used 已占用编号（会被就地写入新编号，调用方需自备集合）
+ */
+function objectNameScopeFor(used){
+  const set = used instanceof Set ? used : new Set(Array.isArray(used) ? used : []);
+  let seq = set.size + 1;
+  return {
+    reserve(){
+      let name;
+      do{ name = 'O' + String(seq).padStart(4, '0'); seq++; } while(set.has(name));
+      set.add(name);
+      return name;
+    }
+  };
+}
+/** 建立编号作用域并返回复原函数；批量路径必须 try/finally 复原（可嵌套，内层优先） */
+function beginObjectNameScope(used){
+  const prev = objectNameScope;
+  objectNameScope = objectNameScopeFor(used);
+  return () => { objectNameScope = prev; };
+}
+/** 在编号作用域内同步执行 fn；异常时也会复原外层作用域 */
+function withObjectNameScope(used, fn){
+  const restore = beginObjectNameScope(used);
+  try{ return fn(); } finally{ restore(); }
+}
 function nextObjectId(){
-  /* 编号跨楼层唯一：统计当前层 + 非当前层的既有编号 */
-  const used=new Set(state.objects.map(o=>o.name));
-  (state.floors||[]).forEach(f=>{
-    if(f.id===state.activeFloorId) return;
-    (f.objects||[]).forEach(o=>{ if(o&&o.name) used.add(o.name); });
-  });
-  let n=used.size+1;
-  while(used.has('O' + String(n).padStart(4,'0'))) n++;
-  return 'O' + String(n).padStart(4,'0');
+  /* 批量路径命中作用域：O(1) 取号；单次交互创建仍走一次全量扫描（O(N)，可接受） */
+  if(objectNameScope) return objectNameScope.reserve();
+  return objectNameScopeFor(allObjectNames()).reserve();
 }
 /** 全工程既有对象编号（跨楼层唯一性检查用） */
 function allObjectNames(){
@@ -254,8 +278,8 @@ function defaultTypeId(kind){
  * @returns {DrawingObject}
  */
 function baseObject(kind, typeId, patch={}){
-  return Object.assign({
-    id: uid('OBJ'), name: nextObjectId(), kind, typeId: typeId || defaultTypeId(kind),
+  const o = Object.assign({
+    id: uid('OBJ'), name: '', kind, typeId: typeId || defaultTypeId(kind),
     layerId: 'layer.default', x:0, y:0, points:[], width:0, height:0, angle:0,
     phys:0,   /* 点设备物理尺寸(米，高级)：0=纯位置标识(屏幕固定图标)；>0=按世界比例渲染的覆盖图形 */
     iconSize:1, /* 点设备图标屏幕大小倍率（纯视觉，无物理意义）；与类型默认值、全局倍率连乘 */
@@ -265,6 +289,9 @@ function baseObject(kind, typeId, patch={}){
     style:{}, props:{}, visible:true, locked:false, z:state.objects.length,
     createdAt: nowISO(), updatedAt: nowISO()
   }, patch);
+  /* 已显式给编号（导入/停车场等批量路径）时不再扫描既有编号，避免每建一个对象全量扫 state 的 O(N²) */
+  if(o.name === undefined || o.name === null || o.name === '') o.name = nextObjectId();
+  return o;
 }
 
 /* -------------------- 类型 / 图层 / 样式 -------------------- */

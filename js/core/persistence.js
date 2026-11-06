@@ -612,33 +612,45 @@ function buildProject(p){
   const site=slots.site;
   const viewport=sanitizeViewport(p.viewport);
   const objectTypes=mergeTypes(p.objectTypes);
-  const objects=sanitizeObjects(p.objects,layers,objectTypes);
-  const tombstones=sanitizeTombstones(p.tombstones);
-  /* 楼层：当前楼层数据取顶层 background/site/objects；其余楼层各自清洗并保留 */
-  const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
-  const floors=[]; const seenFloor=new Set();
-  rawFloors.forEach((f,i)=>{
-    const id=safeId(f.id||('FLOOR'+(i+1)),'FLOOR');
-    if(seenFloor.has(id)) return;
-    seenFloor.add(id);
-    const name=(String(f.name||('F'+(i+1))).trim()||('F'+(i+1))).slice(0,40);
-    /* v1→v2：保留已有楼层时间；旧档缺失时写空串，避免迁移瞬间把旧楼层当成最新写入 */
-    const updatedAt=typeof f.updatedAt==='string'?f.updatedAt:'';
-    const entry={id,name,updatedAt};
-    if(f.id!==p.activeFloorId){
-      const fslots=migrateBackgroundAndSite(f,layers);
-      entry.background=fslots.background;
-      entry.site=fslots.site;
-      entry.objects=sanitizeObjects(f.objects||[],layers,objectTypes);
-      entry.viewport=sanitizeViewport(f.viewport);
-    }
-    floors.push(entry);
-  });
-  if(!floors.length) floors.push({id:'floor.default',name:'1F',updatedAt:''});
-  let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
-  if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
-  /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
-  return Object.assign(base,p,{schema:SCHEMA,meta,settings,background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+  /* 编号作用域：先聚一次「当前工程 + 待导入工程」的全部编号，清洗过程中缺编号的对象 O(1) 取号；
+     否则每个对象都会扫描全量 state.objects，已有 1 万对象时导入 1 万对象退化为 O(N²)。 */
+  const nameSeed=allObjectNames();
+  const addRawNames=list=>{
+    if(!Array.isArray(list)) return;
+    list.forEach(o=>{ if(o&&typeof o.name==='string'&&o.name) nameSeed.add(o.name.slice(0,80)); });
+  };
+  addRawNames(p.objects);
+  (Array.isArray(p.floors)?p.floors:[]).forEach(f=>addRawNames(f&&f.objects));
+  const restoreNames=beginObjectNameScope(nameSeed);
+  try{
+    const objects=sanitizeObjects(p.objects,layers,objectTypes);
+    const tombstones=sanitizeTombstones(p.tombstones);
+    /* 楼层：当前楼层数据取顶层 background/site/objects；其余楼层各自清洗并保留 */
+    const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
+    const floors=[]; const seenFloor=new Set();
+    rawFloors.forEach((f,i)=>{
+      const id=safeId(f.id||('FLOOR'+(i+1)),'FLOOR');
+      if(seenFloor.has(id)) return;
+      seenFloor.add(id);
+      const name=(String(f.name||('F'+(i+1))).trim()||('F'+(i+1))).slice(0,40);
+      /* v1→v2：保留已有楼层时间；旧档缺失时写空串，避免迁移瞬间把旧楼层当成最新写入 */
+      const updatedAt=typeof f.updatedAt==='string'?f.updatedAt:'';
+      const entry={id,name,updatedAt};
+      if(f.id!==p.activeFloorId){
+        const fslots=migrateBackgroundAndSite(f,layers);
+        entry.background=fslots.background;
+        entry.site=fslots.site;
+        entry.objects=sanitizeObjects(f.objects||[],layers,objectTypes);
+        entry.viewport=sanitizeViewport(f.viewport);
+      }
+      floors.push(entry);
+    });
+    if(!floors.length) floors.push({id:'floor.default',name:'1F',updatedAt:''});
+    let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
+    if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
+    /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
+    return Object.assign(base,p,{schema:SCHEMA,meta,settings,background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+  }finally{ restoreNames(); }
 }
 /** 迁移并立即替换当前状态（旧调用方语义）；需要失败回滚的路径请用 buildProject */
 function migrateProject(p){
@@ -915,8 +927,9 @@ function sanitizeObjects(arr,layers,types){
     const points=pointArray(raw.points);
     const x=finiteNumber(raw.x,0), y=finiteNumber(raw.y,0);
     const angle=normalizeAngle(finiteNumber(raw.angle,0));
-    const o=Object.assign(baseObject(kind,typeId),{
-      id:safeId(raw.id,'OBJ'), name:String(raw.name??'').slice(0,80)||nextObjectId(),
+    const name=String(raw.name??'').slice(0,80)||nextObjectId();
+    const o=Object.assign(baseObject(kind,typeId,{name}),{
+      id:safeId(raw.id,'OBJ'), name,
       layerId, x, y, angle,
       text:String(raw.text??'').slice(0,500), closed:!!raw.closed,
       subtype:['ruler','distance','area','angle'].includes(raw.subtype)?raw.subtype:'distance',

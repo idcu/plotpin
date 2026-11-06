@@ -2,6 +2,38 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-01 后续：修复已有工程内导入 O(N²)
+
+- **Commit Hash**：本条提交（`perf(import): 修复已有工程内导入 1 万对象的 O(N²)`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用写入本文件，复盘时用 `git log -1 --format=%h` 取本条唯一提交。
+- **根因**
+  - `buildProject → sanitizeObjects → baseObject → nextObjectId()` 的链路上，`baseObject` 无论调用方是否已给出 `name` 都无条件调用 `nextObjectId()`；旧 `nextObjectId()` 每次构造 `new Set(state.objects.map(o=>o.name))`。
+  - JSON 导入 / DXF / PDF / 表格导入在替换 `state` 之前逐对象创建，此时全局 `state.objects` 仍是**旧工程**对象，于是 10k 导入 ≈ 10k × 10k 次 Set 操作 → 4.1–4.8s；空工程导入因起点集合为空，故仅 0.27–0.32s，正好解释 16× 差距。
+- **修复方式**
+  - `js/core/model.js`：新增编号作用域 `objectNameScopeFor(used) / beginObjectNameScope(used) / withObjectNameScope(used, fn)`——一次聚集已占用编号，作用域内 `reserve()` 为 Set 查找（均摊 O(1)）；起点沿用旧语义“已占用数量 + 1”并跳过占用号。`baseObject` 改为先合并 patch，仅在 `name` 缺失时取号，显式 `name` 直接使用不再扫描。
+  - `js/core/persistence.js`：`buildProject` 的种子 = 当前工程编号 + 载荷顶层/各楼层编号（含原样保留的 `O0009` 之类），整个清洗/楼层构建包 `try/finally` 复原作用域；`sanitizeObjects` 先算 `name` 再传 `baseObject`，避免二次扫描。
+  - 全部批量分配路径统一走作用域：`importDxfFile`、`importPdfFile`、`applyTableImport`（含 `rowsToObjectsPlan` 的临时校验对象改传显式 `name`）、`duplicateSelected` / `pasteClipboard`、`runPlacementOptimization` 批量落点。停车场本就显式传 `name`，由快速路径覆盖；合并（`merge.js`）按 id 合并不分配编号，无需改。
+  - 单次交互创建（点工具落点、文字等）仍走一次全量扫描（O(N)，一次约 0.1ms 级），不引入常驻索引，避免索引与 `state.objects` 增删改的同步维护成本。
+- **实测验证数据（真实 Chromium / 本机 Windows / 2026-11-06；修复后 4 轮区间）**
+  - 已有工程内导入：2000 **158–200 → 81.1–85ms**；5000 **946–1215 → 147.7–169ms**；10000 **4068–4848 → 306.3–384.8ms**；5000@DPR2 **950–1144 → 159.8–200ms**。
+  - 空工程导入（修复后）：**57.4–70 / 117.1–161 / 275.8–384.1 / 136.2–188ms**。
+  - 已有工程内 / 空工程导入比值由约 **16×** 降到 **0.95–1.41×**；10k 提升约 **11–16×**（逐轮 10.6–15.8×）。
+  - 自设目标（10k 已有工程内导入 ≤500ms 且 ≤1.5× 空工程导入）**达成**，非改阈值放行。
+  - 门禁收紧（`tests/perf/browser-baseline.perf.mjs`）：`importOverExistingMs` 450/2200/10000/2500 → **250/400/900/600ms**（4 轮实测均远低于新阈值，非放宽）。
+  - 回归（本次提交前重跑）：`check.mjs --selftest` **1806 通过 / 0 失败**；`e2e` **18/18（31.5s）**；`build --check` **689.9KB**，SHA256 `70b36e39…` 与 manifest 一致且二次构建确定；`perf:browser` **4/4**。
+- **对象编号兼容性证据（selftest 新增 7 条断言）**
+  - 起点语义不变：seed `{O0001, O0003, A001}` → `O0004, O0005`（“已占用数量+1”后跳过占用号）。
+  - 显式 `name` 不触发全量扫描（Proxy 拦截 `map` 即抛错）且保持原值。
+  - `buildProject` 对缺编号对象跨楼层唯一；保留载荷已有编号 `O0009`；避开当前工程已有 `O0001/O0002` 与载荷编号。
+- **公共抽象 / 影响面**
+  - 新增公共抽象：`objectNameScopeFor / beginObjectNameScope / withObjectNameScope`（`js/core/model.js`），已登记 `docs/modules.md` 的公共抽象表。
+  - 影响面：编号唯一性与起始号语义不变；改动集中在批量创建路径，导入结果与旧实现逐字段一致（`name` 值序列可能不同，但唯一/不冲突语义保持）。单次交互创建仍 O(N) 一次扫描。
+  - 文档同步：`docs/engineering.md` §5.1/§5.4（体积、SHA、断言数、实测表、阈值收紧、B-09 前置结论）；`docs/features.md` 性能段；`docs/modules.md` 抽象表；`README.md` 徽章与断言数（由 `scripts/badge.mjs` 自动更新）。
+- **遗留 TODO / 风险**
+  - **未纳入本次范围**：渲染侧同类热点仍存在——10k 全视野静态层重建 218–297ms、导入后首帧 212–222ms，属 B-09 决策（分块渲染）范围，本轮不动。
+  - 其它 O(N²) 排查结论：`merge.js` 按 id 合并不分配编号；`collectSnapCandidates` 已有包围盒粗筛；`objectIndexById` 已把拖拽/批量移动的 N 次 `find` 收敛为一次索引。未发现需本轮修改的同类分配路径。
+  - 编号作用域依赖调用方 `try/finally` 复原；新增批量创建路径若忘记包裹会退回 O(N²)（不会产生错误编号，只是变慢），代码注释已注明。
+  - 单次交互创建仍为一次全量扫描；若未来单对象创建频率大幅上升（如连续落点上万），需考虑常驻索引方案。
+
 ## 2026-11-06 · B-01 真实浏览器性能基线 + 大图纸护栏评估
 
 - **Commit Hash**：`9148dce`（test(perf): 新增真实 Chromium 性能基线并给出可选门禁）。

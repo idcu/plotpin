@@ -97,6 +97,8 @@ async function importDxfFile(f){
   const counts={line:0,rect:0,point:0,text:0};
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
   const bounds=p=>p.forEach(([x,y])=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);});
+  /* 批量实体一次建立编号作用域：避免逐个 baseObject → nextObjectId 扫描全量 state（O(E²)） */
+  withObjectNameScope(allObjectNames(), () => {
   ents.forEach(e=>{
     if(e.type==='LWPOLYLINE'){
       const pts=e.points.map(p=>[p[0],p[1]]);
@@ -119,6 +121,7 @@ async function importDxfFile(f){
       o.typeId='text.builtin';
       state.objects.push(o); counts.text++;
     }
+  });
   });
   /* 默认矩形场地时，扩到能容纳导入几何（坐标允许负值，只扩不挪）；图片槽不受影响 */
   if(state.site&&state.site.kind==='rect'&&state.site.shape?.type==='rect'&&Number.isFinite(maxX)){
@@ -171,6 +174,8 @@ async function importPdfFile(f){
   const counts={line:0,area:0,text:0};
   const wM=pdf.pageWidth*k, hM=pdf.pageHeight*k;
   if((pdf.paths.length||pdf.texts.length)&&!pdf.images.length) pushHistory();
+  /* 矢量内容批量建对象：同样使用编号作用域，避免逐个扫描全量 state */
+  withObjectNameScope(allObjectNames(), () => {
   for(const p of pdf.paths){
     const pts=p.points.map(q=>[q[0]*k,q[1]*k]);
     if(pts.length<2) continue;
@@ -190,6 +195,7 @@ async function importPdfFile(f){
     o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
     state.objects.push(o); counts.text++;
   }
+  });
   /* 无内嵌图时，把矢量场地设为 PDF 页面尺寸的矩形域，保证坐标框正确；图片槽保持不变 */
   if(!pdf.images.length && state.site && state.site.kind==='rect' && state.site.shape?.type==='rect'){
     state.site.shape.w=Math.max(state.site.shape.w,wM||100);
