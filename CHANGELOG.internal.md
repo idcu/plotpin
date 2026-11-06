@@ -2,9 +2,40 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · 收口：全量回归 + 文档一致性 + 遗留项归档
+
+- **Commit Hash**：本条提交（`docs(closeout): 全量回归数据、文档事实修正与遗留项三类归档`）。
+- **全量回归（本轮实跑，退出码均为 0，除注明者）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/selftest.mjs` | **2327 通过 / 0 失败**（41 个脚本） | 0 |
+| `node scripts/e2e.mjs` | **65 passed / 1 skipped**（1.1m，22 个 spec） | 0 |
+| `node scripts/bench.mjs` | 全部门禁通过：avg 0.37ms / P95 0.48ms / P99 0.59ms / 重建 25.9ms / 直接帧 22.58ms / heap 23.67MB / 覆盖率 8.3ms / 大场地 16.5ms / 规则 15.5ms / 符号 3.91·0.09·3.07ms / 索引 0.013ms / 裁剪 99.4% | 0 |
+| `node scripts/build.mjs --check` | 736,298 B / 719.0 KB；gzip 226,912 B；SHA256 `977a747853b4…`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被对应门禁捕获 | 0 |
+| `node scripts/check-discipline.mjs` | **12/13（L3）**，缺口第 11 问：`docs/engineering.md` 69.9 KB / 714 行（自设上限 60 KB / 600 行） | 0 |
+| `node scripts/check.mjs --selftest` | 语法 / 入口资源 / 离线引用 / 断言数 / 契约 / API / 分层 / 自测全部通过 | 0 |
+| `npm run ci` | 上述链路顺序执行通过 | 0 |
+| `node scripts/perf-browser.mjs` | 4/4 通过：2000 P95 1.8/重建 43.1/heap 16.76；5000 P95 2.0/106/36.83；10000 P95 5.4/202.9/82.24；5000@DPR2 P95 22.3/P99 27.4/230.7/43.23ms（DPR2 P99 触发 >16.7ms 告警，仍低于 33.3ms 门禁） | 0 |
+
+- **文档一致性修正（逐条核对 README / features / modules / engineering 与代码）**
+  1. README 与 features 的特性计数：29 顶层 + **42 子项 = 71 条**（原写 27/32 子项、56 条）。
+  2. README / features 的产物体积：**719.0 KB（736,298 B）/ gzip 221.6 KB（226,912 B）**（原写 699.7 KB / 716,473 B）。
+  3. README 补齐 C-04 独立交付行（36 图元、500 图元性能、golden、体积增量、测试数据）。
+  4. README / engineering 的「Path2D 缓存不引入」改为「**通用** Path2D 缓存不引入」，并注明 C-04 符号路径 `WeakMap` 窄缓存例外。
+  5. README 英文特性补充 36 符号库与自有 SVG/JSON 说明；目录树补 `docs/known-issues.md`。
+  6. modules：41 个 classic `<script>`（`js/` 31 + vendor 10，原写 40）；补 6 行符号库公共抽象（path 源 / 归一 / 清洗 / 检索 / JSON 包 / DXF 折线）。
+  7. engineering §5.1：补「规则检查 ≤500ms」门禁行；重建/直接/heap/覆盖率/大场地/符号行改为收口实测区间；余量说明改为「渲染类 2–4 倍」。
+  8. engineering §5.2：补 `coverage` / `plugin-sandbox` / `rules` / `symbols` 四个 e2e spec；SW 预缓存 **46 条**（原写 45）。
+  9. engineering §5.4：真实浏览器数据由 4 轮回改为 **5 轮区间 + 收口单次值**；DPR2 P99 上限说明改 27.4ms；导入区间同步。
+  10. engineering 纪律结论：**13/13 → 12/13（L3）**，写明第 11 问缺口在 C-04 前已存在（HEAD~1 65.3 KB / 664 行）。
+- **遗留项归档**：新建 [docs/known-issues.md](known-issues.md)，共 **25 条**——可自动化验证 **6 条**（A1–A6）、需人工或真机 **7 条**（M1–M7）、已知限制不修 **12 条**（K1–K12），每条含来源任务、影响与验证/保留理由。
+- **未验证 / 风险**：见 `docs/known-issues.md`；本轮未改任何业务逻辑、未改阈值、未删断言、未 push、未读取/修改 `camera-*`。
+
 ## 2026-11-06 · C-04 符号库（36 个六类图元 + SVG 安全导入 + DXF 折线降级）
 
-- **Commit Hash**：本条提交（`feat(symbols): 36 个分类符号库 + SVG 安全导入与 DXF 折线降级（+19,825 B）`）。复盘用 `git log --grep="36 个分类符号库" -1 --format=%H`。
+- **Commit Hash**：`4856533a3d3cf9741758836ec2629de211e0e63f`（`feat(symbols): 36 个分类符号库 + SVG 安全导入与 DXF 折线降级（+19,825 B）`）。复盘用 `git log --grep="36 个分类符号库" -1 --format=%H`。
 - **核心改动点**
   - `js/common/symbols.js`（重写）：`SYMBOL_LIBRARY` 36 个图元，六类各 6 个（视频监控 / 门禁 / 消防 / 网络 / 停车 / 其他），统一 24×24 viewBox、紧凑 path；`symbolPathsFor` 作为画布 / SVG / PNG / PDF / DXF 的**唯一 path 源**。
   - 归一入口：`normalizeSymbolPaths` / `normalizeSymbolViewBox` / `normalizeSymbolAliases`；路径字符集白名单校验，非法即抛错；`buildSymbolIndex` / `searchSymbols` 支持 id / 名称 / 别名（如「烟感」「NVR」）小写包含匹配与分类筛选。

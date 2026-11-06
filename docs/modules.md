@@ -4,7 +4,7 @@
 
 ## 为什么是分目录，不是可插拔模块
 
-PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic `<script>` 共享同一个全局词法作用域，
+PlotPin 是**双击 `index.html` 即用**的离线单页工具：41 个 classic `<script>`（`js/` 31 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
 `const SCHEMA`、`state`、`I18N` 都是裸标识符，文件之间直接引用。改 `<script type="module">`
 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
 
@@ -107,6 +107,12 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic 
 | `mergeRuleSide(local, incoming)` | `js/common/merge.js`（规则配置合并唯一判据：本地非空优先，缺失侧回退另一侧；`mergeNormalizeSide` 会把缺失侧归一为空对象，不能只看真值） | `mergeProjectData`、`selftest.mjs`；既有多楼层/墓碑合并语义不变 |
 | `registerRule / unregisterRule / listRules / runRuleCheck / ruleViolationsCsv / locateRuleViolation` | `js/features/rules.js`（规则注册与执行唯一入口：内建规则不可注销；逐规则异常隔离为 `skipped`；违规统一含规则名/对象/关联对象/楼层/位置/说明；CSV 经 `csvCell` 做引号与公式防护；定位跨楼层选中主/关联对象） | 规则页签（`index.html` 第 5 页签）、`selftest.mjs` §57.2–57.7、`e2e rules`；插件/后续规则只走 `registerRule`，不得在 UI 层另写检查循环 |
 | `ruleObjectFootprint / ruleOverlapCheck / ruleSpacingCheck / ruleBoundsCheck / ruleCandidatePairs` | `js/features/rules.js`（几何口径唯一实现：bbox 穿透容差 → 多边形交面积；间距净距 `<` 两类型阈值的 `max`；越界以 `siteOutlinePoints` 为界并分 `partial`/`full`；minX 扫描线候选对，`mode:'brute'` 仅供基准对照） | `runRuleCheck`；`scripts/bench.mjs` 的 2000 对象/30 类型场景与 `--brute` 收益对照 |
+| `SYMBOL_LIBRARY / SYMBOL_CATEGORIES / symbolPathsFor(type)` | `js/common/symbols.js`（内置 36 个六类图元与符号路径的**唯一来源**；`symbolPathsFor` 返回 `[{d,fill}]`，坏数据返回 `[]`，不抛异常） | `render.js` 画布（`Path2D` 窄缓存）、`io-export.js` 的 SVG/PNG/PDF 与 DXF 折线近似、符号库页签预览；**任何格式不得另存一份符号图形** |
+| `normalizeSymbolPaths / normalizeSymbolViewBox / normalizeSymbolAliases` | `js/common/symbols.js`（符号数据归一唯一入口：路径字符白名单、24×24 默认 viewBox、别名数量/长度上限；非法路径抛错） | `persistence.js` 自定义类型载入/合并、`sanitizeSymbolBundle`、`selftest.mjs`；新增字段只改这一处 |
+| `assertSafeSvg / parseSvgSymbol(text)` | `js/common/symbols.js`（SVG 导入安全清洗唯一实现：64 KB / 200 元素 / 16 层嵌套 / 200 路径 / 单条 5000 字符；拒绝 script、`on*`、外部 `href`/`xlink:href`、DOCTYPE/ENTITY 与非法路径字符；只提取 path/circle/rect/polygon/polyline/line） | `symbols.js` 的导入 UI、`selftest.mjs` 10 条安全用例、`e2e symbols`；不得在 UI 层另写解析 |
+| `buildSymbolIndex(lib) / searchSymbols(query, cat)` | `js/common/symbols.js`（符号检索唯一实现：id/名称/别名小写包含匹配 + 分类筛选；索引构建供 bench 加载耗时门禁） | 符号库页签搜索与分类下拉、`scripts/bench.mjs`（`symbolLoadMs`）、`selftest.mjs` |
+| `customSymbolsFromTypes(types, meta) / sanitizeSymbolBundle(raw, usedIds)` | `js/common/symbols.js`（工程命名空间 JSON 包唯一实现：`plotpin.symbols/v1`；只导出非内置符号，导入时逐符号清洗、id 冲突改名 `sym.import.N`、最多 200 个） | 符号库页签「导出 JSON / 导入 JSON」、`selftest.mjs`；**不写全局存储，不影响其他工程** |
+| `symbolPolylinesInWorld(type,x,y,sizeMeters,angleDeg,viewBox) / pathToPolylines(d)` | `js/common/symbols.js`（DXF 折线近似唯一实现：支持 M/L/H/V/C/S/Q/T/A/Z 与相对命令，曲线 8–10 段、圆弧 6–48 段采样；返回世界坐标折线） | `io-export.js` 的 `dxfEntitiesForExport`（POINT 锚点 + LWPOLYLINE 近似与 `report` 降级说明）、`selftest.mjs` |
 
 B-08 原义影响范围：`rowsToObjectsPlan(rows)` 的返回值新增 `replaces / errors / strict`，既有 `updates / creates / warnings`
 字段与含义不变；无「操作」列的旧表头行为保持逐行告警/跳过。`applyTableImport(plan)` 签名不变，但带 `plan.errors`

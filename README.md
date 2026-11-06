@@ -29,7 +29,7 @@
 | **协同** | 多工程库、离线 LWW 合并（删除墓碑可复活）、本机 BroadcastChannel 与跨设备 WebRTC（均无服务器） |
 | **可靠** | 零依赖离线运行、分层离屏渲染 + 视口裁剪、解析器输入上限、能力探测与显式降级、中英界面与无障碍 |
 
-> **29 条顶层特性**（含 27 条子项，逐条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
+> **29 条顶层特性**（含 42 条子项，共 71 条，逐条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
 > README 只回答"这是什么、能不能用"；能不能**依赖**它，去那里逐条对。
 
 ## 🚀 快速开始
@@ -113,8 +113,9 @@ npx serve .
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
     ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
-    ├── features.md           # 29 条顶层特性 + 32 条子项（含边界与实现口径）
+    ├── features.md           # 29 条顶层特性 + 42 条子项（共 71 条，含边界与实现口径）
     ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
+    ├── known-issues.md       # Phase A/B/C 遗留项三类归档：可自动化 / 需人工或真机 / 已知限制
     └── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
 ```
 
@@ -175,7 +176,7 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ 多楼层多底图、设备台账二维码、照片附件（已交付）。
 - ✅ 顶栏「清空」：一键清空当前楼层双槽/对象/标注/校准/选中态并恢复默认取景框，二次确认且可 `Ctrl+Z` 整体撤销（已交付）。
 - ✅ PWA/Service Worker 离线缓存（缓存名版本化 + 激活清理旧缓存 + 新版本可用提示，离线打开不白屏）、36 个六类行业符号库与自定义 SVG/JSON 图元（C-04，已交付）。
-- ✅ 单文件发行包（构建期无损压缩，当前 **699.7 KB / 716,473 B**、gzip 215.7 KB / 220,917 B；体积门禁 ≤820 KB / 839,680 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
+- ✅ 单文件发行包（构建期无损压缩，当前 **719.0 KB / 736,298 B**、gzip 221.6 KB / 226,912 B；体积门禁 ≤820 KB / 839,680 B，余量 103,382 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
 - ✅ 停车场规划模式：双面垂直车位 + 通道净距检查、横/纵排列、实时预览与独立图层（已交付）。
 - ✅ 离线协作（CRDT 家族 LWW）：对象/楼层级 Last-Writer-Wins + 删除墓碑 + 工程 JSON 合并；存储 v2 为每个楼层补 `updatedAt`，v1 旧档读取即迁移（已交付，工程库「合并他人工程」）。
 - ✅ 实时协作：本机 BroadcastChannel 多标签 + 跨设备 WebRTC 手动信令（无服务器、零依赖）；邀请串三步建连、连接状态常驻可见、LWW 覆盖提示并可 `Ctrl+Z` 回滚，消息层设 TTL / key / 字节上限与发送异常保护（已交付；内置二维码编码器 42 字节上限装不下 SDP 邀请串，面板只提示不渲染假码）。
@@ -195,13 +196,14 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ DXF 预检与双落点（B-02）：导入前预检版本/单位/实体/保真度，可改判单位（整体换算），可选「可编辑对象」或「只读参考层」（新建 `DXF参考` 图层并默认锁定）；确认后才事务化提交，失败整批回滚。`.dwg` 入口识别 `AC10xx` 版本并给出「转 DXF / 转 PDF / 取消」指引，不内置 DWG 内核、不引入依赖、不修改原文件（已交付）。
 - ✅ 世界变换统一入口（B-12）：比例尺/仿射校准统一走 `applyWorldTransform`，对象（坐标、设备物理尺寸、文字字高、线宽、圆/椭圆/扇形参数）与图片仿射一次迁移——已仿射校准的底图二次改比例尺不再与对象错位；矢量场地按「场地优先校准」保持真值参考不自动迁移，需要整体换坐标系时可显式 opt-in。旧签名 `scaleWorldAround` 保留（已交付）。
 - ✅ 多页 PDF / 图纸集（B-13）：多页矢量 PDF 按文档页树 `/Kids` 还原页序（不按对象编号），每页归零到自身 MediaBox 后沿水平方向独立落位、页间留最大页宽 8% 间隙——**不再同原点叠加**；导入提示页数，场地按整套总宽/最大页高扩展。PDF 导出按「楼层顺序 → 图纸页 + 清单页」生成，页码全局连续写入页脚；往返校验页数/页序/页宽页高一致（`selftest` §37b + `e2e pdf-multipage`）。限制：PDF 导出为位图页，回读时不还原矢量坐标（已交付）。
-- ✅ 渲染性能基线（B-11）：新增真实 Chromium 渲染基线 `tests/e2e/perf-render.spec.mjs`（2000 对象 / 1600×900，A 基础场景 + B 标注图元，输出重建/缓存命中/直接全量的 avg·P50·P95·P99、单帧 `measureText`/`Path2D` 调用、`staticKey`、`filter+sort`、heap 与裁剪率）。实测缓存帧 P95 0.2ms、重建 P95 6.0–8.6ms，均在本帧预算内；`measureText` LRU、Path2D 缓存、图层/对象索引、`staticKey` 精确化四项经 A/B 实测无稳定帧级收益，按「无数据支撑不引入」不做，分块/Worker 亦无「主线程占满」证据（已交付）。
+- ✅ 渲染性能基线（B-11）：新增真实 Chromium 渲染基线 `tests/e2e/perf-render.spec.mjs`（2000 对象 / 1600×900，A 基础场景 + B 标注图元，输出重建/缓存命中/直接全量的 avg·P50·P95·P99、单帧 `measureText`/`Path2D` 调用、`staticKey`、`filter+sort`、heap 与裁剪率）。实测缓存帧 P95 0.2ms、重建 P95 6.0–8.6ms，均在本帧预算内；通用 `measureText` LRU、通用 Path2D 缓存、图层/对象索引、`staticKey` 精确化四项经 A/B 实测无稳定帧级收益，按「无数据支撑不引入」不做（C-04 只对符号路径做按类型的 `WeakMap` 窄缓存，不改变该结论），分块/Worker 亦无「主线程占满」证据（已交付）。
 - ✅ 图框 / 标题栏 / 比例尺 / 图例模板（B-07）：导出下拉「图框模板…」配置工程名/图号/比例/日期/版本与设计/审核/单位 8 字段，可分别开关图框边框、标题栏、比例尺、图例；**默认关闭**，关闭时 PNG/PDF/SVG 产物与旧版逐字节一致。启用后三格式共用同一布局源：右下 4×2 标题栏（空比例自动 `1:N`、空日期取导出当天、空图号显示 `—`）、左下整齐长度比例尺、右上按可见对象类型/图层生成的图例；文字统一 `esc()` 转义。字段随 `meta.titleBlock` 持久化并进入撤销快照，旧工程缺字段按默认模板降级（已交付）。
 - ✅ i18n 插值模板（B-14）：动态整句改用 `{name}` 占位 + 集中字典 `TEMPLATES`，消除 `前缀 + 数值 + 后缀` 拼接；覆盖剪贴板、表格/DXF/PDF/底图导入、楼层与工程库、快照、协作合并、报价与 PDF 页脚等 UI 与报告文案。中文模式原样填充（语义不变），英文整句命中字典；用户输入只作参数，DOM 仍走 `textContent` / `esc()`，不扩大注入面。可复跑统计 `node scripts/i18n-scan.mjs`：英文覆盖率 **25.64% → 33.79%**（已字典化 269 → 347 条，缺口 125 → 49 条），体积 **820,168 → 831,533 B（+11,365 B）**，仍低于 820 KB 门禁（已交付）。
 - ✅ 移动端 / PWA 补强（B-15）：SW 缓存名 `plotpin-v3` 版本化，`activate` 清理所有旧缓存；安装逐项 `allSettled`，单个资源 404 不阻断升级；`fetch` 网络优先、离线回退缓存，导航兜底 `index.html`，无缓存时返回内置离线提示页（不白屏）；`updatefound → installed` 且已有控制器时提示「新版本可用：刷新页面后生效」。移动端加 `viewport-fit=cover` 与 `env(safe-area-inset-*)`（桌面为 0，旧布局不变），触屏目标 ≥44px，横屏压缩顶栏、侧栏收窄且可纵向滚动工具栏；窄屏侧栏遮罩降到顶栏之下并支持点空白关闭。实测（同机 Chromium 移动模拟 390×844 / DPR3 vs 桌面 1600×900，单轮）：首屏 FCP 84 vs 96ms，2000 对象重建 P95 7.2 vs 5.9ms、缓存帧 P95 0.2 vs 0.2ms、rAF 间隔 P95 17.8 vs 18.2ms；**真机未测**（已交付）。
 - ✅ 体积压缩专项（2026-11）：构建期无损压缩（只删注释 / 缩进 / 空白，字符串、模板与正则字面量原样保留；CSP 哈希按压缩后文本重算，压缩后逐脚本 `vm.Script` 解析），产物 **833,855 → 664,325 B（−20.33%）**、gzip **273,289 → 205,465 B（−24.81%）**；820 KB 门禁余量 5,825 → 175,355 B。selftest 2184/0、e2e 51/1，dist 压缩产物同套断言全过（已交付）。
 - ✅ 插件沙箱 / 版本兼容 / 示例（C-01，2026-11）：新增 `PlotPin.apiVersion="1.0.0"` 与 `checkPlugin` 版本协商（1.x；不兼容返回可读 `reason` 而非崩溃）；`loadPlugin` 用独立 Worker 执行插件，能力白名单 7 项（`state:read` / `state:write` / `annotate` / `types` / `icons` / `export` / `import`）未声明一律不可用；Worker 全局与原型链硬化（无 DOM / `window` / `parent`，删 `fetch` / `indexedDB` / `XHR` / `WebSocket` / `importScripts` 等），初始化与单次调用 **>2 s 超时 terminate** 并禁用插件、toast 写原因；异常/原型污染不触达主工程；图标仍走 A-02 `normalizeIcon` 白名单与 `esc`。旧同源 `<script>` 路径保留为受信任兼容入口，迁移说明与能力表见 `docs/engineering.md` §4.1；示例 `plugins/sample-sandboxed.js`。实测体积 **664,325 → 685,350 B（+21,025 B，+3.16%）**、gzip **205,465 → 211,396 B（+5,931 B）**；selftest **2194/0**、e2e **61 passed / 1 skipped**（新增 10 条恶意/兼容用例）；dist file:// 双击实测 Worker 沙箱可用（已交付）。
 - ✅ 几何规则检查（C-05，2026-11）：规则页签提供可注册规则框架、随工程保存的 `state.rules` 配置、单次检查与违规清单（规则名/对象/关联对象/楼层/X·Y/说明/实测值），支持点击跨楼层定位与 CSV 导出（BOM、引号与公式注入防护）。三条内建规则：**对象重叠**（同楼层包围盒穿透 > 容差才做多边形交面积判定，贴边与容差内浅穿透不报；凹多边形三角化）、**最小间距**（按类型阈值两两比较，取 max，净距 `<` 阈值才报，恰好达标不报）、**越界**（以矢量场地边界为准，区分部分/完全越出，文字/尺寸/点设备同样参与）。页面明确提示「这是几何检查，不是消防/规范审图」，不内置任何规范数值。2000 对象 / 30 类型阈值实测 **14.3–15.2 ms**（5 次中位数 14.3ms，CI 复跑 15.2ms；minX 扫描线候选对 7 / 理论 2,221,111，全量对照 15,666.4 ms，加速约 **1096×**）；体积 **685,350 → 716,473 B（+31,123 B，+4.54%）**、gzip **211,396 → 220,917 B（+9,521 B）**；selftest **2288/0**、e2e 新增 `rules` 用例覆盖「改配置→重查→违规数变化」。口径、已知限制与不承诺范围见 `docs/engineering.md` §4.2（已交付）。
+- ✅ 行业符号库（C-04，2026-11）：36 个 24×24 线性图元分六类（视频监控 / 门禁 / 消防 / 网络 / 停车 / 其他，每类 6 个），名称/别名搜索与分类筛选、预览、放置、旋转角与真实尺寸；自定义 SVG 经与 A-02 同源的清洗（64 KB / 200 元素 / 16 层嵌套 / 200 条路径 / 单条 5000 字符，拒绝 script、`on*`、外部 href、DOCTYPE）后存入当前工程命名空间，可 JSON 往返且 id 冲突改名；画布/SVG/PNG/PDF 共用 `symbolPathsFor` 单一 path 源，DXF 保留 POINT 并追加 LWPOLYLINE 近似、导出报告标注降级。实测 500 符号图元重建 **3.33–4.01 ms** / 缓存帧 **0.08–0.10 ms** / 直接帧 **2.83–3.23 ms**、索引加载 **0.012–0.014 ms**；golden `symbol-scene.svg` 5,012 B / `.dxf` 4,753 B；体积 **716,473 → 736,298 B（+19,825 B，+2.77%）**、gzip **220,917 → 226,912 B（+5,995 B）**；selftest **2327/0**、e2e **65 passed / 1 skipped**（已交付）。
 
 > 触屏已支持：Pointer Events 单指绘制/移动，**双指捏合缩放、双指平移**（缩放锚定双指中点）；≤860px 窄屏侧栏自动变覆盖层（☰ 面板开关，点画布/遮罩空白关闭）；安全区与触控目标见 B-15。
 
@@ -228,7 +230,7 @@ Place device markers on any base map (image or vector site), draw true-to-scale 
 
 - **Offline & zero-dependency**: no npm, no CDN, no backend; works from `file://` on intranets, air-gapped and field environments.
 - **Base maps**: image files with two-point scale calibration (meters/pixel), or vector sites in meters — rectangle, circle, ellipse, sector, parallelogram and polygon.
-- **Point devices (position semantics)**: screen-fixed icons that stay crisp at any zoom; icon size is adjustable on three levels (global × type default × per-object). Optional physical-size overlays render at real scale (coverage circle, square, camera FOV sector, barrier-gate bar).
+- **Point devices (position semantics)**: screen-fixed icons that stay crisp at any zoom; icon size is adjustable on three levels (global × type default × per-object). Optional physical-size overlays render at real scale (coverage circle, square, camera FOV sector, barrier-gate bar). A built-in **36-symbol library** in six categories (CCTV / access control / fire / network / parking / other) supports alias search, rotation and true-size placement; custom SVG symbols are sanitized before being saved into the current project namespace (JSON round-trip).
 - **Areas & polylines (geometry semantics)**: always in world coordinates (meters), true-to-scale. Areas support rectangle / circle / ellipse / sector / parallelogram with parameter handles and on-the-fly shape conversion (center-preserving, equal-area); triangles and arbitrary polygons come from closed polylines.
 - **Dimensions & text**: distance, area and angle annotations; scalable/rotatable world-size text.
 - **Editing**: single/rubber/multi select, move, resize, rotate, node editing, layers, custom types, grid snapping, undo/redo.
