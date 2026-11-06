@@ -188,6 +188,39 @@ Worker 是**隔离边界**而不是完整语言级沙箱——插件仍可访问
 - 不判断消防间距、疏散、结构、日照等任何规范条文，也不提供规范默认值；
 - 规则注册表为运行时内存态，自定义规则不随工程保存；工程只保存规则**配置**。
 
+### 4.3 符号库、SVG 导入与 DXF 降级口径（C-04）
+
+符号库（`js/common/symbols.js`）是内置图元与用户自有图元的**唯一数据源**；画布、SVG、PNG、PDF
+都通过同一个 `symbolPathsFor(type)` 取路径，不存在第二份图形定义。内置 **36 个**线性图元，
+六类各 6 个（视频监控 / 门禁 / 消防 / 网络 / 停车 / 其他），统一 24×24 viewBox、紧凑 path 字符串。
+
+| 项 | 口径 |
+|---|---|
+| 图元数据 | `{id,name,cat,aliases,views,paths}`；`paths` 为 `{d,fill}` 数组，路径字符集白名单 `MmLlHhVvCcSsQqTtAaZz0-9.,-+eE \t`，非法即抛错。`normalizeSymbolPaths` / `normalizeSymbolViewBox` / `normalizeSymbolAliases` 是唯一归一入口。 |
+| 搜索与放置 | `searchSymbols(query, cat)` 对 id / 名称 / 别名做小写包含匹配；别名如「烟感」「NVR」。放置走「点设备」工具；`symbolPlace = {angle, phys}` 为**临时放置选项、不持久化**，落地后写入对象自身的 `angle` / `phys`。 |
+| 真实尺寸 | `phys > 0` 时按图元外接宽度（米）缩放到世界尺寸，画布与 SVG 用同一比例因子；`phys = 0` 为屏幕固定图标（`k` 缩放）。DXF 无 `phys` 时用 **0.6m 名义尺寸**。 |
+| 自有导入（安全） | 上传 SVG 后走 `assertSafeSvg` + `parseSvgSymbol`：**64 KB** / **200 元素** / **嵌套 16 层** / **200 条路径** / **单条 path 5000 字符**；拒绝 script 标签、`on*` 事件属性、外部 `href` / `xlink:href`、`DOCTYPE`/`ENTITY`、`DOMParser` 危险元素与非法路径字符。所有拒绝均返回**具体原因**，不落库。 |
+| 工程命名空间 | 自有符号只写 `state.objectTypes`（随工程 JSON 持久化），JSON 包 `{schema:'plotpin.symbols/v1', symbols, project}` 由 `customSymbolsFromTypes` / `sanitizeSymbolBundle` 生成与校验；导入 id 冲突自动改名为 `sym.import.N`，包内最多 200 个符号。**不写全局存储**，不影响其他工程。 |
+| 渲染一致 | `symbolPathsFor` 是唯一 path 源；Canvas 侧 `Path2D` 缓存（`WeakMap`），无 `Path2D` 时回退逐段描边并保留同源路径。属性面板对符号类型开放物理尺寸。 |
+| DXF 降级 | DXF 不支持任意填充路径，**保留原始 POINT 锚点**并追加 `LWPOLYLINE` 折线近似（曲线 8–10 段、圆弧 6–48 段采样）。`dxfEntitiesForExport` 返回 `report = {symbolPoints, approxPolylines, degraded, note}`，有符号时导出弹窗列出「N 个符号按 M 条 LWPOLYLINE 近似」；**不静默丢弃**。 |
+| 既有工程 | 不使用符号时导出产物**逐字节不变**（golden 基线由 HEAD 代码生成并与新代码比对一致）。 |
+
+**性能**：单页 500 个符号图元（六类混合、部分 1–3m 真实尺寸、带旋转）实测
+**重建 3.33–4.01 ms / 缓存帧 0.08–0.10 ms / 直接帧 2.83–3.23 ms**（3 轮实测）；`buildSymbolIndex()`
+加载 **0.012–0.014 ms**（36 个图元）。门禁 `符号渲染(500图元直接帧) ≤ 60ms` 与 `符号库索引加载 ≤ 10ms`
+已进 `npm run ci`。
+
+**golden**：`tests/golden/` 四份快照，`UPDATE_GOLDEN=1` 生成、`npm run ci` 逐字节比对：
+无符号 `plain-scene.svg` 4,730 B / `.dxf` 900 B，符号场景 `symbol-scene.svg` 5,012 B /
+`.dxf` 4,753 B（DXF 含折线近似，体现降级而非丢失）。
+
+**已知限制**：
+- DXF 只有折线与锚点近似，圆/弧的视觉精度受采样段数限制，不能还原填充；
+- SVG 导入只识别 path / circle / rect / polygon / polyline / line 六类图元，其余元素被忽略
+  （不报错但不进入图元数据）；
+- 符号搜索为小写包含匹配，不做拼音/模糊/分词；
+- 内置符号替代了旧版 64 个图标集合，**旧工程**仍按工程 JSON 里的 `objectTypes` 保留原图元。
+
 ---
 
 ## 5. 故意不设门禁的地方（明说不保证）
@@ -219,11 +252,13 @@ Worker 是**隔离边界**而不是完整语言级沙箱——插件仍可访问
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 820 KB（839,680 B） | 669.3 KB（685,350 B） | 余量 154,330 B（C-01 沙箱后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 C 系列功能留空间） |
-| 产物体积（gzip） | 只打印，不阻断 | 206.4 KB（211,396 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `488bc04e9b5a…` | 从源重建、二次构建确定性一致 |
-| CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 40 = 40 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 2194 | 只增不减 |
+| 符号渲染（500 图元直接帧） | ≤ 60 ms | 2.97–3.23 ms | 六类混合 + 部分真实尺寸 + 旋转 |
+| 符号库索引加载 | ≤ 10 ms | 0.014 ms（36 个图元） | `buildSymbolIndex()` 200 次平均 |
+| 单文件体积 | ≤ 820 KB（839,680 B） | 719.0 KB（736,298 B） | 余量 103,382 B（C-04 符号库后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 C 系列功能留空间） |
+| 产物体积（gzip） | 只打印，不阻断 | 221.6 KB（226,912 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `977a747853b4…` | 从源重建、二次构建确定性一致 |
+| CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 41 = 41 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
+| 断言数 | ≥ 1870 且 0 失败 | 2327 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在

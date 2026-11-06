@@ -305,7 +305,9 @@ canvas.addEventListener('pointerdown',e=>{
   if(currentTool==='point'){
     pushHistory();
     const typeId=$('pointType').value || 'point.marker';
-    const o=baseObject('point',typeId,{x:wp[0],y:wp[1],angle:0});
+    const ptType=getType(typeId);
+    const isSym=ptType&&Array.isArray(ptType.symbol)&&ptType.symbol.length;
+    const o=baseObject('point',typeId,{x:wp[0],y:wp[1],angle:isSym?(Number(symbolPlace.angle)||0):0,phys:isSym?(Number(symbolPlace.phys)||0):0});
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加点设备');
     switchTab('props'); return;
   }

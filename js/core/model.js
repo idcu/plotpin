@@ -18,6 +18,7 @@ let selectedIds = new Set();
 let history = { past: [], future: [] };
 let clipboard = [];
 let draft = null;
+let symbolPlace = { angle: 0, phys: 0 };   /* 符号库放置选项：旋转角与真实尺寸（临时，不持久化） */
 let drag = null;
 let rubber = null;
 let calibPoints = [];

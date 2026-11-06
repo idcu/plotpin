@@ -82,7 +82,7 @@ code += `\n;globalThis.__bench = {
   get state(){ return state; },
   resetState(){ state=createInitialState(); resetFrameRef(); return state; },
   baseObject, drawScene, invalidateStatic, visibleWorldRect, objectBounds, boundsIntersect, selectedIds,
-  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules
+  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules, buildSymbolIndex
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 const api = sandbox.__bench;
@@ -236,6 +236,43 @@ out.coverageZoomRatios = zoomRatios.map(r => +(r * 100).toFixed(2));
   }
 }
 
+/* 7) C-04 符号渲染：单页 500 个符号图元 + 符号库索引加载耗时 */
+{
+  api.resetState();
+  api.state.background = { kind: 'empty', fileName: '', assetId: '', width: 0, height: 0, origin: [0, 0], metersPerPixel: 0.1, calibrated: false, transform: null };
+  api.state.site = { id:'site.bench.sym', name:'符号基准场地', layerId:'layer.default', visible:true, locked:false,
+    annot:{}, style:{}, updatedAt:'', kind:'rect', shape:{ type:'rect', x:0, y:0, w:1000, h:800 } };
+  api.state.viewport = { zoom: 0.8, panX: 10, panY: 10 };
+  const symIds = ['sym.camera_gun','sym.smoke','sym.barrier','sym.switch','sym.card_reader','sym.elevator'];
+  const symObjs = [];
+  for (let i = 0; i < 500; i++) {
+    symObjs.push(api.baseObject('point', symIds[i % symIds.length], {
+      x: (i * 41) % 960 + 20, y: (i * 59) % 760 + 20,
+      angle: (i * 13) % 360, phys: (i % 10 === 0) ? (1 + i % 3) : 0, name: 'SYM' + i
+    }));
+  }
+  symObjs.forEach((o, i) => { o.z = i; });
+  api.state.objects = symObjs;
+  api.resetFrameRef();
+  const symRebuildMs = timeIt('sym-rebuild', 10, () => {
+    api.invalidateStatic();
+    api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: true, markerScale: 1 });
+  });
+  const symCachedSamples = timeSamples(100, () => {
+    api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: true, markerScale: 1 });
+  });
+  const symDirectMs = timeIt('sym-direct', 10, () => {
+    api.drawScene(ctxStub, api.state.viewport, W, H, { interactive: false, markerScale: 1.6 });
+  });
+  const loadSamples = timeSamples(200, () => { api.buildSymbolIndex(); });
+  out.symbolObjects = 500;
+  out.symbolRebuildMs = +symRebuildMs.toFixed(2);
+  out.symbolCachedMs = +avgOf(symCachedSamples).toFixed(2);
+  out.symbolDirectMs = +symDirectMs.toFixed(2);
+  out.symbolLoadMs = +avgOf(loadSamples).toFixed(3);
+  out.symbolLibraryCount = api.buildSymbolIndex().length;
+}
+
 out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
 
 if (process.argv.includes('--json')) {
@@ -256,6 +293,8 @@ if (process.argv.includes('--json')) {
   if (out.ruleCheckBruteMs !== undefined) {
     console.log(`  规则全量对照（--brute）：${out.ruleCheckBruteMs} ms，候选对 ${out.ruleBrutePairs}（扫描线加速 ${(out.ruleCheckBruteMs / out.ruleCheckMs).toFixed(1)}×）`);
   }
+  console.log(`  符号渲染：${out.symbolObjects} 个符号点 重建 ${out.symbolRebuildMs} ms / 缓存帧 ${out.symbolCachedMs} ms / 直接帧 ${out.symbolDirectMs} ms（目标 ≤ 60ms）`);
+  console.log(`  符号库加载：索引构建 ${out.symbolLoadMs} ms（${out.symbolLibraryCount} 个图元，目标 ≤ 10ms）`);
 }
 
 /* 门禁：阻断项（超出一项即红），P99 仅告警。--no-gate 供本地快速跑。 */
@@ -270,6 +309,8 @@ if (!process.argv.includes('--no-gate')) {
     { name: '大场地覆盖率分析', value: out.coverageBigMs, limit: 300, op: '≤', unit: 'ms' },
     { name: '覆盖率缩放差异', value: out.coverageZoomSpreadPp, limit: 1, op: '≤', unit: 'pp' },
     { name: '规则检查(2000对象/30类型)', value: out.ruleCheckMs, limit: 500, op: '≤', unit: 'ms' },
+    { name: '符号渲染(500图元直接帧)', value: out.symbolDirectMs, limit: 60, op: '≤', unit: 'ms' },
+    { name: '符号库索引加载', value: out.symbolLoadMs, limit: 10, op: '≤', unit: 'ms' },
     { name: '视口裁剪率', value: out.culledRatio, limit: 0.6, op: '≥', unit: '' }
   ].filter(g => !(out.ruleCheckBruteMs !== undefined && g.name === 'heapUsed')); /* --brute 会物化 2M 候选对，heap 门禁不适用 */
   const failed = [];

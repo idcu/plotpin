@@ -11,3 +11,5 @@
 *.ico binary
 *.xlsx binary
 *.zip binary
+# DXF 导出使用 CRLF，golden 必须逐字节保留（不得做换行归一）
+*.dxf -text

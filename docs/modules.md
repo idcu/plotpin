@@ -20,7 +20,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic 
 
 | 层 | 目录 | 允许依赖 | 职责 |
 |---|---|---|---|
-| 0 · 公共库 | `js/common/` | 仅 `ngm.vendor/` | i18n、LWW 合并、符号库、DXF/PDF/QR 适配；与具体业务无关 |
+| 0 · 公共库 | `js/common/` | 仅 `ngm.vendor/` | i18n、LWW 合并、符号库（36 六类图元、别名搜索、SVG 安全清洗、JSON 往返、DXF 折线近似）、DXF/PDF/QR 适配；与具体业务无关 |
 | 1 · 内核 | `js/core/` | 0 + vendor | 常量与内置类型、模型、几何、渲染、交互、持久化、视口、启动 |
 | 2 · 功能域 | `js/features/` | 0 + 1 + vendor | 属性面板、侧栏清单、UI 外壳、插件注册点与 Worker 隔离沙箱、文件/表格导入导出、停车规划、实时协作 |
 | 3 · 入口 | `js/core/app.js` | 全部 | 能力探测、恢复工程、首屏适配、Service Worker 注册；**必须最后加载** |

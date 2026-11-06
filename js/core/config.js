@@ -101,7 +101,7 @@ const BUILTIN_TYPES = [
   {id:'point.charger', kind:'point', name:'充电桩', color:'#0f766e', icon:'charger', scaleShape:'square', builtin:true},
   {id:'point.warning', kind:'point', name:'警示点', color:'#f59e0b', icon:'warning', scaleShape:'none', builtin:true},
   {id:'point.custom', kind:'point', name:'自定义点', color:'#7c3aed', icon:'custom', scaleShape:'none', builtin:true},
-  /* 行业标准图元：来自 symbols.js 的 64 个 24×24 线性图标（安防/弱电/停车/消防/通用） */
+  /* 行业标准图元：来自 symbols.js 的 36 个 24×24 线性图标（视频监控/门禁/消防/网络/停车/其他） */
   ...((typeof SYMBOL_LIBRARY!=='undefined'?SYMBOL_LIBRARY:[]).map(sym=>({
     id:sym.id, kind:'point', name:sym.name, color:'#1e293b', icon:'symbol', scaleShape:'none',
     builtin:true, symbol:sym.paths.map(p=>typeof p==='string'?{d:p,fill:false}:p),

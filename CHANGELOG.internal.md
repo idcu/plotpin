@@ -2,6 +2,45 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · C-04 符号库（36 个六类图元 + SVG 安全导入 + DXF 折线降级）
+
+- **Commit Hash**：本条提交（`feat(symbols): 36 个分类符号库 + SVG 安全导入与 DXF 折线降级（+19,825 B）`）。复盘用 `git log --grep="36 个分类符号库" -1 --format=%H`。
+- **核心改动点**
+  - `js/common/symbols.js`（重写）：`SYMBOL_LIBRARY` 36 个图元，六类各 6 个（视频监控 / 门禁 / 消防 / 网络 / 停车 / 其他），统一 24×24 viewBox、紧凑 path；`symbolPathsFor` 作为画布 / SVG / PNG / PDF / DXF 的**唯一 path 源**。
+  - 归一入口：`normalizeSymbolPaths` / `normalizeSymbolViewBox` / `normalizeSymbolAliases`；路径字符集白名单校验，非法即抛错；`buildSymbolIndex` / `searchSymbols` 支持 id / 名称 / 别名（如「烟感」「NVR」）小写包含匹配与分类筛选。
+  - 安全清洗：`assertSafeSvg` + `parseSvgSymbol` 限制 **64 KB / 200 元素 / 16 层嵌套 / 200 条路径 / 单条 5000 字符**，逐条拒绝 script 标签、`on*` 事件、外部 `href`/`xlink:href`、`DOCTYPE`/`ENTITY`、危险元素与非法路径字符，并返回具体原因。
+  - 自有符号命名空间：`customSymbolsFromTypes` / `sanitizeSymbolBundle` 生成与校验 `{schema:'plotpin.symbols/v1', symbols, project}`；只写 `state.objectTypes`（随工程持久化），不写全局存储；id 冲突改名 `sym.import.N`，最多 200 个。
+  - 渲染：`js/core/render.js` 新增 `symbolPathCache`（WeakMap）与 `drawPointSymbol`，`phys > 0` 按真实米宽缩放、`phys = 0` 屏幕固定图标；`js/features/io-export.js` 的 SVG 分支走同一 path 源。
+  - DXF 降级：保留 POINT 锚点 + `LWPOLYLINE` 折线近似（曲线 8–10 段、圆弧 6–48 段），`dxfEntitiesForExport` 返回 `report = {symbolPoints, approxPolylines, degraded, note}`，有符号时导出弹窗列出「N 个符号按 M 条 LWPOLYLINE 近似」。
+  - 持久化/迁移：`js/core/persistence.js` 用公共归一函数校验 `symbol` / `symbolViewBox` / `category` / `symbolAliases`；`js/features/props.js` 对符号类型开放物理尺寸并给出提示。
+  - UI：`index.html` 新增第 6 页签「符号」（搜索、分类、旋转角、真实尺寸、网格预览、SVG 导入、JSON 导出/导入）；`js/features/ui-panels.js` 新增 `renderSymbolPanel` 等；`css/style.css` 追加 `.symbol-grid` / `.symbol-tile`。
+  - 测试与文档：`scripts/selftest.mjs` §55 重写（新增 39 条断言，含 10 条安全用例与 golden 逐字节比对）；`tests/e2e/symbols.spec.mjs` 3 条；`scripts/bench.mjs` 新增 500 符号场景与两条门禁；同步 `docs/engineering.md` §4.3/§5.1、`docs/features.md`、`docs/modules.md`、`README.md`。
+- **实测验证数据**
+  - **体积**：716,473 → **736,298 B（+19,825 B / +2.77%）**；gzip 220,917 → **226,912 B（+5,995 B / +2.71%）**；839,680 B 门禁余量 **103,382 B**；SHA256 `977a747853b4570828ca46569e32aa0e4e69475018d2ce0851bc2ad1b743d247`；CSP 内联脚本哈希 **41 = 41**。
+  - **selftest**：**2327 通过 / 0 失败**（基线 2288，新增 39 条；加载 41 个脚本）。
+  - **e2e**：**65 passed / 1 skipped**（基线 62/1，新增 `symbols.spec.mjs` 3 条，约 1.0m）。覆盖：别名搜索「烟感」/「NVR」与分类筛选、放置后角度/物理尺寸写回、5 例恶意 SVG 逐条 toast 原因且类型数不变、JSON 导出仅含当前工程符号且内存重置后导入只写入当前工程。
+  - **安全用例逐条（selftest + e2e 双重断言，均被拒且给出原因）**：无图形元素 / 含 script 标签 / 含 `onload` 事件属性 / 外部 `href` / `xlink:href` / 嵌套超 16 层 / 字节超 64 KB / 元素超 200 个 / `DOCTYPE` 声明 / 非法路径字符。
+  - **性能（单页 500 符号图元，六类混合，部分 1–3m 真实尺寸并带旋转）**：重建 **3.33–4.01 ms** / 缓存帧 **0.08–0.10 ms** / 直接帧 **2.83–3.23 ms**（门禁 ≤60ms，3 轮实测）；`buildSymbolIndex()` 200 次平均 **0.012–0.014 ms**（36 个图元，门禁 ≤10ms）。
+  - **golden**：`tests/golden/plain-scene.svg` 4,730 B（SHA256 `7DC61074361D10FB8F931F064B66EF1D8EC58B4F442BB5F5499ABE0114C243A4`）、`.dxf` 900 B（`D5B0EC4734DB0CB78B313C85C1B16A778E291403D2307C2E64175A4A1B506ED9`）；`symbol-scene.svg` 5,012 B（`54661926E7207252300EEF02CD2F552368C69A9A64EFBEA5FC6D982D0851BB22`）、`.dxf` 4,753 B（`A57B8EAEC89FCE2F49FDA0E2501018103E890671F0D83FE2CBA098E70D043B05`）。
+  - **既有工程不受影响**：plain-scene golden 由 HEAD worktree 代码生成，与 C-04 后代码导出结果**逐字节一致**（SVG / DXF 均一致）。
+  - **构建门禁**：`node scripts/build.mjs --check` 二次构建确定性一致；`node scripts/check-gates.mjs` 通过。
+- **未验证项**
+  - **Firefox / Safari 未测**：SVG 导入与文件下载只在 Chromium（Playwright bundled）验证。
+  - **真实浏览器 500 符号帧率未测**：性能数据来自 bench 的 Node 桩（Canvas 上下文替身），不是 Chromium 真实帧；`perf:browser` 未加符号场景。
+  - **极复杂 SVG 未测**：200 条路径 × 5000 字符的上限组合没有做端到端耗时打点，只测单点解析。
+  - **PDF 输出未单独取证**：PDF 走与 SVG 同一渲染链路，但本轮没有 PDF 字节级 golden。
+  - **旧工程 64 图标的视觉回归未逐项比对**：仅确认类型随工程 JSON 保留，外观未逐图标截图对比。
+- **遗留 TODO / 风险**
+  - DXF 折线为近似：圆弧/曲线精度受 8–10 / 6–48 段采样限制，且不还原填充；大尺寸符号会放大折线数量（单个符号最多约 200 条折线）。
+  - SVG 导入只识别 path / circle / rect / polygon / polyline / line，其余元素被静默忽略（不报错但也不进入图元数据）。
+  - 符号搜索为小写包含匹配，无拼音、分词与模糊匹配；36 个内置图元之外仍须用户自行导入。
+  - 符号旋转角、真实尺寸在放置时来自**临时 `symbolPlace`**，不持久化；刷新后需重新设置默认值。
+  - 内置符号集合由旧版 64 个图标收敛为 36 个，新工程默认类型集变化；旧工程依赖工程 JSON 内的 `objectTypes` 保留，新工程无法再选到被移除的旧图标。
+- **受影响调用方 / 公共抽象**
+  - `drawPoint` / `svgPointIcon` / `dxfEntitiesForExport` 的符号分支：无符号类型走原路径，导出字节不变；`dxfEntitiesForExport` 返回值由数组改为 `{entities,layers,report}`，调用方已同步。
+  - 新增公共抽象（详见 `docs/modules.md`）：`symbolPathsFor`（唯一 path 源）、`normalizeSymbolPaths` / `normalizeSymbolViewBox` / `normalizeSymbolAliases`（数据归一唯一入口）、`assertSafeSvg` / `parseSvgSymbol`（SVG 安全清洗）、`buildSymbolIndex` / `searchSymbols`（检索）、`customSymbolsFromTypes` / `sanitizeSymbolBundle`（JSON 包）、`symbolPolylinesInWorld` / `pathToPolylines`（DXF 折线近似）。
+  - 无新增运行时依赖；`index.html` 仅多一个内联脚本块与第 6 页签，未改 `camera-*`。
+
 ## 2026-11-06 · C-05 几何规则检查（重叠 / 间距 / 越界 + 可注册框架与 CSV）
 
 - **Commit Hash**：本条提交（`feat(rules): 几何规则检查框架与三条内建规则（+31,123 B）`）。复盘用 `git log --grep="几何规则检查框架" -1 --format=%H`。

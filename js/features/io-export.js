@@ -459,10 +459,10 @@ function buildSceneSvg(){
     }else if(icon==='custom'){
       body=`<path d="M0,-10 L10,0 L0,10 L-10,0 Z" fill="${color}"/>`;
     }else if(icon==='symbol'){
-      /* 行业/自定义 SVG 图元：24 单位坐标系（或自定义 viewBox）居中缩放到图标尺寸 */
+      /* 行业/自定义 SVG 图元：与画布共用 symbolPathsFor 的 path 源 */
       const vb=type&&type.symbolViewBox||{x:0,y:0,w:24,h:24};
       const fs=0.9*24/Math.max(vb.w,vb.h);
-      const paths=(type&&type.symbol||[]).map(p=>`<path d="${esc(p.d)}" fill="${p.fill?color:'none'}" stroke="${p.fill?'none':color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+      const paths=(type?symbolPathsFor(type):[]).map(p=>`<path d="${esc(p.d)}" fill="${p.fill?color:'none'}" stroke="${p.fill?'none':color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
       body=`<g transform="translate(${-(vb.x+vb.w/2)*fs} ${-(vb.y+vb.h/2)*fs}) scale(${fs})">${paths}</g>`;
     }else{
       body=`<circle cx="0" cy="0" r="7" fill="#fff" stroke="${color}" stroke-width="2"/><circle cx="0" cy="0" r="3.5" fill="${color}"/>`;
@@ -505,7 +505,14 @@ function buildSceneSvg(){
       markers.push(annotItemsSvg(o));
     }else if(o.kind==='point'){
       const x=X(o.x),y=Y(o.y), psh=t.scaleShape||'none';
-      if((o.phys||0)>0&&psh!=='none'){
+      /* 符号真实尺寸：phys>0 时按米缩放，与画布同一 path 源与同一尺寸基准 */
+      const symSize=(t.symbol&&t.symbol.length&&(o.phys||0)>0)?o.phys*ppu:0;
+      if(symSize){
+        const vb=t.symbolViewBox||{x:0,y:0,w:24,h:24};
+        const fs=symSize/Math.max(vb.w,vb.h), lw=Math.max(.06,Math.min(6,1.6/fs));
+        const paths=symbolPathsFor(t).map(p=>`<path d="${esc(p.d)}" fill="${p.fill?color:'none'}" stroke="${p.fill?'none':color}" stroke-width="${lw.toFixed(3)}" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+        shapes.push(`<g transform="translate(${x} ${y}) rotate(${-o.angle})"><g transform="translate(${-(vb.x+vb.w/2)*fs} ${-(vb.y+vb.h/2)*fs}) scale(${fs})">${paths}</g></g>`);
+      }else if((o.phys||0)>0&&psh!=='none'){
         const R=o.phys*ppu, half=R/2, sw=Math.max(1.5,.06*ppu);
         let body='';
         if(psh==='circle') body=`<circle r="${half}" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-width="${sw}"/>`;
@@ -576,15 +583,28 @@ function siteDxfEntities(){
 function dxfEntitiesForExport(){
   const entities=[];
   const layers=state.layers.map(l=>({name:l.name,color:'#7c3aed'}));
+  /* DXF 明确降级报告：符号点保留 POINT 锚点，形状以折线近似（不静默丢失） */
+  const report={symbolPoints:0, approxPolylines:0, degraded:false,
+    note:'符号图元在 DXF 中以 LWPOLYLINE 折线近似（曲线/圆弧离散），不可再编辑为符号；真实尺寸按对象 phys，phys=0 时用 0.6 m 名义尺寸。'};
   /* 矢量场地：独立 SITE 图层，闭合 LWPOLYLINE（不进 objects/CSV/XLSX） */
   const siteEnts=siteDxfEntities();
   if(siteEnts.length&&!layers.some(l=>l.name==='SITE')) layers.push({name:'SITE',color:'#16a34a'});
   entities.push(...siteEnts);
   state.objects.filter(isVisible).forEach(o=>{
-    const color=o.style.color||getType(o.typeId).color||'#111827';
+    const t=getType(o.typeId);
+    const color=o.style.color||t.color||'#111827';
     const layer=layerOf(o).name;
     if(o.kind==='point'){
       entities.push({type:'POINT',layer,color,x:o.x,y:o.y});
+      if(t.symbol&&t.symbol.length){
+        const size=(o.phys||0)>0?o.phys:0.6;
+        const polys=symbolPolylinesInWorld(t,o.x,o.y,size,o.angle,t.symbolViewBox);
+        for(const poly of polys){
+          entities.push({type:'LWPOLYLINE',layer,color,points:poly.points,closed:!!poly.closed});
+          report.approxPolylines++;
+        }
+        report.symbolPoints++;
+      }
     }else if(o.kind==='line'){
       entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:!!o.closed});
     }else if(o.kind==='rect'){
@@ -603,13 +623,21 @@ function dxfEntitiesForExport(){
       entities.push({type:'TEXT',layer,color:o.style.color||'#111827',x:o.x,y:o.y,text:o.text||'文字',height:o.height||1});
     }
   });
-  return {entities,layers};
+  report.degraded=report.symbolPoints>0;
+  return {entities,layers,report};
 }
 function exportDXF(){
-  const {entities,layers}=dxfEntitiesForExport();
+  const {entities,layers,report}=dxfEntitiesForExport();
   if(!entities.length) return toast('当前没有可导出的对象','warn');
   downloadBlob(new Blob([ensureVendor('Dxf').buildDxf(entities,layers)],{type:'image/vnd.dxf;charset=utf-8'}),safeName()+'.dxf');
-  toast('DXF 已导出（坐标单位：毫米，可用 AutoCAD/LibreCAD 打开）','success');
+  if(report&&report.degraded){
+    openModal(L('DXF 导出报告'),
+      `<p>${esc(L('本次导出含 {n} 个符号图元，已按 {m} 条 LWPOLYLINE 折线近似（曲线/圆弧离散）。',{n:report.symbolPoints,m:report.approxPolylines}))}</p>`+
+      `<p class="hint-text">${esc(report.note)}</p>`,
+      [{text:L('知道了'),class:'primary',click:closeModal}]);
+  }else{
+    toast('DXF 已导出（坐标单位：毫米，可用 AutoCAD/LibreCAD 打开）','success');
+  }
 }
 
 /* -------------------- 多页 PDF 导出（图纸页 + 完整清单分页） -------------------- */

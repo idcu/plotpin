@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1774.2857142857142" height="1260" viewBox="0 0 1774.2857142857142 1260">
+<rect width="100%" height="100%" fill="white"/>
+<g><polygon points="30,1230 1744.2857142857142,1230 1744.2857142857142,-141.42857142857142 30,-141.42857142857142" fill="#eef2f7" stroke="#3b82f6" stroke-width="2"/>
+<polygon points="544.2857142857142,852.8571428571429 842.3428263977696,772.992980368365 789.1000514052511,574.2882389603282 491.04293929319573,654.1524014491059" fill="#2563eb" fill-opacity="0.13" stroke="#2563eb" stroke-width="2.057142857142857"/>
+<polyline points="972.8571428571428,1058.5714285714284 1264.2857142857142,990 1195.7142857142858,544.2857142857142" fill="none" fill-opacity=".08" stroke="#334155" stroke-width="2.4000000000000004" stroke-linejoin="round"/></g><g font-family="Microsoft YaHei,Arial,sans-serif"><text x="887.1428571428571" y="537.2857142857142" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">面积 8000.00 ㎡</text><text x="887.1428571428571" y="553.2857142857142" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">周长 360.00 m</text>
+<text x="35" y="1225" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P1 (0.00, 0.00)</text>
+<text x="1749.2857142857142" y="1225" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P2 (100.00, 0.00)</text>
+<text x="1749.2857142857142" y="-146.42857142857142" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P3 (100.00, 80.00)</text>
+<text x="35" y="-146.42857142857142" font-size="11" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">P4 (0.00, 80.00)</text>
+<text x="887.1428571428571" y="1230" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">100.00 m</text>
+<text x="1744.2857142857142" y="544.2857142857142" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">80.00 m</text>
+<text x="887.1428571428571" y="-141.42857142857142" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">100.00 m</text>
+<text x="30" y="544.2857142857142" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">80.00 m</text>
+<g transform="translate(235.71428571428572 990) rotate(-30) scale(1)"><circle cx="0" cy="0" r="7" fill="#fff" stroke="#2563eb" stroke-width="2"/><circle cx="0" cy="0" r="3.5" fill="#2563eb"/></g>
+<text x="235.71428571428572" y="970" text-anchor="middle" font-size="12" fill="#2563eb" stroke="#fff" stroke-width="3" paint-order="stroke">P1</text>
+
+<text x="666.6928828454827" y="713.5726909087355" text-anchor="middle" font-size="14" fill="#2563eb" stroke="#fff" stroke-width="3" paint-order="stroke">R1</text>
+<text x="666.6928828454827" y="706.5726909087355" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">面积 216.00 ㎡</text><text x="666.6928828454827" y="722.5726909087355" text-anchor="middle" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">周长 60.00 m</text>
+
+<text x="1264.2857142857142" y="982" text-anchor="middle" font-size="12" font-weight="bold" fill="#334155" stroke="#fff" stroke-width="3" paint-order="stroke">L1</text>
+<text x="1121.5714285714284" y="1009.2857142857142" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">17.46 m</text><text x="1233" y="752.1428571428571" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">26.31 m</text><text x="1204.7142857142858" y="539.2857142857142" font-size="12" font-family="Consolas,Menlo,monospace" fill="#1e3a8a" stroke="#fff" stroke-width="3" paint-order="stroke">Σ 43.77 m</text></g>
+<text x="30" y="1252" font-size="11" fill="#666">C-04 基线工程 · 矩形场地：100.00×80.00 m（世界坐标，无需比例尺校准）</text>
+</svg>

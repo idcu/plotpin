@@ -349,10 +349,13 @@ function renderProps(){
       <label class="span2">${esc(L('节点'))}</label>${renderNodeEditor(o)}`;
   }else if(o.kind==='point'){
     const psh=t.scaleShape||'none';
-    const canScale=psh!=='none';
-    const physHint=canScale
-      ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh==='sector'?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
-      : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。'))}</div>`;
+    const isSymbol=Array.isArray(t.symbol)&&t.symbol.length>0;
+    const canScale=psh!=='none'||isSymbol;
+    const physHint=isSymbol
+      ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('符号图元：填 0 为屏幕固定图标；填图元外接宽度（米）后按真实比例随底图缩放，朝向随朝向角旋转。'))}</div>`
+      : canScale
+        ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh==='sector'?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
+        : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。'))}</div>`;
     const ci=currentCatalog?currentCatalog.items:[];
     const vendors=Array.from(new Set(ci.map(it=>it.vendor)));
     const catList=ci.length?`<datalist id="catModels">${ci.map(it=>`<option value="${esc(it.model)}">`).join('')}</datalist><datalist id="catVendors">${vendors.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`:'';

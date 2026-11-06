@@ -210,8 +210,85 @@ $('symFileInput').addEventListener('change',async e=>{
     state.objectTypes.push({id:uid('sym'),kind:'point',name,color:'#7c3aed',icon:'symbol',
       scaleShape:'none',builtin:false,symbol:parsed.paths,symbolViewBox:parsed.vb});
     commitChange(L('已导入 SVG 图元：{name}',{name}));
-    populateSelects(); renderTypes();
+    populateSelects(); renderTypes(); renderSymbolPanel();
   }catch(err){ toast(L('SVG 导入失败：{msg}',{msg:err.message}),'error'); }
+});
+
+/* -------------------- 符号库面板（C-04） -------------------- */
+function symbolAliasText(t){
+  const lib=SYMBOL_LIBRARY.find(x=>x.id===t.id);
+  return (lib&&lib.aliases)||t.symbolAliases||[];
+}
+function symbolCategory(t){
+  const lib=SYMBOL_LIBRARY.find(x=>x.id===t.id);
+  return (lib&&lib.cat)||t.category||'其他';
+}
+/** 预览与画布/SVG 共用 symbolPathsFor 的 path 源，避免三套图形不一致 */
+function symbolPreviewSvg(t,size){
+  const vb=normalizeSymbolViewBox(t.symbolViewBox);
+  const paths=symbolPathsFor(t).map(p=>`<path d="${esc(p.d)}" fill="${p.fill?esc(t.color||'#7c3aed'):'none'}" stroke="${p.fill?'none':esc(t.color||'#7c3aed')}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+  const px=size||34;
+  return `<svg viewBox="${vb.x} ${vb.y} ${vb.w} ${vb.h}" width="${px}" height="${px}" aria-hidden="true" focusable="false">${paths}</svg>`;
+}
+function renderSymbolPanel(){
+  const grid=$('symbolGrid');
+  if(!grid) return;
+  const catSel=$('symbolCat');
+  if(catSel&&catSel.options.length<=1){
+    SYMBOL_CATEGORIES.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); });
+  }
+  const q=String(($('symbolSearch')&&$('symbolSearch').value)||'').trim().toLowerCase();
+  const cat=(catSel&&catSel.value)||'';
+  const list=state.objectTypes.filter(t=>t&&t.kind==='point'&&Array.isArray(t.symbol)&&t.symbol.length)
+    .filter(t=>{
+      if(cat&&symbolCategory(t)!==cat) return false;
+      if(!q) return true;
+      const text=[t.id,t.name,typeDisplayName(t)].concat(symbolAliasText(t)).join(' ').toLowerCase();
+      return text.includes(q);
+    });
+  grid.innerHTML=list.length?list.map(t=>`
+    <button type="button" class="symbol-tile" data-symbol-id="${esc(t.id)}" title="${esc(symbolAliasText(t).join(' / ')||typeDisplayName(t))}">
+      ${symbolPreviewSvg(t)}
+      <span>${esc(typeDisplayName(t))}</span>
+    </button>`).join(''):`<div class="hint-text">没有匹配的符号</div>`;
+  grid.querySelectorAll('[data-symbol-id]').forEach(b=>b.onclick=()=>{
+    const t=state.objectTypes.find(x=>x.id===b.dataset.symbolId);
+    if(!t) return;
+    symbolPlace.angle=Number($('symbolAngle')&&$('symbolAngle').value)||0;
+    symbolPlace.phys=Math.max(0,Number($('symbolPhys')&&$('symbolPhys').value)||0);
+    const sel=$('pointType'); if(sel) sel.value=t.id;
+    setTool('point');
+    toast(L('已选择符号「{name}」，点击画布放置',{name:typeDisplayName(t)}),'success');
+  });
+  const count=$('symbolCount');
+  if(count) count.textContent=L('共 {n} 个符号（六类内置 + 自有导入）',{n:list.length});
+}
+function exportSymbolBundle(){
+  const bundle=customSymbolsFromTypes(state.objectTypes,state.meta);
+  if(!bundle.symbols.length) return toast(L('当前工程没有自定义符号可导出'),'warn');
+  downloadBlob(new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'}),safeName()+'-symbols.json');
+  toast(L('已导出 {n} 个自定义符号（仅当前工程）',{n:bundle.symbols.length}),'success');
+}
+async function importSymbolBundleFile(file){
+  try{
+    const raw=JSON.parse(await file.text());
+    const types=sanitizeSymbolBundle(raw,state.objectTypes.map(t=>t.id));
+    if(!types.length) return toast(L('JSON 中没有可导入的符号'),'warn');
+    pushHistory();
+    state.objectTypes.push(...types);
+    commitChange(L('已导入自定义符号：{n} 个',{n:types.length}));
+    populateSelects(); renderTypes(); renderSymbolPanel();
+    toast(L('已导入 {n} 个符号（仅写入当前工程）',{n:types.length}),'success');
+  }catch(err){ toast(L('符号 JSON 导入失败：{msg}',{msg:err.message}),'error'); }
+}
+if($('symbolSearch')) $('symbolSearch').addEventListener('input',renderSymbolPanel);
+if($('symbolCat')) $('symbolCat').addEventListener('change',renderSymbolPanel);
+if($('symbolImportSvgBtn')) $('symbolImportSvgBtn').onclick=()=>$('symFileInput').click();
+if($('symbolExportJsonBtn')) $('symbolExportJsonBtn').onclick=exportSymbolBundle;
+if($('symbolImportJsonBtn')) $('symbolImportJsonBtn').onclick=()=>$('symbolJsonInput').click();
+if($('symbolJsonInput')) $('symbolJsonInput').addEventListener('change',async e=>{
+  const f=e.target.files[0]; e.target.value='';
+  if(f) await importSymbolBundleFile(f);
 });
 
 /* -------------------- 统计 / 校验 -------------------- */
@@ -414,6 +491,6 @@ function refreshUI(){
   if(msEl) msEl.value=String(Number(state.settings.markerScale)||1);
   const msLbl=$('markerScaleLabel');
   if(msLbl) msLbl.textContent=(Number(state.settings.markerScale)||1).toFixed(1)+'×';
-  renderProps(); renderList(); renderLayers(); renderTypes(); renderStats(); updateZoomLabel();
+  renderProps(); renderList(); renderLayers(); renderTypes(); renderSymbolPanel(); renderStats(); updateZoomLabel();
   updateHistoryButtons();
 }

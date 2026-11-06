@@ -9,7 +9,7 @@
  *
  *   node scripts/selftest.mjs
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
@@ -147,6 +147,12 @@ code += `\n;globalThis.__api = {
   dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
+  SYMBOL_CATEGORIES: globalThis.SYMBOL_CATEGORIES, SYMBOL_LIMITS: globalThis.SYMBOL_LIMITS,
+  searchSymbols: globalThis.searchSymbols, buildSymbolIndex: globalThis.buildSymbolIndex,
+  symbolPathsFor: globalThis.symbolPathsFor, normalizeSymbolPaths: globalThis.normalizeSymbolPaths,
+  normalizeSymbolViewBox: globalThis.normalizeSymbolViewBox, normalizeSymbolAliases: globalThis.normalizeSymbolAliases,
+  symbolPolylinesInWorld: globalThis.symbolPolylinesInWorld, pathToPolylines: globalThis.pathToPolylines,
+  customSymbolsFromTypes: globalThis.customSymbolsFromTypes, sanitizeSymbolBundle: globalThis.sanitizeSymbolBundle,
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
   parkingLayout, parkingWarningText, applyParkingLayout,
@@ -3552,46 +3558,69 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
-/* 55. 行业图元库与自定义 SVG 导入 ------------------------------------------- */
+/* 55. 符号库（C-04）：36 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden */
 {
   const lib=api.SYMBOL_LIBRARY;
-  ok('图元库-数量≥60', lib.length>=60);
-  eq('图元库-id唯一', new Set(lib.map(s=>s.id)).size, lib.length);
-  eq('图元库-名称唯一', new Set(lib.map(s=>s.name)).size, lib.length);
-  ok('图元库-每条都有路径', lib.every(s=>Array.isArray(s.paths)&&s.paths.length>0));
-  ok('图元库-覆盖安防/弱电/停车/消防', ['安防','弱电','停车','消防'].every(cat=>lib.some(s=>s.cat===cat)));
-  eq('图元库-全部注册为内置点类型', api.BUILTIN_TYPES.filter(t=>t.kind==='point'&&t.symbol&&t.symbol.length).length, lib.length);
+  eq('符号库-总数36', lib.length, 36);
+  eq('符号库-分类固定六类', api.SYMBOL_CATEGORIES, ['视频监控','门禁','消防','网络','停车','其他']);
+  api.SYMBOL_CATEGORIES.forEach(cat=>eq('符号库-分类数量 '+cat, lib.filter(s=>s.cat===cat).length, 6));
+  eq('符号库-id唯一', new Set(lib.map(s=>s.id)).size, lib.length);
+  eq('符号库-名称唯一', new Set(lib.map(s=>s.name)).size, lib.length);
+  ok('符号库-每条都有别名与路径', lib.every(s=>Array.isArray(s.aliases)&&s.aliases.length&&Array.isArray(s.paths)&&s.paths.length));
+  eq('符号库-全部注册为内置点类型', api.BUILTIN_TYPES.filter(t=>t.kind==='point'&&t.symbol&&t.symbol.length).length, lib.length);
+  ok('符号库-别名搜索烟感', api.searchSymbols('烟感').some(s=>s.id==='sym.smoke'));
+  ok('符号库-别名搜索NVR', api.searchSymbols('nvr').some(s=>s.id==='sym.nvr'));
+  eq('符号库-分类筛选消防', api.searchSymbols('','消防').length, 6);
+  ok('符号库-引擎索引构建', api.buildSymbolIndex().length===36);
 
-  /* SVG 导入：path/circle/rect/polygon/line + viewBox + 安全与上限 */
+  /* SVG 导入：path/circle/rect/polygon/line + viewBox */
   const parsed=api.parseSvgSymbol('<svg viewBox="0 0 48 32"><path d="M0 0L10 10" fill="none"/><circle cx="5" cy="6" r="2"/><rect x="1" y="2" width="3" height="4"/><polygon points="0,0 1,0 1,1"/><line x1="0" y1="0" x2="2" y2="2"/></svg>');
   eq('SVG导入-viewBox解析', parsed.vb, {x:0,y:0,w:48,h:32});
   eq('SVG导入-五类图元路径数', parsed.paths.length, 5);
   ok('SVG导入-圆形转路径', parsed.paths[1].d.includes('a2 2'));
   ok('SVG导入-矩形转路径', parsed.paths[2].d.includes('h3v4'));
   ok('SVG导入-多边形闭合', parsed.paths[3].d.endsWith('Z'));
-  let err=null; try{ api.parseSvgSymbol('<svg></svg>'); }catch(e){ err=e; }
-  ok('SVG导入-无图形拒绝', !!err&&/未找到/.test(err.message));
-  err=null; try{ api.parseSvgSymbol('<svg><script>alert(1)</script><path d="M0 0L1 1"/></svg>'); }catch(e){ err=e; }
-  ok('SVG导入-含脚本拒绝', !!err&&/脚本/.test(err.message));
-  const many=Array.from({length:201},()=>'<path d="M0 0L1 1"/>').join('');
-  err=null; try{ api.parseSvgSymbol('<svg>'+many+'</svg>'); }catch(e){ err=e; }
-  ok('SVG导入-路径数上限200', !!err&&/最多 200/.test(err.message));
 
-  /* 迁移保留自定义图元几何 */
+  /* 安全：逐条断言拒绝并给出原因 */
+  const bad=[
+    ['无图形','<svg></svg>',/未找到/],
+    ['script','<svg><script>alert(1)</script><path d="M0 0L1 1"/></svg>',/脚本/],
+    ['onload 事件','<svg><path d="M0 0L1 1" onload="alert(1)"/></svg>',/on\* 事件/],
+    ['外部 href','<svg><path d="M0 0L1 1" href="https://evil.example/x.svg"/></svg>',/外部资源/],
+    ['外部 xlink:href','<svg><path d="M0 0L1 1" xlink:href="//evil.example/x.svg"/></svg>',/外部资源/],
+    ['超深嵌套','<svg>'+'<g>'.repeat(20)+'<path d="M0 0L1 1"/>'+'</g>'.repeat(20)+'</svg>',/嵌套过深/],
+    ['超大字节','<svg><path d="M0 0L1 1"/>'+' '.repeat(70000)+'</svg>',/64 KB/],
+    ['元素超限','<svg>'+'<path d="M0 0L1 1"/>'.repeat(210)+'</svg>',/元素过多/],
+    ['DOCTYPE','<!DOCTYPE svg><svg><path d="M0 0L1 1"/></svg>',/DOCTYPE/],
+    ['危险元素 style','<svg><style>*{fill:red}</style><path d="M0 0L1 1"/></svg>',/<style>/],
+    ['非法 path 字符','<svg><path d="M0 0%1 1"/></svg>',/非法字符/]
+  ];
+  bad.forEach(([name,text,re])=>{
+    let err=null; try{ api.parseSvgSymbol(text); }catch(e){ err=e; }
+    ok('SVG安全-'+name+'被拒并给原因', !!err&&re.test(err.message));
+  });
+
+  /* 迁移保留自定义图元几何；跑到非法 path 直接丢弃 */
   const m=api.migrateProject({schema:'offline-drawing-annotation/v1',
     objectTypes:[{id:'sym.test',kind:'point',name:'测试图元',color:'#123456',icon:'symbol',
-      symbol:[{d:'M0 0L10 10',fill:false}],symbolViewBox:{x:0,y:0,w:48,h:32}}],objects:[]});
+      symbol:[{d:'M0 0L10 10',fill:false}],symbolViewBox:{x:0,y:0,w:48,h:32},
+      category:'其他',symbolAliases:['测试别名']}],objects:[]});
   const tt=m.objectTypes.find(t=>t.id==='sym.test');
   ok('图元-迁移保留路径', !!tt&&tt.symbol.length===1&&tt.symbol[0].d==='M0 0L10 10');
   eq('图元-迁移保留viewBox', tt&&tt.symbolViewBox.w, 48);
+  ok('图元-迁移保留分类与别名', tt&&tt.category==='其他'&&tt.symbolAliases.includes('测试别名'));
 
-  /* 属性面板列出行业图元；SVG 导出使用同一路径；无 Path2D 环境降级不抛错 */
+  /* 属性面板、同一 path 源、真实尺寸 SVG、无 Path2D 降级 */
   api.resetState();
-  const pt=api.baseObject('point',lib[0].id,{name:'SYM',x:1,y:1});
+  const pt=api.baseObject('point',lib[0].id,{name:'SYM',x:1,y:1,angle:30,phys:2});
   api.state.objects=[pt]; api.selectedIds.add(pt.id); api.renderProps();
   ok('图元-属性面板类型下拉含行业图元', api.$('propPanel').innerHTML.includes('枪机摄像头'));
+  ok('图元-属性面板显示真实尺寸', api.$('propPanel').innerHTML.includes('物理尺寸(m)'));
+  const symType=api.state.objectTypes.find(t=>t.id===lib[0].id);
+  ok('图元-统一 path 源', JSON.stringify(api.symbolPathsFor(symType))===JSON.stringify(lib[0].paths.map(p=>({d:p,fill:false}))));
   const svg=api.buildSceneSvg();
   ok('图元-SVG导出包含图元路径', svg.includes('M3 9h11v6H3z')&&svg.includes('stroke-linecap="round"'));
+  ok('图元-真实尺寸按米缩放', /rotate\(-30\)"><g transform=/.test(svg));
   const rec=new Proxy({},{get(t,p){
     if(p==='then') return undefined;
     if(p==='measureText') return ()=>({width:10});
@@ -3601,6 +3630,78 @@ asyncSuites.push((async()=>{
   },set(t,p,v){ t[p]=v; return true; }});
   let threw=false; try{ api.drawObject(rec,pt,{zoom:1},p=>p,1,1); }catch(e){ threw=true; }
   ok('图元-无Path2D环境降级不抛错', !threw);
+
+  /* DXF：明确降级为折线近似，保留锚点，不静默丢失 */
+  api.resetState();
+  api.state.objects=[api.baseObject('point',lib[0].id,{name:'S1',x:10,y:20,angle:45,phys:2})];
+  const dxf=api.dxfEntitiesForExport();
+  eq('DXF降级-符号点数', dxf.report.symbolPoints, 1);
+  ok('DXF降级-生成折线', dxf.report.approxPolylines>0&&dxf.entities.some(e=>e.type==='LWPOLYLINE'));
+  ok('DXF降级-保留POINT锚点', dxf.entities.some(e=>e.type==='POINT'));
+  ok('DXF降级-报告标注说明', dxf.report.degraded&&/折线近似/.test(dxf.report.note));
+  const poly=api.pathToPolylines(lib[0].paths[1]);
+  ok('DXF降级-圆弧离散', poly.length>0&&poly[0].points.length>3);
+  const world=api.symbolPolylinesInWorld({symbol:lib[0].paths,symbolViewBox:lib[0].views},10,20,2,45);
+  ok('DXF降级-世界尺寸与旋转', world.length>0&&Math.abs(world[0].points[0][0]-10)<2&&Math.abs(world[0].points[0][1]-20)<2);
+
+  /* 自定义符号 JSON：导出仅当前工程、导入生成新 id、换工程不串数据 */
+  api.resetState();
+  api.state.objectTypes.push({id:'sym.custom.1',kind:'point',name:'自有图元',color:'#123456',icon:'symbol',
+    builtin:false,scaleShape:'none',category:'其他',symbolAliases:['自定'],
+    symbol:[{d:'M0 0L10 10',fill:false}],symbolViewBox:{x:0,y:0,w:24,h:24}});
+  const bundle=api.customSymbolsFromTypes(api.state.objectTypes,api.state.meta);
+  eq('符号JSON-仅导出自定义', bundle.symbols.length, 1);
+  eq('符号JSON-schema', bundle.schema, 'plotpin.symbols/v1');
+  const imported=api.sanitizeSymbolBundle(bundle,api.state.objectTypes.map(t=>t.id));
+  eq('符号JSON-导入数量', imported.length, 1);
+  ok('符号JSON-id冲突自动改新名', imported[0].id!=='sym.custom.1');
+  api.state.objectTypes.push(...imported);
+  let jsonErr=null; try{ api.sanitizeSymbolBundle({symbols:[{name:'坏',paths:[{d:'<script>alert(1)</script>'}]}]},[]); }catch(e){ jsonErr=e; }
+  ok('符号JSON-非法路径拒绝', !!jsonErr&&/非法字符/.test(jsonErr.message));
+  const beforeCount=api.state.objectTypes.length;
+  api.resetState();
+  eq('符号JSON-工程隔离', api.state.objectTypes.filter(t=>t.id==='sym.custom.1').length, 0);
+  ok('符号JSON-新工程不含导入符号', api.state.objectTypes.length<beforeCount);
+
+  /* golden：无符号工程逐字节不变；符号工程采集 SVG/DXF */
+  const goldenRoot=join(root,'tests','golden');
+  function plainFixture(){
+    api.resetState();
+    api.state.meta.name='C-04 基线工程';
+    api.state.site={id:'site.golden',name:'基准场地',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:80}};
+    api.state.background={kind:'empty',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:0.1,calibrated:false,transform:null};
+    const a=api.baseObject('point','point.marker',{name:'P1',x:12,y:14,angle:30});
+    const b=api.baseObject('rect','rect.area',{name:'R1',x:30,y:22,width:18,height:12,angle:15});
+    const c=api.baseObject('line','line.boundary',{name:'L1',points:[[55,10],[72,14],[68,40]],closed:false});
+    api.state.objects=[a,b,c];
+  }
+  function symbolFixture(){
+    api.resetState();
+    api.state.meta.name='C-04 符号工程';
+    api.state.site={id:'site.golden',name:'基准场地',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:80}};
+    api.state.background={kind:'empty',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:0.1,calibrated:false,transform:null};
+    api.state.objects=[
+      api.baseObject('point','sym.camera_gun',{name:'S1',x:12,y:14,angle:0,phys:0}),
+      api.baseObject('point','sym.smoke',{name:'S2',x:40,y:30,angle:45,phys:0}),
+      api.baseObject('point','sym.dome',{name:'S3',x:60,y:50,angle:30,phys:2.5})
+    ];
+  }
+  function goldenCase(name,build){
+    build();
+    const svg=api.buildSceneSvg();
+    const dxf=api.Dxf.buildDxf(api.dxfEntitiesForExport().entities,api.dxfEntitiesForExport().layers);
+    if(process.env.UPDATE_GOLDEN==='1'){
+      writeFileSync(join(goldenRoot,name+'.svg'),svg,'utf8');
+      writeFileSync(join(goldenRoot,name+'.dxf'),dxf,'utf8');
+      return;
+    }
+    const wantSvg=readFileSync(join(goldenRoot,name+'.svg'),'utf8');
+    const wantDxf=readFileSync(join(goldenRoot,name+'.dxf'),'utf8');
+    eq('golden-'+name+'.svg 逐字节一致', svg, wantSvg);
+    eq('golden-'+name+'.dxf 逐字节一致', dxf, wantDxf);
+  }
+  goldenCase('plain-scene',plainFixture);
+  goldenCase('symbol-scene',symbolFixture);
   api.resetState();
 }
 
@@ -4119,11 +4220,11 @@ asyncSuites.push((async()=>{
 
   /* ARIA tablist：每个页签有关联面板，每个面板有标签来源 */
   const tabBtns=[...html.matchAll(/<button[^>]*class="side-tab[^"]*"[^>]*>/g)].map(m=>m[0]);
-  eq('无障碍-页签按钮数', tabBtns.length, 5);
+  eq('无障碍-页签按钮数', tabBtns.length, 6);
   ok('无障碍-页签均有 aria-controls', tabBtns.every(s=>/aria-controls="tab-/.test(s)));
   ok('无障碍-页签均有 roving tabindex', tabBtns.every(s=>/tabindex="(?:0|-1)"/.test(s)));
   const tabPanels=[...html.matchAll(/<section[^>]*class="tab-pane[^"]*"[^>]*>/g)].map(m=>m[0]);
-  eq('无障碍-页签面板数', tabPanels.length, 5);
+  eq('无障碍-页签面板数', tabPanels.length, 6);
   ok('无障碍-面板均为 tabpanel', tabPanels.every(s=>/role="tabpanel"/.test(s)));
   ok('无障碍-面板均有 aria-labelledby', tabPanels.every(s=>/aria-labelledby="tabBtn-/.test(s)));
 

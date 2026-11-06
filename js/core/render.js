@@ -683,18 +683,31 @@ function drawPhysicalPoint(c,o,color,type,toS,v,markerScale){
   c.restore();
   drawLabel(c,o,s[0],s[1]-Math.max(13,R/2+6),color,toS,12*markerScale);
 }
-/** 行业图元/SVG 图元：按 24×24（或自定义 viewBox）归一化到屏幕图标尺寸 */
-function drawPointSymbol(c,type,color,s,a,k){
+/** 符号 Path2D 缓存：同一类型在 500 图元/多帧渲染中只构造一次 */
+const symbolPathCache=new WeakMap();
+function symbolRenderPaths(type){
+  if(typeof Path2D!=='function') return null;
+  let hit=symbolPathCache.get(type);
+  if(!hit){
+    hit=symbolPathsFor(type).map(p=>{ try{ return {path:new Path2D(p.d),fill:p.fill}; }catch(_){ return null; } }).filter(Boolean);
+    symbolPathCache.set(type,hit);
+  }
+  return hit;
+}
+/** 行业图元/SVG 图元：默认屏幕图标尺寸；sizePx 给定时按世界真实尺寸渲染 */
+function drawPointSymbol(c,type,color,s,a,k,sizePx){
   const vb=type.symbolViewBox||{x:0,y:0,w:24,h:24};
-  const fs=k*0.9*24/Math.max(vb.w,vb.h);
+  const span=Math.max(vb.w,vb.h)||24;
+  const fs=sizePx?sizePx/span:k*0.9*24/span;
   c.save(); c.translate(s[0],s[1]); c.rotate(a); c.scale(fs,fs);
   c.translate(-(vb.x+vb.w/2),-(vb.y+vb.h/2));
-  c.strokeStyle=color; c.fillStyle=color; c.lineWidth=1.7; c.lineJoin='round'; c.lineCap='round';
-  if(typeof Path2D==='function'){
-    for(const p of type.symbol){
-      try{ const path=new Path2D(p.d); if(p.fill) c.fill(path); else c.stroke(path); }catch(_){}
-    }
-  }else{
+  c.strokeStyle=color; c.fillStyle=color;
+  c.lineWidth=sizePx?Math.max(.06,Math.min(6,1.6/fs)):1.7;
+  c.lineJoin='round'; c.lineCap='round';
+  const paths=symbolRenderPaths(type);
+  if(paths){
+    for(const p of paths){ if(p.fill) c.fill(p.path); else c.stroke(p.path); }
+  }else if(typeof Path2D!=='function'){
     /* 无 Path2D 的降级环境：画一个菱形占位，避免整帧渲染失败 */
     c.beginPath(); c.moveTo(-9,0); c.lineTo(0,-9); c.lineTo(9,0); c.lineTo(0,9); c.closePath(); c.stroke();
   }
@@ -704,12 +717,16 @@ function drawPoint(c,o,color,type,toS,markerScale,v){
   if((o.phys||0)>0 && (type.scaleShape&&type.scaleShape!=='none')) return drawPhysicalPoint(c,o,color,type,toS,v,markerScale);
   /* 屏幕固定图标：导出增益 × 全局倍率 × 类型默认 × 对象覆盖；缩放画布不改变图标视觉大小 */
   const k=markerScale*(Number(type.iconSize)||1)*(Number(o.iconSize)||1);
-  const s=toS([o.x,o.y]), r=11*k, a=screenAngle(o);
+  const s=toS([o.x,o.y]), a=screenAngle(o);
   if(type.symbol&&type.symbol.length){
-    drawPointSymbol(c,type,color,s,a,k);
+    /* 真实尺寸：phys>0 时按米渲染（随缩放变化）；否则固定屏幕图标 */
+    const sizePx=(o.phys||0)>0?o.phys*v.zoom:0;
+    drawPointSymbol(c,type,color,s,a,k,sizePx);
+    const r=sizePx?sizePx/2:11*k;
     drawLabel(c,o,s[0],s[1]-r-8,color,toS,12*k);
     return;
   }
+  const r=11*k;
   c.save(); c.translate(s[0],s[1]); c.rotate(a); c.scale(k,k);
   c.lineWidth=2; c.strokeStyle=color; c.fillStyle=color;
   const icon=type.icon||o.style.icon||'marker';
