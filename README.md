@@ -170,7 +170,7 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 
 - ✅ 多楼层多底图、设备台账二维码、照片附件（已交付）。
 - ✅ 顶栏「清空」：一键清空当前楼层双槽/对象/标注/校准/选中态并恢复默认取景框，二次确认且可 `Ctrl+Z` 整体撤销（已交付）。
-- ✅ PWA/Service Worker 离线缓存、64 个行业符号库与自定义 SVG 图元（已交付）。
+- ✅ PWA/Service Worker 离线缓存（缓存名版本化 + 激活清理旧缓存 + 新版本可用提示，离线打开不白屏）、64 个行业符号库与自定义 SVG 图元（已交付）。
 - ✅ 单文件发行包（体积门禁 ≤820 KB / 839,680 B，gzip 体积随构建打印作为发布指标）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
 - ✅ 停车场规划模式：双面垂直车位 + 通道净距检查、横/纵排列、实时预览与独立图层（已交付）。
 - ✅ 离线协作（CRDT 家族 LWW）：对象/楼层级 Last-Writer-Wins + 删除墓碑 + 工程 JSON 合并；存储 v2 为每个楼层补 `updatedAt`，v1 旧档读取即迁移（已交付，工程库「合并他人工程」）。
@@ -194,9 +194,10 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ 渲染性能基线（B-11）：新增真实 Chromium 渲染基线 `tests/e2e/perf-render.spec.mjs`（2000 对象 / 1600×900，A 基础场景 + B 标注图元，输出重建/缓存命中/直接全量的 avg·P50·P95·P99、单帧 `measureText`/`Path2D` 调用、`staticKey`、`filter+sort`、heap 与裁剪率）。实测缓存帧 P95 0.2ms、重建 P95 6.0–8.6ms，均在本帧预算内；`measureText` LRU、Path2D 缓存、图层/对象索引、`staticKey` 精确化四项经 A/B 实测无稳定帧级收益，按「无数据支撑不引入」不做，分块/Worker 亦无「主线程占满」证据（已交付）。
 - ✅ 图框 / 标题栏 / 比例尺 / 图例模板（B-07）：导出下拉「图框模板…」配置工程名/图号/比例/日期/版本与设计/审核/单位 8 字段，可分别开关图框边框、标题栏、比例尺、图例；**默认关闭**，关闭时 PNG/PDF/SVG 产物与旧版逐字节一致。启用后三格式共用同一布局源：右下 4×2 标题栏（空比例自动 `1:N`、空日期取导出当天、空图号显示 `—`）、左下整齐长度比例尺、右上按可见对象类型/图层生成的图例；文字统一 `esc()` 转义。字段随 `meta.titleBlock` 持久化并进入撤销快照，旧工程缺字段按默认模板降级（已交付）。
 - ✅ i18n 插值模板（B-14）：动态整句改用 `{name}` 占位 + 集中字典 `TEMPLATES`，消除 `前缀 + 数值 + 后缀` 拼接；覆盖剪贴板、表格/DXF/PDF/底图导入、楼层与工程库、快照、协作合并、报价与 PDF 页脚等 UI 与报告文案。中文模式原样填充（语义不变），英文整句命中字典；用户输入只作参数，DOM 仍走 `textContent` / `esc()`，不扩大注入面。可复跑统计 `node scripts/i18n-scan.mjs`：英文覆盖率 **25.64% → 33.79%**（已字典化 269 → 347 条，缺口 125 → 49 条），体积 **820,168 → 831,533 B（+11,365 B）**，仍低于 820 KB 门禁（已交付）。
+- ✅ 移动端 / PWA 补强（B-15）：SW 缓存名 `plotpin-v3` 版本化，`activate` 清理所有旧缓存；安装逐项 `allSettled`，单个资源 404 不阻断升级；`fetch` 网络优先、离线回退缓存，导航兜底 `index.html`，无缓存时返回内置离线提示页（不白屏）；`updatefound → installed` 且已有控制器时提示「新版本可用：刷新页面后生效」。移动端加 `viewport-fit=cover` 与 `env(safe-area-inset-*)`（桌面为 0，旧布局不变），触屏目标 ≥44px，横屏压缩顶栏、侧栏收窄且可纵向滚动工具栏；窄屏侧栏遮罩降到顶栏之下并支持点空白关闭。实测（同机 Chromium 移动模拟 390×844 / DPR3 vs 桌面 1600×900，单轮）：首屏 FCP 84 vs 96ms，2000 对象重建 P95 7.2 vs 5.9ms、缓存帧 P95 0.2 vs 0.2ms、rAF 间隔 P95 17.8 vs 18.2ms；**真机未测**（已交付）。
 - ✅ 批量编号与层级：前缀/起始/步长重排编号（跨楼层避让），置顶/置底调整叠放顺序（已交付）。
 
-> 触屏已支持：Pointer Events 单指绘制/移动，**双指捏合缩放、双指平移**（缩放锚定双指中点），≤860px 窄屏侧栏自动变覆盖层（☰ 面板开关）。
+> 触屏已支持：Pointer Events 单指绘制/移动，**双指捏合缩放、双指平移**（缩放锚定双指中点）；≤860px 窄屏侧栏自动变覆盖层（☰ 面板开关，点画布/遮罩空白关闭）；安全区与触控目标见 B-15。
 
 ---
 
@@ -225,7 +226,7 @@ Place device markers on any base map (image or vector site), draw true-to-scale 
 - **Areas & polylines (geometry semantics)**: always in world coordinates (meters), true-to-scale. Areas support rectangle / circle / ellipse / sector / parallelogram with parameter handles and on-the-fly shape conversion (center-preserving, equal-area); triangles and arbitrary polygons come from closed polylines.
 - **Dimensions & text**: distance, area and angle annotations; scalable/rotatable world-size text.
 - **Editing**: single/rubber/multi select, move, resize, rotate, node editing, layers, custom types, grid snapping, undo/redo.
-- **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback with explicit capability detection; network-first Service Worker with offline cache for hosted deployments.
+- **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback with explicit capability detection; versioned network-first Service Worker (cache `plotpin-v3`, old-cache cleanup, update prompt) with offline cache for hosted deployments.
 - **Engineering**: layered offscreen rendering cache + viewport culling, parser input limits for ZIP/XLSX/DXF/PDF, zero-dependency CI gate and render benchmark.
 - **Distribution**: `npm run build` produces a fully inlined single-file HTML with SHA256 checksum; plugin registration API for custom object types, importers and exporters.
 - **Internationalization & a11y**: Chinese/English switch covering chrome, property panels, dialogs, notifications, built-in type names, reports and QR labels (custom type names preserved); ARIA roles/states, modal focus trap, live region for toasts and visible keyboard focus rings.

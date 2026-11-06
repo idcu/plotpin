@@ -704,6 +704,7 @@
     '已删除楼层':'Floor deleted',
     '楼层已重命名':'Floor renamed',
     '待保存…':'Saving…', '已保存':'Saved', '已自动保存':'Auto-saved', '请手动导出':'Export manually',
+    '新版本可用：刷新页面后生效':'New version available: refresh to update',
     '底图读取失败，请重新导入底图':'Failed to read the base map; re-import it',
     '未载入目录':'No catalog loaded',
     '报价表已导出':'Quote table exported',

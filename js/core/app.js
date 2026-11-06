@@ -16,8 +16,23 @@
   updateOsnapChip();
   /* IndexedDB 不可用：首次启动即提示降级，避免自动保存静默失效 */
   if(!caps.idb) notifyIdbFallback();
-  /* 仅托管（http/https）部署可注册 Service Worker；file:// 双击模式本身即离线 */
+  /* 仅托管（http/https）部署可注册 Service Worker；file:// 双击模式本身即离线。
+     更新检测：新 SW 装好且已有旧版在控制页面时提示刷新；注册/更新失败只是保持旧版本，不影响使用。 */
   if(caps.sw){
-    try{ await navigator.serviceWorker.register('sw.js'); }catch(_){ /* 注册失败不影响离线使用 */ }
+    try{
+      const reg=await navigator.serviceWorker.register('sw.js');
+      const notify=()=>{
+        if(!reg.waiting || !navigator.serviceWorker.controller) return;
+        toast(L('新版本可用：刷新页面后生效'),'warn');
+      };
+      reg.addEventListener('updatefound',()=>{
+        const w=reg.installing;
+        if(w) w.addEventListener('statechange',()=>{ if(w.state==='installed') notify(); });
+      });
+      notify();
+      document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState==='visible') reg.update().catch(()=>{ /* 离线时更新失败保持旧版本 */ });
+      });
+    }catch(_){ /* 注册失败不影响离线使用 */ }
   }
 })();

@@ -126,9 +126,9 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 820 KB（839,680 B） | 812.0 KB（831,533 B） | 余量 8,147 B（B-14 后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 B 系列功能留空间） |
-| 产物体积（gzip） | 只打印，不阻断 | 266.1 KB（272,480 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `70c1d092812b…` | 从源重建、二次构建确定性一致 |
+| 单文件体积 | ≤ 820 KB（839,680 B） | 814.3 KB（833,855 B） | 余量 5,825 B（B-15 后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 B 系列功能留空间） |
+| 产物体积（gzip） | 只打印，不阻断 | 266.9 KB（273,289 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `3787536b7406…` | 从源重建、二次构建确定性一致 |
 | CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 40 = 40 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
 | 断言数 | ≥ 1870 且 0 失败 | 2184 | 只增不减 |
 
@@ -351,6 +351,8 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
 | `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
 | `i18n-template.spec.mjs` | B-14：切换英文后顶栏导出按钮为 `Export`；`L('已粘贴 {n} 个对象',{n:3})` 经 `toast` 输出 `Pasted 3 objects`、表格导入整句输出英文；把 `<img src=x onerror=...>` 作为文件名参数注入，toast 内 `childTags=0` 且 `window.__xss` 未触发（`textContent` 边界不引入注入面） |
+| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v3` 且预缓存 45 条 → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
+| `mobile.spec.mjs` | B-15：390×844 / DPR3 / touch 移动模拟下 `viewport-fit=cover`、画布 `touch-action:none`、工具栏命中区 ≥44px、☰ 侧栏开合并可点空白关闭、点工具轻触画布落点；同一次运行输出 2000 对象的移动与桌面重建/缓存帧/首屏数据，断言仅作宽松防回归 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
@@ -388,6 +390,21 @@ showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK
 （`git worktree` 旧版本）与改造后各跑一次，**25.64% → 33.79%**（已字典化 269 → 347，缺口 125 → 49，
 硬编码 655 → 631）。未迁移项集中在 `js/common` 适配层内部错误串、DXF 单位名、DWG 入口整段 HTML
 指引与多行组合提示（见 `CHANGELOG.internal.md` 的 B-14 条目）。
+
+**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v3`），
+`activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本清单从 `index.html` 解析，新增脚本无需手工维护。
+安装用 `Promise.allSettled` 逐项 `cache.add`，单个 404 不会让新版本永远装不上；安装/激活失败时旧版本继续
+服务。`fetch` 网络优先（在线始终取最新，避免旧缓存卡住升级），离线回退缓存，导航请求 `ignoreSearch` 回退
+`./index.html`，缓存也没有时返回内置离线提示页（503，非浏览器白屏错误页）。`js/core/app.js` 监听
+`updatefound → installed`，已有控制器时 `toast('新版本可用：刷新页面后生效')` 并暴露同一 i18n 文案；
+`visibilitychange` 可见时 `reg.update()`，离线失败静默保持旧版本。移动端：`viewport-fit=cover`，
+`.topbar/.hud-bottom/.sidebar` 使用 `env(safe-area-inset-*)`（桌面解析为 0，不改变旧布局），
+`@media(pointer:coarse)` 保证按钮/工具栏 ≥44px，手机横屏压缩顶栏并收窄侧栏，`.tool-rail` 允许纵向滚动；
+窄屏侧栏改为「文档级 pointerdown 关闭 + 遮罩 z-index 19 低于顶栏」——修掉此前遮罩盖住 ☰ 导致触屏无法
+关闭侧栏的问题。手势取消沿用 A-06：`pointercancel / lostpointercapture / Escape` 统一走 `cancelActiveDrag`，
+本轮未新增手势状态。渲染样本提取到 `tests/e2e/helpers/scenes.mjs`（B-11/B-15 共用，避免两套样本漂移）。
+覆盖率为 `viewport-fit`/安全区/触控目标/CSS 横竖屏的检查，另有 `mobile.spec.mjs` 与桌面同机输出的首屏与
+2000 对象帧数据；**真机（iOS Safari / Android 低端机）未测**。
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 §5.4。

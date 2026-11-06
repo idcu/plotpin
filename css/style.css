@@ -20,7 +20,7 @@
   input,select,textarea{border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;min-width:0}
   input[type=color]{padding:2px;height:30px;width:42px}
   input[type=checkbox],input[type=radio]{width:auto;margin:0 4px 0 0}
-  .topbar{height:52px;background:var(--toolbar);color:#fff;display:flex;align-items:center;gap:8px;padding:0 12px;box-shadow:0 2px 10px rgba(0,0,0,.18);z-index:20;position:relative}
+  .topbar{height:calc(52px + env(safe-area-inset-top));background:var(--toolbar);color:#fff;display:flex;align-items:center;gap:8px;padding:env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));box-shadow:0 2px 10px rgba(0,0,0,.18);z-index:20;position:relative}
   .brand{font-weight:700;font-size:15px;white-space:nowrap;margin-right:6px;display:flex;align-items:center;gap:8px}
   .brand::before{display:none}
   .brand{font-size:16px}
@@ -41,8 +41,8 @@
   .site-card .hint-text{display:block}
   .site-current{background:#f8fafc;border:1px dashed var(--line);border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.6}
   .save-state{font-size:11px;color:#cbd5e1;min-width:72px;text-align:right}
-  .app-shell{height:calc(100vh - 52px);display:flex;min-height:0}
-  .tool-rail{width:58px;background:#0f172a;display:flex;flex-direction:column;align-items:center;gap:7px;padding:9px 7px}
+  .app-shell{height:calc(100vh - 52px - env(safe-area-inset-top));display:flex;min-height:0}
+  .tool-rail{width:58px;background:#0f172a;display:flex;flex-direction:column;align-items:center;gap:7px;padding:9px 7px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
   .tool-btn{width:42px;height:42px;border-radius:10px;border:1px solid transparent;background:transparent;color:#cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;padding:3px}
   .tool-btn:hover{background:#1e293b;border-color:#334155}
   .tool-btn.active{background:var(--primary);color:#fff;border-color:#60a5fa}
@@ -53,7 +53,7 @@
   body.tool-pan #canvas{cursor:grab} body.tool-pan.panning #canvas{cursor:grabbing}
   .hud{position:absolute;z-index:5;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:7px 10px;font-size:12px}
   .hud-top{left:12px;top:12px;max-width:62%;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .hud-bottom{left:12px;right:12px;bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none}
+  .hud-bottom{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none}
   .hud-bottom .hint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .coord{font-family:Consolas,Menlo,monospace;color:#334155}
   .zoom-label{min-width:54px;text-align:right;font-weight:600}
@@ -64,7 +64,7 @@
   body.tool-rect .tool-options [data-for="rect"],
   body.tool-line .tool-options [data-for="line"],
   body.tool-dimension .tool-options [data-for="dimension"]{display:flex}
-  .sidebar{width:390px;min-width:390px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;box-shadow:-4px 0 18px rgba(16,24,40,.05);transition:transform .18s ease}
+  .sidebar{width:390px;min-width:390px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;padding-bottom:env(safe-area-inset-bottom);box-shadow:-4px 0 18px rgba(16,24,40,.05);transition:transform .18s ease}
   /* 窄屏（平板竖屏/手机）：侧栏变为覆盖层，由 ☰ 面板按钮切换 */
   #sidebarToggle{display:none}
   @media(max-width:860px){
@@ -72,14 +72,29 @@
     .sidebar{position:absolute;top:0;right:0;bottom:0;width:min(88vw,360px);min-width:0;z-index:30;
       transform:translateX(105%);box-shadow:-8px 0 30px rgba(16,24,40,.25)}
     body.sidebar-open .sidebar{transform:none}
-    body.sidebar-open::after{content:'';position:absolute;inset:0;background:rgba(15,23,42,.3);z-index:25;pointer-events:auto}
+    body.sidebar-open::after{content:'';position:absolute;inset:0;background:rgba(15,23,42,.3);z-index:19}
     .app-shell{position:relative}
-    .topbar{flex-wrap:wrap;height:auto;padding:6px 8px;gap:4px}
+    .topbar{flex-wrap:wrap;height:auto;padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left));gap:4px}
     .topbar .tb-group{flex-wrap:wrap}
     .hud-top{font-size:11px;max-width:calc(100vw - 24px)}
     .tool-rail{width:52px}
     .tool-btn{padding:5px 2px;font-size:10px}
     .tool-btn .ico{font-size:16px}
+  }
+  /* 触屏设备：可点击目标不小于 44px，避免手指误触；悬停样式不参与可用性 */
+  @media(pointer:coarse){
+    button,select,.side-tab,.tool-btn{min-height:44px}
+    .tool-btn{width:46px}
+    .icon-btn,.mini{min-height:36px}
+    input[type=checkbox],input[type=radio]{width:22px;height:22px}
+  }
+  /* 手机横屏：压缩顶栏与工具栏，侧栏按比例收窄，画布优先占满 */
+  @media(max-height:520px) and (orientation:landscape){
+    .topbar{height:auto;padding-top:calc(2px + env(safe-area-inset-top))}
+    .hud-top{padding:4px 8px;font-size:11px}
+    .hud-bottom{bottom:calc(6px + env(safe-area-inset-bottom))}
+    .sidebar{width:min(62vw,420px)}
+    .tool-rail{gap:3px;padding:4px}
   }
   .side-tabs{display:flex;border-bottom:1px solid var(--line);background:#f8fafc}
   .side-tab{flex:1;border:0;border-radius:0;background:transparent;padding:10px 4px;color:var(--muted)}

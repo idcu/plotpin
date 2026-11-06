@@ -29,8 +29,13 @@ document.querySelectorAll('.side-tabs').forEach(list=>list.addEventListener('key
   e.preventDefault();
   tabs[to].focus(); switchTab(tabs[to].dataset.tab);
 }));
-/* 窄屏侧栏覆盖层：☰ 开关；点画布遮罩区域关闭 */
+/* 窄屏侧栏覆盖层：☰ 开关；点画布/遮罩/顶栏空白区域关闭（触屏没有 hover，必须有点击关闭路径） */
 $('sidebarToggle').addEventListener('click',()=>document.body.classList.toggle('sidebar-open'));
+document.addEventListener('pointerdown',e=>{
+  if(!document.body.classList.contains('sidebar-open')||!window.matchMedia('(max-width:860px)').matches) return;
+  if(e.target.closest&&e.target.closest('.sidebar,#sidebarToggle')) return;
+  document.body.classList.remove('sidebar-open');
+},true);
 wrap.addEventListener('pointerdown',()=>{ if(document.body.classList.contains('sidebar-open')&&window.matchMedia('(max-width:860px)').matches) document.body.classList.remove('sidebar-open'); });
 document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
 /* 顶部下拉在 测距/其他标注 间切换时，同步左侧「测距」「标注」按钮互斥高亮 */

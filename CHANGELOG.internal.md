@@ -2,6 +2,38 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-15：移动端 / PWA 补强（Phase B 收尾）
+
+- **Commit Hash**：本条提交（`feat(pwa): SW 版本化缓存与移动端安全区，离线不白屏`）。复盘用 `git log --grep="SW 版本化缓存与移动端安全区" -1 --format=%H`。
+- **核心改动点**
+  - `sw.js`：缓存名改为 `plotpin-v{VERSION}`（当前 **`plotpin-v3`**）；`activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本/资源清单由 `index.html` 动态解析（不再手写数组）。安装改为逐项 `cache.add` + `Promise.allSettled`，单个 404 不阻断安装；安装/激活失败静默，旧版本继续服务。`fetch` 保持网络优先（在线取最新），离线回退缓存；导航请求 `ignoreSearch` 兜底 `./index.html`，缓存也没有时返回内置离线提示页（503 HTML），不再出现浏览器白屏错误页；新增 `SKIP_WAITING` 消息入口。
+  - `js/core/app.js`：`register` 后监听 `updatefound → installed`，当已有 `navigator.serviceWorker.controller` 时 `toast(L('新版本可用：刷新页面后生效'),'warn')`；`visibilitychange` 可见时 `reg.update()`，离线失败不再冒泡。注册/更新失败只保持旧版本，不影响页面。
+  - `js/common/i18n.js`：新增短句 `新版本可用：刷新页面后生效` / `New version available: refresh to update`。
+  - `index.html`：viewport 增加 `viewport-fit=cover`。
+  - `css/style.css`：顶栏/底部 HUD/侧栏接入 `env(safe-area-inset-*)`（桌面为 0，旧布局不变）；`.app-shell` 高度同步扣除顶部安全区；`.tool-rail` 允许纵向滚动；`@media(pointer:coarse)` 按钮/工具栏/选择器命中区 ≥44px（细分图标按钮 36px）；`@media(max-height:520px)` 横屏压缩顶栏、收窄侧栏；窄屏侧栏遮罩 `z-index 25 → 19`（低于顶栏），顶栏不再被遮罩挡住。
+  - `js/features/ui-panels.js`：新增文档级 `pointerdown`（capture）关闭窄屏侧栏，目标在 `.sidebar` / `#sidebarToggle` 内则跳过。修复此前遮罩覆盖顶栏 + 画布导致触屏无法关闭侧栏的真实缺陷。
+  - 测试：`tests/e2e/helpers/scenes.mjs` 提取 B-11 的 2000 对象样本，`perf-render.spec.mjs` 改为共用（避免两套样本口径漂移）；新增 `tests/e2e/sw.spec.mjs`（用不加载业务脚本的 `tests/fixtures/sw-test.html` 注册，规避 app.js 自动注册竞态）与 `tests/e2e/mobile.spec.mjs`。`scripts/serve.mjs` 仅保留原有静态服务，无测试专用分支。
+  - 文档：`docs/features.md`（PWA/离线 + 移动端两条）、`docs/engineering.md`（B-15 技术段 + e2e 两行 + 体积/SHA 表）、`README.md`（路线图、PWA 条目、英文 Persistence 行、触屏说明）、本文件。
+- **实测验证数据**
+  - **SW 链路（e2e `sw.spec.mjs` 实跑）**：注册后 `caches.keys()=["plotpin-v3"]`、预缓存 **45 条**、`controller=true`；预置的 `plotpin-v1` 在 `activate` 时被删除；`context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布、`state.objects.length=0`（缓存回退，非白屏）。
+  - **移动端（真实 Chromium 移动模拟，`mobile.spec.mjs` 单轮，390×844 / DPR3 / touch）**：画布 CSS 338×792（后备 1014×2376）；`viewport-fit=cover` 存在、`touch-action:none`、工具栏命中区 ≥44px、`env()` 语法可用；☰ 打开 → 点空白关闭；点工具轻触画布落点世界坐标 **(50,35)**。同一轮桌面 1600×900 / DPR1（画布 1152×848）：首屏 FCP **84 vs 96ms**；2000 对象重建 P95 **7.2 vs 5.9ms**；缓存帧 P95 **0.2 vs 0.2ms**；rAF 间隔 P95 **17.8 vs 18.2ms**。移动端重建略慢来自 3× 后备位图填充，缓存命中无差异。**单轮样本，未做多轮取中位数。**
+  - selftest **2184 通过 / 0 失败**（B-15 未新增断言，仅文案/样式/SW）。
+  - e2e 全量 **51 passed / 1 skipped（48.4s）**（B-14 为 48 passed，新增 `sw`、`mobile` 2 条）；`npm run ci` 全绿（重建 21.49ms、缓存帧 avg 0.34 / P95 0.45ms、直接全量 20.5ms、heapUsed 20.23MB、裁剪 99.4%、覆盖率 8.1ms / 大场地 14.3ms / 缩放差异 0pp、门禁牙齿 5/5）。
+  - 体积 **831,533 → 833,855 B（+2,322 B / +0.28%）**；gzip **272,480 → 273,289 B（+809 B）**；820 KB 门禁余量 **5,825 B**；SHA256 `3787536b7406…`；`build --check` 二次构建确定性一致。
+- **未验证项**
+  - **真机未测**：iOS Safari / Android 低端机、软键盘、刘海/挖孔安全区的真实像素、横竖屏旋转后的布局重排；均为 Chromium 桌面端移动模拟。
+  - **「新版本可用」提示未 e2e 覆盖**：e2e 只验证注册/版本化缓存/旧缓存清理/离线打开；真实升级提示需要发布字节已变更的 SW，当前无版本发布流程可触发。代码路径为 `updatefound → installed`，未手工点验。
+  - 捏合缩放手势未在本轮重新实测，沿用 A-06 既有 e2e；本轮未改手势代码。
+  - Firefox / Safari 的 `env(safe-area-inset-*)`、`viewport-fit` 表现未测。
+- **遗留 TODO / 风险**
+  - `VERSION` 为手工常量：改 `sw.js` 但忘记 bump 时，旧缓存不会清理（网络优先仍能拿到新文件，但旧版本缓存会滞留占磁盘）。发布流程需把 bump 作为检查项；未自动化。
+  - `fetch` 网络优先意味着离线首次导航要等一次网络失败；浏览器离线时通常立即失败，未做超时竞速。
+  - 移动侧栏关闭用文档级 capture `pointerdown`，若未来新增「点击不关闭侧栏」的浮层，需要显式加入豁免选择器。
+  - `@media(pointer:coarse)` 会把触屏笔记本的按钮也放到 44px，可能让顶栏更早换行；仅影响触屏设备。
+- **受影响调用方 / 公共抽象**
+  - 新增测试公共样本 `tests/e2e/helpers/scenes.mjs`（`SCENE_A/SCENE_B`），`perf-render` 与 `mobile` 共用；无运行时公共抽象新增。
+  - 调用方：`sw.js`（托管模式）、`app.js` 启动注册、`ui-panels.js` 侧栏开关、B-11 渲染基线测试。未新增运行时依赖；未读取/修改 `camera-*`；未 push。
+
 ## 2026-11-06 · B-14：i18n 插值模板与集中字典（消除拼接句）
 
 - **Commit Hash**：本条提交（`feat(i18n): 插值模板与集中字典，动态整句英文可译`）。复盘用 `git log --grep="插值模板与集中字典" -1 --format=%H`。
