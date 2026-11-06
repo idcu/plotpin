@@ -143,9 +143,12 @@ npm run gates     # 门禁牙齿：5 种人为破坏必须让对应门禁非 0�
 npm install -D @playwright/test
 npx playwright install chromium
 npm run test:e2e
+npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象；--no-gate 只采数）
 ```
 
 缺依赖或缺浏览器时脚本打印 `[SKIP]` 原因并**退 2**，不会把「没跑」冒充成「通过」。
+`perf:browser` 的数据与 `bench.mjs` 的 Node 桩数据不可互换，阈值与口径见
+[docs/engineering.md](docs/engineering.md) §5.4。
 
 **契约判据**（`contracts/conventions.json`）守四件看不见的事：版本号三处一致、
 中英文案键对齐、每个脚本恰好一行文件头、枚举同源。判据自己也有牙齿：

@@ -19,7 +19,8 @@ node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 →
 node scripts/bench.mjs              渲染基准（avg / P95 / 重建 / heapUsed / 裁剪 / 覆盖率阈值）
 node scripts/build.mjs --check      源重建 ↔ scripts/dist-manifest.json 登记哈希比对
 node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对应门禁非 0
-node scripts/e2e.mjs               浏览器级测试（可选，devDependency；**不在 ci 路径**）
+node scripts/e2e.mjs               浏览器级功能测试（可选，devDependency；**不在 ci 路径**）
+node scripts/perf-browser.mjs      真实浏览器性能基线（可选；**不在 ci 路径**，见 §5.4）
 ```
 
 `npm run ci` = 上面四条的顺序执行（含 `check-gates.mjs`），与 `.github/workflows/ci.yml` 的 test job 一致：
@@ -31,6 +32,11 @@ CI 的 test job 另外还跑同名四条命令；`vendor-check` / `discipline` /
 `npm run test:e2e` 需要 `@playwright/test` + Chromium 二进制（仅 devDependency）。缺依赖或缺浏览器时
 `scripts/e2e.mjs` 打印 `[SKIP]` 原因并**退 2**（不是 0），避免把「没跑」当成「通过」；`npm run ci`
 不调用它，离线门禁与构建不依赖浏览器。
+
+`npm run perf:browser`（`scripts/perf-browser.mjs`）同样需要浏览器，退出码规则相同；它采集真实
+Chromium 的帧耗时 / 静态层重建 / heapUsed / 导入耗时并做阈值判定（`--no-gate` 只采数），
+报告写入 `test-results/perf-browser-baseline.json`。**它不在 `npm run ci` 路径**，也**不得用
+bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不可比（见 §5.4）。
 
 ---
 
@@ -97,7 +103,7 @@ CI 的 test job 另外还跑同名四条命令；`vendor-check` / `discipline` /
 |---|---|---|
 | Service Worker 的 `CACHE` 版本号 | "改了 js 就必须 bump"没有可读的事实源：SW 的预缓存清单在运行时从 `index.html` 解析，构建期不知道"上一版是什么" | 靠发布纪律 + `sw.js` 注释；`pwa.test.mjs` 只守下限（版本号格式与 ≥ 基线） |
 | 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确 | selftest 覆盖"全量中英文案"路径；语义由评审看 |
-| 渲染性能的**真实浏览器基线** | `bench.mjs` 跑在 Node + canvas 桩上，没有 GPU / 真实 Canvas；绝对值阈值只能守住"明显退化"，证明不了真机流畅 | Node 桩下已有阻断门禁（见 §5.1）；Playwright 只做**功能** e2e（§5.2），不采集真机 FPS/heap 基线 |
+| 渲染性能的**真实设备基线** | 真机 GPU / 不同 DPI 的组合无法在离线 CI 里稳定复现；绝对阈值只能说明“这台机器上没退化”，证明不了所有用户设备流畅 | Node 桩下已有阻断门禁（§5.1）；真实浏览器基线（§5.4）在 Chromium headless + SwiftShader 上可重复采集，但默认不进 `npm run ci`，数据不得与 bench 混用 |
 | 插件 API 的**向后兼容** | 需要契约测试 + 历史版本矩阵，成本高于当前收益 | 版本号三处一致由契约守；破坏性变更写进 README |
 
 **这一节比上面几节更重要**：把"没有判据"的区域写出来，读者才不会把绿色的
@@ -141,6 +147,9 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层、切换楼层后刷新与操作后状态一致 |
 | `interaction.spec.mjs` | 单击对象不落盘/不清覆盖率/不留空撤销快照；拖拽中 Esc 回滚到原位 |
 
+**性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
+执行，不混进上面的功能 e2e；指标与阈值见 §5.4。
+
 **边界**：`@playwright/test` 只允许出现在 `devDependencies`；`build.mjs` 的单文件产物不引用
 `tests/` 与 `node_modules/`。`npm run ci` 不含 e2e——无浏览器环境不会因此变红，但显式运行
 `npm run test:e2e` 时缺依赖/缺浏览器会以 `[SKIP]` + 退出码 2 明确失败，而不是假绿。
@@ -167,6 +176,65 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `HISTORY_MAX` | 20 | 撤销栈深度 |
 | `TOMBSTONE_MAX` / `TOMBSTONE_EVICT_BATCH` | 20000 / 2000 | 墓碑硬上限与增量淘汰批量（A-11） |
 | `TOMBSTONE_RETENTION_DAYS` | 730 天 | 墓碑保留窗口（超窗才允许按时间淘汰） |
+
+### 5.4 真实浏览器性能基线（B-01，可选门禁）
+
+`tests/perf/browser-baseline.perf.mjs` 经 `npm run perf:browser` 在真实 Chromium 中跑，
+**不在 `npm run ci` 路径**（浏览器/机器差异大，不能把某台机器的绝对值当成全量承诺）：
+
+| 项 | 取值 |
+|---|---|
+| 运行命令 | `npm run perf:browser`（门禁默认开）/ `node scripts/perf-browser.mjs --no-gate`（只采数） |
+| 浏览器 | Chromium（Playwright devDependency），headless，1920×1080 CSS 视口，DPR1；另加 5000 对象 @DPR2 采样 |
+| 画布 | 实际 `#canvasWrap` = **1472×1028** CSS 像素（顶栏/侧栏占位后）；静态层位图 DPR1 **5.77MB** / DPR2 **23.09MB** |
+| 场景 | 世界域 2000×1500m，对象构成 1/3 `point.marker` + 1/3 `rect.area` + 1/3 `line.custom`（3 节点），全部在视野内（最坏重建） |
+| 指标口径 | 每帧 = `drawScene` + `getImageData(0,0,1,1)` **强制同步光栅**；heap 用 `performance.memory.usedJSHeapSize`（`--enable-precise-memory-info`），逐帧抽样取峰值 |
+| 报告 | `test-results/perf-browser-baseline.json`（gitignore，含原始样本汇总与阈值） |
+
+**实测（2026-11-06，本机 Windows，4 轮区间；渲染器为 ANGLE/SwiftShader 软件光栅；同机轮次差异最高约 2 倍，阈值按偏高值留余量）**
+
+| 规模 | 缓存帧 P95 | 缓存帧 P99 | 静态层重建 P95 | heapUsed 峰值 | 空工程导入 | 已有工程内导入 | 导入后首帧 |
+|---|---|---|---|---|---|---|---|
+| 2000 对象 DPR1 | 1.3–4.2 ms | 2.3–5.6 ms | 40.6–55.2 ms | 15.9–17.1 MB | 53–62 ms | 158–200 ms | 37–48 ms |
+| 5000 对象 DPR1 | 2.1–4.7 ms | 3.6–7.3 ms | 100–122.7 ms | 36.5–36.7 MB | 127–155 ms | 946–1215 ms | 92–118 ms |
+| 10000 对象 DPR1 | 3.5–6.4 ms | 5.0–8.4 ms | 198.6–230 ms | 59.3–72.1 MB | 272–298 ms | 4068–4848 ms | 190–222 ms |
+| 5000 对象 DPR2 | 11.8–15.4 ms | 12.4–17.9 ms | 192.9–221.8 ms | 36.1–66.2 MB | 128–164 ms | 950–1144 ms | 182–259 ms |
+
+**阻断阈值（实测值约 2 倍余量；改阈值须在 commit body 写明旧值 → 新值 + 理由 + 连续实测）**
+
+| 规模 | 缓存帧 P95 | 重建 P95 | heap 峰值 | 空工程导入 | 已有工程内导入 | 静态层字节 |
+|---|---|---|---|---|---|---|
+| 2000@DPR1 | ≤ 16.7 ms | ≤ 100 ms | ≤ 64 MB | ≤ 300 ms | ≤ 450 ms | ≤ 8 MB |
+| 5000@DPR1 | ≤ 16.7 ms | ≤ 250 ms | ≤ 128 MB | ≤ 500 ms | ≤ 2200 ms | ≤ 8 MB |
+| 10000@DPR1 | ≤ 16.7 ms | ≤ 450 ms | ≤ 200 MB | ≤ 900 ms | ≤ 10000 ms | ≤ 8 MB |
+| 5000@DPR2 | ≤ 33.3 ms | ≤ 500 ms | ≤ 128 MB | ≤ 600 ms | ≤ 2500 ms | ≤ 32 MB |
+
+- 16.7ms = 60fps 单帧预算；DPR2 的 33.3ms = 30fps 下限，因为软件光栅下 DPR2 已接近 60fps 上限（P99 17.9ms）。
+- `已有工程内导入` 阈值偏松是**已知缺陷**而非放宽：见下方 B-09 前置结论，修掉 O(N²) 后必须收紧。
+- 门禁牙齿：临时把 `2000@DPR1` 的 `frameP95` 改成 0.1ms，用例如期失败并以退出码 1 结束；随后已还原。
+- **与 `bench.mjs` 的关系**：bench 是 Node + canvas 桩，只证明相对退化、进 `npm run ci`；
+  本套件是真实 Canvas2D 光栅，证明这台机器上的绝对体验。两者数据不可互换，也不得互相冒充。
+
+**方法学边界（不许拿这些数当全量结论）**
+
+- headless Chromium 使用 **SwiftShader 软件光栅**，没有真机 GPU 上屏；缓存帧里包含强制 `getImageData`
+  同步开销（draw 本身 P50 仅 0.2–1.0ms），因此缓存帧数值偏保守，不能直接当“真机 FPS”。
+- 只测一台 Windows 机器 / 一个分辨率 / 两种 DPR；未测 Safari/Firefox、未测低端移动设备。
+- heap 是 `performance.memory` 抽样峰值（无 GC 强制），会随 GC 时机波动（DPR2 峰值 36–66MB 即为例证）。
+
+**B-01 结论：分块渲染 / 静态层 LRU / Worker**
+
+| 方案 | 结论 | 数据依据 |
+|---|---|---|
+| 静态层重建分块（逐帧画一批对象） | **后续再做（B-09 优先）** | 缓存帧 P95 6.4ms（10k）已满足 60fps，瓶颈只在重建：10k 一帧阻塞 216–230ms（>3 帧预算）。分块能把长任务切短，但需要 generation token 处理中途失效与部分静态层，属于渲染架构改动，本轮不做 |
+| 静态层 LRU（缓存多个视口位图） | **不做** | 签名含 zoom/pan，平移/缩放必然重建；每层 5.77MB（DPR2 23.09MB），LRU=3 即 17–69MB，只在“回到同一视口”时命中。当前无命中率数据支撑，收益不明、内存代价确定 |
+| Worker + OffscreenCanvas | **后续再做（前置条件未满足）** | 缓存帧主线程成本仅 1–6ms，没有“渲染占满主线程”的证据；Worker 化要把 `state` 快照、类型/样式/字体/标签几何整体迁走，并且失去同步命中测试与 `getImageData` 导出一致性，零依赖与导出路径风险远大于当前收益 |
+
+**B-09 前置结论（必须先修的非渲染问题）**：同一份 10000 对象 JSON，“空工程导入” 294–298ms，
+而“当前工程已有 10000 个对象时导入” 4721–4848ms —— 16 倍差距说明导入成本被现有 `state` 规模拖成
+O(N²)，来源是 `buildProject → sanitizeObjects → baseObject → nextObjectId()` 每创建一个对象都扫一遍
+全量 `state.objects`。这是可复现的实测断点，与渲染架构无关；B-09 应先消除该 O(N²)，再决定是否做
+分块重建。导入后首帧 202–222ms 则与静态层重建同源（10k 全视野）。
 
 ---
 
