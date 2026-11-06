@@ -22,7 +22,8 @@ node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对
 node scripts/e2e.mjs               浏览器级测试（可选，devDependency；**不在 ci 路径**）
 ```
 
-`npm run ci` = 上面四条的顺序执行，与 `.github/workflows/ci.yml` 的 test job 一致。
+`npm run ci` = 上面四条的顺序执行（含 `check-gates.mjs`），与 `.github/workflows/ci.yml` 的 test job 一致：
+CI 的 test job 另外还跑同名四条命令；`vendor-check` / `discipline` / `ngm-verify` 是独立 job，不在 `npm run ci` 里。
 `npm run lint` 只跑 `check.mjs`（不带 `--selftest`），用于本地快速自检；CI 必须带 `--selftest`。
 
 单项也可以单独跑：`npm test`（check-ngm + selftest）、`npm run contracts`、`npm run bench`、`npm run gates`、`npm run test:e2e`。
@@ -105,16 +106,16 @@ node scripts/e2e.mjs               浏览器级测试（可选，devDependency�
 ### 5.1 阻断阈值与门禁牙齿（A-13）
 
 阈值是**绝对值**，不是与上一版比对；改阈值必须在 commit body 写明「旧值 → 新值 + 理由 + 连续实测」。
-当前余量为实测值的 2–4 倍（本机 2026-11-06 实测区间：A-06 连续 3 次 + A-09 单次；avg 0.34–0.45ms / P95 0.42–0.70ms / 重建 22.2–30.3ms / heapUsed 14.48–19.52MB / 覆盖率 7.4–14.4ms）。
+当前余量为实测值的 2–4 倍（本机 2026-11-06 实测区间：A-06 连续 3 次 + A-09/A-11/A-15/A-16 单次；avg 0.34–0.48ms / P95 0.42–0.91ms / 重建 22.1–31.3ms / heapUsed 14.48–19.41MB / 覆盖率 7.4–14.4ms）。
 
 | 指标 | 阻断阈值 | 实测（Node 桩 / 2000 对象 / 1600×900，多次区间） | 说明 |
 |---|---|---|---|
-| 缓存帧平均 | ≤ 8 ms | 0.34–0.45 ms | 50fps 预算的一半，下限保护 |
-| 缓存帧 P95 | ≤ 3 ms | 0.42–0.70 ms | 偶发卡顿不能靠平均帧掩盖 |
+| 缓存帧平均 | ≤ 8 ms | 0.34–0.48 ms | 50fps 预算的一半，下限保护 |
+| 缓存帧 P95 | ≤ 3 ms | 0.42–0.91 ms | 偶发卡顿不能靠平均帧掩盖 |
 | 缓存帧 P99 | ≤ 10 ms（仅告警） | 0.79–1.23 ms | 先积累数据，不阻断 |
-| 静态层重建 | ≤ 60 ms | 22.1–30.3 ms | 对象增删改时触发 |
-| 直接全量帧 | ≤ 60 ms | 21.4–28.0 ms | 导出/打印路径 |
-| `heapUsed` | ≤ 64 MB | 14.48–19.52 MB | bench 结束时读数，不含长跑斜率 |
+| 静态层重建 | ≤ 60 ms | 22.1–31.3 ms | 对象增删改时触发 |
+| 直接全量帧 | ≤ 60 ms | 21.4–29.32 ms | 导出/打印路径 |
+| `heapUsed` | ≤ 64 MB | 14.48–19.41 MB | bench 结束时读数，不含长跑斜率 |
 | 覆盖率分析 | ≤ 300 ms | 7.4–14.4 ms | 1000×1000m + 30 摄像头 |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
 | 单文件体积 | ≤ 750 KB | 687.1 KB | 留约 10% 余量 |
@@ -144,6 +145,29 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 `tests/` 与 `node_modules/`。`npm run ci` 不含 e2e——无浏览器环境不会因此变红，但显式运行
 `npm run test:e2e` 时缺依赖/缺浏览器会以 `[SKIP]` + 退出码 2 明确失败，而不是假绿。
 
+### 5.3 资源上限（`APP_LIMITS` 唯一源）
+
+`js/core/config.js` 的 `APP_LIMITS` 是缩放、图标倍率、底图解码、导入与存储边界的**唯一来源**；
+业务代码不得另写魔法数字。导入侧统一由 `importLimitErrors(spec)` 判定（A-09）。
+
+| 常量 | 值 | 作用点 |
+|---|---|---|
+| `ZOOM_MIN` / `ZOOM_MAX` | 0.02 / 200 | 画布缩放夹取 |
+| `ICON_SCALE_MIN` / `ICON_SCALE_MAX` | 0.2 / 8 | 图标全局/单对象倍率 |
+| `SEG_LABEL_MIN_PX`（可调区间 10–60） | 26 px | 段长标注最小屏幕像素 |
+| `BG_MAX_EDGE` / `BG_JPEG_QUALITY` | 3000 px / 0.85 | 底图最长边降采样与透明图转 JPEG |
+| `BG_RECOMPRESS_LIMIT` | 6 MB | 超过该体积的透明底图转 JPEG |
+| `BG_MAX_DECODE_PIXELS` | 40 MP | 单张底图解码像素上限（导入前校验） |
+| `ASSET_MAX_BYTES` | 16 MB | 单个内容寻址资产（底图/照片） |
+| `IMPORT_FILE_MAX_BYTES` | 32 MB | 所有导入文件体积（含工程合并） |
+| `IMPORT_TEXT_MAX_CHARS` | 32 MB | JSON/CSV 文本字符数 |
+| `IMPORT_ROWS_MAX` | 20000 | CSV/TSV/XLSX 行数 |
+| `IMPORT_ENTITIES_MAX` | 100000 | DXF/PDF 实体数 |
+| `OBJECTS_MAX` | 100000 | 单工程对象总数（含所有楼层） |
+| `HISTORY_MAX` | 20 | 撤销栈深度 |
+| `TOMBSTONE_MAX` / `TOMBSTONE_EVICT_BATCH` | 20000 / 2000 | 墓碑硬上限与增量淘汰批量（A-11） |
+| `TOMBSTONE_RETENTION_DAYS` | 730 天 | 墓碑保留窗口（超窗才允许按时间淘汰） |
+
 ---
 
 ## 6. 怎么加一条新判据
@@ -160,9 +184,9 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 
 ---
 
-## 附：十问看板（成熟度自评）
+## 附：十三问看板（成熟度自评）
 
-> `engineering-discipline.md` §8 的十问清单，做成了一个脚本：它**不替代**任何判据，
+> `engineering-discipline.md` §8 的十三问清单，做成了一个脚本：它**不替代**任何判据，
 > 只回答"这个仓库现在几档、缺哪一条"。
 
 ```bash
@@ -172,4 +196,5 @@ npm run discipline
 结构上不适用的问写在 `docs/discipline-exemptions.json`（理由必须写清为什么结构上不成立；
 "暂时没做"不是理由）。不适用项从分母剔除，而不是从分子加分。
 
-当前：**10/10 → L4**。缺口出现在哪一问，就是下一轮要补的判据。
+当前：**13/13 → L4**。缺口出现在哪一问，就是下一轮要补的判据（最近一次修正：第 13 问的
+`scripts/*.js` 正则缺少右边界，会把 `scripts/dist-manifest.json` 误判为不存在的 `.js` 脚本）。

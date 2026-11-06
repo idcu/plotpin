@@ -14,7 +14,7 @@
     "badge": "node scripts/badge.mjs",
     "bench": "node scripts/bench.mjs",
     "build": "node scripts/build.mjs",
-    "ci": "node scripts/check.mjs --selftest && node scripts/bench.mjs && node scripts/build.mjs --check",
+    "ci": "node scripts/check.mjs --selftest && node scripts/bench.mjs && node scripts/build.mjs --check && node scripts/check-gates.mjs",
     "gates": "node scripts/check-gates.mjs",
     "discipline": "node scripts/check-discipline.mjs",
     "test:e2e": "node scripts/e2e.mjs"

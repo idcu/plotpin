@@ -29,7 +29,7 @@
 | **协同** | 多工程库、离线 LWW 合并（删除墓碑可复活）、本机 BroadcastChannel 与跨设备 WebRTC（均无服务器） |
 | **可靠** | 零依赖离线运行、分层离屏渲染 + 视口裁剪、解析器输入上限、能力探测与显式降级、中英界面与无障碍 |
 
-> **35 条完整特性**（每条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
+> **28 条顶层特性**（含 27 条子项，逐条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
 > README 只回答"这是什么、能不能用"；能不能**依赖**它，去那里逐条对。
 
 ## 🚀 快速开始
@@ -91,7 +91,7 @@ npx serve .
 
 ```
 .
-├── index.html                # 主入口（双击即用，内联加载下述脚本）
+├── index.html                # 主入口（双击即用，按层序外部加载下述脚本；单文件发行包才内联）
 ├── sw.js                     # 托管模式 Service Worker（必须在根目录才能接管全站离线缓存）
 ├── css/
 │   └── style.css
@@ -113,7 +113,7 @@ npx serve .
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
     ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
-    ├── features.md           # 35 条完整特性（含边界与实现口径）
+    ├── features.md           # 28 条顶层特性 + 27 条子项（含边界与实现口径）
     ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
     └── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
 ```
@@ -133,7 +133,7 @@ npm test
 门禁与依赖自检（语法 / 入口资源 / 离线承诺 / 断言数 / 契约 / 分层 / 自测）走另一条：
 
 ```powershell
-npm run ci        # check --selftest → bench → build --check，与 CI 同一条命令
+npm run ci        # check --selftest → bench → build --check → gates，与 CI 的 test job 同一条
 npm run gates     # 门禁牙齿：5 种人为破坏必须让对应门禁非 0（临时副本内构造）
 ```
 
@@ -206,16 +206,16 @@ Place device markers on any base map (image or vector site), draw true-to-scale 
 ### Features
 
 - **Offline & zero-dependency**: no npm, no CDN, no backend; works from `file://` on intranets, air-gapped and field environments.
-- **Base maps**: image files with two-point scale calibration (meters/pixel), or vector sites in meters — rectangle, circle, ellipse, sector and polygon.
+- **Base maps**: image files with two-point scale calibration (meters/pixel), or vector sites in meters — rectangle, circle, ellipse, sector, parallelogram and polygon.
 - **Point devices (position semantics)**: screen-fixed icons that stay crisp at any zoom; icon size is adjustable on three levels (global × type default × per-object). Optional physical-size overlays render at real scale (coverage circle, square, camera FOV sector, barrier-gate bar).
-- **Areas & polylines (geometry semantics)**: always in world coordinates (meters), true-to-scale. Areas support rectangle / circle / ellipse / sector with parameter handles and on-the-fly shape conversion (center-preserving, equal-area); triangles and arbitrary polygons come from closed polylines.
+- **Areas & polylines (geometry semantics)**: always in world coordinates (meters), true-to-scale. Areas support rectangle / circle / ellipse / sector / parallelogram with parameter handles and on-the-fly shape conversion (center-preserving, equal-area); triangles and arbitrary polygons come from closed polylines.
 - **Dimensions & text**: distance, area and angle annotations; scalable/rotatable world-size text.
 - **Editing**: single/rubber/multi select, move, resize, rotate, node editing, layers, custom types, grid snapping, undo/redo.
 - **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback with explicit capability detection; network-first Service Worker with offline cache for hosted deployments.
 - **Engineering**: layered offscreen rendering cache + viewport culling, parser input limits for ZIP/XLSX/DXF/PDF, zero-dependency CI gate and render benchmark.
 - **Distribution**: `npm run build` produces a fully inlined single-file HTML with SHA256 checksum; plugin registration API for custom object types, importers and exporters.
 - **Internationalization & a11y**: Chinese/English switch covering chrome, property panels, dialogs, notifications, built-in type names, reports and QR labels (custom type names preserved); ARIA roles/states, modal focus trap, live region for toasts and visible keyboard focus rings.
-- **Import / export**: JSON project (embedded map), hi-res PNG, vector SVG, CSV/TSV and real `.xlsx` (hand-written minimal OOXML + ZIP), print-to-PDF report; drag-and-drop import supported.
+- **Import / export**: JSON project (embedded map + device photos across all floors), hi-res PNG, vector SVG, CSV/TSV and real `.xlsx` (OOXML via vendored `@idcu/format-*` modules, no npm/CDN at runtime), print-to-PDF report; drag-and-drop import supported.
 
 ### Quick start
 
@@ -231,7 +231,7 @@ npm run build
 ### Plugins
 
 ```html
-<script src="js/core/plugins.js"></script>
+<script src="js/features/plugins.js"></script>
 <script>
 /* 自定义设备类型：进入类型下拉，新建/载入工程都会带上；被对象使用时注销会被拒绝 */
 PlotPin.registerObjectType({

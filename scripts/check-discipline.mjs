@@ -221,7 +221,7 @@ for (const f of cmdDocs) {
   const text = read(f);
   for (const block of text.matchAll(/```[a-zA-Z]*\n([\s\S]*?)```/g)) {
     for (const line of block[1].split('\n')) {
-      for (const m of line.matchAll(/(?:^|\s)(scripts\/[\w./-]+\.(?:mjs|js|sh))/g)) {
+      for (const m of line.matchAll(/(?:^|\s)(scripts\/[\w./-]+\.(?:mjs|js|sh))(?![\w.-])/g)) {
         cmdCount++;
         if (!exists(m[1])) missingCmds.push(`${f}: ${m[1]}`);
       }
@@ -238,7 +238,7 @@ for (const f of cmdDocs) {
 // package.json 里的 script 也常常直接指向脚本文件（`"build": "node scripts/build.mjs"`）。
 // 光查"名字在不在 scripts 里"不够：改名后 `npm run build` 仍能匹配上，跑起来才报 ENOENT。
 for (const [name, cmd] of Object.entries(scripts)) {
-  for (const m of String(cmd).matchAll(/(scripts\/[\w./-]+\.(?:mjs|js|sh))/g)) {
+  for (const m of String(cmd).matchAll(/(scripts\/[\w./-]+\.(?:mjs|js|sh))(?![\w.-])/g)) {
     cmdCount++;
     if (!exists(m[1])) missingCmds.push(`package.json scripts.${name}: ${m[1]}`);
   }
