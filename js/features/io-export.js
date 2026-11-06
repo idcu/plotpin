@@ -75,9 +75,15 @@ function exportBlindSpotsGeoJson(){
     properties:{region:r.regionName,regionId:r.regionId,index:i+1},
     geometry:{type:'Polygon',coordinates:[r.points.concat([r.points[0]])]}
   }));
-  const fc={type:'FeatureCollection',features};
+  /* 导出的报告必须自带口径，避免与历史 v1（随缩放变化）数值混用 */
+  const cells=coverageResult.regions.map(r=>r.cell);
+  const spec=coverageResult.spec||{version:2};
+  const fc={type:'FeatureCollection',
+    coverageSpec:{version:spec.version,targetCells:coverageResult.targetCells,gridCells:coverageResult.gridCells,
+      cellMinM:cells.length?Math.min(...cells):0,cellMaxM:cells.length?Math.max(...cells):0,zoomIndependent:true},
+    features};
   downloadBlob(new Blob([JSON.stringify(fc,null,2)],{type:'application/geo+json'}),safeName()+'-盲区.geojson');
-  toast('盲区多边形已导出：'+features.length+' 个面（合计 '+fmt(blindSpotArea(coverageResult))+' ㎡）','success');
+  toast('盲区多边形已导出：'+features.length+' 个面（合计 '+fmt(blindSpotArea(coverageResult))+' ㎡，口径 v'+spec.version+'）','success');
 }
 async function exportJSON(){
   state.meta.updatedAt=nowISO();

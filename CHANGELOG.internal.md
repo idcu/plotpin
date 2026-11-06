@@ -2,6 +2,41 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-09 覆盖率可信度（口径 v2）
+
+- **Commit Hash**：本条提交（`fix(coverage): 覆盖率口径 v2，固定格数消除缩放差异`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用写入本文件，复盘时用 `git log -1 --format=%h` 取本条唯一提交。
+- **问题**
+  - v1 的 `runCoverageAnalysis` 用 `state.viewport.zoom` 推导 targetCells（6000–36000），同一图纸换个缩放百分比覆盖率就不同；`analyzeCoverage` 又按区域包围盒（而非多边形面积）分配格数，多区域/不规则区域口径不统一。
+  - `regionPolygons` 不检查可见性，隐藏图层的区域仍进入分母；隐藏图层的设备已被 `isVisible` 排除，导致“设备不计、区域照算”的不对称。
+  - 报告只写“栅格法估算”，未标注视场角/有效距离/格边口径，历史数值无法归档比较。
+- **算法口径变化（v2）**
+  - `APP_LIMITS` 新增：`COVERAGE_TARGET_CELLS=18000`、`COVERAGE_MAX_CELLS=200000`、`COVERAGE_CELL_MIN_M=0.03`、`COVERAGE_CELL_MAX_M=10`。
+  - `coverageGridPlan`：按**可见区域多边形面积**分配固定目标格数 → 格边 = √(面积/分得格数)，夹在 0.03–10m；总格数超 20 万时统一放大格边（仍确定）。
+  - `analyzeCoverage(st,opt)` 签名不变，内部改用固定规划；结果新增 `spec`（version/targetCells/maxCells/cellMinM/cellMaxM/fovSource/rangeSource/zoomIndependent）、`gridCells`/`targetCells`/`maxCells`。
+  - `runCoverageAnalysis` 删除 zoom→targetCells 推导；弹窗标注“统计口径 v2”、固定目标/实际格数/格边、镜头口径与 v1 不可比说明。
+  - `regionPolygons` 过滤隐藏对象与隐藏图层：不计入分母、覆盖与摄像头统计；图层可见性恢复后结果可复现。
+  - GeoJSON 盲区导出新增顶层 `coverageSpec`，toast 标注口径版本。
+  - 镜头口径统一并在报告标注：张角取类型 `fov`（默认 90°，10–360°，360° 视为全向）；有效距离取 `phys`(m)，扇形半径=phys、圆/方=phys/2；未填 phys 的图标点不计入。
+  - `optimizeCameraPlacement` 签名与固定低分辨率规划网格不变（仍 6000 格、与缩放无关）；文档说明其“当前覆盖率”以报告 v2 为准。
+- **实测验证数据（Node bench，本机 Windows，2026-11-06，连续 3 轮）**
+  - 缩放无关性：同一 1000×1000m 图纸 zoom **0.25 / 1 / 4 / 16** 覆盖率均为 **44.42%**，极差 **0.00 个百分点**（目标 ≤1pp）。真实 Chromium e2e 同一场景断言极差 ≤1pp。
+  - 大场地：5000×5000m + 30 摄像头，**173889 格**，单次 **14.6–15.2ms**（目标 <300ms）；1000×1000m + 30 摄像头 **8.0–8.3ms**（3 轮区间）。
+  - selftest：1806 → **1827 通过 / 0 失败**（新增 21 条：4 缩放完全相等、格边不随缩放、固定目标/版本/上限、按面积分配、隐藏图层/对象不计入、恢复可见可复现、再次隐藏可复现、5000×5000m 不超上限且全覆盖 100%）。
+  - e2e：**19/19（22.1s）**，新增 `coverage.spec.mjs` 在真实 Chromium 验证缩放无关、隐藏图层与弹窗口径标注。
+  - `build --check`：**694.7KB**，SHA256 `ea9c45b8…`，二次构建确定。
+  - `npm run ci`：check --selftest / bench（含新增 2 条覆盖率门禁）/ build --check / gates 全绿。
+- **历史数据兼容**
+  - 口径变化会改变历史报告数值（尤其多区域与不规则区域）：弹窗、GeoJSON、`docs/features.md`、`docs/engineering.md` §5.1 均已标注 **v1 数值不可直接对比**，不做静默变更。
+  - 公共 API 签名不变；新增字段均为附加式，旧调用方不受影响。
+- **公共抽象 / 影响面**
+  - 新增 `coverageGridPlan(items,opt)`（`js/core/geometry.js`，覆盖率格数规划唯一实现），已登记 `docs/modules.md`。
+  - `regionPolygons(st)` 语义变化：由“全部区域”变为“仅可见对象+可见图层”，影响所有覆盖率与盲区输出（预期行为）。
+  - 新增常量登记于 `APP_LIMITS`（唯一源），文档 §5.3 同步。
+- **遗留 TODO / 风险**
+  - 超大场地仍受 10m 格边上限 + 20 万格上限约束，精度是“公里级网格”；若需更高精度需另设采样策略，不在本轮。
+  - 布点优化使用 6000 格固定规划网格，其覆盖率与报告 18000 格存在小幅数值差（已文档化），若要求完全一致需提高其网格并承担枚举耗时。
+  - 固定栅格以每次分析的可见区域包围盒为锚，区域增删会改变格边（但同一状态下任意缩放完全一致）；这是面积分配口径的固有特性。
+
 ## 2026-11-06 · B-01 后续：修复已有工程内导入 O(N²)
 
 - **Commit Hash**：本条提交（`perf(import): 修复已有工程内导入 1 万对象的 O(N²)`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用写入本文件，复盘时用 `git log -1 --format=%h` 取本条唯一提交。

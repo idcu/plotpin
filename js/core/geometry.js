@@ -767,10 +767,11 @@ function pointInFootprint(p,cam){
   const half=cam.fov/2;
   return bearing<=half||bearing>=360-half;
 }
-/** 参与覆盖率统计的闭合区域：区域对象 + 闭合折线 */
+/** 参与覆盖率统计的闭合区域：区域对象 + 闭合折线；隐藏对象与隐藏图层不计入分母 */
 function regionPolygons(st){
   const out=[];
   for(const o of st.objects){
+    if(!isVisible(o)) continue;
     if(o.kind==='rect'){ const pts=shapeWorldPoints(o); if(pts.length>=3) out.push({id:o.id,name:o.name||'未命名区域',points:pts}); }
     else if(o.kind==='line'&&o.closed&&Array.isArray(o.points)&&o.points.length>=3){
       out.push({id:o.id,name:o.name||'未命名闭合折线',points:o.points.map(p=>p.slice())});
@@ -780,12 +781,41 @@ function regionPolygons(st){
 }
 function polygonBBox(poly){ return __geo.polygonBBox(poly); }
 /**
- * 栅格覆盖率：每个区域自适应步长（目标 ~targetCells 个候选格），
+ * 覆盖率栅格规划（口径 v2）：固定目标格数，与视口缩放、画布像素和 DPR 无关。
+ * 按可见区域面积分配目标格数 → 格边 = sqrt(面积/分得格数)，夹在 [CELL_MIN_M, CELL_MAX_M]；
+ * 总格数超过 MAX_CELLS 时统一放大格边（结果仍确定，保证大场地单次分析耗时可控）。
+ * 修改此口径等同于改变历史报告数值，必须在文档中标注版本变化。
+ */
+function coverageGridPlan(items,opt){
+  opt=opt||{};
+  const targetCells=Math.max(400,Number(opt.targetCells)||APP_LIMITS.COVERAGE_TARGET_CELLS);
+  const maxCells=Math.max(targetCells,Number(opt.maxCells)||APP_LIMITS.COVERAGE_MAX_CELLS);
+  const totalArea=items.reduce((s,r)=>s+(r.area>0?r.area:0),0);
+  const plan=items.map(r=>{
+    const share=totalArea>0?targetCells*(r.area>0?r.area:0)/totalArea:0;
+    const cell=Math.max(APP_LIMITS.COVERAGE_CELL_MIN_M,
+      Math.min(APP_LIMITS.COVERAGE_CELL_MAX_M,
+        Math.sqrt(Math.max(r.area,1e-6)/Math.max(1,share))));
+    return {bb:r.bb,cell,nx:Math.max(1,Math.ceil(r.bb.w/cell)),ny:Math.max(1,Math.ceil(r.bb.h/cell))};
+  });
+  const totalCells=()=>plan.reduce((s,p)=>s+p.nx*p.ny,0);
+  let guard=0;
+  while(totalCells()>maxCells&&guard++<40){
+    for(const p of plan){
+      p.cell*=1.2;
+      p.nx=Math.max(1,Math.ceil(p.bb.w/p.cell));
+      p.ny=Math.max(1,Math.ceil(p.bb.h/p.cell));
+    }
+  }
+  return {targetCells,maxCells,plan,totalCells:totalCells()};
+}
+/**
+ * 栅格覆盖率：固定格数按区域面积分配（v2，与缩放无关），
  * 格心在区域内且被任一摄像机覆盖即计入。返回每区域网格，供画布叠加层逐格渲染。
+ * 口径元数据随结果返回（spec），报告必须显式标注，避免把新旧数值混为一谈。
  */
 function analyzeCoverage(st,opt){
   opt=opt||{};
-  const target=Math.max(400,opt.targetCells||18000);
   const cameras=st.objects.filter(o=>isVisible(o)).map(cameraFootprint).filter(Boolean);
   /* 摄像机参数预计算：半径平方 / 朝向单位向量 / half 角余弦平方；
      包围盒用于廉价预筛，绝大多数格心离所有设备都很远 */
@@ -797,11 +827,14 @@ function analyzeCoverage(st,opt){
       minX:c.x-c.r-EPS, maxX:c.x+c.r+EPS, minY:c.y-c.r-EPS, maxY:c.y+c.r+EPS};
   });
   const ignored=st.objects.filter(o=>o.kind==='point'&&isVisible(o)&&!(Number(o.phys)>0)).length;
-  const regions=regionPolygons(st).map(r=>{
-    const bb=polygonBBox(r.points), area=polygonArea(r.points);
-    /* 步长上限 10m：超大场地不因目标格数被硬钳到 2m 而产生数十万格 */
-    const cell=Math.max(.03,Math.min(10,Math.sqrt(bb.w*bb.h/target)));
-    const nx=Math.max(1,Math.ceil(bb.w/cell)), ny=Math.max(1,Math.ceil(bb.h/cell));
+  const raw=regionPolygons(st).map(r=>{
+    const bb=polygonBBox(r.points);
+    return {id:r.id,name:r.name,points:r.points,area:polygonArea(r.points),bb};
+  });
+  const layout=coverageGridPlan(raw,opt);
+  const regions=raw.map((r,idx)=>{
+    const cell=layout.plan[idx].cell, nx=layout.plan[idx].nx, ny=layout.plan[idx].ny;
+    const bb=r.bb, area=r.area;
     const poly=r.points, np=poly.length;
     /* 0=区内盲区 1=已覆盖 2=区外 */
     const grid=new Uint8Array(nx*ny);
@@ -845,9 +878,19 @@ function analyzeCoverage(st,opt){
   });
   const totalArea=regions.reduce((s,r)=>s+r.area,0);
   const totalCovered=regions.reduce((s,r)=>s+r.coveredArea,0);
+  /* 口径元数据：报告与文档必须引用同一份，避免“同一图纸换缩放得到不同结果”再次发生 */
+  const spec=Object.freeze({
+    version:2,
+    targetCells:layout.targetCells, maxCells:layout.maxCells,
+    cellMinM:APP_LIMITS.COVERAGE_CELL_MIN_M, cellMaxM:APP_LIMITS.COVERAGE_CELL_MAX_M,
+    fovSource:'point-type.fov', rangeSource:'object.phys',
+    sectorRadius:'phys', circleRadius:'phys/2', squareHalfSide:'phys/2',
+    zoomIndependent:true
+  });
   return {regions,cameraCount:cameras.length,ignoredPoints:ignored,
     totalArea,totalCovered,totalBlind:totalArea-totalCovered,
-    ratio:totalArea?totalCovered/totalArea:0};
+    ratio:totalArea?totalCovered/totalArea:0,
+    gridCells:layout.totalCells,targetCells:layout.targetCells,maxCells:layout.maxCells,spec};
 }
 /**
  * 盲区多边形：逐行合并连续盲格为矩形面（世界坐标，闭合环）。

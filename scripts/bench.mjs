@@ -161,6 +161,33 @@ const tCov = now();
 const cov = api.analyzeCoverage(api.state, { targetCells: 36000 });
 out.coverageMs = +(now() - tCov).toFixed(1);
 out.coverageRatio = +(cov.ratio * 100).toFixed(1);
+
+/* 5b) 大场地：5000×5000m + 30 摄像头，固定目标格数（B-09 验收口径） */
+api.resetState();
+api.state.objects = [api.baseObject('rect', 'rect.area', { x: 0, y: 0, width: 5000, height: 5000 })];
+for (let i = 0; i < 30; i++) {
+  const gx = ((i % 6) + 0.5) * 5000 / 6, gy = (Math.floor(i / 6) + 0.5) * 5000 / 5;
+  api.state.objects.push(api.baseObject('point', 'point.camera', { x: gx, y: gy, phys: 800, angle: (i * 37) % 360 }));
+}
+const tBig = now();
+const covBig = api.analyzeCoverage(api.state);
+out.coverageBigMs = +(now() - tBig).toFixed(1);
+out.coverageBigCells = covBig.gridCells;
+out.coverageBigRatio = +(covBig.ratio * 100).toFixed(1);
+
+/* 5c) 缩放无关性：同一图纸在 4 个缩放级别下的覆盖率差异（B-09 验收 ≤1 个百分点） */
+api.resetState();
+api.state.objects = [api.baseObject('rect', 'rect.area', { x: 0, y: 0, width: 1000, height: 1000 })];
+for (let i = 0; i < 30; i++) {
+  const gx = ((i % 6) + 0.5) * 1000 / 6, gy = (Math.floor(i / 6) + 0.5) * 1000 / 5;
+  api.state.objects.push(api.baseObject('point', 'point.camera', { x: gx, y: gy, phys: 160, angle: (i * 37) % 360 }));
+}
+const zoomRatios = [0.25, 1, 4, 16].map(z => {
+  api.state.viewport = Object.assign({}, api.state.viewport, { zoom: z });
+  return api.analyzeCoverage(api.state).ratio;
+});
+out.coverageZoomSpreadPp = +((Math.max(...zoomRatios) - Math.min(...zoomRatios)) * 100).toFixed(2);
+out.coverageZoomRatios = zoomRatios.map(r => +(r * 100).toFixed(2));
 out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
 
 if (process.argv.includes('--json')) {
@@ -174,6 +201,8 @@ if (process.argv.includes('--json')) {
   console.log(`  视口裁剪：放大 6 倍时绘制 ${out.drawnObjects} / 2000 个对象（裁剪 ${(out.culledRatio * 100).toFixed(1)}%）`);
   console.log(`  默认视图绘制对象：${out.baseDrawn} / 2000`);
   console.log(`  覆盖率分析：1000×1000m + 30 摄像头 ${out.coverageMs} ms（覆盖率 ${out.coverageRatio}%，目标 < 300ms）`);
+  console.log(`  大场地覆盖率：5000×5000m + 30 摄像头 ${out.coverageBigMs} ms（${out.coverageBigCells} 格，覆盖率 ${out.coverageBigRatio}%，目标 < 300ms）`);
+  console.log(`  缩放无关性：zoom 0.25/1/4/16 覆盖率 ${out.coverageZoomRatios.join(' / ')}%，差异 ${out.coverageZoomSpreadPp} 个百分点（目标 ≤ 1）`);
 }
 
 /* 门禁：阻断项（超出一项即红），P99 仅告警。--no-gate 供本地快速跑。 */
@@ -185,6 +214,8 @@ if (!process.argv.includes('--no-gate')) {
     { name: '直接全量帧', value: out.directMs, limit: 60, op: '≤', unit: 'ms' },
     { name: 'heapUsed', value: out.heapUsedMB, limit: 64, op: '≤', unit: 'MB' },
     { name: '覆盖率分析', value: out.coverageMs, limit: 300, op: '≤', unit: 'ms' },
+    { name: '大场地覆盖率分析', value: out.coverageBigMs, limit: 300, op: '≤', unit: 'ms' },
+    { name: '覆盖率缩放差异', value: out.coverageZoomSpreadPp, limit: 1, op: '≤', unit: 'pp' },
     { name: '视口裁剪率', value: out.culledRatio, limit: 0.6, op: '≥', unit: '' }
   ];
   const failed = [];
@@ -204,5 +235,5 @@ if (!process.argv.includes('--no-gate')) {
     failed.forEach(f => console.error(f));
     process.exit(1);
   }
-  console.log(`✅ 渲染基准通过：缓存帧 avg ${out.cachedMs} ms ≤ 8 ms / P95 ${out.cachedP95Ms} ms ≤ 3 ms，重建 ${out.rebuildMs} ms ≤ 60 ms，heapUsed ${out.heapUsedMB} MB ≤ 64 MB，裁剪 ${(out.culledRatio * 100).toFixed(1)}% ≥ 60%，覆盖率 ${out.coverageMs} ms ≤ 300 ms`);
+  console.log(`✅ 渲染基准通过：缓存帧 avg ${out.cachedMs} ms ≤ 8 ms / P95 ${out.cachedP95Ms} ms ≤ 3 ms，重建 ${out.rebuildMs} ms ≤ 60 ms，heapUsed ${out.heapUsedMB} MB ≤ 64 MB，裁剪 ${(out.culledRatio * 100).toFixed(1)}% ≥ 60%，覆盖率 ${out.coverageMs} ms ≤ 300 ms，大场地覆盖率 ${out.coverageBigMs} ms ≤ 300 ms，缩放差异 ${out.coverageZoomSpreadPp}pp ≤ 1pp`);
 }

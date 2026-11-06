@@ -2735,6 +2735,70 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+/* 48.1 覆盖率口径 v2：与缩放无关、按面积分配固定格数、隐藏图层不计入 ------- */
+{
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'R2',x:0,y:0,width:50,height:40}));
+  api.state.objects.push(api.baseObject('point','point.camera',{name:'C2',x:10,y:10,phys:40,angle:45}));
+  const zooms=[0.2,4,20,80];
+  const runs=zooms.map(z=>{
+    api.state.viewport=Object.assign({},api.state.viewport,{zoom:z});
+    return api.analyzeCoverage(api.state);
+  });
+  const ratios=runs.map(r=>r.ratio), cells=runs.map(r=>r.regions[0].cell);
+  const span=Math.max(...ratios)-Math.min(...ratios);
+  eq('覆盖口径v2-4个缩放级别覆盖率完全一致', span, 0);
+  ok('覆盖口径v2-缩放差异≤1个百分点', span<=0.01);
+  approx('覆盖口径v2-格边不随缩放变化', Math.max(...cells)-Math.min(...cells), 0, 1e-12);
+  const fixed=runs[0];
+  eq('覆盖口径v2-固定目标格数', fixed.targetCells, api.APP_LIMITS.COVERAGE_TARGET_CELLS);
+  eq('覆盖口径v2-口径版本', fixed.spec.version, 2);
+  eq('覆盖口径v2-标记与缩放无关', fixed.spec.zoomIndependent, true);
+  ok('覆盖口径v2-总格数受上限护栏约束', fixed.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
+  ok('覆盖口径v2-格边不低于下限', fixed.regions[0].cell>=api.APP_LIMITS.COVERAGE_CELL_MIN_M);
+
+  const two=api.analyzeCoverage({objects:[
+    api.baseObject('rect','rect.area',{name:'A',x:0,y:0,width:20,height:20}),
+    api.baseObject('rect','rect.area',{name:'B',x:100,y:0,width:40,height:40})
+  ]});
+  approx('覆盖口径v2-按面积分配（同形等比区域格边一致）', two.regions[0].cell, two.regions[1].cell, 1e-9);
+
+  api.resetState();
+  const hiddenLayer={id:'layer.hidden',name:'隐藏图层',visible:false,locked:false};
+  api.state.layers.push(hiddenLayer);
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'HR',x:0,y:0,width:20,height:20,layerId:'layer.hidden'}));
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'VR',x:100,y:0,width:20,height:20}));
+  api.state.objects.push(api.baseObject('point','point.dome',{name:'HC',x:10,y:10,phys:30,layerId:'layer.hidden'}));
+  hiddenLayer.visible=true;
+  const baseline=api.analyzeCoverage(api.state);
+  eq('覆盖口径v2-可见时两个区域参与统计', baseline.regions.length, 2);
+  hiddenLayer.visible=false;
+  const hidden=api.analyzeCoverage(api.state);
+  eq('覆盖口径v2-隐藏图层区域不计入分母', hidden.totalArea, 400);
+  eq('覆盖口径v2-隐藏图层设备不计入摄像头', hidden.cameraCount, 0);
+  eq('覆盖口径v2-只统计可见区域', hidden.regions.length, 1);
+  hiddenLayer.visible=true;
+  const shown=api.analyzeCoverage(api.state);
+  eq('覆盖口径v2-图层恢复可见后区域重新计入', shown.regions.length, 2);
+  eq('覆盖口径v2-图层恢复后格数可复现', shown.gridCells, baseline.gridCells);
+  eq('覆盖口径v2-图层恢复后覆盖率可复现', shown.ratio, baseline.ratio);
+  hiddenLayer.visible=false;
+  const again=api.analyzeCoverage(api.state);
+  eq('覆盖口径v2-再次隐藏结果可复现', again.totalArea, hidden.totalArea);
+  eq('覆盖口径v2-再次隐藏格数可复现', again.gridCells, hidden.gridCells);
+
+  api.state.objects[1].visible=false;
+  const invisible=api.analyzeCoverage(api.state);
+  eq('覆盖口径v2-隐藏对象区域不计入分母', invisible.totalArea, 0);
+
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'HUGE',x:0,y:0,width:5000,height:5000}));
+  const huge=api.analyzeCoverage(api.state);
+  ok('覆盖口径v2-5000×5000m 格数不超上限', huge.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
+  approx('覆盖口径v2-5000×5000m 全覆盖为100%', huge.totalArea?huge.ratio:0, 0, 1e-9);
+  api.resetState();
+}
+
 /* 49. 运行环境能力探测：file:// 与 IDB/SW/Blob 缺失时的显式降级 ---------------- */
 {
   const fileEnv=api.detectCapabilities({protocol:'file:',indexedDB:{},serviceWorker:{},Blob:function(){},createObjectURL:true});

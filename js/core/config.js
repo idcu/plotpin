@@ -36,7 +36,11 @@ const APP_LIMITS = Object.freeze({
   HISTORY_MAX: 20,                          /* 撤销栈深度 */
   TOMBSTONE_MAX: 20000,                     /* 删除墓碑硬上限：按对象 id 长期保留，仅在超限时淘汰 */
   TOMBSTONE_EVICT_BATCH: 2000,              /* 增量淘汰批量：攒够一批才压缩一次，避免每次删除都全量排序 */
-  TOMBSTONE_RETENTION_DAYS: 730             /* 墓碑保留窗口：只有超过该天数的旧墓碑才允许按时间淘汰 */
+  TOMBSTONE_RETENTION_DAYS: 730,            /* 墓碑保留窗口：只有超过该天数的旧墓碑才允许按时间淘汰 */
+  COVERAGE_TARGET_CELLS: 18000,             /* 覆盖率栅格固定目标总格数（按区域面积分配，与视口缩放无关） */
+  COVERAGE_MAX_CELLS: 200000,               /* 单次覆盖率分析的栅格总格数上限（大场地性能护栏） */
+  COVERAGE_CELL_MIN_M: 0.03,                /* 覆盖率格边下限（m），防止极小区域产生过量格 */
+  COVERAGE_CELL_MAX_M: 10                   /* 覆盖率格边上限（m），防止超大场地粗于 10m（超格数上限时仍会统一放大） */
 });
 /** 导入限值统一校验：传 {bytes,chars,rows,entities,objects,pixels} 的已知项，返回超限字段列表（空=通过） */
 function importLimitErrors(spec){
