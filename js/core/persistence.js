@@ -665,7 +665,7 @@ function buildProject(p){
     let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
     if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
     /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
-    return Object.assign(base,p,{schema:SCHEMA,meta,settings,background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+    return Object.assign(base,p,{schema:SCHEMA,meta,settings,rules:normalizeRuleConfig(p.rules),background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
   }finally{ restoreNames(); }
 }
 /** 迁移并立即替换当前状态（旧调用方语义）；需要失败回滚的路径请用 buildProject */

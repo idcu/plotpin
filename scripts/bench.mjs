@@ -6,8 +6,10 @@
  *   2) 重建帧：静态层失效后的完整重建耗时（对象增删改时发生）
  *   3) 直接帧：导出/打印路径（全量绘制，作为对照）
  *   4) 视口裁剪有效性：高倍缩放下应只绘制视野附近的对象
+ *   5) 覆盖率分析：栅格化耗时与缩放无关性
+ *   6) C-05 规则检查：2000 对象 / 30 类型阈值；默认 minX 扫描线，--brute 额外全量对照
  *
- * 用法：node scripts/bench.mjs [--json] [--no-gate]
+ * 用法：node scripts/bench.mjs [--json] [--no-gate] [--brute]
  * 门禁（默认启用，--no-gate 仅本地快速跑时关闭）：
  *   缓存帧平均 ≤ 8ms（50fps 预算 20ms 的一半，保留为下限保护）
  *   缓存帧 P95    ≤ 3ms（偶发卡顿不能靠平均帧掩盖）
@@ -16,6 +18,7 @@
  *   直接全量帧    ≤ 60ms（导出/打印路径）
  *   heapUsed      ≤ 64MB
  *   覆盖率分析    ≤ 300ms
+ *   规则检查      ≤ 500ms（2000 对象 / 30 类型阈值）
  *   视口裁剪      ≥ 60%
  * 任一阻断项超出 → 退出码 1，并打印实测值 / 阈值 / 超出比例。
  */
@@ -79,7 +82,7 @@ code += `\n;globalThis.__bench = {
   get state(){ return state; },
   resetState(){ state=createInitialState(); resetFrameRef(); return state; },
   baseObject, drawScene, invalidateStatic, visibleWorldRect, objectBounds, boundsIntersect, selectedIds,
-  resetFrameRef, worldDims, analyzeCoverage
+  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 const api = sandbox.__bench;
@@ -188,6 +191,51 @@ const zoomRatios = [0.25, 1, 4, 16].map(z => {
 });
 out.coverageZoomSpreadPp = +((Math.max(...zoomRatios) - Math.min(...zoomRatios)) * 100).toFixed(2);
 out.coverageZoomRatios = zoomRatios.map(r => +(r * 100).toFixed(2));
+
+/* 6) C-05 规则检查：2000 对象 + 30 类型阈值（site 2000×1500）
+ *    默认 minX 扫描线；--brute 额外跑一次全量两两对照（慢，仅供记录收益） */
+{
+  api.resetState();
+  api.state.site = { id:'site.bench.rules', name:'规则基准场地', layerId:'layer.default', visible:true, locked:false,
+    annot:{}, style:{}, updatedAt:'', kind:'rect', shape:{ type:'rect', x:0, y:0, w:2000, h:1500 } };
+  const ruleTypes = [];
+  for (let i = 0; i < 30; i++) {
+    const id = 'bench.ruletype' + i;
+    ruleTypes.push(id);
+    api.state.objectTypes.push({ id, kind:'point', name:'规则类型' + i, color:'#334155', icon:'custom', builtin:false, scaleShape:'none' });
+  }
+  const ruleObjs = [];
+  for (let i = 0; i < 2000; i++) {
+    const x = (i * 37) % 1900 + 20, y = (i * 53) % 1400 + 20;
+    const typeId = ruleTypes[i % 30];
+    if (i % 3 === 0) ruleObjs.push(api.baseObject('point', typeId, { x, y, name: 'RP' + i }));
+    else if (i % 3 === 1) ruleObjs.push(api.baseObject('rect', typeId, { x, y, width: 4 + (i % 7), height: 3 + (i % 5), name: 'RR' + i }));
+    else ruleObjs.push(api.baseObject('line', typeId, { x, y, points: [[x, y], [x + 6, y], [x + 6, y + 4]], name: 'RL' + i }));
+  }
+  ruleObjs.forEach((o, i) => { o.z = i; });
+  api.state.objects = ruleObjs;
+  ruleTypes.forEach((id, i) => { api.state.rules.spacing.types[id] = 1 + (i % 5) * 0.5; });
+  const ruleSamples = timeSamples(5, () => { api.runRuleCheck(); });
+  const ruleMs = pctOf(ruleSamples, 0.5);
+  const ruleRes = api.runRuleCheck();
+  out.ruleCheckMs = +ruleMs.toFixed(1);
+  out.ruleObjects = ruleRes.stats.objects;
+  out.ruleFloors = ruleRes.stats.floors;
+  out.rulePairs = ruleRes.stats.pairs;
+  out.ruleTheoretical = ruleRes.stats.theoretical;
+  out.rulePairRatio = +(ruleRes.stats.theoretical ? ruleRes.stats.pairs / ruleRes.stats.theoretical : 0).toFixed(4);
+  out.ruleViolations = ruleRes.violations.length;
+  out.ruleTypeCount = ruleTypes.length;
+  out.rulePerRuleMs = Object.keys(ruleRes.perRule).map(id => `${id}:${ruleRes.perRule[id].ms}`).join(' ');
+  if (process.argv.includes('--brute')) {
+    const tBrute = now();
+    const bruteRes = api.runRuleCheck({ mode: 'brute' });
+    out.ruleCheckBruteMs = +(now() - tBrute).toFixed(1);
+    out.ruleBrutePairs = bruteRes.stats.pairs;
+    out.ruleBruteViolations = bruteRes.violations.length;
+  }
+}
+
 out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
 
 if (process.argv.includes('--json')) {
@@ -203,6 +251,11 @@ if (process.argv.includes('--json')) {
   console.log(`  覆盖率分析：1000×1000m + 30 摄像头 ${out.coverageMs} ms（覆盖率 ${out.coverageRatio}%，目标 < 300ms）`);
   console.log(`  大场地覆盖率：5000×5000m + 30 摄像头 ${out.coverageBigMs} ms（${out.coverageBigCells} 格，覆盖率 ${out.coverageBigRatio}%，目标 < 300ms）`);
   console.log(`  缩放无关性：zoom 0.25/1/4/16 覆盖率 ${out.coverageZoomRatios.join(' / ')}%，差异 ${out.coverageZoomSpreadPp} 个百分点（目标 ≤ 1）`);
+  console.log(`  规则检查：2000 对象 / ${out.ruleTypeCount} 类型阈值 ${out.ruleCheckMs} ms（候选对 ${out.rulePairs} / 理论 ${out.ruleTheoretical}，${(out.rulePairRatio * 100).toFixed(2)}%，违规 ${out.ruleViolations} 条，目标 ≤ 500ms）`);
+  console.log(`  规则分项：${out.rulePerRuleMs} ms`);
+  if (out.ruleCheckBruteMs !== undefined) {
+    console.log(`  规则全量对照（--brute）：${out.ruleCheckBruteMs} ms，候选对 ${out.ruleBrutePairs}（扫描线加速 ${(out.ruleCheckBruteMs / out.ruleCheckMs).toFixed(1)}×）`);
+  }
 }
 
 /* 门禁：阻断项（超出一项即红），P99 仅告警。--no-gate 供本地快速跑。 */
@@ -216,8 +269,9 @@ if (!process.argv.includes('--no-gate')) {
     { name: '覆盖率分析', value: out.coverageMs, limit: 300, op: '≤', unit: 'ms' },
     { name: '大场地覆盖率分析', value: out.coverageBigMs, limit: 300, op: '≤', unit: 'ms' },
     { name: '覆盖率缩放差异', value: out.coverageZoomSpreadPp, limit: 1, op: '≤', unit: 'pp' },
+    { name: '规则检查(2000对象/30类型)', value: out.ruleCheckMs, limit: 500, op: '≤', unit: 'ms' },
     { name: '视口裁剪率', value: out.culledRatio, limit: 0.6, op: '≥', unit: '' }
-  ];
+  ].filter(g => !(out.ruleCheckBruteMs !== undefined && g.name === 'heapUsed')); /* --brute 会物化 2M 候选对，heap 门禁不适用 */
   const failed = [];
   for (const g of gates) {
     const bad = g.op === '≤' ? g.value > g.limit : g.value < g.limit;

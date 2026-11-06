@@ -132,6 +132,7 @@
       <button class="side-tab" id="tabBtn-list" data-tab="list" role="tab" aria-selected="false" aria-controls="tab-list" tabindex="-1" data-i18n="tabList">清单</button>
       <button class="side-tab" id="tabBtn-layers" data-tab="layers" role="tab" aria-selected="false" aria-controls="tab-layers" tabindex="-1" data-i18n="tabLayers">图层/类型</button>
       <button class="side-tab" id="tabBtn-stats" data-tab="stats" role="tab" aria-selected="false" aria-controls="tab-stats" tabindex="-1" data-i18n="tabStats">统计</button>
+      <button class="side-tab" id="tabBtn-rules" data-tab="rules" role="tab" aria-selected="false" aria-controls="tab-rules" tabindex="-1" data-i18n="tabRules">规则</button>
     </div>
 
     <section class="tab-pane active" id="tab-props" role="tabpanel" aria-labelledby="tabBtn-props">
@@ -211,6 +212,22 @@
     <section class="tab-pane" id="tab-stats" role="tabpanel" aria-labelledby="tabBtn-stats">
       <div id="statsPanel"></div>
     </section>
+
+    <section class="tab-pane" id="tab-rules" role="tabpanel" aria-labelledby="tabBtn-rules">
+      <div class="section">
+        <h3>几何规则检查</h3>
+        <div id="ruleConfig"></div>
+      </div>
+      <div class="section">
+        <h3>违规清单<span id="ruleCount" class="hint-text"></span></h3>
+        <div class="batch-row">
+          <button class="primary mini" id="runRulesBtn">运行检查</button>
+          <button class="mini" id="exportRulesBtn">导出 CSV</button>
+          <button class="mini" id="clearRulesBtn">清空结果</button>
+        </div>
+        <div id="ruleResults"></div>
+      </div>
+    </section>
   </aside>
 </div>
 
@@ -267,6 +284,7 @@
 <script src="js/features/parking.js"></script>
 <script src="js/features/collab.js"></script>
 <script src="js/features/plugins.js"></script>
+<script src="js/features/rules.js"></script>
 <script src="js/core/app.js"></script>
 </body>
 </html>

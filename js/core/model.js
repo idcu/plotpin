@@ -4,6 +4,11 @@ const ctx = canvas.getContext('2d');
 const wrap = document.getElementById('canvasWrap');
 const $ = id => document.getElementById(id);
 
+/* 规则配置常量必须先于 state 初始化，避免 createRuleConfig 访问 TDZ */
+const RULE_CONFIG_VERSION = 1;
+const RULE_TOLERANCE_MAX = 1000;
+const RULE_TYPE_LIMIT = 200;
+
 let state = createInitialState();
 let bgImage = null;
 let bgDataUrl = '';      // 运行时底图（dataURL，仅内存；持久化走 assets 库的 assetId）
@@ -140,6 +145,50 @@ function normalizeTitleBlock(raw){
   TITLE_BLOCK_FIELDS.forEach(def=>{ if(f[def.key]!==undefined) out.fields[def.key]=titleBlockText(f[def.key]); });
   return out;
 }
+/* -------------------- 几何规则检查配置（C-05） -------------------- */
+/** 规则配置默认值：不内置任何规范数值；间距阈值默认为空，需用户按项目填写 */
+function createRuleConfig(){
+  return {
+    version: RULE_CONFIG_VERSION,
+    scope: 'all',
+    overlap: { enabled:true, tolerance:0.05 },
+    spacing: { enabled:true, types:{} },
+    bounds:  { enabled:true, tolerance:0.05 }
+  };
+}
+function ruleTolerance(v,fb){
+  const n=Number(v);
+  return Number.isFinite(n)&&n>=0&&n<=RULE_TOLERANCE_MAX?Math.round(n*1000)/1000:fb;
+}
+function normalizeRuleTypes(raw){
+  const out={};
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) return out;
+  Object.keys(raw).slice(0,RULE_TYPE_LIMIT).forEach(k=>{
+    if(!/^[A-Za-z0-9_.-]{1,80}$/.test(k)) return;
+    const n=Number(raw[k]);
+    if(Number.isFinite(n)&&n>=0&&n<=RULE_TOLERANCE_MAX) out[k]=Math.round(n*1000)/1000;
+  });
+  return out;
+}
+/** 旧档/脏数据归一：只保留已知规则字段，范围夹取，未知字段剔除 */
+function normalizeRuleConfig(raw){
+  const out=createRuleConfig();
+  if(!raw||typeof raw!=='object') return out;
+  if(raw.scope==='current'||raw.scope==='all') out.scope=raw.scope;
+  if(raw.overlap&&typeof raw.overlap==='object'){
+    out.overlap.enabled=raw.overlap.enabled!==false;
+    out.overlap.tolerance=ruleTolerance(raw.overlap.tolerance,out.overlap.tolerance);
+  }
+  if(raw.spacing&&typeof raw.spacing==='object'){
+    out.spacing.enabled=raw.spacing.enabled!==false;
+    out.spacing.types=normalizeRuleTypes(raw.spacing.types);
+  }
+  if(raw.bounds&&typeof raw.bounds==='object'){
+    out.bounds.enabled=raw.bounds.enabled!==false;
+    out.bounds.tolerance=ruleTolerance(raw.bounds.tolerance,out.bounds.tolerance);
+  }
+  return out;
+}
 /* -------------------- 初始化 / 工程数据 -------------------- */
 /** @returns {ProjectState} 新工程状态 */
 function createInitialState(){
@@ -162,6 +211,7 @@ function createInitialState(){
       segLabelMinPx:APP_LIMITS.SEG_LABEL_MIN_PX, /* 段长标注最小屏幕像素：过短的段不标，避免拥挤 */
       lang:'zh',         /* 界面语言：zh / en（静态 chrome 文案） */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
+    rules: createRuleConfig(), /* C-05 几何规则检查配置：随工程保存 */
     viewport: { zoom:1, panX:0, panY:0 },
     /* 双槽：background 只承载图片栅格（kind:'empty'|'image'）；site 独立承载矢量场地（世界坐标米）。
        两者互不覆盖，每层最多 1 图 + 1 场地；场地不进 objects，不占编号/表格行。 */

@@ -82,6 +82,7 @@ const sandbox = {
   devicePixelRatio: 1,
   requestAnimationFrame: () => 0,
   cancelAnimationFrame() {},
+  matchMedia: () => ({ matches: false }),
   addEventListener() {}, removeEventListener() {}
 };
 sandbox.window = sandbox;
@@ -193,6 +194,11 @@ code += `\n;globalThis.__api = {
   quoteTable, quoteAggregate, quoteColumns, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
   catalogVersion, QUOTE_SNAPSHOT_KEY, quoteSignature, quoteSnapshotTable, quoteMetaTable,
   get currentCatalog(){ return currentCatalog; }, setCurrentCatalog(v){ currentCatalog=v; },
+  createRuleConfig, normalizeRuleConfig, RULE_MAX_VIOLATIONS,
+  registerRule, unregisterRule, listRules, runRuleCheck, ruleViolations,
+  ruleObjectFootprint, ruleGapGeometry, rulePolygonIntersectionArea,
+  rulePointOutsideSite, ruleViolationsCsv, ruleFloorContexts,
+  locateRuleViolation, normalizeRuleTypes, mergeRuleSide, ruleExportName,
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -3785,6 +3791,248 @@ asyncSuites.push((async()=>{
   eq('插件-初始沙箱插件列表为空', PP.listPlugins().length, 0);
 }
 
+/* 57.2 C-05 几何规则检查：配置 / 框架 / 三条规则 / CSV / 定位 --------------- */
+{
+  eq('规则-默认版本', api.createRuleConfig().version, 1);
+  eq('规则-默认范围', api.createRuleConfig().scope, 'all');
+  eq('规则-默认重叠容差', api.createRuleConfig().overlap.tolerance, 0.05);
+  eq('规则-默认间距阈值表为空', api.createRuleConfig().spacing.types, {});
+  eq('规则-默认越界容差', api.createRuleConfig().bounds.tolerance, 0.05);
+  ok('规则-默认三条全部启用', (()=>{const c=api.createRuleConfig();return c.overlap.enabled&&c.spacing.enabled&&c.bounds.enabled;})());
+  eq('规则-state 默认配置与工厂一致', api.state.rules, api.createRuleConfig());
+
+  const n = raw => api.normalizeRuleConfig(raw);
+  eq('规则-归一空配置回默认', n(null).overlap.tolerance, 0.05);
+  eq('规则-负数容差回默认', n({overlap:{tolerance:-1}}).overlap.tolerance, 0.05);
+  eq('规则-超上限容差回默认', n({overlap:{tolerance:5000}}).overlap.tolerance, 0.05);
+  eq('规则-字符串容差转数值', n({overlap:{tolerance:'2'}}).overlap.tolerance, 2);
+  eq('规则-容差保留三位小数', n({overlap:{tolerance:1.2345}}).overlap.tolerance, 1.235);
+  eq('规则-范围只接受枚举', n({scope:'weird'}).scope, 'all');
+  eq('规则-范围 current 保留', n({scope:'current'}).scope, 'current');
+  eq('规则-关闭标记保留', n({spacing:{enabled:false}}).spacing.enabled, false);
+  eq('规则-类型阈值过滤非法键', n({spacing:{types:{'bad key!':1,'ok.type':2}}}).spacing.types, {'ok.type':2});
+  eq('规则-类型阈值过滤负数', n({spacing:{types:{'a.b':-1,'c.d':0}}}).spacing.types, {'c.d':0});
+  eq('规则-类型阈值过滤超上限', n({spacing:{types:{'a.b':5000}}}).spacing.types, {});
+  const manyTypes = {};
+  for(let i=0;i<250;i++) manyTypes['t.'+i]=1;
+  eq('规则-类型阈值上限 200', Object.keys(n({spacing:{types:manyTypes}}).spacing.types).length, 200);
+  eq('规则-未知字段剔除', Object.keys(n({bogus:1})).sort().join(','), 'bounds,overlap,scope,spacing,version');
+
+  /* 配置随工程保存：persistableState 深拷贝 / buildProject 显式归一 / 合并保留 */
+  api.resetState();
+  api.state.rules.spacing.types['point.marker'] = 1.5;
+  const persisted = api.persistableState();
+  eq('规则-自动保存带出配置', persisted.rules.spacing.types['point.marker'], 1.5);
+  persisted.rules.spacing.types['point.marker'] = 9;
+  eq('规则-自动保存为深拷贝', api.state.rules.spacing.types['point.marker'], 1.5);
+  const proj = api.buildProject({ rules:{ scope:'current', overlap:{tolerance:0.2}, spacing:{types:{'point.marker':1.5}} } });
+  eq('规则-载入工程保留范围', proj.rules.scope, 'current');
+  eq('规则-载入工程保留容差', proj.rules.overlap.tolerance, 0.2);
+  eq('规则-载入工程保留阈值', proj.rules.spacing.types['point.marker'], 1.5);
+  eq('规则-载入工程剔除脏阈值', api.buildProject({ rules:{ spacing:{types:{'bad key!':1}} } }).rules.spacing.types, {});
+  const baseProj = rules => ({ schema:api.SCHEMA, meta:{}, settings:{}, viewport:{}, background:{kind:'empty'}, site:null,
+    layers:[], objectTypes:[], objects:[], floors:[{id:'floor.default',name:'1F'}], activeFloorId:'floor.default', tombstones:[], rules });
+  const localRules = { version:1, scope:'all', overlap:{enabled:true,tolerance:0.1}, spacing:{enabled:true,types:{'point.marker':1}}, bounds:{enabled:true,tolerance:0.1} };
+  const remoteRules = { version:1, scope:'current', overlap:{enabled:true,tolerance:0.5}, spacing:{enabled:true,types:{'point.marker':4}}, bounds:{enabled:false,tolerance:0.5} };
+  eq('规则-合并保留本地配置', api.mergeProjectData(baseProj(localRules), baseProj(remoteRules)).project.rules.overlap.tolerance, 0.1);
+  eq('规则-合并缺失侧取另一侧', api.mergeProjectData(baseProj(null), baseProj(remoteRules)).project.rules.spacing.types['point.marker'], 4);
+  eq('规则-合并缺失侧逻辑直接判定', api.mergeRuleSide({}, remoteRules).spacing.types['point.marker'], 4);
+}
+
+/* 57.3 规则注册框架 -------------------------------------------------------- */
+{
+  api.resetState();
+  const st = api.state;
+  const builtin = api.listRules().filter(r=>r.builtin).map(r=>r.id).sort().join(',');
+  eq('规则框架-内建三条已注册', builtin, 'bounds,overlap,spacing');
+  ok('规则框架-内建三条均有名称与说明', ['overlap','spacing','bounds'].every(id=>{
+    const r = api.listRules().find(x=>x.id===id);
+    return r && r.name && r.description;
+  }));
+  eq('规则框架-重复 id 被拒绝', api.registerRule({id:'overlap',check(){return [];}}).ok, false);
+  eq('规则框架-非法 id 被拒绝', api.registerRule({id:'bad id!',check(){return [];}}).ok, false);
+  eq('规则框架-缺少 check 被拒绝', api.registerRule({id:'test.nocheck'}).ok, false);
+  ok('规则框架-内建规则不可注销', !api.unregisterRule('overlap').ok);
+  ok('规则框架-注销不存在规则失败', !api.unregisterRule('nope').ok);
+
+  const reg = api.registerRule({id:'test.flag',name:'测试标记',check:ctx=>({violations:ctx.objects.map(o=>({
+    objectId:o.id, objectName:o.name, x:o.x, y:o.y, message:'自定义规则命中'
+  }))})});
+  ok('规则框架-注册自定义规则成功', reg.ok && reg.id==='test.flag');
+  const obj = api.baseObject('point','point.marker',{x:5,y:5,name:'P1'});
+  st.objects = [obj];
+  const run1 = api.runRuleCheck({scope:'current'});
+  eq('规则框架-自定义规则参与运行', run1.violations.filter(v=>v.ruleId==='test.flag').length, 1);
+  const hit = run1.violations.find(v=>v.ruleId==='test.flag');
+  ok('规则框架-违规含规则名/对象/楼层/位置/说明', !!hit && hit.ruleName==='测试标记' && hit.objectId===obj.id &&
+    hit.floorId===st.activeFloorId && hit.floorName==='1F' && hit.x===5 && hit.y===5 && hit.message==='自定义规则命中');
+  api.registerRule({id:'test.throw',name:'异常规则',check(){ throw new Error('boom'); }});
+  const run2 = api.runRuleCheck({scope:'current'});
+  ok('规则框架-规则异常被隔离并记录', run2.skipped.some(s=>s.ruleId==='test.throw'&&/规则异常/.test(s.reason)));
+  eq('规则框架-异常不影响其他规则', run2.violations.filter(v=>v.ruleId==='test.flag').length, 1);
+  ok('规则框架-注销自定义规则成功', api.unregisterRule('test.flag').ok && api.unregisterRule('test.throw').ok);
+  eq('规则框架-注销后恢复三条内建', api.listRules().length, 3);
+}
+
+/* 57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨楼层 --------------------- */
+{
+  const rect = (x,y,w=10,h=10,name='R') => api.baseObject('rect','rect.area',{x,y,width:w,height:h,name});
+  const run = objs => { api.resetState(); api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
+  const cnt = (r,id) => r.violations.filter(v=>v.ruleId===id).length;
+
+  let r1 = run([rect(0,0),rect(5,5)]);
+  eq('重叠-实质相交报 1 条', cnt(r1,'overlap'), 1);
+  approx('重叠-交面积数值', r1.violations.find(v=>v.ruleId==='overlap').value, 25);
+  eq('重叠-相邻贴合不报', cnt(run([rect(0,0),rect(10,0)]),'overlap'), 0);
+  eq('重叠-0.02m 贴合容差内不报', cnt(run([rect(0,0),rect(10.02,0)]),'overlap'), 0);
+  eq('重叠-0.10m 有间隙不报', cnt(run([rect(0,0),rect(10.10,0)]),'overlap'), 0);
+  eq('重叠-0.04m 微交在容差内不报', cnt(run([rect(0,0),rect(9.96,0)]),'overlap'), 0);
+
+  api.resetState();
+  api.state.rules.overlap.tolerance = 0.5;
+  api.state.objects = [rect(0,0),rect(9.6,0)];
+  eq('重叠-调大容差后浅穿透不报', cnt(api.runRuleCheck({scope:'current'}),'overlap'), 0);
+  api.state.objects = [rect(0,0),rect(9.4,0)];
+  eq('重叠-超出容差的实质重叠仍报', cnt(api.runRuleCheck({scope:'current'}),'overlap'), 1);
+
+  const L = api.baseObject('line','line.custom',{closed:true,name:'L',points:[[0,0],[10,0],[10,4],[4,4],[4,10],[0,10]]});
+  const rc = run([L,rect(2,2,6,6)]);
+  eq('重叠-凹多边形与矩形相交报 1 条', cnt(rc,'overlap'), 1);
+  approx('重叠-凹多边形交面积 20m²', rc.violations.find(v=>v.ruleId==='overlap').value, 20);
+  approx('重叠-凹多边形交面积直接计算', api.rulePolygonIntersectionArea(L.points,[[2,2],[8,2],[8,8],[2,8]]), 20, 1e-6);
+  eq('重叠-纯图标点无面积跳过', cnt(run([
+    api.baseObject('point','point.marker',{x:5,y:5}),api.baseObject('point','point.marker',{x:5,y:5})
+  ]),'overlap'), 0);
+
+  api.resetState();
+  const st = api.state;
+  st.objects = [rect(0,0)];
+  st.floors.push({id:'floor.F2',name:'2F',objects:[rect(0,0)],site:null});
+  const allFloors = api.runRuleCheck({scope:'all'});
+  eq('重叠-跨楼层同位置不互报', cnt(allFloors,'overlap'), 0);
+  eq('重叠-全部楼层对象计数', allFloors.stats.objects, 2);
+  eq('重叠-全部楼层楼层计数', allFloors.stats.floors, 2);
+  eq('重叠-当前楼层范围仅统计本层', api.runRuleCheck({scope:'current'}).stats.objects, 1);
+}
+
+/* 57.5 最小间距：不足 / 刚好达标 / 改配置重查 / 双类型取 max / 点-区域 ------- */
+{
+  const pt = (x,y,name='P') => api.baseObject('point','point.marker',{x,y,name});
+  const run = objs => { api.resetState(); api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
+  const cnt = r => r.violations.filter(v=>v.ruleId==='spacing').length;
+
+  api.resetState();
+  api.state.rules.spacing.types = {'point.marker':1};
+  api.state.objects = [pt(10,10,'P1'),pt(10.5,10,'P2'),pt(12,10,'P3')];
+  const r1 = api.runRuleCheck({scope:'current'});
+  eq('间距-不足 1m 报 1 对', cnt(r1), 1);
+  eq('间距-净距数值', r1.violations.find(v=>v.ruleId==='spacing').value, 0.5);
+  eq('间距-阈值随违规带出', r1.violations.find(v=>v.ruleId==='spacing').threshold, 1);
+
+  const run2 = objs => { api.resetState(); api.state.rules.spacing.types = {'point.marker':1}; api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
+  eq('间距-刚好达标 1m 不报', cnt(run2([pt(10,10),pt(11,10)])), 0);
+  eq('间距-略超阈值不报', cnt(run2([pt(10,10),pt(11.0001,10)])), 0);
+
+  api.resetState();
+  api.state.rules.spacing.types = {'point.marker':3};
+  api.state.objects = [pt(10,10,'P1'),pt(10.5,10,'P2'),pt(12,10,'P3')];
+  eq('间距-改阈值 1→3 后违规数变化', cnt(api.runRuleCheck({scope:'current'})), 3);
+
+  api.resetState();
+  const st = api.state;
+  st.objectTypes.push({id:'type.a',kind:'point',name:'A 类',color:'#111111',icon:'custom',builtin:false,scaleShape:'none'});
+  st.rules.spacing.types = {'type.a':1,'point.marker':3};
+  st.objects = [api.baseObject('point','type.a',{x:10,y:10,name:'A'}),pt(12.5,10,'B')];
+  const rm = api.runRuleCheck({scope:'current'});
+  eq('间距-两类对象取最大阈值报 1 对', cnt(rm), 1);
+  eq('间距-阈值取 max=3', rm.violations.find(v=>v.ruleId==='spacing').threshold, 3);
+
+  api.resetState();
+  api.state.rules.spacing.types = {'point.marker':4,'rect.area':4};
+  api.state.objects = [
+    api.baseObject('rect','rect.area',{x:20,y:5,width:4,height:4,shape:{type:'circle',r:2},name:'C'}),
+    pt(25,5,'P')
+  ];
+  const rp = api.runRuleCheck({scope:'current'});
+  eq('间距-点到圆区域报 1 对', cnt(rp), 1);
+  approx('间距-点到圆净距 3m', rp.violations.find(v=>v.ruleId==='spacing').value, 3, 1e-6);
+
+  api.resetState();
+  api.state.rules.spacing.types = {'point.marker':4};
+  api.state.objects = [
+    api.baseObject('rect','rect.area',{x:20,y:5,width:4,height:4,shape:{type:'circle',r:2},name:'C'}),
+    pt(25,5,'P')
+  ];
+  eq('间距-未配置类型不参与比较', cnt(api.runRuleCheck({scope:'current'})), 0);
+
+  api.resetState();
+  api.state.rules.spacing.types = {'line.custom':1};
+  api.state.objects = [
+    api.baseObject('line','line.custom',{points:[[10,10],[20,10]],name:'L1'}),
+    api.baseObject('line','line.custom',{points:[[10,10.5],[20,10.5]],name:'L2'})
+  ];
+  const rl = api.runRuleCheck({scope:'current'});
+  eq('间距-平行线间距不足报 1 对', cnt(rl), 1);
+  eq('间距-平行线净距 0.5m', rl.violations.find(v=>v.ruleId==='spacing').value, 0.5);
+}
+
+/* 57.6 越界：场内 / 贴边 / 部分 / 完全 / 文字 / 尺寸 / 隐藏 / 无场地 --------- */
+{
+  const rect = (x,y,w=10,h=10,name='R') => api.baseObject('rect','rect.area',{x,y,width:w,height:h,name});
+  const run = objs => { api.resetState(); api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
+  const cnt = r => r.violations.filter(v=>v.ruleId==='bounds').length;
+  const one = r => r.violations.find(v=>v.ruleId==='bounds');
+
+  eq('越界-场地内不报', cnt(run([rect(10,10)])), 0);
+  eq('越界-贴边不报', cnt(run([rect(90,10)])), 0);
+  const part = run([rect(95,10)]);
+  eq('越界-部分越出报 1 条', cnt(part), 1);
+  eq('越界-部分越界标记', one(part).kind, 'partial');
+  const full = run([rect(150,10)]);
+  eq('越界-完全越出报 1 条', cnt(full), 1);
+  eq('越界-完全越界标记', one(full).kind, 'full');
+  const cross = run([api.baseObject('line','line.custom',{points:[[-10,30],[110,30]],name:'X'})]);
+  eq('越界-线段横跨边界记为部分', cnt(cross), 1);
+  eq('越界-横跨边界标记', one(cross).kind, 'partial');
+  const txt = run([api.baseObject('text','text.builtin',{x:99,y:35,text:'文字ABC',name:'T'})]);
+  eq('越界-文字越界参与检查', cnt(txt), 1);
+  eq('越界-场内尺寸标注不报', cnt(run([api.baseObject('dimension','dimension.distance',{subtype:'ruler',points:[[5,5],[10,5]],x:5,y:5,name:'D'})])), 0);
+  eq('越界-隐藏对象不检查', cnt(run([api.baseObject('point','point.marker',{x:200,y:30,visible:false,name:'H'})])), 0);
+
+  api.resetState();
+  api.state.site = null;
+  api.state.objects = [rect(150,10)];
+  const noSite = api.runRuleCheck({scope:'current'});
+  eq('越界-无场地不产生违规', cnt(noSite), 0);
+  ok('越界-无场地记录跳过原因', noSite.skipped.some(s=>s.ruleId==='bounds'&&/未设置/.test(s.reason)));
+}
+
+/* 57.7 违规清单 CSV 导出与点击定位 ------------------------------------------ */
+{
+  api.resetState();
+  api.state.objects = [
+    api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:10,name:'A'}),
+    api.baseObject('rect','rect.area',{x:5,y:5,width:10,height:10,name:'B'})
+  ];
+  const r = api.runRuleCheck({scope:'current'});
+  const csv = api.ruleViolationsCsv(r);
+  ok('CSV-含 BOM 与表头', csv.startsWith('\uFEFF规则,对象编号,对象名称,关联对象,楼层,X,Y,说明,值'));
+  eq('CSV-行数=表头+违规数', csv.trimEnd().split('\r\n').length, 1+r.violations.length);
+  ok('CSV-行尾 CRLF', csv.endsWith('\r\n'));
+  const fake = { violations:[{ruleId:'x',ruleName:'规则,名',objectId:'O1',objectName:'=SUM(1)',peerId:'',peerName:'',
+    floorName:'1F',x:1,y:2,message:'a,b',value:3}] };
+  const fc = api.ruleViolationsCsv(fake);
+  ok('CSV-逗号字段加引号', fc.includes('"规则,名"'));
+  ok('CSV-公式注入加前导单引号', fc.includes("'=SUM(1)"));
+  ok('CSV-文件名带日期与 .csv', /^rule-violations-\d{8}-\d{4}\.csv$/.test(api.ruleExportName()));
+
+  const v = r.violations.find(x=>x.ruleId==='overlap');
+  const located = await api.locateRuleViolation(v);
+  ok('定位-返回成功', located);
+  ok('定位-选中主对象与关联对象', api.selectedIds.has(v.objectId) && (!v.peerId || api.selectedIds.has(v.peerId)));
+  ok('定位-异常对象安全返回', (await api.locateRuleViolation({objectId:'missing',floorId:api.state.activeFloorId})) === false);
+}
+
 /* 58. 中英界面切换与无障碍标记 --------------------------------------------- */
 {
   const I=api.I18N;
@@ -3871,11 +4119,11 @@ asyncSuites.push((async()=>{
 
   /* ARIA tablist：每个页签有关联面板，每个面板有标签来源 */
   const tabBtns=[...html.matchAll(/<button[^>]*class="side-tab[^"]*"[^>]*>/g)].map(m=>m[0]);
-  eq('无障碍-页签按钮数', tabBtns.length, 4);
+  eq('无障碍-页签按钮数', tabBtns.length, 5);
   ok('无障碍-页签均有 aria-controls', tabBtns.every(s=>/aria-controls="tab-/.test(s)));
   ok('无障碍-页签均有 roving tabindex', tabBtns.every(s=>/tabindex="(?:0|-1)"/.test(s)));
   const tabPanels=[...html.matchAll(/<section[^>]*class="tab-pane[^"]*"[^>]*>/g)].map(m=>m[0]);
-  eq('无障碍-页签面板数', tabPanels.length, 4);
+  eq('无障碍-页签面板数', tabPanels.length, 5);
   ok('无障碍-面板均为 tabpanel', tabPanels.every(s=>/role="tabpanel"/.test(s)));
   ok('无障碍-面板均有 aria-labelledby', tabPanels.every(s=>/aria-labelledby="tabBtn-/.test(s)));
 

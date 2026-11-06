@@ -6,6 +6,14 @@
  * 删除时间早于对象更新时间时墓碑失效并被清理，较新的编辑可以让对象「复活」。
  * 楼层按 id 合并：新增楼层追加；楼层墓碑晚于该层最后写入时整层删除。图层/对象类型按 id 取并集，本地优先。
  */
+/** 规则配置取非空的一侧（本地优先）；mergeNormalizeSide 会把缺失侧归一为 {}，这里不能只看真值 */
+function mergeRuleSide(local, incoming){
+  const a=local&&typeof local==='object'?local:null;
+  const b=incoming&&typeof incoming==='object'?incoming:null;
+  if(a&&Object.keys(a).length) return a;
+  if(b&&Object.keys(b).length) return b;
+  return {};
+}
 function mergeProjectData(currentRaw, incomingRaw){
   const A = mergeNormalizeSide(currentRaw);
   const B = mergeNormalizeSide(incomingRaw);
@@ -74,6 +82,8 @@ function mergeProjectData(currentRaw, incomingRaw){
   const project = {
     schema: (currentRaw && currentRaw.schema) || (incomingRaw && incomingRaw.schema) || '',
     meta, settings,
+    /* 规则配置属于工程级设置：本地侧优先，任一侧缺失时保留另一侧，避免协作合并丢配置 */
+    rules: mergeClone(mergeRuleSide(A.rules, B.rules)),
     viewport: mergeClone(active.viewport || {}),
     background: mergeClone(active.background || {}),
     site: mergeClone(active.site || null),
@@ -125,6 +135,7 @@ function mergeNormalizeSide(raw){
     activeFloorId,
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
     settings: raw.settings && typeof raw.settings === 'object' ? raw.settings : {},
+    rules: raw.rules && typeof raw.rules === 'object' ? mergeClone(raw.rules) : {},
     layers: mergeIdList(raw.layers),
     objectTypes: mergeIdList(raw.objectTypes),
     tombstones: mergeTombstoneMap(raw),

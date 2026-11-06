@@ -2,6 +2,47 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · C-05 几何规则检查（重叠 / 间距 / 越界 + 可注册框架与 CSV）
+
+- **Commit Hash**：本条提交（`feat(rules): 几何规则检查框架与三条内建规则（+31,123 B）`）。复盘用 `git log --grep="几何规则检查框架" -1 --format=%H`。
+- **核心改动点**
+  - `js/core/model.js`：新增 `RULE_CONFIG_VERSION=1`、`createRuleConfig()`、`ruleTolerance()`、`normalizeRuleTypes()`、`normalizeRuleConfig()`；`state.rules` 默认三条规则启用（`scope:'all'`，重叠/越界容差 0.05m，间距类型表为空），随工程保存。
+  - `js/core/persistence.js`：`buildProject()` 显式 `normalizeRuleConfig(p.rules)`，载入/导入/合并均走同一归一，未知字段剔除、容差 0–1000m 三位小数、类型阈值最多 200 键。
+  - `js/common/merge.js`：新增 `mergeRuleSide(local, incoming)`，本地非空优先、缺失侧回退；修正 `mergeNormalizeSide` 把缺失侧归一为 `{}` 后"永远本地优先"的隐性丢配置问题。
+  - `js/features/rules.js`（新增）：`RULE_REGISTRY` + `registerRule/unregisterRule/listRules`；三条内建规则不可注销，自定义规则参与 `runRuleCheck`，逐规则异常隔离为 `skipped`。
+  - 几何口径：重叠 = 同楼层包围盒穿透 > `tolerance` 才进入多边形判定，交面积 > `tolerance²` 报；间距 = 只比较已配置类型两两，两对象阈值取 `max`，净距 `<` 阈值报（恰好达标不报）；越界 = 以 `siteOutlinePoints(site)` 为界，容差内视为场内，分 `partial` / `full`。
+  - 性能：`ruleCandidatePairs()` 提供 `mode:'sweep'`（minX 扫描线，按最大类型阈值扩张）与 `mode:'brute'`（全量 `N(N-1)/2`，仅供基准对照）。
+  - 输出与交互：违规统一含规则 id/名、对象 id/名、关联对象、楼层、世界坐标、说明、实测值、越界分类；`ruleViolationsCsv()` 复用 `csvCell`（BOM、引号、公式注入防护）；`locateRuleViolation()` 跨楼层切层、选中主/关联对象、切属性页签并居中；`index.html` 新增第 5 页签「规则」，配置/结果/运行/导出/清空全部走事件委托。
+  - 免责声明：页面与文档明确「这是几何检查，不是消防/规范审图；不内置任何规范数值」，阈值全部由用户填写。
+  - 测试与文档：`scripts/selftest.mjs` 新增 §57.2–57.7；`tests/e2e/rules.spec.mjs` 覆盖运行→改配置→重查→定位→CSV；`scripts/bench.mjs` 新增 2000 对象/30 类型场景与 `--brute` 对照；同步 `docs/engineering.md` §4.2、`docs/features.md`、`docs/modules.md`、`README.md`。
+- **实测验证数据**
+  - **体积**：685,350 → **716,473 B（+31,123 B / +4.54%）**；gzip 211,396 → **220,917 B（+9,521 B / +4.50%）**；839,680 B 门禁余量 **123,207 B**；SHA256 `f426ebc6657faf1eafd126c22cc6b6609b35e961d3423cea31713f0ed3286ada`。
+  - **selftest**：**2288 通过 / 0 失败**（基线 2194，新增 94 条）。逐条正反例结果：
+    - 重叠：相交 25m² 报 1 条；相邻贴合、0.02m 浅穿透（容差 0.05）、0.10m 间隙均 0 条；容差调 0.5 后 0.4m 浅穿透 0 条、0.6m 实质重叠 1 条；凹 L 形多边形与矩形交面积 20m²；纯图标点跳过；跨楼层同位置 0 条。
+    - 间距：净距 0.5m / 阈值 1m 报 1 对且数值 0.5；净距 1m（刚好达标）与 1.0001m 均 0 条；阈值 1→3 后违规 1→3 条；双类型阈值取 max=3；点到圆净距 3m；未配置类型不参与；平行线净距 0.5m。
+    - 越界：场内与贴边 0 条；部分越出 `partial` 1 条；完全越出 `full` 1 条；线段横跨边界 `partial`；文字越界参与；场内尺寸标注 0 条；隐藏对象不检查；无场地时跳过并记录原因。
+    - CSV：BOM + 表头、行数 = 1 + 违规数、CRLF；逗号字段加引号；`=SUM(1)` 加前导单引号；文件名 `rule-violations-YYYYMMDD-HHMM.csv`。
+    - 定位：命中主/关联对象并写入 `selectedIds`；不存在对象安全返回 `false`。
+  - **e2e**：**62 passed / 1 skipped**（基线 61/1，新增 `rules.spec.mjs` 1 条，813ms）。覆盖：首轮重叠 1 + 越界 1 → 2 条；UI 填间距阈值 1m 并失焦 → 重查 3 条（新增「最小间距」「低于阈值」）；点击违规行切到属性页签且选中 1–2 个对象；导出文件名与 4 行 CSV（表头 + 3 违规）；免责提示文案存在。
+  - **性能（2000 对象 / 30 类型阈值 / 场地 2000×1500m）**：`ruleCheckMs = 14.3–15.2 ms`（5 次取中位数 14.3ms，CI 复跑 15.2ms；分项 overlap 9–10ms / spacing 1ms / bounds 1–2ms；违规 0 条）；候选对 **7** / 理论 `C(667,2)+C(2000,2) = 2,221,111`，占比 **0.00%**；同场景 `--brute` 全量对照 **15,666.4 ms**，扫描线加速约 **1096×**。门禁 `≤500ms` 通过。
+  - **构建门禁**：`node scripts/build.mjs --check` 二次构建确定性一致；CSP 哈希 40 = 40；产物 716,473 B ≤ 839,680 B。
+- **未验证项**
+  - **Firefox / Safari 未测**：本轮只在 Chromium（Playwright bundled）验证；`fill + blur` 触发 `change` 的交互与下载行为未在其他内核取证。
+  - **跨楼层点击定位未跑 e2e**：selftest 覆盖同层定位与不存在对象；`locateRuleViolation` 的 `switchFloor` 异步路径只有静态审查，没有浏览器级跨层用例。
+  - **超过 2000 对象未测**：5000 条违规截断、10k 对象耗时、极端密集场景（大量候选对）均未打点。
+  - **自交多边形回退分支未构造正反例**：只有实现与静态审查，没有 selftest 断言。
+  - **旋转椭圆/扇形间距精度未逐角度验证**：按 72 段采样近似，只在点-圆场景测过数值。
+- **遗留 TODO / 风险**
+  - 采样/三角化误差：圆/椭圆/扇形 72 段、凹多边形耳切三角化，边界误差在采样/三角化容差内；贴边阈值附近可能出现 ±1 段误差。
+  - 自交多边形回退包围盒，可能对"自交但视觉不重叠"的对象误报；属于已知保守行为。
+  - 规则注册表是运行时内存态：工程只保存**配置**，自定义规则函数不随工程/协作同步；刷新后需插件重新 `registerRule`。
+  - 越界只对照矢量场地边界，不校核红线、用地性质、退线、消防间距等外部约束。
+  - `scope:'all'` 逐层执行，楼层很多时耗时为线性叠加；当前只有单层基准数据。
+- **受影响调用方 / 公共抽象**
+  - `persistableState()` / `buildProject()` 新增 `rules` 键：旧工程缺该键时 `buildProject` 补默认，旧调用方参数不变；`mergeProjectData` 输出新增 `rules`，`mergeNormalizeSide` 保留该键。
+  - 新增公共抽象（详见 `docs/modules.md`）：`createRuleConfig` / `normalizeRuleConfig` / `normalizeRuleTypes` / `ruleTolerance` / `RULE_CONFIG_VERSION`（配置唯一源）、`mergeRuleSide`（合并判据）、`registerRule` / `unregisterRule` / `listRules` / `runRuleCheck` / `ruleViolationsCsv` / `locateRuleViolation`（框架唯一入口）、`ruleObjectFootprint` / `ruleOverlapCheck` / `ruleSpacingCheck` / `ruleBoundsCheck` / `ruleCandidatePairs`（几何口径唯一实现）。
+  - 无新增运行时依赖；`index.html` 仅多一个 `<script src="js/features/rules.js">` 与第 5 页签，未改 `camera-*`。
+
 ## 2026-11-06 · C-01 插件沙箱 / 版本兼容 / 示例与文档
 
 - **Commit Hash**：本条提交（`feat(plugin): 隔离 Worker 沙箱 + 版本/能力门 + 安全 e2e（+21,025 B）`）。复盘用 `git log --grep="隔离 Worker 沙箱" -1 --format=%H`。
