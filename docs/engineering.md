@@ -126,10 +126,10 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 750 KB | 717.8 KB | 留约 4.3% 余量 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `ad8c3901…` | 从源重建、二次构建确定性一致 |
+| 单文件体积 | ≤ 750 KB | 722.3 KB | 留约 3.7% 余量 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `f8c5aa9c…` | 从源重建、二次构建确定性一致 |
 | CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 37 = 37 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 1870 | 只增不减 |
+| 断言数 | ≥ 1870 且 0 失败 | 1886 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在
@@ -156,6 +156,22 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 等运行时字段。构造样本（20 个未变 + 六类各 1 条）实测分类全部正确、**误报 0/20（0%）**；
 50 条人工差异样本本轮**未验证**（见 CHANGELOG.internal.md 遗留项）。
 
+**历史栈结构共享（B-10，2026-11）**：撤销栈不再对 `state` 做 20 份 JSON 深拷贝。
+`pushHistory / undo / redo` 改用 `snapshotHistoryState`（`js/core/model.js`）：
+与上一份**已标记快照**逐层深比较，未变子树直接复用，变化子树新建；字符串（含照片 base64）
+按引用共享，不复制字节。快照顶层带不可枚举 `Symbol` 标记，`history.past/future` 仍是
+state 形状的普通对象数组（`assetRefsInMemory`、`ContentAssets.collectAssetRefs`、
+交互层 `history.past.pop()` 与外部手工 push 的普通条目全部保持兼容）。
+`undo/redo` 弹出快照后先 `materializeHistoryState` 物化——容器重新分配、字符串继续共享——
+避免 live 编辑污染被其他栈帧共享的子树；落盘时机（`markDirty('restore')`）与 20 条上限不变。
+真实 Chromium（`history-increment.spec.mjs`，本机 Windows，CDP `HeapProfiler.collectGarbage`
++ `Runtime.getHeapUsage`，1000 对象 + 10 张 100KB 内嵌照片，每步只改一个对象）：
+20 条历史 GC 后堆增量 **28.26 MB → 1.03 MB（下降 96.4%）**；
+20 次 push **117.0–159.8 ms → 45.5–48.1 ms**；1000 对象单次 `undo` 同步耗时 **4.0–18.5 ms**
+（3 轮 5 次采样；HEAD 基线单轮 2.4–5.0 ms，增量来自物化副本，仍远低于 100 ms 建议值）。
+注意：`JSON.stringify(history.past)` 仍为 **26.70 MB**——每条快照逻辑上仍是完整工程，
+体积下降来自**内存结构共享**而非序列化格式变更。
+
 **门禁牙齿（`npm run gates`）**：上面这些判据本身也会假绿（只打印不比对、缺文件退 0、
 模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 5 种破坏——
 P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败——
@@ -172,6 +188,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删）；非法 JSON 导入失败后现场不变；跨楼层照片导出/导入不丢 |
 | `csp.spec.mjs` | 4 条注入路径（导入 JSON / 旧存档 / 插件注册 / 类型列表渲染）在浏览器中确实无法执行 JS |
 | `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层、切换楼层后刷新与操作后状态一致 |
+| `history-increment.spec.mjs` | B-10：CDP 实测 20 条含照片历史堆增量（基线 28.26MB vs 1.03MB，下降 96.4%）；共享快照不被 live 编辑污染、undo/redo 语义与 20 条上限不变、普通条目兼容；历史引用的底图/照片保活与清空历史后可回收；1000 对象单次 undo <100ms |
 | `interaction.spec.mjs` | 单击对象不落盘/不清覆盖率/不留空撤销快照；拖拽中 Esc 回滚到原位 |
 | `snapshot.spec.mjs` | 1000 对象快照 < 2s、体积实测；内嵌照片转为 `photoId` 引用；删除快照不影响工程；回滚进入撤销栈且可撤销/重做、回滚后可继续编辑；构造样本六类差异分类与 0 误报；叠加开关与关闭清理；**快照资产保活/删除后可回收**；20 快照（7.64MB）可达集扫描 41.5–42.6ms |
 

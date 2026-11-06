@@ -228,6 +228,96 @@ function restackObjects(objects,ids,mode){
 }
 /** @template T @param {T} v @returns {T} */
 function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
+/* -------------------- 历史快照：结构共享 -------------------- */
+/**
+ * 历史快照的不可枚举标记。只有本实现生成的快照才能参与「结构共享 / 物化」；
+ * 外部（自测、调试、旧代码）手工 push 的普通 state 对象继续走旧语义：
+ * 直接成为 live state，避免共享到会被就地编辑的普通对象。
+ */
+const HISTORY_SNAPSHOT_TAG = Symbol('historySnapshot');
+/** @param {*} v @returns {boolean} */
+function isHistorySnapshot(v){
+  return !!(v && typeof v === 'object' && v[HISTORY_SNAPSHOT_TAG] === HISTORY_SNAPSHOT_TAG);
+}
+/** 深比较两份可序列化快照值（state 内只有 JSON 安全值，无循环引用） */
+function historyValueEqual(a, b){
+  if(a === b) return true;
+  if(a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+  const aArr = Array.isArray(a), bArr = Array.isArray(b);
+  if(aArr !== bArr) return false;
+  if(aArr){
+    if(a.length !== b.length) return false;
+    for(let i = 0; i < a.length; i++) if(!historyValueEqual(a[i], b[i])) return false;
+    return true;
+  }
+  const ak = Object.keys(a), bk = Object.keys(b);
+  if(ak.length !== bk.length) return false;
+  for(const k of ak){
+    if(!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if(!historyValueEqual(a[k], b[k])) return false;
+  }
+  return true;
+}
+/**
+ * 生成结构共享的历史快照：与上一份**已标记快照**逐层比较，未变子树直接复用，
+ * 变化子树新建；字符串（含照片 base64）按引用共享，不复制字节。
+ * 只与 tagged prev 共享——普通对象可能是 live state，复用会让快照被后续编辑污染。
+ * @param {object} src 当前 live state
+ * @param {object|null} prev 上一份历史快照（可缺省）
+ * @returns {object} 不可变快照（顶层带不可枚举标记）
+ */
+function snapshotHistoryState(src, prev){
+  const shared = sharedHistoryValue(src, isHistorySnapshot(prev) ? prev : undefined);
+  if(shared && typeof shared === 'object' && !isHistorySnapshot(shared)){
+    try{ Object.defineProperty(shared, HISTORY_SNAPSHOT_TAG, { value: HISTORY_SNAPSHOT_TAG, enumerable: false }); }catch(_){}
+  }
+  return shared;
+}
+function sharedHistoryValue(src, prev){
+  if(src === null || typeof src !== 'object') return src;   /* 原始值（含字符串）天然按引用共享 */
+  if(Array.isArray(src)){
+    const prevArr = Array.isArray(prev) ? prev : null;
+    const out = new Array(src.length);
+    let same = !!prevArr && prevArr.length === src.length;
+    for(let i = 0; i < src.length; i++){
+      out[i] = sharedHistoryValue(src[i], prevArr ? prevArr[i] : undefined);
+      if(same && out[i] !== prevArr[i]) same = false;
+    }
+    return same && prevArr ? prevArr : out;
+  }
+  const keys = Object.keys(src);
+  const prevObj = (prev && typeof prev === 'object' && !Array.isArray(prev)) ? prev : null;
+  if(!prevObj){
+    const out = {};
+    for(const k of keys) out[k] = sharedHistoryValue(src[k], undefined);
+    return out;
+  }
+  const prevKeys = Object.keys(prevObj);
+  let same = prevKeys.length === keys.length;
+  const out = {};
+  for(const k of keys){
+    const v = sharedHistoryValue(src[k], prevObj[k]);
+    out[k] = v;
+    if(same && (!Object.prototype.hasOwnProperty.call(prevObj, k) || v !== prevObj[k])) same = false;
+  }
+  return same ? prevObj : out;
+}
+/**
+ * 把历史快照物化为可安全就地编辑的 live state：
+ * 容器（对象/数组）重新分配，字符串等原始值按引用共享（不再复制 base64）。
+ * 外部普通条目原样返回，保持旧语义。
+ */
+function materializeHistoryState(snap){
+  if(!isHistorySnapshot(snap)) return snap;
+  return copySnapshotContainers(snap);
+}
+function copySnapshotContainers(v){
+  if(v === null || typeof v !== 'object') return v;
+  if(Array.isArray(v)) return v.map(copySnapshotContainers);
+  const out = {};
+  for(const k of Object.keys(v)) out[k] = copySnapshotContainers(v[k]);
+  return out;
+}
 /** @returns {string} ISO 时间 */
 function nowISO(){ return new Date().toISOString(); }
 

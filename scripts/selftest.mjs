@@ -144,6 +144,7 @@ code += `\n;globalThis.__api = {
   parkingLayout, parkingWarningText, applyParkingLayout,
   collabChunkText, collabCleanSDP,
   undo, redo, pushHistory, get history(){ return history; },
+  snapshotHistoryState, materializeHistoryState, isHistorySnapshot, historyValueEqual,
   applyLedgerCells, LEDGER_FIELDS,
   csvCell: (v,d)=>csvCell(v,d),
   formulaGuard, delimitedText,
@@ -4850,6 +4851,56 @@ asyncSuites.push(async()=>{
   eq('B-04 叠加关闭后条目清空', [api.diffOverlay.on,api.diffOverlay.items.length], [false,0]);
 
   api.resetState();
+}
+
+/* 74. B-10 历史栈结构共享/增量：未变子树与 base64 字符串复用、物化隔离、普通条目兼容 --- */
+{
+  api.resetState();
+  const huge = 'data:image/png;base64,' + 'A'.repeat(1 << 20);   /* 1MB 内嵌照片 */
+  const o1 = api.baseObject('point','point.marker',{id:'H1',name:'H1',x:1,y:1});
+  o1.props = { photoDataUrl: huge };
+  const o2 = api.baseObject('point','point.marker',{id:'H2',name:'H2',x:2,y:2});
+  api.state.objects = [o1, o2];
+  api.history.past = []; api.history.future = [];
+
+  api.pushHistory();
+  const s0 = api.history.past[0];
+  eq('B-10 快照带不可枚举标记', api.isHistorySnapshot(s0), true);
+  eq('B-10 标记不进入序列化', Object.keys(s0).includes('historySnapshot'), false);
+
+  api.state.objects[1].x = 99;          /* 只改一个对象，其余应共享 */
+  api.pushHistory();
+  const s1 = api.history.past[1];
+  eq('B-10 未变对象复用同一引用', s1.objects[0] === s0.objects[0], true);
+  eq('B-10 照片 base64 复用同一字符串', s1.objects[0].props.photoDataUrl === huge, true);
+  eq('B-10 变化对象未被共享', s1.objects[1] === s0.objects[1], false);
+  eq('B-10 快照 JSON 仍是完整工程', JSON.stringify(s1.objects[1].x), '99');
+
+  /* 物化：容器全部分离，字符串共享；live 编辑不污染共享快照 */
+  const live = api.materializeHistoryState(s1);
+  eq('B-10 物化后顶层容器分离', live !== s1 && live.objects !== s1.objects, true);
+  eq('B-10 物化后对象容器分离', live.objects[0] !== s1.objects[0], true);
+  eq('B-10 物化后 base64 仍共享', live.objects[0].props.photoDataUrl === huge, true);
+  live.objects[1].x = 123456;
+  eq('B-10 物化副本编辑不污染快照', s1.objects[1].x, 99);
+
+  /* 普通条目（外部手工 push / 旧代码）原样返回，保持旧语义 */
+  const plain = { objects: [], background: { assetId: 'A' } };
+  eq('B-10 普通条目原样返回', api.materializeHistoryState(plain) === plain, true);
+  eq('B-10 普通条目不是快照', api.isHistorySnapshot(plain), false);
+  const snapPlain = api.snapshotHistoryState(plain, plain);
+  eq('B-10 普通 prev 不被复用', snapPlain !== plain && snapPlain.objects !== plain.objects, true);
+
+  eq('B-10 深比较相等', api.historyValueEqual({ a: [1, 2] }, { a: [1, 2] }), true);
+  eq('B-10 深比较识别差异', api.historyValueEqual({ a: 1 }, { a: 2 }), false);
+
+  /* A-01 资产可达集：历史快照形状不变，底图/照片引用仍被识别 */
+  api.history.past = [{ background: { assetId: 'HIST_BG' }, objects: [{ props: { photoId: 'HIST_PHOTO' } }] }];
+  api.history.future = [];
+  const refs = api.reachableBgAssetIds();
+  ok('B-10 历史资产仍在可达集', refs.includes('HIST_BG') && refs.includes('HIST_PHOTO'));
+
+  api.resetState(); api.history.past = []; api.history.future = [];
 }
 
 /* ---------------- 结果汇总 ---------------- */

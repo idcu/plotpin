@@ -74,15 +74,19 @@ function updateHistoryButtons(){
   if(r) r.disabled=!history.future.length;
 }
 function pushHistory(){
-  history.past.push(deepClone(state));
+  /* 结构共享快照：与上一帧比较，未变子树/字符串（照片 base64）直接复用 */
+  const prev=history.past.length?history.past[history.past.length-1]:null;
+  history.past.push(snapshotHistoryState(state,prev));
   if(history.past.length>APP_LIMITS.HISTORY_MAX){ history.past.shift(); pruneBgAssets(); }
   history.future=[];
   updateHistoryButtons();
 }
 function undo(){
   if(!history.past.length) return;
-  history.future.push(deepClone(state));
-  state=history.past.pop();
+  const prevFuture=history.future.length?history.future[history.future.length-1]:null;
+  history.future.push(snapshotHistoryState(state,prevFuture));
+  /* 快照不可变：弹出后物化一份可编辑副本，避免 live 编辑污染共享子树（普通条目原样返回） */
+  state=materializeHistoryState(history.past.pop());
   selectedIds.clear();
   afterStateLoaded(false); pruneBgAssets();
   markDirty('restore');            /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
@@ -90,8 +94,9 @@ function undo(){
 }
 function redo(){
   if(!history.future.length) return;
-  history.past.push(deepClone(state));
-  state=history.future.pop();
+  const prevPast=history.past.length?history.past[history.past.length-1]:null;
+  history.past.push(snapshotHistoryState(state,prevPast));
+  state=materializeHistoryState(history.future.pop());
   selectedIds.clear();
   afterStateLoaded(false); pruneBgAssets();
   markDirty('restore');            /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */

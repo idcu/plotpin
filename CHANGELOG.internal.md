@@ -2,6 +2,43 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-10 历史栈结构共享/增量
+
+- **Commit Hash**：本条提交（`perf(history): 撤销栈改为结构共享快照`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="历史栈结构共享" -1 --format=%H`。
+- **核心改动点**
+  - `js/core/model.js` 新增历史快照公共抽象：`HISTORY_SNAPSHOT_TAG`（不可枚举 `Symbol`）、`isHistorySnapshot`、`historyValueEqual`、`snapshotHistoryState`、`materializeHistoryState`、内部 `sharedHistoryValue` / `copySnapshotContainers`。
+  - `snapshotHistoryState(src, prev)` 与上一份**已标记快照**逐层深比较：未变数组元素/对象子树直接复用，变化子树新建；字符串（含 `props.photoDataUrl` 的 base64）按引用共享，不复制字节。**只与 tagged prev 共享**，避免复用外部手工 push 的普通 state 对象（那会被后续就地编辑污染）。
+  - `js/core/persistence.js`：`pushHistory()` 改为 `history.past.push(snapshotHistoryState(state, lastPast))`；`undo/redo` 先把 live state 压入对侧栈，再 `state=materializeHistoryState(pop())`。物化只复制对象/数组容器，字符串继续共享；外部普通条目（非 tagged）原样返回，保持旧语义。
+  - 不变：`APP_LIMITS.HISTORY_MAX=20`、`history.past/future` 仍是 state 形状的普通对象数组、撤销/重做后 `markDirty('restore')` 立即落盘、`afterStateLoaded(false)` 刷新静态层/UI。
+  - **不新增运行时依赖、不改 IndexedDB schema、不读取/修改 `camera-*`。**
+- **基线（改代码前，HEAD `8622610` 实测）**
+  - 方法：Playwright 真实 Chromium + CDP `HeapProfiler.collectGarbage`（连续两次、间隔 60ms）+ `Runtime.getHeapUsage`；页面内构造 1000 对象、10 张 100KB 合法 base64 照片（`btoa` 生成），重置 `history` 后测量「构建完成」与「20 次 push 后」的 GC 堆用量差。
+  - 每步只改一个对象的 `x`，模拟真实局部编辑。
+  - 结果：20 条整份 `JSON.parse(JSON.stringify(state))` 堆增量 **29,628,056 B ≈ 28.26 MB**；`JSON.stringify(history.past)` **27,993,591 B ≈ 26.70 MB**；20 次 push **117.0–159.8 ms**（同一 harness 中旧算法的参考组）。
+  - 同一 harness 在 HEAD 上测真实 `pushHistory()` 得到 **28.26 MB / -0.0%**，证明基线测量与改造前实现一致（不是拿一个假参考做对比）。
+- **改造后实测（同 harness，3 轮）**
+  - 20 条历史堆增量 **1,078,232 B ≈ 1.03 MB**，相对基线 **下降 96.36%**（验收 ≥50%）。
+  - 20 次 push **45.5–48.1 ms**（旧算法参考组 117.0–159.8ms）。
+  - `JSON.stringify(history.past)` 仍为 **27,993,591 B ≈ 26.70 MB**：每条快照逻辑上仍是完整工程，**下降来自内存结构共享，不是序列化格式/协议变更**；不得把该数值当作体积优化指标。
+  - 1000 对象单次 `undo` 同步耗时 **4.0–18.5 ms**（3 轮 × 5 次：`[6.4,8,8.3,8.3,18.5]` / `[4.6,6.8,8.5,9.8,10.3]` / `[4,7.4,7.7,10.4,11]`），HEAD 基线单轮 2.4–5.0 ms。增量来自物化副本（容器重分配），全部样本仍远低于 100ms 建议值。
+- **语义与兼容验证**
+  - selftest：1870 → **1886 通过 / 0 失败**。新增 16 条 B-10 断言：标记不可枚举、未变对象/照片字符串复用、变化对象不共享、物化容器分离且字符串共享、物化副本编辑不污染快照、普通条目原样返回、普通 prev 不被复用、深比较真假样例、历史资产仍在可达集。
+  - e2e：24 → **28/28 通过（29.8s）**。新增 `tests/e2e/history-increment.spec.mjs` 4 个用例：内存对比（≥50%）、undo/redo 语义 + 共享快照不被 live 编辑污染 + 20 条上限 + 普通条目兼容、历史资产保活/清空后可回收、1000 对象单次 undo <100ms。
+  - 既有 `history.spec.mjs`（撤销/重做落盘、楼层增删切换）与 `snapshot.spec.mjs`（回滚进撤销栈、可撤销/重做）全部通过，未改断言。
+- **受影响调用方（结构未变，兼容访问保留）**
+  - `assetRefsInMemory()` / `ContentAssets.collectAssetRefs()`：遍历 `history.past/future` 条目，条目仍是 state 形状 → 底图/照片引用照常进入 A-01 可达集；e2e 验证「历史引用阻止 prune、清空历史后可回收」。
+  - `interaction.js` 六处 `history.past.pop()`：只是丢弃快照，不依赖内容，行为不变。
+  - `selftest.mjs` / `tests/e2e/persistence.spec.mjs` 手工 `history.past.push({...})` 的普通对象：`undo` 时 `materializeHistoryState` 原样返回，仍可直接成为 live state（旧语义）。
+  - `snapshot.js` 回滚前 `pushHistory()`：自动获得结构共享收益，无需改动。
+  - 唯一行为变化：`undo/redo` 后 `state` 不再是与栈内条目同一引用，而是物化副本。仓库内没有任何代码依赖该引用同一性（已全仓检索 `history.past/future` 消费者确认）。
+- **文档同步**：`docs/engineering.md`（§5.1 体积 722.3KB / SHA `f8c5aa9c…` / 断言 1886、B-10 实测段、§5.2 e2e 表）、`docs/features.md`、`docs/modules.md`（公共抽象与影响面）、`README.md`（徽章 1886）、本文件。
+- **遗留风险 / 未验证**
+  - **最坏情况未压测**：若每次编辑都改动全部 1000 个对象，对象子树无法复用，收益只剩字符串共享；本轮按真实局部编辑建模，未测「全量变更 × 20」。
+  - 物化是 O(对象数) 的容器复制；1000 对象实测 4.6–8.5ms，万级对象未实测（不建议外推）。
+  - `snapshotHistoryState` 每次都做一次全量深比较（与旧 `JSON.stringify` 同阶），20 次 push 从 113.9ms 降到 42.0–47.8ms，但超大工程（10 万对象）单次 push 成本未测。
+  - 堆增量测量受 V8 噪声影响，已用两次 GC + 60ms 间隔；数值为单机 Windows 实测区间，未做跨机器统计。
+  - 快照为普通对象 + `Symbol` 标记，不做 `Object.freeze`（冻结会改变既有编辑路径性能与 `Object.assign` 行为）；不可变性由「只读不写 + 物化隔离」保证，若未来有代码直接改写 `history.past/future` 条目内容，仍会破坏共享子树。
+
 ## 2026-11-06 · B-04 补丁：快照资产保活口子
 
 - **Commit Hash**：本条提交（`fix(assets): 将版本快照引用纳入资产可达集`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="快照资产保活" -1 --format=%H`。
