@@ -14,7 +14,7 @@
 | `node scripts/bench.mjs` | 全部门禁通过：avg 0.37ms / P95 0.48ms / P99 0.59ms / 重建 25.9ms / 直接帧 22.58ms / heap 23.67MB / 覆盖率 8.3ms / 大场地 16.5ms / 规则 15.5ms / 符号 3.91·0.09·3.07ms / 索引 0.013ms / 裁剪 99.4% | 0 |
 | `node scripts/build.mjs --check` | 736,298 B / 719.0 KB；gzip 226,912 B；SHA256 `977a747853b4…`；二次构建确定性一致 | 0 |
 | `node scripts/check-gates.mjs` | 5/5 人为破坏均被对应门禁捕获 | 0 |
-| `node scripts/check-discipline.mjs` | **12/13（L3）**，缺口第 11 问：`docs/engineering.md` 69.9 KB / 714 行（自设上限 60 KB / 600 行） | 0 |
+| `node scripts/check-discipline.mjs` | **12/13（L3）**，缺口第 11 问：回归时 `docs/engineering.md` 67.7 KB / 700 行（自设上限 60 KB / 600 行）；本条提交的文档修正后为 69.9 KB / 714 行 | 0 |
 | `node scripts/check.mjs --selftest` | 语法 / 入口资源 / 离线引用 / 断言数 / 契约 / API / 分层 / 自测全部通过 | 0 |
 | `npm run ci` | 上述链路顺序执行通过 | 0 |
 | `node scripts/perf-browser.mjs` | 4/4 通过：2000 P95 1.8/重建 43.1/heap 16.76；5000 P95 2.0/106/36.83；10000 P95 5.4/202.9/82.24；5000@DPR2 P95 22.3/P99 27.4/230.7/43.23ms（DPR2 P99 触发 >16.7ms 告警，仍低于 33.3ms 门禁） | 0 |
