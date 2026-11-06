@@ -5,6 +5,8 @@
 > 判据的取舍标准见 ngm 仓库的 `docs/practice/engineering-discipline.md`
 > （工程纪律方法论：什么值得写成判据、成熟度分级、四种失效形态）——
 > **任何"我们保证了 X"必须能指向一条会变红的判据；没有判据的，就明说不保证。**
+>
+> 子文档：[测试体系（浏览器级 e2e）](testing.md) · [性能基线（真实浏览器）](performance.md)。
 
 ---
 
@@ -20,7 +22,7 @@ node scripts/bench.mjs              渲染基准（avg / P95 / 重建 / heapUsed
 node scripts/build.mjs --check      源重建 ↔ scripts/dist-manifest.json 登记哈希比对
 node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对应门禁非 0
 node scripts/e2e.mjs               浏览器级功能测试（可选，devDependency；**不在 ci 路径**）
-node scripts/perf-browser.mjs      真实浏览器性能基线（可选；**不在 ci 路径**，见 §5.4）
+node scripts/perf-browser.mjs      真实浏览器性能基线（可选；**不在 ci 路径**，见 [performance.md](performance.md) §5.4）
 ```
 
 `npm run ci` = 上面四条的顺序执行（含 `check-gates.mjs`），与 `.github/workflows/ci.yml` 的 test job 一致：
@@ -36,7 +38,7 @@ CI 的 test job 另外还跑同名四条命令；`vendor-check` / `discipline` /
 `npm run perf:browser`（`scripts/perf-browser.mjs`）同样需要浏览器，退出码规则相同；它采集真实
 Chromium 的帧耗时 / 静态层重建 / heapUsed / 导入耗时并做阈值判定（`--no-gate` 只采数），
 报告写入 `test-results/perf-browser-baseline.json`。**它不在 `npm run ci` 路径**，也**不得用
-bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不可比（见 §5.4）。
+bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不可比（见 [performance.md](performance.md) §5.4）。
 
 ---
 
@@ -229,7 +231,7 @@ Worker 是**隔离边界**而不是完整语言级沙箱——插件仍可访问
 |---|---|---|
 | Service Worker 的 `CACHE` 版本号 | "改了 js 就必须 bump"没有可读的事实源：SW 的预缓存清单在运行时从 `index.html` 解析，构建期不知道"上一版是什么" | 靠发布纪律 + `sw.js` 注释；`pwa.test.mjs` 只守下限（版本号格式与 ≥ 基线） |
 | 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确 | selftest 覆盖"全量中英文案"路径；语义由评审看 |
-| 渲染性能的**真实设备基线** | 真机 GPU / 不同 DPI 的组合无法在离线 CI 里稳定复现；绝对阈值只能说明“这台机器上没退化”，证明不了所有用户设备流畅 | Node 桩下已有阻断门禁（§5.1）；真实浏览器基线（§5.4）在 Chromium headless + SwiftShader 上可重复采集，但默认不进 `npm run ci`，数据不得与 bench 混用 |
+| 渲染性能的**真实设备基线** | 真机 GPU / 不同 DPI 的组合无法在离线 CI 里稳定复现；绝对阈值只能说明“这台机器上没退化”，证明不了所有用户设备流畅 | Node 桩下已有阻断门禁（§5.1）；真实浏览器基线（[performance.md](performance.md) §5.4）在 Chromium headless + SwiftShader 上可重复采集，但默认不进 `npm run ci`，数据不得与 bench 混用 |
 | 插件 API 的**向后兼容** | 需要契约测试 + 历史版本矩阵，成本高于当前收益 | 版本号三处一致由契约守；破坏性变更写进 README |
 
 **这一节比上面几节更重要**：把"没有判据"的区域写出来，读者才不会把绿色的
@@ -461,91 +463,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 
 ### 5.2 浏览器级测试（A-14，可选）
 
-`tests/e2e/*.spec.mjs` 经本地静态服务器（`scripts/serve.mjs`，零依赖）在真实 Chromium 中执行，
-覆盖 Node 桩无法证明的部分：
-
-| 文件 | 守什么 |
-|---|---|
-| `smoke.spec.mjs` | 页面加载无脚本错误 / 入口无远程引用 / CSP 声明；点工具落点与选择命中；JSON 导出真实下载可解析；CSV/XLSX 表头与行值来自同一字段表，台账列与公式防护不回退 |
-| `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删）；非法 JSON 导入失败后现场不变；跨楼层照片导出/导入不丢 |
-| `csp.spec.mjs` | 4 条注入路径（导入 JSON / 旧存档 / 插件注册 / 类型列表渲染）在浏览器中确实无法执行 JS |
-| `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层、切换楼层后刷新与操作后状态一致 |
-| `history-increment.spec.mjs` | B-10：CDP 实测 20 条含照片历史堆增量（基线 28.26MB vs 1.03MB，下降 96.4%）；共享快照不被 live 编辑污染、undo/redo 语义与 20 条上限不变、普通条目兼容；历史引用的底图/照片保活与清空历史后可回收；1000 对象单次 undo <100ms |
-| `interaction.spec.mjs` | 单击对象不落盘/不清覆盖率/不留空撤销快照；拖拽中 Esc 回滚到原位 |
-| `snapshot.spec.mjs` | 1000 对象快照 < 2s、体积实测；内嵌照片转为 `photoId` 引用；删除快照不影响工程；回滚进入撤销栈且可撤销/重做、回滚后可继续编辑；构造样本六类差异分类与 0 误报；叠加开关与关闭清理；**快照资产保活/删除后可回收**；20 快照（7.64MB）可达集扫描 41.5–42.6ms |
-| `collab.spec.mjs` | B-06：双标签等待→已连接→对端断开可见；消息层 TTL/key 上限/重复 hello 去重/`send` 抛错不冒泡/异常断开进 `error`；LWW 覆盖写撤销栈且 `Ctrl+Z` 恢复本地值、冲突行可见；离线短间隔重连不丢本地修改；邀请串三步建连 + 邀请串超 42 字节时只提示不渲染二维码（**同机双标签，不代表双设备 WebRTC**）；`COLLAB_SOAK=1` 时额外跑 5 分钟离线浸泡 |
-| `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（7 列表头、数值、合计、目录版本/导出时间）→ 替换目录后重导仍为冻结单价、改数量后按新目录重算 → 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 → 跨厂商重名未填厂商不带价、填厂商后按精确键计价 |
-| `table-batch.spec.mjs` | B-08 原义：CSV 条件替换命中 2 台并改写业务类型/台账、批量新增落点 (10,20) 可复算；严格模式下非法更新行整批拒绝（无「合并导入」按钮），现有对象数量与文本不变 |
-| `world-transform.spec.mjs` | B-12：已仿射校准底图 + 矩形场地 + 点位做 2× 世界缩放后，对象世界坐标 ×2、与底图同一像素屏幕偏差 < 0.5 px，`metersPerPixel` 0.05→0.1、`transform.a` 同步 ×2，设备物理尺寸 ×2；场地默认保持 100×70（场地优先校准）。退化变换 `ok=false` 且对象/mp 不变；`scaleWorldAround` 旧签名可用、无 transform 时只缩放 m/p；显式 `{site:true}` 时圆场地等比放大仍为圆 |
-| `perf-render.spec.mjs` | B-11：真实 Chromium 1600×900 离屏渲染基线（A 基础场景 / B 标注+图元，均 2000 对象）。输出重建 / 缓存命中 / 直接全量的 avg·P50·P95·P99、`staticKey`、`filter+sort`、`measureText` 与 `Path2D` 单帧调用、heapDelta、zoom=6 裁剪率；断言为宽松上限（重建 P95 <160ms、缓存帧 P50 <8ms / P95 <12ms、直接 P95 <160ms、裁剪 >60%）只作防回归，不作为性能承诺 |
-| `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
-| `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
-| `i18n-template.spec.mjs` | B-14：切换英文后顶栏导出按钮为 `Export`；`L('已粘贴 {n} 个对象',{n:3})` 经 `toast` 输出 `Pasted 3 objects`、表格导入整句输出英文；把 `<img src=x onerror=...>` 作为文件名参数注入，toast 内 `childTags=0` 且 `window.__xss` 未触发（`textContent` 边界不引入注入面） |
-| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v3` 且预缓存 46 条 → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
-| `mobile.spec.mjs` | B-15：390×844 / DPR3 / touch 移动模拟下 `viewport-fit=cover`、画布 `touch-action:none`、工具栏命中区 ≥44px、☰ 侧栏开合并可点空白关闭、点工具轻触画布落点；同一次运行输出 2000 对象的移动与桌面重建/缓存帧/首屏数据，断言仅作宽松防回归 |
-| `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
-| `coverage.spec.mjs` | A-11：覆盖率 v2 固定格数口径跨 zoom 0.25/1/4/16 差异 ≤1pp、隐藏对象/图层退出分母、盲区 GeoJSON 下载、布点优化应用后重跑闭环 |
-| `plugin-sandbox.spec.mjs` | C-01：Worker 隔离执行、`capabilities` 未声明能力拒绝、超时 2s 由主线程 terminate、插件异常只禁用该插件；`symbol` 未声明 `icons` 被拒；带 `"><img onerror=…>` 的类型名/图标经 `esc` 后不产生 DOM 注入 |
-| `rules.spec.mjs` | C-05：规则页签配置容差与类型阈值 → 重叠/间距/越界违规清单（规则名/对象/关联对象/楼层/坐标/实测值）→ 单击行跨楼层定位并选中主/关联对象 → CSV 导出含表头与转义；恰好等于阈值不报违规 |
-| `symbols.spec.mjs` | C-04：别名搜索（烟感 / NVR）与分类筛选、放置后角度与物理尺寸写回对象、5 例恶意 SVG（script / onload / 外部 href / 超深嵌套 / 超大字节）逐条 toast 原因且类型数不变、自有符号 JSON 导出仅含当前工程符号且内存重置后导入只写入当前工程 |
-
-**B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
-`/Catalog → /Pages → /Kids` 递归恢复文档页序（缺失/损坏时退回扫描顺序并追加未覆盖页，不静默丢内容）。
-每页内容先归零到自身 MediaBox，再由 `PdfRead.layoutPdfPages` 沿 +X 依次落位（gap=最大页宽 8%）——
-修复旧行为「所有页叠在同一原点」。导出侧 `pdfPagePlan()` 以楼层顺序生成「图纸页 + 清单页」计划，
-页码全局连续并写入页脚；清单分页数与渲染共用 `pdfListRowsPerPage()`。往返校验覆盖页数、页序、页宽/页高
-（`selftest` §37b，用 `Pdf.buildImagePdf` 生成两页后 `parsePdf` 回读），矢量坐标回读仍受「PDF 导出为位图」限制（见风险）。
-
-**图框 / 标题栏 / 比例尺 / 图例（B-07，2026-11）**：字段 schema 只有 `js/core/model.js` 一处
-（`TITLE_BLOCK_FIELDS` / `createTitleBlock` / `normalizeTitleBlock`），默认 `enabled:false`，
-`frame/scaleBar/legend` 默认开、版本默认 `V1.0`，文本清洗控制字符并截断到 80 字符。
-导出侧 `titleBlockSpec(W,H,ppu,format)` 是**唯一布局源**，未启用返回 `null`，三处调用点（PNG
-`renderToDataURL` / PDF `renderPdfDrawingPage` / SVG `buildSceneSvg`）直接跳过——默认产物零字节差异，
-`selftest` 以 `buildSceneSvg` 视觉快照哈希 `e6ba5542…` 断言。启用后 PNG/PDF 共用
-`drawTitleBlockOnCanvas`、SVG 用 `exportTitleBlockSvg`，两者读同一 spec（几何/文案不各写一套）；
-SVG 所有文本走既有 `esc()`，与底图 `href`、场地 `fill/stroke` 同一道转义防线。
-比例尺取 1/2/5×10ⁿ 米的整齐长度（目标 140px），比例 `1:N` 中 N = dpi /(每米像素 × 0.0254)，
-PNG/SVG 按 96dpi、PDF 按 150dpi 图纸页换算（同一缩放导出 PNG 与 PDF 的比例数不同属预期）。
-图例只统计**可见对象**，按类型聚合名称/颜色/数量，上限 8 类 / 6 层，超出显示 `+N`。
-持久化：字段存 `state.meta.titleBlock`，`buildProject` 归一后随 `meta` 进入撤销/重做快照（B-10 结构共享
-不改语义）；协作/合并走 `mergeProjectData` 的 `meta` **整体本地优先**（`Object.assign(B.meta, A.meta)`），
-不做字段级 LWW，也不单独统计标题栏冲突；旧工程缺 `meta.titleBlock` 时 `normalizeTitleBlock`
-整体降级为「关闭 + 默认字段」，不阻塞载入。
-
-**i18n 插值模板（B-14，2026-11）**：动态整句不再用 `L('前缀：') + 值` 拼接。`js/common/i18n.js`
-新增 `TEMPLATES`（中文整句 → 英文整句，含 `{name}` 占位）与 `fillTemplate`：`p(text, params)`
-在英文下先查 `TEMPLATES`、再查 `PHRASES`，未收录回退中文；最后统一按 `/\{(\w+)\}/g` 替换占位，
-**中文模式直接填充原文模板**，语义不变。对外暴露 `I18N.templates` / `I18N.fmt`（只做占位替换、
-**不转义**），调用方在 DOM/SVG 边界仍走 `textContent` / `esc()` / `xmlEscape`，A-02 注入面不扩大。
-新增可复跑统计 `scripts/i18n-scan.mjs`：逐字符状态机跳过注释与字典文件，收集单/双/反引号字符串字面量
-并去重；识别 `L / I18N.p / I18N.t / I18N.fmt / I18N.tpl / toast / commitChange / openModal /
-showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK 且未走入口，「缺口」＝走了入口
-但字典无对应英文，「覆盖率」＝ 已字典化 ÷（已字典化 + 缺口 + 硬编码）。同一脚本对 `HEAD` 基线
-（`git worktree` 旧版本）与改造后各跑一次，**25.64% → 33.79%**（已字典化 269 → 347，缺口 125 → 49，
-硬编码 655 → 631）。未迁移项集中在 `js/common` 适配层内部错误串、DXF 单位名、DWG 入口整段 HTML
-指引与多行组合提示（见 `CHANGELOG.internal.md` 的 B-14 条目）。
-
-**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v3`），
-`activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本清单从 `index.html` 解析，新增脚本无需手工维护。
-安装用 `Promise.allSettled` 逐项 `cache.add`，单个 404 不会让新版本永远装不上；安装/激活失败时旧版本继续
-服务。`fetch` 网络优先（在线始终取最新，避免旧缓存卡住升级），离线回退缓存，导航请求 `ignoreSearch` 回退
-`./index.html`，缓存也没有时返回内置离线提示页（503，非浏览器白屏错误页）。`js/core/app.js` 监听
-`updatefound → installed`，已有控制器时 `toast('新版本可用：刷新页面后生效')` 并暴露同一 i18n 文案；
-`visibilitychange` 可见时 `reg.update()`，离线失败静默保持旧版本。移动端：`viewport-fit=cover`，
-`.topbar/.hud-bottom/.sidebar` 使用 `env(safe-area-inset-*)`（桌面解析为 0，不改变旧布局），
-`@media(pointer:coarse)` 保证按钮/工具栏 ≥44px，手机横屏压缩顶栏并收窄侧栏，`.tool-rail` 允许纵向滚动；
-窄屏侧栏改为「文档级 pointerdown 关闭 + 遮罩 z-index 19 低于顶栏」——修掉此前遮罩盖住 ☰ 导致触屏无法
-关闭侧栏的问题。手势取消沿用 A-06：`pointercancel / lostpointercapture / Escape` 统一走 `cancelActiveDrag`，
-本轮未新增手势状态。渲染样本提取到 `tests/e2e/helpers/scenes.mjs`（B-11/B-15 共用，避免两套样本漂移）。
-覆盖率为 `viewport-fit`/安全区/触控目标/CSS 横竖屏的检查，另有 `mobile.spec.mjs` 与桌面同机输出的首屏与
-2000 对象帧数据；**真机（iOS Safari / Android 低端机）未测**。
-
-**性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
-执行，不混进上面的功能 e2e；指标与阈值见 §5.4。
-
-**边界**：`@playwright/test` 只允许出现在 `devDependencies`；`build.mjs` 的单文件产物不引用
-`tests/` 与 `node_modules/`。`npm run ci` 不含 e2e——无浏览器环境不会因此变红，但显式运行
-`npm run test:e2e` 时缺依赖/缺浏览器会以 `[SKIP]` + 退出码 2 明确失败，而不是假绿。
+已独立成文：[testing.md](testing.md)（e2e spec 清单、覆盖边界、运行方式与 B-13/B-07/B-14/B-15 技术说明）。门禁阈值与断言数见 §5.1，真实浏览器性能基线见 [performance.md](performance.md) §5.4。
 
 ### 5.3 资源上限（`APP_LIMITS` 唯一源）
 
@@ -577,106 +495,7 @@ showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK
 
 ### 5.4 真实浏览器性能基线（B-01，可选门禁）
 
-`tests/perf/browser-baseline.perf.mjs` 经 `npm run perf:browser` 在真实 Chromium 中跑，
-**不在 `npm run ci` 路径**（浏览器/机器差异大，不能把某台机器的绝对值当成全量承诺）：
-
-| 项 | 取值 |
-|---|---|
-| 运行命令 | `npm run perf:browser`（门禁默认开）/ `node scripts/perf-browser.mjs --no-gate`（只采数） |
-| 浏览器 | Chromium（Playwright devDependency），headless，1920×1080 CSS 视口，DPR1；另加 5000 对象 @DPR2 采样 |
-| 画布 | 实际 `#canvasWrap` = **1472×1028** CSS 像素（顶栏/侧栏占位后）；静态层位图 DPR1 **5.77MB** / DPR2 **23.09MB** |
-| 场景 | 世界域 2000×1500m，对象构成 1/3 `point.marker` + 1/3 `rect.area` + 1/3 `line.custom`（3 节点），全部在视野内（最坏重建） |
-| 指标口径 | 每帧 = `drawScene` + `getImageData(0,0,1,1)` **强制同步光栅**；heap 用 `performance.memory.usedJSHeapSize`（`--enable-precise-memory-info`），逐帧抽样取峰值 |
-| 报告 | `test-results/perf-browser-baseline.json`（gitignore，含原始样本汇总与阈值） |
-
-**实测（修复导入 O(N²) 后 5 轮区间，含 2026-11-06 收口复跑，本机 Windows；渲染器为 ANGLE/SwiftShader 软件光栅）**
-
-> 收口复跑单次：2000 → P95 1.8 / P99 3.9 / 重建 43.1 / heap 16.76 / 空导入 52.5 / 已有导入 73.1ms；
-> 5000 → 2.0 / 4.7 / 106 / 36.83 / 125.1 / 141.8ms；10000 → 5.4 / 6.5 / 202.9 / 82.24 / 245.9 / 260.4ms；
-> 5000@DPR2 → 22.3 / 27.4 / 230.7 / 43.23 / 163.6 / 170.5ms。
-
-> 修复前「已有工程内导入」实测：2000 → 158–200ms；5000 → 946–1215ms；10000 → 4068–4848ms；
-> 5000@DPR2 → 950–1144ms。修复后如下，导入数据为同机复测。
-
-| 规模 | 缓存帧 P95 | 缓存帧 P99 | 静态层重建 P95 | heapUsed 峰值 | 空工程导入 | 已有工程内导入 | 导入后首帧 |
-|---|---|---|---|---|---|---|---|
-| 2000 对象 DPR1 | 1.8–4.2 ms | 3.9–6.0 ms | 39–53.7 ms | 16.34–16.76 MB | 52.5–70 ms | 73.1–85 ms | 40.2–52 ms |
-| 5000 对象 DPR1 | 2.0–4.6 ms | 4.7–6.1 ms | 101.3–135.7 ms | 36.5–43.02 MB | 117.1–161 ms | 141.8–169 ms | 107.1–111.3 ms |
-| 10000 对象 DPR1 | 4.2–6.2 ms | 5.7–7.9 ms | 191.6–296.6 ms | 60.37–82.24 MB | 245.9–384.1 ms | 260.4–384.8 ms | 186.4–264.1 ms |
-| 5000 对象 DPR2 | 12.8–22.3 ms | 15.8–27.4 ms | 190.1–277.4 ms | 42.91–43.23 MB | 136.2–188 ms | 159.8–200 ms | 185.5–303 ms |
-
-**阻断阈值（实测值约 2 倍余量；改阈值须在 commit body 写明旧值 → 新值 + 理由 + 连续实测）**
-
-| 规模 | 缓存帧 P95 | 重建 P95 | heap 峰值 | 空工程导入 | 已有工程内导入 | 静态层字节 |
-|---|---|---|---|---|---|---|
-| 2000@DPR1 | ≤ 16.7 ms | ≤ 100 ms | ≤ 64 MB | ≤ 300 ms | ≤ 250 ms | ≤ 8 MB |
-| 5000@DPR1 | ≤ 16.7 ms | ≤ 250 ms | ≤ 128 MB | ≤ 500 ms | ≤ 400 ms | ≤ 8 MB |
-| 10000@DPR1 | ≤ 16.7 ms | ≤ 450 ms | ≤ 200 MB | ≤ 900 ms | ≤ 900 ms | ≤ 8 MB |
-| 5000@DPR2 | ≤ 33.3 ms | ≤ 500 ms | ≤ 128 MB | ≤ 600 ms | ≤ 600 ms | ≤ 32 MB |
-
-- 16.7ms = 60fps 单帧预算；DPR2 的 33.3ms = 30fps 下限，因为软件光栅下 DPR2 接近 60fps 上限
-  （收口复跑 P99 27.4ms，仍低于 33.3ms 门禁，但触发「P99 > 16.7ms」的告警）。
-- 导入 O(N²) 已修，「已有工程内导入」阈值由 450/2200/10000/2500ms 收紧为 250/400/900/600ms
-  （5 轮实测 73.1–85 / 141.8–169 / 260.4–384.8 / 159.8–200ms），不再是“松阈值放行”。
-- 门禁牙齿：临时把 `2000@DPR1` 的 `frameP95` 改成 0.1ms，用例如期失败并以退出码 1 结束；随后已还原。
-- **与 `bench.mjs` 的关系**：bench 是 Node + canvas 桩，只证明相对退化、进 `npm run ci`；
-  本套件是真实 Canvas2D 光栅，证明这台机器上的绝对体验。两者数据不可互换，也不得互相冒充。
-
-**方法学边界（不许拿这些数当全量结论）**
-
-- headless Chromium 使用 **SwiftShader 软件光栅**，没有真机 GPU 上屏；缓存帧里包含强制 `getImageData`
-  同步开销（draw 本身 P50 仅 0.2–1.0ms），因此缓存帧数值偏保守，不能直接当“真机 FPS”。
-- 只测一台 Windows 机器 / 一个分辨率 / 两种 DPR；未测 Safari/Firefox、未测低端移动设备。
-- heap 是 `performance.memory` 抽样峰值（无 GC 强制），会随 GC 时机波动（DPR2 峰值 36–66MB 即为例证）。
-
-**B-01 结论：分块渲染 / 静态层 LRU / Worker**
-
-| 方案 | 结论 | 数据依据 |
-|---|---|---|
-| 静态层重建分块（逐帧画一批对象） | **后续再做（B-09 优先）** | 缓存帧 P95 4.2–6.2ms（10k）已满足 60fps，瓶颈只在重建：10k 一帧阻塞 199–297ms（>3 帧预算）。分块能把长任务切短，但需要 generation token 处理中途失效与部分静态层，属于渲染架构改动，本轮不做 |
-| 静态层 LRU（缓存多个视口位图） | **不做** | 签名含 zoom/pan，平移/缩放必然重建；每层 5.77MB（DPR2 23.09MB），LRU=3 即 17–69MB，只在“回到同一视口”时命中。当前无命中率数据支撑，收益不明、内存代价确定 |
-| Worker + OffscreenCanvas | **后续再做（前置条件未满足）** | 缓存帧主线程成本仅 1–6ms，没有“渲染占满主线程”的证据；Worker 化要把 `state` 快照、类型/样式/字体/标签几何整体迁走，并且失去同步命中测试与 `getImageData` 导出一致性，零依赖与导出路径风险远大于当前收益 |
-
-**B-09 前置结论（导入 O(N²) 已修，渲染侧仍待决策）**
-
-- **已修**：同一份 10000 对象 JSON，“当前工程已有 10000 个对象时导入”从 **4068–4848ms** 降到
-  **306.3–384.8ms**（约 11–16 倍），与“空工程导入” 275.8–384.1ms 的比值由约 16 倍降到
-  **0.95–1.41 倍**（4 轮区间，已基本持平）。
-  根因是 `buildProject → sanitizeObjects → baseObject → nextObjectId()` 每创建一个对象都扫一遍全量
-  `state.objects`；修法见 `docs/modules.md` 的 `objectNameScopeFor / beginObjectNameScope /
-  withObjectNameScope`：批量路径一次聚集已占用编号，作用域内 O(1) 取号；`baseObject` 对显式
-  `name` 不再触发取号。编号语义（唯一、稳定、从“已占用数量+1”跳号）保持不变。
-- **同类路径排查结果**：DXF/PDF 批量导入、表格预览与落行、复制/粘贴、覆盖率建议批量落点已一并收敛；
-  合并（`mergeProject`）按 id 合并不分配新编号，无需改动。单次交互创建仍是 O(N) 一次全量扫描
-  （实测 10k 对象下单次 < 1ms），不属于需要修的热路径；未发现其它随对象数平方增长的分配/查找路径。
-- **仍需 B-09 决策**：10k 全视野静态层重建 199–297ms、导入后首帧 212–222ms，分块重建仍是主要候选；
-  本轮不直接改渲染架构。
-
-**B-11 结论：渲染候选优化逐项实测（2026-11，只做有数据支撑的项）**
-
-新增 `tests/e2e/perf-render.spec.mjs`，在真实 Chromium 中创建 1600×900 离屏 canvas，
-直接调用 `drawScene` 计时（预热 3 次；重建 10 次、缓存命中 200 次、直接全量 10 次、`sceneStaticKey` 500 次；
-另用 `CanvasRenderingContext2D.prototype.measureText` 与 `window.Path2D` 插桩统计单帧真实调用）。
-两个场景均为 2000 对象：A 与 `bench.mjs` 同口径（点位/区域/折线各 1/3，不显示名称），
-B 为 2000 个行业 SVG 图元点且显示名称标注（更接近真实图纸的 `measureText` / `Path2D` 压力）。
-
-| 场景 | 重建 avg / P50 / P95 | 缓存帧 P50 / P95 | 直接全量 avg / P95 | staticKey | measureText | Path2D | filter+sort | 裁剪率 |
-|---|---|---|---|---|---|---|---|---|
-| A | 5.74–6.85 / 5.4–7.2 / 8.1–8.6 ms | 0.1 / 0.2 ms | 2.93–3.47 / 4.7 ms | 0.00–0.01 ms | 480 次 / 0.3–0.5 ms | 0 次 | 0.07 ms | 99.1% |
-| B | 4.24–5.44 / 3.9–5.0 / 6.0–8.2 ms | 0.1 / 0.2 ms | 2.42–2.65 / 3.3–3.8 ms | 0.00–0.01 ms | 245 次 / 0.1–0.5 ms | 940 次 / 0.6–1.5 ms | 0.05–0.06 ms | 99.1% |
-
-两轮运行（单独跑 + 全量 e2e）区间；`heapDelta` 20 次重建前后均为 **0 MB**。
-
-| 候选 | 结论 | 数据依据 |
-|---|---|---|
-| `staticKey` 精确化（减少签名字段 / 避免 JSON.stringify） | **不做** | 500 次签名累计 0.00–0.01ms/次，占重建帧 <0.2%；已包含 `settings/site/transform` 全量比较，精确化只能省下噪声级成本 |
-| 图层/对象索引（替代每帧 `filter+sort`） | **不做** | 2000 对象下 `filter(可见且未选中)+sort(z)` 实测 0.05–0.07ms，是重建帧的 0.7–1.6%；索引需维护增删改同步，收益不足以抵消复杂度 |
-| `measureText` LRU | **不引入** | 场景 A 480 次 / 0.3–0.5ms、B 245 次 / 0.1–0.5ms，全部发生在重建帧内；缓存命中帧根本不调用。实现后同进程交替 24 轮 A/B，帧级差异不可重复，故回退 |
-| 通用 Path2D 缓存 | **不引入** | 场景 B 940 次构造 / 0.6–1.5ms；实现后 A/B 交替实测（on 3.76ms vs off 4.08ms、on 6.46ms vs off 6.11ms）方向不稳定，低于运行间噪声，按「无数据支撑不引入」回退。**C-04 例外**：仅对符号 `symbolPathsFor` 结果按类型做 `WeakMap` 窄缓存，避免每个符号每帧重新解析 path 字符串，缓存命中帧实测 0.08–0.10ms（500 图元）；不改变「通用对象路径不做」的结论 |
-| 分块渲染 / Worker + OffscreenCanvas | **不做（无证据）** | 缓存帧 P95 仅 0.2ms，重建 P95 6.0–8.6ms，均在 16.7ms 帧预算内，**没有「渲染占满主线程」的实测证据**；10k 规模的重建 199–297ms 沿用 B-01 结论，分块仍留给 B-09 决策 |
-
-**未验证（原因）**：只测本机 headless Chromium（SwiftShader 软件光栅）与 1600×900 离屏画布，
-未覆盖真机 GPU、Safari/Firefox、低端移动设备；2000 对象规模下的结论不外推到 10k 对象重建耗时。
+已独立成文：[performance.md](performance.md)（4 档实测、阻断阈值、方法学边界与 B-01/B-09/B-11 结论）。Node 桩阻断门禁见 §5.1。
 
 ---
 
@@ -706,9 +525,8 @@ npm run discipline
 结构上不适用的问写在 `docs/discipline-exemptions.json`（理由必须写清为什么结构上不成立；
 "暂时没做"不是理由）。不适用项从分母剔除，而不是从分子加分。
 
-当前：**12/13（L3）**。唯一缺口是第 11 问：`docs/engineering.md` 按纪律脚本口径 **69.9 KB / 714 行**，
-超过该问自设的 60 KB / 600 行上限。该缺口在 C-04 前已存在（HEAD~1 为 63.8 KB / 664 行），C-04 新增 §4.3
-后进一步扩大；本轮只做收口、不重构文档，故如实保留缺口并记入 [docs/known-issues.md](known-issues.md)。
-其余 12 问全部有可复跑判据。
+当前：**13/13（L4）**。第 11 问已通过按主题拆分满足：`engineering.md` 47.8 KB / 533 行，
+测试体系见 [testing.md](testing.md)（13.5 KB / 92 行），性能基线见 [performance.md](performance.md)（10.1 KB / 107 行），
+三份文档均低于 60 KB / 600 行；拆分只移动内容、未改判据或阈值。其余 12 问全部有可复跑判据。
 最近一次修正：第 13 问的 `scripts/*.js` 正则缺少右边界，会把 `scripts/dist-manifest.json` 误判为不存在的
 `.js` 脚本。

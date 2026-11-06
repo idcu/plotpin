@@ -2,9 +2,45 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 文档拆分：engineering.md → engineering / testing / performance
+
+- **Commit Hash**：本条提交（`docs(engineering): 按测试/性能主题拆分…`）；完整哈希见汇报与 `git log HEAD`。
+- **核心改动点**
+  - `docs/engineering.md` 保留概览、命令、契约、生成物、API/插件/规则/符号、门禁阈值（§5.1）、资源上限（§5.3）、新增判据流程与十三问看板；原 §5.2/§5.4 位置保留短指针，既有锚点不失效。
+  - 新增 `docs/testing.md`：承接原 §5.2 全部浏览器级 e2e 内容（22 个 spec 清单、B-13/B-07/B-14/B-15 技术说明、边界与运行方式）。
+  - 新增 `docs/performance.md`：承接原 §5.4 全部真实浏览器性能基线（4 档实测区间、阻断阈值、方法学边界、B-01/B-09/B-11 结论）。
+  - 三份文档互链；README 目录树补两篇新文档、§5.4 链接改指 `performance.md`；`docs/features.md` §5.4 链接同步；`docs/known-issues.md` K11 标记已关闭。
+  - 拆分用逐段抽取 + **非空行逐一包含性校验**（仅标题层级与一处 §5.4 改链例外），0 内容丢失。
+
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check-discipline.mjs` | **13/13（L4）**；第 11 问最大文档 `engineering.md` **47.8 KB / 533 行**（拆分前 69.9 KB / 714 行） | 0 |
+| `node scripts/selftest.mjs` | **2584 通过 / 0 失败**（41 个脚本） | 0 |
+| `node scripts/bench.mjs` | 全门禁通过：avg 0.34ms / P95 0.38ms / 重建 21.06ms / heap 29.35MB / 覆盖率 7.4ms / 大场地 14.2ms / SVG 导入 1.049ms | 0 |
+| `node scripts/build.mjs --check` | 719.0 KB（736,298 B）/ gzip 221.6 KB；SHA256 `977a7478…` 与登记一致；体积不变（文档不进 dist） | 0 |
+| `node scripts/check.mjs --selftest` | 语法 / 入口 / 离线 / 断言数 / 契约 / API / 分层 / 自测全部通过 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/e2e.mjs` | 65 passed / 1 skipped（57.1s） | 0 |
+| `npm run ci` | 完整链路顺序执行通过 | 0 |
+
+- **文档体量与路径映射**
+
+| 文档 | 体量 | 承接内容 |
+|---|---|---|
+| `docs/engineering.md` | 47.8 KB / 533 行 | 概览、构建、门禁阈值、资源上限、判据流程、十三问看板 |
+| `docs/testing.md` | 13.5 KB / 92 行 | 原 §5.2 浏览器级 e2e 测试体系（22 spec） |
+| `docs/performance.md` | 10.1 KB / 107 行 | 原 §5.4 真实浏览器性能基线（4 档） |
+
+- **遗留 / 风险**
+  - 拆分只移动内容，未改判据、阈值或断言；`testing.md` / `performance.md` 保留 §5.2/§5.4 编号以兼容历史引用。
+  - 若未来单篇文档再超 60 KB / 600 行，需继续按主题拆分，不能靠删内容过门禁。
+  - 未 push、未读取/修改 `camera-*`。
+
 ## 2026-11-07 · 收口：关闭 A1–A6 可自动化验证项
 
-- **Commit Hash**：本条提交（`test(closeout): 关闭 A1–A6 自动化验证…`）；哈希在下一提交回填。
+- **Commit Hash**：`d69da5df0c0e8522458c297f0663917416d45774`（下一提交回填）。
 - **核心改动点**
   - `tests/fixtures/legacy-symbols.json`（新增）：从 `a0aecf0:js/common/symbols.js` 提取旧版 **64** 图元，逐图标记录 `paths` 与 `pathsSha256`；旧工程 `objectTypes` 持久化 symbol paths，因此可直接验证旧图标渲染。
   - `scripts/selftest.mjs`（A1/A2/A5/A6）：新增 A1 逐图标 path 哈希 + 可折线化断言 + `tests/golden/legacy-symbols.svg`（56,839 B）逐字节；A2 `tests/golden/fixed-pages.pdf`（1,128 B）逐字节 + 同输入两次 SHA-256 一致；A5 规则采样固定期望/容差（圆/旋转方/扇形/净距/重叠/凹多边形三角化）；A6 DXF 折线与 SVG 几何一致性（合成非对称符号独立推导 bbox + `symbol-scene` 折线逐点一致）。

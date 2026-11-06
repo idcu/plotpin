@@ -113,6 +113,8 @@ npx serve .
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
     ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
+    ├── testing.md            # 浏览器级 e2e 测试体系（spec 清单、覆盖边界、可选门禁）
+    ├── performance.md        # 真实浏览器性能基线（4 档实测、阈值、方法学边界）
     ├── features.md           # 29 条顶层特性 + 42 条子项（共 71 条，含边界与实现口径）
     ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
     ├── known-issues.md       # Phase A/B/C 遗留项三类归档：可自动化 / 需人工或真机 / 已知限制
@@ -149,7 +151,7 @@ npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象�
 
 缺依赖或缺浏览器时脚本打印 `[SKIP]` 原因并**退 2**，不会把「没跑」冒充成「通过」。
 `perf:browser` 的数据与 `bench.mjs` 的 Node 桩数据不可互换，阈值与口径见
-[docs/engineering.md](docs/engineering.md) §5.4。
+[docs/performance.md](docs/performance.md) §5.4。
 
 **契约判据**（`contracts/conventions.json`）守四件看不见的事：版本号三处一致、
 中英文案键对齐、每个脚本恰好一行文件头、枚举同源。判据自己也有牙齿：
@@ -163,7 +165,7 @@ npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象�
 能力表、版本规则、隔离机制与明确限制见 [docs/engineering.md](docs/engineering.md) §4.1；
 可运行示例见 [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js)。
 刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、真实浏览器渲染基线）逐一写在
-[docs/engineering.md](docs/engineering.md) 里——不设不是忘了，是明说不保证。
+[docs/engineering.md](docs/engineering.md) 与 [docs/performance.md](docs/performance.md) 里——不设不是忘了，是明说不保证。
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
