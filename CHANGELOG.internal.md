@@ -2,6 +2,32 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-16 文档一致性（6 处硬矛盾 + APP_LIMITS 限值表）
+
+- **Commit Hash**：`ef62039`（docs(arch): 修正 6 处文档硬矛盾，并把 APP_LIMITS 限值表文档化）。
+- **核心改动点（逐条对代码事实）**
+  1. `README.md` 目录树「index.html 内联加载脚本」→ 实际是外部 `<script src>` 按层序加载，仅单文件发行包内联。
+  2. `README.md` 英文特性「.xlsx 手写最小 OOXML + ZIP」→ 实际经 vendor `@idcu/format-*`（与 features.md 统一口径）。
+  3. `README.md` 插件示例 `js/core/plugins.js` → 实际 `js/features/plugins.js`。
+  4. `README.md` + `package.json`：「npm run ci = 三条，与 CI 同一条」→ CI test job 是四条。修法是把 `check-gates.mjs` 加进 `package.json` 的 ci，使文档与命令真正一致（门槛更严，不放松）。
+  5. `docs/engineering.md`：「十问看板 10/10 → L4」→ 实际 **13 问 13/13**；并修复 `scripts/check-discipline.mjs` 正则假阳性（`scripts/*.js` 缺右边界，把合法的 `scripts/dist-manifest.json` 误报为不存在的 `.js`）。
+  6. `docs/modules.md`：「第 9 步…且文件存在」→ 第 9 步只管目录归属与层序，文件存在性归第 2/3 步。
+  - 补充：`features.md`/README「35 条特性」→ **28 条顶层 + 27 条子项（共 55 条）**；README 英文 Base maps / Areas 补 `parallelogram`。
+  - 限值表：`docs/engineering.md` 新增 §5.3，逐项文档化 `APP_LIMITS`（缩放/图标倍率/底图降采样与解码像素/资产字节/导入文件·文本·行数·实体/对象数/历史深度/墓碑上限与窗口），注明唯一来源与 `importLimitErrors` 统一入口。
+- **实测验证数据（本机 Windows / 2026-11-06）**
+  - `npm run ci`（check --selftest → bench → build --check → gates）：**全绿**。
+    - selftest **1799 通过 / 0 失败**。
+    - bench：缓存帧 avg **0.48 ms** / P95 **0.91 ms** / P99 1.23 ms；重建 **31.23 ms**；直接全量帧 29.32 ms；heapUsed **19.41 MB**；裁剪 99.4%；覆盖率 **8.9 ms**。
+    - build：**687.1 KB**，SHA256 `31d8d69f51f8acd5ce35675a2cdc2c4dbd3d5f7610e08b9eee4f1416d216ed59`，二次构建一致。
+    - gates：**5/5** 人为破坏均被对应门禁以非 0 拦截。
+  - `node scripts/check-discipline.mjs`：**13/13 → L4**（修正前 12/13，红在问 13 假阳性）。
+- **公共抽象 / 影响面**
+  - 运行时零改动、单文件产物零变化、无新依赖。
+  - 构建/门禁侧两处变更：`package.json` 的 `ci` 增加 `check-gates.mjs`；`check-discipline.mjs` 两处正则补右边界（仅消除假阳性，不放宽判据）。
+- **遗留 TODO / 风险**
+  - README 英文特性清单仍比中文版简略（逐条镜像成本高），后续按需补齐。
+  - `docs/engineering.md` §5.3 与 `config.js` 的 `APP_LIMITS` 仍是两处维护；若再加常量需同步（未做自动生成）。
+
 ## 2026-11-06 · A-15 公共抽象第一批（outlineOf / objectIndexById / siteBounds / ensureVendor）
 
 - **Commit Hash**：`4a11133`（refactor(core): 收敛对象轮廓/对象索引/场地包围盒/第三方模块守卫四个公共抽象）。
