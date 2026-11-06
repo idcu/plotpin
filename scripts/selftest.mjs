@@ -2021,6 +2021,44 @@ asyncSuites.push((async()=>{
   eq('PDF-拉丁文本保留', api.PdfRead.looksLikeCidGarbage('Building A-101'), false);
 })());
 
+/* 37b. B-13 多页 PDF：页序 / 每页独立原点 / 导出回读往返 -------------------- */
+asyncSuites.push((async()=>{
+  const obj=(n,body)=>n+' 0 obj\n'+body+'\nendobj\n';
+  /* /Kids 顺序故意与对象编号相反：对象 3 是第二页（宽 300），对象 5 是第一页（宽 200） */
+  const c1='0 0 m 100 0 l S\n', c2='0 0 m 160 0 l S\n';
+  let s='%PDF-1.4\n';
+  s+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  s+=obj(2,'<< /Type /Pages /Kids [5 0 R 3 0 R] /Count 2 >>');
+  s+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [10 20 310 220] /Contents 4 0 R >>');
+  s+=obj(4,'<< /Length '+c2.length+' >>\nstream\n'+c2+'endstream');
+  s+=obj(5,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 6 0 R >>');
+  s+=obj(6,'<< /Length '+c1.length+' >>\nstream\n'+c1+'endstream');
+  const r=await api.PdfRead.parsePdf(s);
+  eq('B-13-页数2', r.pageCount, 2);
+  eq('B-13-页序按Kids', r.pages.map(p=>p.pageNo).join(','), '1,2');
+  approx('B-13-第一页宽200', r.pages[0].width, 200, 1e-9);
+  approx('B-13-第二页宽300', r.pages[1].width, 300, 1e-9);
+  approx('B-13-第二页源原点x=10', r.pages[1].origin[0], 10, 1e-9);
+  /* 每页局部坐标各自归零：第一页尾 100，第二页尾 160-10=150 */
+  approx('B-13-页1线尾100', r.pages[0].paths[0].points[1][0], 100, 1e-9);
+  approx('B-13-页2线尾150', r.pages[1].paths[0].points[1][0], 150, 1e-9);
+  /* 落点：maxW=300 → gap=24；第二页 x=200+24，页间不重叠 */
+  const plan=api.PdfRead.layoutPdfPages(r.pages);
+  eq('B-13-页1原点0', plan[0].x, 0);
+  approx('B-13-页2原点224', plan[1].x, 224, 1e-9);
+  ok('B-13-页面不重叠', plan[0].x+plan[0].width < plan[1].x);
+  /* 导出→回读：页数/页序/尺寸保持，落点仍独立 */
+  const out=api.Pdf.buildImagePdf([
+    {width:200,height:100,b64:''},
+    {width:100,height:200,b64:''}
+  ]);
+  const back=await api.PdfRead.parsePdf(new Uint8Array(out));
+  eq('B-13-往返页数', back.pageCount, 2);
+  eq('B-13-往返页序宽', back.pages.map(p=>Math.round(p.width)).join(','), '200,100');
+  eq('B-13-往返页高', back.pages.map(p=>Math.round(p.height)).join(','), '100,200');
+  approx('B-13-往返第二页独立原点', api.PdfRead.layoutPdfPages(back.pages)[1].x, 216, 1e-9);
+})());
+
 /* 38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区 ------------------- */
 {
   api.resetState();

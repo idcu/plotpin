@@ -439,7 +439,28 @@ function canvasToJpegBase64(canvas,quality=.92){
   return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('JPEG 编码失败')),'image/jpeg',quality))
     .then(b=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); }));
 }
-async function renderPdfDrawingPage(floorName){
+/* 清单页版式常量：分页数与渲染共用一份（避免两处各写一套导致页码/总页数不一致） */
+const PDF_LIST_PAGE={W:1240,H:1748,margin:48,rowH:30,headH:40};
+function pdfListRowsPerPage(){ return Math.max(1,Math.floor((PDF_LIST_PAGE.H-PDF_LIST_PAGE.margin*2-150)/PDF_LIST_PAGE.rowH)); }
+/** 整套 PDF 的页序/页码计划：楼层顺序 → 每层「图纸页 + 清单页」，页码全局连续 */
+function pdfPagePlan(){
+  const fs=floorSummaries();
+  const per=pdfListRowsPerPage();
+  const listCount=n=>Math.max(1,Math.ceil((Number(n)||0)/per));
+  const out=[];
+  if(fs.rows.length<=1){
+    out.push({kind:'drawing',floorName:null});
+    for(let i=0;i<listCount(fs.rows[0]?fs.rows[0].count:0);i++) out.push({kind:'list',floorName:null,pageIndex:i});
+  }else{
+    for(const row of fs.rows){
+      out.push({kind:'drawing',floorId:row.id,floorName:row.name});
+      for(let i=0;i<listCount(row.count);i++) out.push({kind:'list',floorId:row.id,floorName:row.name,pageIndex:i});
+    }
+  }
+  out.forEach((p,i)=>{ p.pageNo=i+1; p.total=out.length; });
+  return out;
+}
+async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
   const W=1748,H=1240;   /* A4 横向 150dpi 像素 */
   const c=document.createElement('canvas'); c.width=W; c.height=H; markSurfaceSize(c,W,H);
   const cc=c.getContext('2d'); cc.fillStyle='#fff'; cc.fillRect(0,0,W,H);
@@ -447,13 +468,14 @@ async function renderPdfDrawingPage(floorName){
   const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
   drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
   cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
-  cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription(),margin,H-14);
+  const pageTag=pageNo?' · '+L('第')+' '+pageNo+' / '+pageTotal+' '+L('页'):'';
+  cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()+pageTag,margin,H-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
-async function renderPdfListPages(floorName){
-  const W=1240,H=1748, margin=48, rowH=30, headH=40;
+async function renderPdfListPages(floorName,pageNos,pageTotal){
+  const {W,H,margin,rowH,headH}=PDF_LIST_PAGE;
   const rows=objectRows(), pages=[];
-  const per=Math.floor((H-margin*2-150)/rowH);
+  const per=pdfListRowsPerPage();
   const chunks=[]; for(let i=0;i<rows.length;i+=per) chunks.push(rows.slice(i,i+per));
   const total=Math.max(1,chunks.length);
   for(let pi=0;pi<chunks.length||rows.length===0;pi++){
@@ -462,7 +484,8 @@ async function renderPdfListPages(floorName){
     g.fillStyle='#111827'; g.font='bold 26px Microsoft YaHei,Arial'; g.textBaseline='alphabetic';
     g.fillText(state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单'),margin,margin+8);
     g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
-    g.fillText(L('共')+' '+rows.length+' '+L('个对象')+' · '+L('第')+' '+(pi+1)+' / '+total+' '+L('页')+' · '+new Date().toLocaleString(),margin,margin+34);
+    const pageNo=(pageNos&&pageNos[pi])||pi+1, pageAll=pageTotal||total;
+    g.fillText(L('共')+' '+rows.length+' '+L('个对象')+' · '+L('第')+' '+pageNo+' / '+pageAll+' '+L('页')+' · '+new Date().toLocaleString(),margin,margin+34);
     let y=margin+70;
     g.fillStyle='#f1f5f9'; g.fillRect(margin,y,W-margin*2,headH);
     g.strokeStyle='#cbd5e1'; g.lineWidth=1; g.strokeRect(margin,y,W-margin*2,headH);
@@ -489,15 +512,21 @@ async function renderPdfListPages(floorName){
 async function exportPDF(){
   try{
     const fs=floorSummaries();
+    const plan=pdfPagePlan();
+    const listNosFor=floorId=>plan.filter(p=>p.kind==='list'&&(floorId===undefined||p.floorId===floorId)).map(p=>p.pageNo);
+    const totalPages=plan[0]?plan[0].total:1;
     let pages=[];
     if(fs.rows.length<=1){
-      pages=[await renderPdfDrawingPage(),...await renderPdfListPages()];
+      const draw=plan.find(p=>p.kind==='drawing');
+      pages=[await renderPdfDrawingPage(null,draw&&draw.pageNo,totalPages),
+        ...await renderPdfListPages(null,listNosFor(),totalPages)];
     }else{
       toast(L('正在生成多楼层 PDF…'));
       for(const row of fs.rows){
         await withFloor(row.id, async()=>{
-          pages.push(await renderPdfDrawingPage(row.name));
-          pages.push(...await renderPdfListPages(row.name));
+          const draw=plan.find(p=>p.kind==='drawing'&&p.floorId===row.id);
+          pages.push(await renderPdfDrawingPage(row.name,draw&&draw.pageNo,totalPages));
+          pages.push(...await renderPdfListPages(row.name,listNosFor(row.id),totalPages));
         });
       }
     }

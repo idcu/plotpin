@@ -309,39 +309,50 @@ async function importPdfFile(f){
     bgNote='底图 '+img.width+'×'+img.height;
     /* 矢量叠加仍以 PDF 页世界尺寸为场地，图片米/像素一致 */
   }
-  /* 矢量内容：路径转折线/区域，文本转文字对象。点→米 */
+  /* 矢量内容：路径转折线/区域，文本转文字对象。点→米。
+     多页：按页序沿 +X 排布（每页独立原点），不再把所有页叠在同一原点。 */
   const counts={line:0,area:0,text:0};
-  const wM=pdf.pageWidth*k, hM=pdf.pageHeight*k;
+  const pageList=Array.isArray(pdf.pages)&&pdf.pages.length?pdf.pages:null;
+  const plan=pageList?ensureVendor('PdfRead').layoutPdfPages(pageList):[];
+  const layoutW=plan.length?plan[plan.length-1].x+plan[plan.length-1].width:pdf.pageWidth;
+  const layoutH=plan.length?plan.reduce((m,p)=>Math.max(m,p.height||0),0):pdf.pageHeight;
+  const wM=layoutW*k, hM=layoutH*k;
   if((pdf.paths.length||pdf.texts.length)&&!pdf.images.length) pushHistory();
   /* 矢量内容批量建对象：同样使用编号作用域，避免逐个扫描全量 state */
   withObjectNameScope(allObjectNames(), () => {
-  for(const p of pdf.paths){
-    const pts=p.points.map(q=>[q[0]*k,q[1]*k]);
-    if(pts.length<2) continue;
-    const len=polylineLength(pts);
-    if(len<0.05) continue;   /* 去噪 */
-    const o=baseObject('line','line.custom',{points:pts,closed:!!p.closed,x:pts[0][0],y:pts[0][1]});
-    if(p.closed){
-      o.style={strokeWidth:.05};
-      counts.area++;
-    }else counts.line++;
-    state.objects.push(o);
-  }
-  for(const t of pdf.texts){
-    const h=(t.size||1)*k;
-    if(!(h>0)||!t.text) continue;
-    const o=baseObject('text',null,{x:t.x*k,y:t.y*k,text:t.text,height:h,style:{color:'#111827'}});
-    o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
-    state.objects.push(o); counts.text++;
-  }
+    const sources=pageList
+      ? pageList.map((pg,i)=>({paths:pg.paths||[],texts:pg.texts||[],ox:plan[i].x,oy:plan[i].y}))
+      : [{paths:pdf.paths,texts:pdf.texts,ox:0,oy:0}];
+    for(const src of sources){
+      for(const p of src.paths){
+        const pts=p.points.map(q=>[(q[0]+src.ox)*k,(q[1]+src.oy)*k]);
+        if(pts.length<2) continue;
+        const len=polylineLength(pts);
+        if(len<0.05) continue;   /* 去噪 */
+        const o=baseObject('line','line.custom',{points:pts,closed:!!p.closed,x:pts[0][0],y:pts[0][1]});
+        if(p.closed){
+          o.style={strokeWidth:.05};
+          counts.area++;
+        }else counts.line++;
+        state.objects.push(o);
+      }
+      for(const t of src.texts){
+        const h=(t.size||1)*k;
+        if(!(h>0)||!t.text) continue;
+        const o=baseObject('text',null,{x:(t.x+src.ox)*k,y:(t.y+src.oy)*k,text:t.text,height:h,style:{color:'#111827'}});
+        o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
+        state.objects.push(o); counts.text++;
+      }
+    }
   });
-  /* 无内嵌图时，把矢量场地设为 PDF 页面尺寸的矩形域，保证坐标框正确；图片槽保持不变 */
+  /* 无内嵌图时，把矢量场地设为整套图纸的矩形域（单页=原页面尺寸），保证坐标框正确 */
   if(!pdf.images.length && state.site && state.site.kind==='rect' && state.site.shape?.type==='rect'){
     state.site.shape.w=Math.max(state.site.shape.w,wM||100);
     state.site.shape.h=Math.max(state.site.shape.h,hM||70);
   }
   selectedIds.clear();
-  commitChange('PDF 已导入：'+counts.line+' 线 / '+counts.area+' 区域 / '+counts.text+' 文字'+(bgNote?' / '+bgNote:''));
+  const pageNote=pageList&&pageList.length>1?' / '+pageList.length+' 页（独立原点）':'';
+  commitChange('PDF 已导入：'+counts.line+' 线 / '+counts.area+' 区域 / '+counts.text+' 文字'+pageNote+(bgNote?' / '+bgNote:''));
   fitView();
 }
 

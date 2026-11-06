@@ -2,6 +2,33 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-13：多页 PDF / 图纸集（页序 · 页码 · 每页独立原点）
+
+- **Commit Hash**：本条提交（`fix(pdf): 多页 PDF 按页序独立原点落位，导出页码全局连续`）。复盘用 `git log --grep="多页 PDF 按页序独立原点" -1 --format=%H`。
+- **核心改动点**
+  - `js/common/pdf-read.js`：新增 `pageTreeOrder(objects)` / `pagesInDocumentOrder(parsed)`，从 `/Catalog → /Pages → /Kids` 递归还原**文档页序**（容器层按对象编号扫描，编号≠页序；页树缺失时退回扫描顺序并追加未被页树覆盖的页面，不静默丢内容）。
+  - `parsePdf` 新增 `pageCount` 与 `pages:[{pageNo,num,width,height,origin,paths,texts}]`，每页几何归零到自身 MediaBox；原有合并 `paths/texts/images` 字段保持不变（向后兼容）。
+  - 新增 `PdfRead.layoutPdfPages(pages,opt)`（多页落点唯一实现）：按页序沿 +X 排布，gap 默认最大页宽 8%，返回 `{pageNo,x,y,width,height,sourceOrigin}`；单页同样走该函数（x=0）。
+  - `js/features/io-import.js`：`importPdfFile` 按 `pdf.pages` 逐页偏移落位（**修复所有页同原点叠加**）；导入提示附「N 页（独立原点）」；场地按整套图纸总宽/最大页高扩展（只扩不缩）。
+  - `js/features/io-export.js`：新增 `PDF_LIST_PAGE` / `pdfListRowsPerPage()` / `pdfPagePlan()`，页序＝楼层顺序→每层「图纸页 + 清单页」，**页码全局连续**并写入图纸页脚与清单页头；清单分页数与渲染共用同一常量，避免两处各算一套。
+  - 文档：`docs/features.md`（导入/导出 PDF 段）、`docs/modules.md`（两条公共抽象）、`docs/engineering.md`（e2e 表 + B-13 技术说明 + 体积/SHA/断言表）、`README.md`、本文件。
+- **实测验证数据**
+  - selftest **2133 → 2147 通过 / 0 失败（+14）**：页树顺序（`/Kids [5 0 R 3 0 R]`）、第一页宽 200 / 第二页宽 300、第二页源原点 x=10、页内局部坐标归零（100 / 150）、落点 `x=0 / 224pt`（gap=24）且不重叠；`Pdf.buildImagePdf` 两页（200×100 / 100×200）→ `parsePdf` 回读 `pageCount=2`、页序宽 `200,100`、高 `100,200`、第二页独立原点 `216pt`。
+  - e2e `pdf-multipage.spec.mjs` **2 passed（2.5s 单独运行）**：两页矢量 PDF 导入后 2 线 + 2 文字，第一页线尾 `190pt×PT_M≈0.0670m` 可复算，第二页整体右移（min > 第一页 max）、提示含「2 页（独立原点）」、场地 ≥ 524pt 总宽；单页 PDF 保持旧行为（原点归零、无多页提示）。全量 e2e **46 passed / 1 skipped（46.0s）**。
+  - `npm run ci` 全绿：bench 缓存帧 avg 0.35ms（P50 0.33 / P95 0.43 / P99 1.02）、重建 24.57ms、直接全量 22.41ms、heapUsed 19.57MB、裁剪 99.4%（13/2000）、覆盖率 8ms / 大场地 15.6ms。
+  - 体积 **800,804 → 806,138 B（+5,334 B / +0.67%）**；gzip **262,303 → 264,284 B（+1,981 B）**；820 KB 门禁余量 **33,542 B**；SHA256 `1675f80528fc9e2bdb9bfefea297b6b280d793c7f2e772d66abc258edeb45f74`；二次构建确定性由 `build --check` 守。
+- **未验证项**
+  - PDF 导出为**位图页**（JPEG 图像页），回读只能校验页数/页序/页宽页高，**不还原矢量坐标**；矢量往返仅覆盖「外部矢量 PDF → 导入」单向下行。
+  - 未覆盖异常页树（循环 `/Kids`、跨引用间接对象、加密 PDF）真实样本；只用手工构造 PDF 与 `Pdf.buildImagePdf` 产物。
+  - 未验证旋转/裁剪 MediaBox（`/Rotate`、`/CropBox`）：本实现按 MediaBox 原点归零，旋转页可能与视觉方向不一致。
+- **遗留 TODO / 风险**
+  - 多页布局固定水平排布（不做自动换行/列排版），超宽图纸集可能横向很长；后续若需网格排布，应在 `layoutPdfPages` 内扩展并保持默认行为。
+  - 页码目前烘进位图页脚，PDF 文本层不可检索/不可复制；若需可搜索页码，需改矢量 PDF 生成（属于新决策）。
+- **受影响调用方 / 公共抽象**
+  - 新增公共抽象：`PdfRead.layoutPdfPages`、`pdfPagePlan`、`pdfListRowsPerPage`（清单分页数与渲染同源）；`parsePdf` 返回值新增 `pageCount/pages`，旧字段与签名不变。
+  - 调用方：`importPdfFile`（多页落位）、`exportPDF`（页码渲染）、`selftest` §37b、`e2e pdf-multipage`；单页行为显式回归覆盖。
+  - 未新增运行时依赖；未读取/修改 `camera-*`。
+
 ## 2026-11-06 · B-11：渲染性能收敛（真实 Chromium 实测后按数据取舍）
 
 - **Commit Hash**：本条提交（`test(perf): 真实 Chromium 渲染基线，四项候选实测无稳定收益不引入`）。复盘用 `git log --grep="真实 Chromium 渲染基线" -1 --format=%H`。

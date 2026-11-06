@@ -218,20 +218,77 @@ function buildPng(w,h,rgb){
   return png;
 }
 
+/* ---------------- 页序 / 多页落点 ---------------- */
+/** 按文档页树顺序展开页面对象号：/Catalog → /Pages → /Kids 递归。
+ *  容器层按对象编号扫描页对象，编号≠页序；此处在适配层恢复真实页序（不改 vendor）。 */
+function pageTreeOrder(objects){
+  const byNum=new Map();
+  for(const [num,o] of objects||[]) byNum.set(num,o);
+  let catalog=null;
+  for(const [,o] of objects||[]){ if(/\/Type\s*\/Catalog/.test(o.dict)){ catalog=o; break; } }
+  const out=[], seen=new Set();
+  const walkRef=(num,depth)=>{
+    if(depth>64||seen.has(num)) return;
+    const o=byNum.get(num); if(!o) return;
+    seen.add(num);
+    if(/\/Type\s*\/Page(?!s)/.test(o.dict)){ out.push(num); return; }
+    const kids=(o.dict.match(/\/Kids\s*\[([\s\S]*?)\]/)||[])[1];
+    if(!kids) return;
+    for(const m of kids.matchAll(/(\d+)\s+\d+\s*R/g)) walkRef(+m[1],depth+1);
+  };
+  const ref=catalog&&(catalog.dict.match(/\/Pages\s+(\d+)\s+\d+\s*R/)||[])[1];
+  if(ref) walkRef(+ref,0);
+  return out;
+}
+function pagesInDocumentOrder(parsed){
+  const order=pageTreeOrder(parsed.objects);
+  if(!order.length) return parsed.pages.slice();
+  const byNum=new Map(parsed.pages.map(p=>[p.num,p]));
+  const out=order.filter(n=>byNum.has(n)).map(n=>byNum.get(n));
+  /* 损坏文件兜底：页树未覆盖但可解析的页面追加在末尾，避免静默丢内容 */
+  parsed.pages.forEach(p=>{ if(!order.includes(p.num)) out.push(p); });
+  return out;
+}
+/**
+ * 多页落点规划：按文档页序沿 +X 依次排布，页间留 gap（默认最大页宽的 8%）。
+ * 返回 [{pageNo,width,height,x,y,sourceOrigin}]，x/y 为页面在「整套图纸」中的 PDF 点偏移。
+ * 旧行为把所有页归零到各自 MediaBox 后叠在同一原点，导入后跨页几何互相覆盖；此函数给每页独立原点。
+ */
+function layoutPdfPages(pages,opt){
+  const arr=Array.isArray(pages)?pages.filter(Boolean):[];
+  if(!arr.length) return [];
+  const o=opt||{};
+  const gapRatio=Number.isFinite(Number(o.gapRatio))?Math.max(0,Number(o.gapRatio)):0.08;
+  const maxW=arr.reduce((m,p)=>Math.max(m,Number(p.width)||0),0);
+  const gap=Number.isFinite(Number(o.gap))?Math.max(0,Number(o.gap)):maxW*gapRatio;
+  let x=0;
+  return arr.map((p,i)=>{
+    const r={pageNo:i+1,width:Number(p.width)||0,height:Number(p.height)||0,x,y:0,
+      sourceOrigin:Array.isArray(p.origin)?[p.origin[0],p.origin[1]]:[0,0]};
+    x+=r.width+gap;
+    return r;
+  });
+}
+
 /* ---------------- 主入口 ---------------- */
 async function parsePdf(input,opt){
   /* 容器层（对象树/页面/内容流原文）由 @idcu/format-pdf 解析；这里只做绘图语义转换 */
   const parsed=await __pdf.parse(input,{inflate,limits:opt});
   const merged={paths:[],texts:[],images:[]};
+  const pages=[];
   let firstBox=null;
-  for(const page of parsed.pages){
+  pagesInDocumentOrder(parsed).forEach((page,i)=>{
     const box=page.mediaBox;
     if(!firstBox) firstBox={w:box.width,h:box.height};
     const interp=interpretContent(page.contentText);
-    interp.paths.forEach(p=>merged.paths.push({
+    const paths=interp.paths.map(p=>({
       points:p.points.map(q=>[q[0]-box.x,q[1]-box.y]),closed:p.closed,filled:p.filled}));
-    interp.texts.forEach(t=>merged.texts.push({x:t.x-box.x,y:t.y-box.y,size:t.size,text:t.text}));
-  }
+    const texts=interp.texts.map(t=>({x:t.x-box.x,y:t.y-box.y,size:t.size,text:t.text}));
+    pages.push({pageNo:i+1,num:page.num,width:box.width,height:box.height,
+      origin:[box.x,box.y],paths,texts});
+    paths.forEach(p=>merged.paths.push(p));
+    texts.forEach(t=>merged.texts.push(t));
+  });
   /* 内嵌图像（每页资源）：收集 /Subtype /Image 对象，选最大者 */
   const images=[];
   for(const [num,o] of parsed.objects){
@@ -271,9 +328,10 @@ async function parsePdf(input,opt){
   }
   images.sort((a,b)=>b.width*b.height-a.width*a.height);
   return {pageWidth:firstBox?.w||0,pageHeight:firstBox?.h||0,
+    pageCount:pages.length,pages,
     paths:merged.paths,texts:merged.texts,images,
     unitMeter:PT_TO_METER};
 }
 
-global.PdfRead={ parsePdf, PT_TO_METER, tokenizeContent, looksLikeCidGarbage, LIMITS: PDF_LIMITS };
+global.PdfRead={ parsePdf, layoutPdfPages, PT_TO_METER, tokenizeContent, looksLikeCidGarbage, LIMITS: PDF_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);
