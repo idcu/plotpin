@@ -2,6 +2,27 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-11 墓碑按对象 id 保留 + 增量淘汰
+
+- **Commit Hash**：`5e47a03`（fix(collab): 墓碑按对象 id 长期保留并改为增量淘汰）。
+- **核心改动点**
+  - `js/core/config.js`：`TOMBSTONE_MAX` 2000 → **20000**；新增 `TOMBSTONE_EVICT_BATCH=2000`（增量淘汰批量）、`TOMBSTONE_RETENTION_DAYS=730`（保留窗口）。
+  - `js/core/persistence.js`：`sanitizeTombstones(arr, nowMs)` 新增保留窗口裁切（仅淘汰超过 730 天的旧墓碑，`nowMs` 可注入以便自测）；`markTombstone` 从「每次删除都全量排序」改为「攒够 2000 条才压缩一次」。
+  - `js/common/merge.js`：远端对象被墓碑删除时计入 `stats.deleted`（此前漏计）；文件头注释明确「删除时间不早于对象更新时间即生效（平局删除胜）」，与 A-04 LWW 语义一致。
+  - `scripts/selftest.mjs` §71：13 条断言覆盖保留窗口、硬上限、增量淘汰触发时机，以及「旧端 3000 个已删对象合并后全部被压制」。
+- **实测验证数据（本机 Windows / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1778 通过 / 0 失败**（加载 36 脚本）。
+  - `node scripts/e2e.mjs`：**18 passed / 0 failed（19.8s）**。
+  - `node scripts/bench.mjs`：缓存帧 avg **0.37 ms** / P95 **0.5 ms**；重建 **22.18 ms**；heapUsed **18.64 MB**；覆盖率 **7.8 ms**。
+  - `node scripts/build.mjs --check`：**686.0 KB**，SHA256 `5d989f8e269d79f331ba256e2eacbe63097ed1387681c045a509fa1c2891c43a`，二次构建一致。
+- **公共抽象 / 影响面**
+  - 墓碑体积上限由 2000 条提升到 20000 条（最坏约 +1.4MB，仍受导入 32MB 上限约束），换取「旧端合并不复活」。
+  - `sanitizeTombstones` 签名新增可选 `nowMs`，现有调用方（`buildProject`）不传则等价于 `Date.now()`。
+  - `markTombstone` 压缩频率下降，删除路径 CPU 成本随之下降；无 schema 变更、无新依赖。
+- **遗留 TODO / 风险**
+  - 超过 730 天的墓碑仍会按时间淘汰：离线超过 2 年的旧端合并时，其持有的已删对象仍可能复活（已在 `docs/features.md` 写明）。
+  - 极端工程（墓碑 2 万条）会使工程 JSON 明显变大；未做压缩编码。
+
 ## 2026-11-06 · A-10 照片资产全楼层化与 JSON 内嵌统一
 
 - **Commit Hash**：`6d7df54`（feat(export): 照片资产全楼层化并统一 JSON 内嵌策略）。
