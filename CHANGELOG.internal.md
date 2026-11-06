@@ -2,6 +2,35 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-08 原义：表格批量布点 + 条件批量替换
+
+- **Commit Hash**：本条提交（`feat(table): 表格批量布点与条件批量替换`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="表格批量布点与条件批量替换" -1 --format=%H`。
+- **核心改动点**
+  - `io-table.js`：`rowsToObjectsPlan` 新增「操作」列（新增 / 更新 / 替换）与 6 个「匹配…」条件列；替换行对同时满足全部条件的对象批量写回名称/业务类型/图层/台账/备注/显隐/锁定，**不改几何**；`楼层` 列可限定命中范围。
+  - 严格模式：存在「操作」列时，未知编号/未知业务类型/未知图层/非法台账值/替换缺条件/新增编号重复/未知楼层/非法操作值都进入 `plan.errors`；预览只显示错误、不提供「合并导入」；`applyTableImport` 直接拒绝带 errors 的计划（整批不生效）。
+  - 事务化兜底：应用前保存 `snapshotHistoryState` 快照；应用异常时回滚现场并弹出本次空的 `history.past` 帧，不留半批对象。
+  - 新增/更新仍复用 `withObjectNameScope`（编号作用域）与 `importLimitErrors`（对象数上限）；预检在 `applyTableImport` 前完成。
+  - 公式防护：`formulaGuard` 从 `io-export.js` 迁到 `io-fields.js`，新增 `formulaUnguard`；导入时仅在原值会被防护时去掉前导单引号，保证导出→再导入文本不变形。
+  - 公共抽象：提取 `applyTableCommonCells`（更新/替换/新增共用属性写回）、`rowMatchesObject`（条件匹配唯一实现）、`tableImportColumns()`（导入表头 = 导出列 + 操作/匹配列）。
+  - 文档：`docs/features.md`、`docs/modules.md`（抽象表 + B-08 原义影响范围）、`docs/engineering.md`（B-08 原义段 + e2e 表）、`README.md`、本文件。
+- **实测验证数据**
+  - 体积 **771,344 → 779,096 B（+7,752 B / +1.01%）**；820 KB 门禁余量 **60,584 B**；gzip **253,036 → 255,447 B（+2,411 B）**；SHA256 `9ed2a6ed26c4…`。
+  - selftest **1994 → 2016 通过 / 0 失败**（新增 22 项：严格模式识别、替换命中数与属性、批量落点坐标、非法行整批拒绝、非法台账值/缺条件报错、公式引号还原、500 行全量新增）。
+  - 大表实测（Node 逻辑层）：500 行 `对象类型,X,Y` → **规划 3–5 ms、应用 8–15 ms**，500 对象全部落点。
+  - e2e `table-batch.spec.mjs` **2 passed（3.6s，含服务器启动）**：条件替换命中 2 台并改业务类型/台账；新增落点 (10,20) 与图层可复算；非法更新行整批拒绝且对象数/文本不变。
+- **未验证项**
+  - **桌面 Excel/WPS 人工打开仍未验证**：严格模式 CSV/XLSX 只做 `DSV.parseRows` / `Xlsx.readRows` 往返与数值断言。
+  - 浏览器级 500 行耗时未单独测（当前数据是 Node 逻辑层；真实 Chromium 的导入 UI 耗时未采集）。
+- **遗留 TODO / 风险**
+  - 严格模式以「操作」列存在为开关：旧模板（无该列）仍逐行告警/跳过，不享受整批回滚；用户需显式加列才获得事务语义。
+  - 新增行的「编号」只用于防重，对象名仍由统一编号作用域生成（与旧导出模板一致）；若用户期望把表格编号原样落库，需要另开选项。
+  - 条件替换按`匹配…`列匹配**当前楼层现有对象**，不匹配本批新增行；同批新增后再替换需分两次导入。
+  - 替换不改几何；批量移动/缩放仍走属性面板或拖拽。
+- **受影响调用方**
+  - `rowsToObjectsPlan` 返回值新增 `replaces / errors / strict`，既有 `updates / creates / warnings` 不变；`applyTableImport` 签名不变，但会拒绝带 errors 的计划。
+  - 导出表头 `TABLE_COLUMNS` 与 8 种导出产物不变；新增全局 `TABLE_MATCH_COLUMNS / TABLE_IMPORT_EXTRA_COLUMNS / tableImportColumns / rowMatchesObject / applyTableCommonCells / formulaUnguard`。
+  - `formulaGuard` 迁移到 `io-fields.js`（全局名与行为不变，`io-export.js` 不再保留第二份实现）。
+
 ## 2026-11-06 · B-05 补强：报价快照 + 厂商维度绑定
 
 - **Commit Hash**：本条提交（`feat(quote): 报价快照与厂商维度绑定`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="报价快照与厂商维度绑定" -1 --format=%H`。

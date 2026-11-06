@@ -89,7 +89,16 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic 
 | `quoteAggregate(catalog) / quoteColumns(agg, catalog) / quoteTable(catalog) / QUOTE_FIELD_DEFS` | `js/features/io-fields.js`（报价表唯一字段源与跨楼层 BOM 聚合：按 `厂商+型号` 聚合数量，仅填型号且目录内唯一时自动绑定；无法唯一确定时记入 `ambiguous` 明确提示；无目录降级为「名称、数量」） | `io-export.js` 的 `exportQuote`（CSV/XLSX 共用，并用 `ambiguous` 决定提示）、`selftest.mjs`；CSV 经 `delimitedFromTable`（`guardFormula`），XLSX 经 `Xlsx.build` |
 | `catalogValidate(raw) / importCatalog(raw, save?) / catalogLoad() / catalogVersion(cat) / exportCatalogJSON() / deleteCatalog()` | `js/features/catalog.js`（产品目录 schema 校验、事务化导入与目录版本指纹唯一实现：校验 → `idbPutKey('catalog:current')` → 才替换内存；任一步失败 IDB 与内存均保持原值；`save` 供自测注入失败；`catalogVersion` 为 items 的 FNV-1a 32 位内容指纹） | `io-import.js` 的 JSON 导入路由（按 schema 分流）、`app.js` 首屏恢复、导出下拉的目录导出/删除/报价快照版本、`selftest.mjs` |
 | `quoteSignature(t) / quoteSnapshotTable(fresh, snap) / quoteMetaTable(t, meta)` | `js/features/io-fields.js`（报价快照唯一实现：签名只含列数 + 厂商/型号/数量，行集合不变才复用冻结单价；`quoteMetaTable` 追加「目录版本 / 导出时间」两列并只写在合计行） | `io-export.js` 的 `exportQuote`（读写 IndexedDB `quote:last`）、`selftest.mjs` |
+| `TABLE_MATCH_COLUMNS / TABLE_IMPORT_EXTRA_COLUMNS / tableImportColumns() / rowMatchesObject(o,c) / applyTableCommonCells(o,c)` | `js/features/io-table.js`（B-08 原义：导入可识别表头 = 导出列 + 操作/匹配列；`rowMatchesObject` 是条件替换的唯一匹配实现；`applyTableCommonCells` 是更新/替换/新增共用的业务属性写回，几何与名称仍由各路径负责） | `rowsToObjectsPlan`、`applyTableImport`、`showTableImportPreview`、`selftest.mjs`；影响：导出表头 `TABLE_COLUMNS` 不变，导入额外接受「操作」与 6 个「匹配…」列 |
+| `formulaGuard(s) / formulaUnguard(s)` | `js/features/io-fields.js`（公式注入防护唯一实现：导出加前导单引号，导入仅在原值会被防护时去引号；`'123` 等纯数字/非公式文本保持字面） | `delimitedFromTable`（CSV/TSV/XLSX 导出）、`rowsToObjectsPlan` 的单元格读取、`selftest.mjs`；不再在 `io-export.js` 另存一份 |
 | `BLIND_SPOT_FIELDS / buildBlindSpotGeoJson(cov)` | `js/features/io-fields.js`（盲区 GeoJSON 属性与 `coverageSpec` 的唯一生成器；纯函数，无盲区返回 `null`） | `exportBlindSpotsGeoJson()`（只负责提示与下载）、`selftest.mjs` |
+
+B-08 原义影响范围：`rowsToObjectsPlan(rows)` 的返回值新增 `replaces / errors / strict`，既有 `updates / creates / warnings`
+字段与含义不变；无「操作」列的旧表头行为保持逐行告警/跳过。`applyTableImport(plan)` 签名不变，但带 `plan.errors`
+的计划会被直接拒绝（整批不生效），并在应用前按 `importLimitErrors` 复核对象数上限、失败时用快照回滚。
+替换行只写属性、不改几何；`匹配…` 列可跨楼层命中，`楼层` 列可把范围收窄到单层。导出表头 `TABLE_COLUMNS`
+与 8 种导出产物不变。`formulaGuard` 从 `io-export.js` 迁到 `io-fields.js`，全局名与行为不变，新增 `formulaUnguard`。
+
 
 B-06 影响范围：`mergeProjectJSON(raw, opts)` 新增 `opts.history:'overwrite'`——只有 `mergeHistoryNeeded(stats)` 为真（发生 LWW 覆盖）才 `pushHistory()`，纯新增合并不再占用撤销栈；既有调用不传 `history` 时行为不变。`mergeProjectData` 的 `stats` 新增 `floorMetaUpdated / floorsDeleted` 两个字段，既有字段与返回值结构不变，旧调用方忽略新字段即可。`qrSvg` 从 `io-export.js` 上移到 `js/common/qr.js`，唯一调用方签名不变（新增可选像素宽度）；`collab.js` 不再各自实现二维码渲染。
 

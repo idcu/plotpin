@@ -105,7 +105,8 @@ code += `\n;globalThis.__api = {
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
-  rowsToObjectsPlan, applyTableImport,
+  rowsToObjectsPlan, applyTableImport, applyTableCommonCells, rowMatchesObject,
+  TABLE_MATCH_COLUMNS, tableImportColumns, formulaUnguard,
   siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints,
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
   siteDescription, worldDims,
@@ -348,6 +349,76 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('全空数据行跳过且不告警', [allEmpty.updates.length, allEmpty.creates.length, allEmpty.warnings.length], [0, 0, 0]);
   const noHeader = api.rowsToObjectsPlan([['foo', 'bar'], ['1', '2']]);
   ok('无有效表头报错', noHeader.warnings.length === 1 && noHeader.updates.length === 0);
+}
+
+/* 8.1 B-08 原义：批量布点 + 条件批量替换（严格模式全有或全无） -------------------- */
+{
+  const st = api.resetState();
+  const mk = (name, text, x, y) => {
+    const o = api.baseObject('point', 'point.marker');
+    o.name = name; o.text = text; o.x = x; o.y = y;
+    st.objects.push(o); return o;
+  };
+  const A = mk('O0001', '旧A', 0, 0), B = mk('O0002', '旧B', 2, 0);
+  const H = ['操作','编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','X','Y','显示','锁定','备注','匹配编号','匹配名称','匹配名称包含','匹配对象类型','匹配业务类型','匹配图层'];
+  const row = map => H.map(k => String(map[k] ?? ''));
+  const plan = api.rowsToObjectsPlan([
+    H,
+    row({ 操作:'替换', 匹配业务类型:'通用标记', 名称:'新名称', 业务类型:'摄像头', 备注:'批量', 安装高度:'3' }),
+    row({ 操作:'新增', 对象类型:'点设备', 业务类型:'摄像头', X:'10', Y:'20' }),
+    row({ 操作:'更新', 编号:'O0001', X:'5', Y:'6' })
+  ]);
+  eq('B-08-严格模式识别', plan.strict, true);
+  eq('B-08-替换命中对象数', plan.replaces.reduce((n,r)=>n+r.objs.length,0), 2);
+  eq('B-08-新增行数', plan.creates.length, 1);
+  eq('B-08-更新行数', plan.updates.length, 1);
+  eq('B-08-严格模式无错误', plan.errors.length, 0);
+  api.applyTableImport(plan);
+  const objs = api.state.objects;
+  eq('B-08-应用后对象数', objs.length, 3);
+  ok('B-08-替换命中两台并改业务类型', A.typeId === 'point.camera' && B.typeId === 'point.camera');
+  ok('B-08-替换名称生效', A.text === '新名称' && B.text === '新名称');
+  ok('B-08-替换台账生效', A.props.mountHeight === 3 && A.props.note === '批量');
+  approx('B-08-更新坐标X', A.x, 5);
+  approx('B-08-更新坐标Y', A.y, 6);
+  const created = objs.find(o => o.name !== 'O0001' && o.name !== 'O0002');
+  ok('B-08-批量布点坐标可复算', !!created && created.x === 10 && created.y === 20);
+  eq('B-08-新增业务类型', created && created.typeId, 'point.camera');
+
+  /* 非法行：严格模式整批拒绝，apply 不改现有对象 */
+  api.resetState();
+  const st2 = api.state, keep = api.baseObject('point', 'point.marker');
+  keep.name = 'O0100'; keep.x = 0; keep.y = 0; st2.objects.push(keep);
+  const bad = api.rowsToObjectsPlan([H, row({ 操作:'更新', 编号:'O9999', X:'1', Y:'1' })]);
+  ok('B-08-非法更新行报错', bad.errors.length >= 1);
+  eq('B-08-非法计划无待更新', bad.updates.length, 0);
+  api.applyTableImport(bad);
+  eq('B-08-非法计划不修改对象', api.state.objects.length, 1);
+  const badLedger = api.rowsToObjectsPlan([H, row({ 操作:'替换', 匹配图层:'默认图层', 安装高度:'abc' })]);
+  ok('B-08-非法台账值报错', badLedger.errors.length >= 1);
+  const noCond = api.rowsToObjectsPlan([H, row({ 操作:'替换', 名称:'X' })]);
+  ok('B-08-替换缺少条件报错', noCond.errors.length >= 1);
+
+  /* 公式防护引号往返：导出加引号 → 导入还原，不留字面单引号 */
+  eq('B-08-公式引号还原', api.formulaUnguard("'=SUM(A1)"), '=SUM(A1)');
+  eq('B-08-非公式引号保留', api.formulaUnguard("'123"), "'123");
+  api.resetState();
+  const st3 = api.state, p3 = api.baseObject('point', 'point.marker');
+  p3.name = 'O0200'; p3.x = 0; p3.y = 0; st3.objects.push(p3);
+  api.applyTableImport(api.rowsToObjectsPlan([['操作','匹配编号','名称'], ['替换','O0200',"'=cmd|calc"]]));
+  eq('B-08-公式文本往返不变形', api.state.objects[0].text, '=cmd|calc');
+
+  /* 大表（≥500 行）实测 */
+  api.resetState();
+  const big = [['对象类型','X','Y']];
+  for (let i = 0; i < 500; i++) big.push(['点设备', String(i), String(i % 97)]);
+  const t0 = Date.now();
+  const bigPlan = api.rowsToObjectsPlan(big);
+  const t1 = Date.now();
+  api.applyTableImport(bigPlan);
+  const t2 = Date.now();
+  eq('B-08-500行全量新增', api.state.objects.length, 500);
+  console.log('  [B-08] 500 行表格：规划 ' + (t1 - t0) + ' ms，应用 ' + (t2 - t1) + ' ms');
 }
 
 /* 9. 矢量场地模型 --------------------------------------------------------- */

@@ -1,4 +1,12 @@
 /* io-fields.js —— 导出字段描述表与行渲染器（CSV/TSV/XLSX/PDF/打印报告/GeoJSON/SVG/DXF 的唯一字段源） */
+/* 公式注入防护（导出加前导单引号、导入去引号还原）：CSV/TSV/XLSX 往返的唯一实现 */
+const NUMERIC_CELL_RE=/^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*[,;，]\s*-?\d+(?:\.\d+)?)*$/;
+function formulaGuard(s){ return /^[=+\-@\t\r]/.test(s)&&!NUMERIC_CELL_RE.test(s); }
+/** 表格导入用：撤销导出时加的前导单引号（仅当原值确实会被公式防护） */
+function formulaUnguard(s){
+  const t=String(s??'');
+  return t.charAt(0)==="'"&&formulaGuard(t.slice(1))?t.slice(1):t;
+}
 /* 单一字段描述表：每个条目声明键名、取值函数以及进入哪些导出格式。
    各格式只负责布局（列宽/列序/文本模板），不得再各自拼装对象字段。 */
 const EXPORT_FIELD_DEFS=[

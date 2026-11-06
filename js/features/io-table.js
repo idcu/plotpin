@@ -1,6 +1,12 @@
 /* io-table.js —— 表格导入：CSV/TSV/XLSX 规划、几何核对与合并应用 */
 /* -------------------- 表格导入（CSV/TSV/XLSX → 对象更新/新增） -------------------- */
 const TABLE_KIND_BY_NAME={'点设备':'point','矩形/区域':'rect','线段/折线':'line','文字':'text','尺寸标注':'dimension'};
+/* 批量操作模式（B-08 原义）：显式「操作」列 + 条件「匹配」列；无「操作」列时保持旧的自动路由行为 */
+const TABLE_OP_BY_LABEL={'新增':'create','创建':'create','更新':'update','替换':'replace'};
+const TABLE_MATCH_COLUMNS=['匹配编号','匹配名称','匹配名称包含','匹配对象类型','匹配业务类型','匹配图层'];
+const TABLE_IMPORT_EXTRA_COLUMNS=['操作'].concat(TABLE_MATCH_COLUMNS);
+/** 导入可识别表头 = 导出列 + 批量操作/条件列（导出表头本身不变，保持既有 golden） */
+function tableImportColumns(){ return TABLE_COLUMNS.concat(TABLE_IMPORT_EXTRA_COLUMNS); }
 /* 区域形状 / 标注子类型：表格中文 ↔ 模型枚举（导出导入共用同一映射） */
 const AREA_SHAPE_LABELS={rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形',parallelogram:'平行四边形'};
 const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':'circle','椭圆':'ellipse','扇形':'sector','平行四边形':'parallelogram'};
@@ -70,6 +76,37 @@ function applyLedgerCells(o,c){
   });
 }
 function tableBool(v){ return /^(是|true|1|y|yes)$/i.test(String(v??'').trim()); }
+/* 严格模式布尔列合法取值（是/否/true/false/1/0/y/n/yes/no） */
+const TABLE_BOOL_RE=/^(是|否|true|false|1|0|y|n|yes|no)$/i;
+/** 条件列命中数：批量替换行至少要有一个非空匹配条件，避免误改全部对象 */
+function rowConditionCount(c){ return TABLE_MATCH_COLUMNS.reduce((n,k)=>n+(c(k)!==''?1:0),0); }
+/** 按「匹配」列判定对象是否命中（空条件不参与；全部为空返回 false） */
+function rowMatchesObject(o,c){
+  const id=c('匹配编号');
+  if(id&&String(o.name||'')!==id) return false;
+  const name=c('匹配名称');
+  if(name&&String(o.text||'').trim()!==name) return false;
+  const inc=c('匹配名称包含');
+  if(inc&&!String(o.text||'').includes(inc)) return false;
+  const kind=c('匹配对象类型');
+  if(kind&&kindName(o.kind)!==kind) return false;
+  const tn=c('匹配业务类型');
+  if(tn&&getType(o.typeId).name!==tn) return false;
+  const ln=c('匹配图层');
+  if(ln&&layerOf(o).name!==ln) return false;
+  return rowConditionCount(c)>0;
+}
+/** 更新 / 替换 / 新增共用：业务类型、图层、显隐、锁定、备注、设备台账（几何与名称由各路径负责） */
+function applyTableCommonCells(o,c){
+  const tn=c('业务类型');
+  if(tn){ const t=state.objectTypes.find(x=>x.kind===o.kind&&x.name===tn); if(t) o.typeId=t.id; }
+  const ln=c('图层');
+  if(ln){ const l=state.layers.find(x=>x.name===ln); if(l) o.layerId=l.id; }
+  const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
+  const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
+  const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
+  applyLedgerCells(o,c);
+}
 function parseShapeParams(text){
   return String(text??'').split(/[,，\s]+/).filter(s=>s.trim()!=='').map(Number);
 }
@@ -181,49 +218,106 @@ function checkRowGeom(where,c,cnd){
   return warns;
 }
 function rowsToObjectsPlan(rows){
-  const warnings=[];
-  if(!rows||!rows.length) return {updates:[],creates:[],warnings:['文件内容为空，未导入任何行']};
+  const warnings=[],errors=[];
+  if(!rows||!rows.length) return {updates:[],creates:[],replaces:[],warnings:['文件内容为空，未导入任何行'],errors,strict:false};
   const header=rows[0].map(h=>String(h||'').trim().replace(/^\ufeff/,''));
-  const idx={};
-  header.forEach((h,i)=>{ if(TABLE_COLUMNS.includes(h)&&idx[h]===undefined) idx[h]=i; });
-  if(idx['编号']===undefined&&idx['对象类型']===undefined){
-    return {updates:[],creates:[],warnings:['首行未找到「编号/对象类型」表头，请使用本工具导出的 CSV/TSV/XLSX 模板']};
+  const idx={},known=tableImportColumns();
+  header.forEach((h,i)=>{ if(known.includes(h)&&idx[h]===undefined) idx[h]=i; });
+  const strict=idx['操作']!==undefined;
+  if(idx['编号']===undefined&&idx['对象类型']===undefined&&idx['操作']===undefined&&
+     !TABLE_MATCH_COLUMNS.some(k=>idx[k]!==undefined)){
+    return {updates:[],creates:[],replaces:[],warnings:['首行未找到「编号/对象类型」表头，请使用本工具导出的 CSV/TSV/XLSX 模板'],errors,strict};
   }
-  const cell=(r,name)=>idx[name]!==undefined?String(r[idx[name]]??'').trim():'';
+  /* 公式防护的导引号在导入侧还原，保证「导出→再导入」名称/备注等文本不变形 */
+  const cell=(r,name)=>idx[name]!==undefined?formulaUnguard(String(r[idx[name]]??'').trim()):'';
   syncActiveFloor();
   const floors=(state.floors||[]).map(f=>({id:f.id,name:f.name,active:f.id===state.activeFloorId,objects:Array.isArray(f.objects)?f.objects:[]}));
   const current=floors.find(f=>f.active);
   if(!current) floors.push({id:state.activeFloorId||'',name:currentFloorName(),active:true,objects:state.objects});
   const floorByName=new Map(floors.map(f=>[String(f.name||'').trim(),f]));
   const codeMaps=new Map(floors.map(f=>[f.id,new Map((f.objects||[]).map(o=>[o.name,o]))]));
-  const updates=[],creates=[];
+  const updates=[],creates=[],replaces=[];
+  const problem=msg=>{ (strict?errors:warnings).push(msg); };
   const check=(where,c,cnd)=>checkRowGeom(where,c,cnd).forEach(w=>warnings.push(w));
+  const objectsOf=f=>f.id===state.activeFloorId?state.objects:(f.objects||[]);
+  /* 严格模式（存在「操作」列）才校验目标字段，旧表头行为保持只告警/静默忽略 */
+  const checkLedger=(where,c)=>{
+    if(!strict) return;
+    const mh=c('安装高度');
+    if(mh!==''&&!(tableNum(mh)>=0)) problem(where+'：安装高度「'+mh+'」非法（需为非负数字）');
+    const vis=c('显示'); if(vis!==''&&!TABLE_BOOL_RE.test(vis)) problem(where+'：显示「'+vis+'」非法（需为是/否）');
+    const lk=c('锁定'); if(lk!==''&&!TABLE_BOOL_RE.test(lk)) problem(where+'：锁定「'+lk+'」非法（需为是/否）');
+  };
+  const checkTargets=(where,c,objs)=>{
+    if(!strict) return;
+    const tn=c('业务类型');
+    if(tn){
+      const bad=objs.find(o=>!state.objectTypes.some(x=>x.kind===o.kind&&x.name===tn));
+      if(bad) problem(where+'：业务类型「'+tn+'」不适用于'+kindName(bad.kind)+'（可用「匹配对象类型」缩小范围）');
+    }
+    const ln=c('图层');
+    if(ln&&!state.layers.some(x=>x.name===ln)) problem(where+'：未知图层「'+ln+'」');
+    checkLedger(where,c);
+  };
+  const seenCreateCodes=new Set();
   rows.slice(1).forEach((r,i)=>{
     const lineNo=i+2;
     if(!r.some(v=>String(v??'').trim()!=='')) return;
-    const code=cell(r,'编号');
-    const rowFloor=cell(r,'楼层');
+    const c=name=>cell(r,name);
+    const code=c('编号');
+    const opRaw=c('操作');
+    const rowFloor=c('楼层');
     let ctx=current;
     if(rowFloor){
       const f=floorByName.get(rowFloor);
-      if(!f){ warnings.push('第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+'：未知楼层「'+rowFloor+'」，已跳过'); return; }
+      if(!f){ problem('第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+'：未知楼层「'+rowFloor+'」，已跳过'); return; }
       ctx=f;
     }
     const where='第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+(rowFloor?'［楼层 '+rowFloor+'］':'');
-    const c=name=>cell(r,name);
     const floorCodes=codeMaps.get(ctx.id);
-    if(code&&floorCodes&&floorCodes.has(code)){
+    let op=TABLE_OP_BY_LABEL[opRaw]||'';
+    if(opRaw&&!op){ problem(where+'：操作「'+opRaw+'」无法识别（可用：新增 / 更新 / 替换）'); return; }
+    if(!op){
+      /* 无「操作」列时保持旧行为：编号命中→更新，否则→新增；出现匹配条件列则视为替换 */
+      if(rowConditionCount(c)>0) op='replace';
+      else if(code&&floorCodes&&floorCodes.has(code)) op='update';
+      else op='create';
+    }
+    if(op==='replace'){
+      if(!rowConditionCount(c)){ problem(where+'：替换行缺少匹配条件（至少填一项「匹配…」列）'); return; }
+      const scope=rowFloor?[ctx]:floors;
+      const matched=scope.flatMap(objectsOf).filter(o=>rowMatchesObject(o,c));
+      if(!matched.length) warnings.push(where+'：没有匹配到任何对象，已跳过');
+      else{
+        checkTargets(where,c,matched);
+        replaces.push({objs:matched,cell:c,floorId:ctx.id});
+      }
+      return;
+    }
+    if(op==='update'){
+      if(!code){ problem(where+'：更新行缺少「编号」'); return; }
+      if(!floorCodes||!floorCodes.has(code)){
+        const other=floors.find(f=>f.id!==ctx.id&&codeMaps.get(f.id)&&codeMaps.get(f.id).has(code));
+        problem(other?where+'：编号「'+code+'」只存在于楼层「'+other.name+'」，请把「楼层」写成该层'
+                    :where+'：编号「'+code+'」在当前'+(rowFloor?'楼层「'+rowFloor+'」':'楼层')+'不存在');
+        return;
+      }
       const obj=floorCodes.get(code);
       check(where,c,previewGeomCandidate(obj,c));
+      checkTargets(where,c,[obj]);
       updates.push({obj,cell:c,floorId:ctx.id});
       return;
     }
+    /* 新增：编号只用于防重（对象名仍由统一编号作用域生成，与旧导出模板一致） */
     if(code){
-      const other=floors.find(f=>f.id!==ctx.id&&codeMaps.get(f.id)&&codeMaps.get(f.id).has(code));
-      if(other){ warnings.push(where+'：编号「'+code+'」已存在于楼层「'+other.name+'」，为避免重复已跳过'); return; }
+      const conflict=floors.find(f=>codeMaps.get(f.id)&&codeMaps.get(f.id).has(code));
+      if(conflict){ problem(where+'：新增行编号「'+code+'」已存在于楼层「'+conflict.name+'」'); return; }
+      const key=ctx.id+'|'+code;
+      if(seenCreateCodes.has(key)){ problem(where+'：本批新增行编号「'+code+'」重复'); return; }
+      seenCreateCodes.add(key);
     }
     const kind=TABLE_KIND_BY_NAME[cell(r,'对象类型')];
-    if(!kind){ warnings.push(where+'：对象类型「'+(cell(r,'对象类型')||'空')+'」无法识别，已跳过'); return; }
+    if(!kind){ problem(where+'：对象类型「'+(cell(r,'对象类型')||'空')+'」无法识别，已跳过'); return; }
     const x=tableNum(c('X')), y=tableNum(c('Y'));
     /* 折线/尺寸标注：从「节点坐标」列重建（基点 X/Y 取首节点）；无坐标列无法新建 */
     if(kind==='line'||kind==='dimension'){
@@ -231,7 +325,7 @@ function rowsToObjectsPlan(rows){
       const subtype=kind==='dimension'?(DIM_SUB_BY_LABEL[c('标注类型')]||'distance'):'';
       const minPts=(kind==='dimension'&&subtype!=='ruler'&&subtype!=='distance')?3:2;
       if(pts.length<minPts){
-        warnings.push(where+'：缺少有效「节点坐标」（格式 x,y;x,y;…，'+kindName(kind)+'至少 '+minPts+' 点），无法新建，已跳过');
+        problem(where+'：缺少有效「节点坐标」（格式 x,y;x,y;…，'+kindName(kind)+'至少 '+minPts+' 点），无法新建，已跳过');
         return;
       }
       const closed=kind==='line'&&tableBool(c('闭合'));
@@ -242,32 +336,46 @@ function rowsToObjectsPlan(rows){
       if(kind==='line') cnd.closed=cr.closed; else cnd.subtype=subtype;
       syncFirstPoint(cnd);
       check(where,c,cnd);
+      checkTargets(where,c,[cnd]);
       creates.push(cr);
       return;
     }
-    if(!Number.isFinite(x)||!Number.isFinite(y)){ warnings.push(where+'：缺少有效 X/Y 坐标，已跳过'); return; }
+    if(!Number.isFinite(x)||!Number.isFinite(y)){ problem(where+'：缺少有效 X/Y 坐标，已跳过'); return; }
     if(kind==='rect'){
       /* 形状列决定尺寸校验：矩形/椭圆要宽+高；圆/扇形只要直径（宽度列） */
       const shape=AREA_SHAPE_BY_LABEL[c('形状')]||'rect';
       const w=tableNum(c('宽度')), h=tableNum(c('高度'));
       const needH=shape==='rect'||shape==='ellipse';
       if(!(w>0)||(needH&&!(h>0))){
-        warnings.push(where+'：'+AREA_SHAPE_LABELS[shape]+'缺少有效宽度'+(needH?'/高度':'')+'，已跳过');
+        problem(where+'：'+AREA_SHAPE_LABELS[shape]+'缺少有效宽度'+(needH?'/高度':'')+'，已跳过');
         return;
       }
       const cnd=baseObject(kind,null,{name:'__表格校验__'});
       applyRowShape(cnd,AREA_SHAPE_LABELS[shape],{x,y,w,h,angle:tableNum(c('角度')),params:parseShapeParams(c('形状参数'))});
       check(where,c,cnd);
+      checkTargets(where,c,[cnd]);
       creates.push({kind,x,y,shape,cell:c,floorId:ctx.id});
       return;
     }
     check(where,c,baseObject(kind,null,{name:'__表格校验__'}));   /* 点设备/文字：长度面积应为空或 0 */
+    checkTargets(where,c,[{kind}]);
     creates.push({kind,x,y,cell:c,floorId:ctx.id});
   });
-  return {updates,creates,warnings};
+  return {updates,creates,replaces,warnings,errors,strict};
 }
 function showTableImportPreview(fileName,plan){
-  if(!plan.updates.length&&!plan.creates.length&&plan.warnings.length){
+  /* 严格模式（含「操作」列）出现非法行时整批不生效，预览不提供「合并导入」 */
+  if(plan.errors&&plan.errors.length){
+    openModal(L('无法导入（整批未生效）：')+fileName,
+      '<div style="max-height:240px;overflow:auto;margin:10px 0">'.concat(
+        plan.errors.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join(''),
+        plan.errors.length>50?'<p class="hint-text">'+esc(L('其余错误略'))+' '+(plan.errors.length-50)+'</p>':'',
+        '</div><p class="hint-text">'+esc(L('存在非法行，整批取消导入；修正后重新导入即可，现有对象未被修改。'))+'</p>'),
+      [{text:L('知道了'),class:'primary',click:closeModal}]);
+    return;
+  }
+  const replaceCount=(plan.replaces||[]).reduce((n,r)=>n+r.objs.length,0);
+  if(!plan.updates.length&&!plan.creates.length&&!replaceCount&&plan.warnings.length){
     openModal(L('无法导入：')+fileName,'<div class="issue">'+plan.warnings.slice(0,10).map(esc).join('</div><div class="issue">')+'</div>',
       [{text:L('知道了'),class:'primary',click:closeModal}]);
     return;
@@ -276,105 +384,121 @@ function showTableImportPreview(fileName,plan){
     ? '<div style="max-height:190px;overflow:auto;margin:10px 0">'+plan.warnings.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join('')+
       (plan.warnings.length>50?'<p class="hint-text">'+esc(L('其余提示略'))+' '+(plan.warnings.length-50)+'</p>':'')+'</div>'
     : `<div class="ok-banner">${esc(L('全部行均可导入。'))}</div>`;
+  const countLine='<p style="line-height:1.7">'+esc(L('按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：'))+
+    '<b>'+plan.updates.length+'</b> '+esc(L('项更新、'))+
+    '<b>'+replaceCount+'</b> '+esc(L('个对象替换（'))+'<b>'+(plan.replaces||[]).length+'</b> '+esc(L('行条件）、'))+
+    '<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>';
   openModal(L('表格导入预览：')+fileName,
-    '<p style="line-height:1.7">'+esc(L('将按「编号」匹配对象并更新属性：'))+'<b>'+plan.updates.length+'</b> '+esc(L('项更新、'))+'<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>'+
-    '<p class="hint-text">'+esc(L('可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；新对象支持点设备 / 矩形·圆·椭圆·扇形区域 / 折线（含闭合）/ 测距等标注（需「节点坐标」列）。'))+'<b>'+esc(L('长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。'))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
+    countLine+
+    '<p class="hint-text">'+esc(L('可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。'))+'<b>'+esc(L('长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。'))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
     [{text:L('取消'),click:closeModal},
      {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }
 function applyTableImport(plan){
+  if(plan.errors&&plan.errors.length){ toast('表格导入失败：存在非法行，已整批取消','error'); return; }
+  const limitErrs=importLimitErrors({objects:countProjectObjects(state)+(plan.creates||[]).length});
+  if(limitErrs.length){ toast('表格导入失败：'+importLimitMessage(limitErrs),'error'); return; }
+  /* 事务化：先留快照；任何意外异常都回到导入前现场，不留半批对象/属性 */
+  const backup=snapshotHistoryState(state), prevFuture=history.future;
   pushHistory();
-  syncActiveFloor();
-  const floorObjects=new Map((state.floors||[]).map(f=>[f.id,Array.isArray(f.objects)?f.objects:null]));
-  let updated=0,created=0;
-  plan.updates.forEach(u=>{
-    const o=u.obj,c=u.cell;
-    const name=c('名称'); if(name!=='') o.text=name;
-    const tn=c('业务类型');
-    if(tn){ const t=state.objectTypes.find(x=>x.kind===o.kind&&x.name===tn); if(t) o.typeId=t.id; }
-    const ln=c('图层');
-    if(ln){ const l=state.layers.find(x=>x.name===ln); if(l) o.layerId=l.id; }
-    const x=tableNum(c('X')),y=tableNum(c('Y')),ang=tableNum(c('角度'));
-    if(o.kind==='line'||o.kind==='dimension'){
-      /* 折线/标注：「节点坐标」整体替换并同步基点；只改 X/Y 时按基点平移全部节点，杜绝锚点与节点脱节 */
-      const pts=parseNodeCoords(c('节点坐标'));
-      if(pts.length){
-        const wantClosed=o.kind==='line'&&c('闭合')!==''?tableBool(c('闭合')):o.closed;
-        const wantSub=o.kind==='dimension'&&c('标注类型')?DIM_SUB_BY_LABEL[c('标注类型')]:o.subtype;
-        const subMin=(o.kind==='dimension'&&wantSub!=='ruler'&&wantSub!=='distance')?3:2;
-        const closedOk=o.kind==='line'?(!wantClosed||pts.length>=3):true;
-        if(pts.length>=subMin&&closedOk){
-          o.points=pts;
-          if(o.kind==='line') o.closed=wantClosed;
-          if(o.kind==='dimension') o.subtype=wantSub;
-          syncFirstPoint(o);
+  try{
+    syncActiveFloor();
+    const floorObjects=new Map((state.floors||[]).map(f=>[f.id,Array.isArray(f.objects)?f.objects:null]));
+    let updated=0,created=0,replaced=0;
+    plan.updates.forEach(u=>{
+      const o=u.obj,c=u.cell;
+      const name=c('名称'); if(name!=='') o.text=name;
+      const x=tableNum(c('X')),y=tableNum(c('Y')),ang=tableNum(c('角度'));
+      if(o.kind==='line'||o.kind==='dimension'){
+        /* 折线/标注：「节点坐标」整体替换并同步基点；只改 X/Y 时按基点平移全部节点，杜绝锚点与节点脱节 */
+        const pts=parseNodeCoords(c('节点坐标'));
+        if(pts.length){
+          const wantClosed=o.kind==='line'&&c('闭合')!==''?tableBool(c('闭合')):o.closed;
+          const wantSub=o.kind==='dimension'&&c('标注类型')?DIM_SUB_BY_LABEL[c('标注类型')]:o.subtype;
+          const subMin=(o.kind==='dimension'&&wantSub!=='ruler'&&wantSub!=='distance')?3:2;
+          const closedOk=o.kind==='line'?(!wantClosed||pts.length>=3):true;
+          if(pts.length>=subMin&&closedOk){
+            o.points=pts;
+            if(o.kind==='line') o.closed=wantClosed;
+            if(o.kind==='dimension') o.subtype=wantSub;
+            syncFirstPoint(o);
+          }
+        }else{
+          const nx=Number.isFinite(x)?x:o.x, ny=Number.isFinite(y)?y:o.y;
+          const dx=nx-o.x, dy=ny-o.y;
+          if(dx||dy){ o.points=o.points.map(p=>[p[0]+dx,p[1]+dy]); o.x=nx; o.y=ny; }
+          if(o.kind==='line'&&c('闭合')!==''&&o.points.length>=3) o.closed=tableBool(c('闭合'));
+          /* 仅切换标注类型（不带节点列）：现有节点数满足新类型下限才生效 */
+          if(o.kind==='dimension'&&c('标注类型')){
+            const wantSub=DIM_SUB_BY_LABEL[c('标注类型')];
+            const subMin=(wantSub!=='ruler'&&wantSub!=='distance')?3:2;
+            if(wantSub&&o.points.length>=subMin) o.subtype=wantSub;
+          }
         }
-      }else{
-        const nx=Number.isFinite(x)?x:o.x, ny=Number.isFinite(y)?y:o.y;
-        const dx=nx-o.x, dy=ny-o.y;
-        if(dx||dy){ o.points=o.points.map(p=>[p[0]+dx,p[1]+dy]); o.x=nx; o.y=ny; }
-        if(o.kind==='line'&&c('闭合')!==''&&o.points.length>=3) o.closed=tableBool(c('闭合'));
-        /* 仅切换标注类型（不带节点列）：现有节点数满足新类型下限才生效 */
-        if(o.kind==='dimension'&&c('标注类型')){
-          const wantSub=DIM_SUB_BY_LABEL[c('标注类型')];
-          const subMin=(wantSub!=='ruler'&&wantSub!=='distance')?3:2;
-          if(wantSub&&o.points.length>=subMin) o.subtype=wantSub;
+      }else if(o.kind==='rect'){
+        /* 形状列存在时按形状重建（基点/圆心系同一套 X/Y）；否则沿用旧的宽高更新 */
+        const shapeLabel=c('形状');
+        const params=parseShapeParams(c('形状参数'));
+        if(shapeLabel){
+          applyRowShape(o,shapeLabel,{x:Number.isFinite(x)?x:o.x,y:Number.isFinite(y)?y:o.y,
+            w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(ang)?ang:o.angle,params});
+        }else{
+          if(Number.isFinite(x)) o.x=x;
+          if(Number.isFinite(y)) o.y=y;
+          if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
+          if(areaShapeType(o)==='rect'){ const w=tableNum(c('宽度')),h=tableNum(c('高度')); if(w>0)o.width=w; if(h>0)o.height=h; }
         }
-      }
-    }else if(o.kind==='rect'){
-      /* 形状列存在时按形状重建（基点/圆心系同一套 X/Y）；否则沿用旧的宽高更新 */
-      const shapeLabel=c('形状');
-      const params=parseShapeParams(c('形状参数'));
-      if(shapeLabel){
-        applyRowShape(o,shapeLabel,{x:Number.isFinite(x)?x:o.x,y:Number.isFinite(y)?y:o.y,
-          w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(ang)?ang:o.angle,params});
       }else{
         if(Number.isFinite(x)) o.x=x;
         if(Number.isFinite(y)) o.y=y;
         if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
-        if(areaShapeType(o)==='rect'){ const w=tableNum(c('宽度')),h=tableNum(c('高度')); if(w>0)o.width=w; if(h>0)o.height=h; }
       }
-    }else{
-      if(Number.isFinite(x)) o.x=x;
-      if(Number.isFinite(y)) o.y=y;
-      if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
-    }
-    const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
-    const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
-    const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
-    applyLedgerCells(o,c);
-    o.updatedAt=nowISO(); updated++;
-  });
-  /* 批量新增行统一建立编号作用域，避免逐行 baseObject → nextObjectId 全量扫描（O(N²)） */
-  withObjectNameScope(allObjectNames(), () => plan.creates.forEach(cr=>{
-    const c=cr.cell;
-    const type=state.objectTypes.find(x=>x.kind===cr.kind&&x.name===c('业务类型'));
-    const o=baseObject(cr.kind,type?type.id:defaultTypeId(cr.kind));
-    const ang=tableNum(c('角度'));
-    if(cr.kind==='line'||cr.kind==='dimension'){
-      o.points=cr.points;
-      if(cr.kind==='line') o.closed=!!cr.closed;
-      if(cr.kind==='dimension') o.subtype=cr.subtype||'distance';
-      syncFirstPoint(o);
-    }else if(cr.kind==='rect'){
-      const params=parseShapeParams(c('形状参数'));
-      applyRowShape(o,AREA_SHAPE_LABELS[cr.shape]||'矩形',
-        {x:cr.x,y:cr.y,w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(ang)?ang:0,params});
-    }else{
-      o.x=cr.x; o.y=cr.y;
-      if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
-      if(cr.kind==='text'){ o.text=c('名称')||'文字'; o.height=2.2; }
-    }
-    const ln=c('图层'); const l=state.layers.find(x=>x.name===ln); if(l) o.layerId=l.id;
-    const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
-    const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
-    const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
-    applyLedgerCells(o,c);
-    const target=cr.floorId&&cr.floorId!==state.activeFloorId?floorObjects.get(cr.floorId):null;
-    const list=target||state.objects;
-    o.z=list.length;
-    list.push(o); created++;
-  }));
-  selectedIds.clear();
-  commitChange('表格导入完成：更新 '+updated+' 项，新增 '+created+' 项');
+      applyTableCommonCells(o,c);
+      o.updatedAt=nowISO(); updated++;
+    });
+    /* 条件批量替换：只改属性，几何保持不变；每条条件行命中的对象都已写入 updatedAt */
+    (plan.replaces||[]).forEach(rp=>{
+      const c=rp.cell;
+      rp.objs.forEach(o=>{
+        const name=c('名称'); if(name!=='') o.text=name;
+        applyTableCommonCells(o,c);
+        o.updatedAt=nowISO(); replaced++;
+      });
+    });
+    /* 批量新增行统一建立编号作用域，避免逐行 baseObject → nextObjectId 全量扫描（O(N²)） */
+    withObjectNameScope(allObjectNames(), () => plan.creates.forEach(cr=>{
+      const c=cr.cell;
+      const type=state.objectTypes.find(x=>x.kind===cr.kind&&x.name===c('业务类型'));
+      const o=baseObject(cr.kind,type?type.id:defaultTypeId(cr.kind));
+      const ang=tableNum(c('角度'));
+      if(cr.kind==='line'||cr.kind==='dimension'){
+        o.points=cr.points;
+        if(cr.kind==='line') o.closed=!!cr.closed;
+        if(cr.kind==='dimension') o.subtype=cr.subtype||'distance';
+        syncFirstPoint(o);
+      }else if(cr.kind==='rect'){
+        const params=parseShapeParams(c('形状参数'));
+        applyRowShape(o,AREA_SHAPE_LABELS[cr.shape]||'矩形',
+          {x:cr.x,y:cr.y,w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(ang)?ang:0,params});
+      }else{
+        o.x=cr.x; o.y=cr.y;
+        if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
+        if(cr.kind==='text'){ o.text=c('名称')||'文字'; o.height=2.2; }
+      }
+      applyTableCommonCells(o,c);
+      const target=cr.floorId&&cr.floorId!==state.activeFloorId?floorObjects.get(cr.floorId):null;
+      const list=target||state.objects;
+      o.z=list.length;
+      list.push(o); created++;
+    }));
+    selectedIds.clear();
+    commitChange('表格导入完成：更新 '+updated+' 项，替换 '+replaced+' 个对象，新增 '+created+' 项');
+  }catch(err){
+    state=materializeHistoryState(backup);
+    if(history.past.length) history.past.pop();
+    history.future=prevFuture;
+    selectedIds.clear();
+    requestRender(); updateHistoryButtons();
+    toast('表格导入失败（已回滚）：'+(err&&err.message||err),'error');
+  }
 }

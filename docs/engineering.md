@@ -192,7 +192,7 @@ Version 3-M、`Qr.MAX_BYTES=42`，实测邀请串 **767 字节**远超该上限�
 `floorMetaUpdated` / `floorsDeleted`，`mergeHistoryNeeded(stats)` 是「是否需要为合并写撤销栈」
 的唯一判据（`history:'overwrite'` 只在覆盖发生时才 `pushHistory`）。
 实测：selftest 1886 → **1914 通过 / 0 失败**（+28，含邀请串往返、QR 容量、TTL/key/字节
-上限、hello 去重、合并历史判据）；e2e **33 passed / 1 skipped**（41.5s，5 分钟浸泡默认跳过），
+上限、hello 去重、合并历史判据）；e2e **37 passed / 1 skipped**（43.1s，5 分钟浸泡默认跳过），
 B-06 新增 `collab.spec.mjs` 5 个用例；同机双标签 WebRTC 建连 `open=true`、**73–95ms**（3 次）。
 5 分钟离线浸泡实测通过（5.1min 用例，重连后本地新增对象对端可见）；双设备真机 WebRTC
 **未验证**（本轮只有同一台机器上的两个标签页）。详见 CHANGELOG.internal.md。
@@ -211,6 +211,28 @@ GeoJSON 249,101 B、PNG 786,440 B、PDF 339,954 B、SVG 17,062 B、DXF 7,249 B�
 单文件体积 **741.3 KB → 744.6 KB（759,056 → 762,500 B，+3,444 B / +0.45%）**：新增字段表模块约 6.5 KB，
 删除各格式重复拼装（`objectRows` 内联分支、PDF `param`、GeoJSON 属性、`angleDimDeg`）后净增 3.4 KB；
 当时的 ≤750 KB 门禁通过（余量 5,500 B；门禁已于 2026-11-06 提到 820 KB）。
+
+**表格驱动布点与条件批量替换（B-08 原义，2026-11）**：在既有「按编号更新 / 无编号新增」之上扩展
+`rowsToObjectsPlan`：表头可含 `操作`（新增 / 更新 / 替换）与 6 个 `匹配…` 条件列（编号、名称、名称包含、
+对象类型、业务类型、图层）。条件替换行对**全部匹配列同时满足**的对象批量写回属性（名称、业务类型、图层、
+型号、安装高度、IP、责任人、备注、显隐、锁定），几何保持不变；匹配范围可用 `楼层` 列限定，默认跨全部楼层。
+**严格模式判据**：存在 `操作` 列才启用——任一行非法（未知编号、未知业务类型/图层、非法台账值、替换缺条件、
+新增编号重复、未知楼层、非法操作值）写入 `plan.errors`，预览只显示错误且不提供「合并导入」；
+`applyTableImport` 对带 errors 的计划直接拒绝。无 `操作` 列的表头保持旧行为（逐行告警/跳过），
+不改变既有模板。所有新增/更新仍复用 `withObjectNameScope` 与 `importLimitErrors`，批量应用前再校验对象数上限；
+应用失败时用 `snapshotHistoryState` 快照回滚，`history.past` 弹出本次空帧，避免半批对象落盘。
+公式防护改为**导入导出共用一份**：`formulaGuard` / `formulaUnguard` 位于 `io-fields.js`，导出仍对
+`= + - @`/Tab/CR 开头且非纯数字的单元格加前导单引号，导入时仅当原值确实会被防护才去掉该引号
+（`'123` 保持字面），保证 CSV/XLSX 往返文本不变形。
+验收数据：selftest **1994 → 2016 通过 / 0 失败**（B-08 新增 22 项：严格模式识别、替换命中数与属性、
+批量落点坐标、非法行整批拒绝、非法台账值/缺条件报错、公式引号还原、500 行全量新增）；500 行表格
+（`对象类型,X,Y`）实测**规划 3–5 ms、应用 8–15 ms**（Node 逻辑层，非浏览器渲染耗时）。
+`e2e table-batch.spec.mjs` 2 passed（3.6s，含本地服务器启动）：条件替换命中 2 台 + 新增落点 (10,20) 可复算；
+非法更新行整批拒绝且现有对象不变。体积 **771,344 → 779,096 B（+7,752 B / +1.01%）**，gzip
+**253,036 → 255,447 B（+2,411 B）**，820 KB 门禁余量 **60,584 B**。
+新增全局：`TABLE_MATCH_COLUMNS / TABLE_IMPORT_EXTRA_COLUMNS / tableImportColumns / rowMatchesObject /
+applyTableCommonCells / formulaUnguard`；`rowsToObjectsPlan` 返回值新增 `replaces / errors / strict` 三个字段
+（既有 `updates / creates / warnings` 不变），`applyTableImport` 签名不变但会拒绝带 errors 的计划。
 
 **设备产品库与 BOM 报价（B-05，2026-11）**：新增 `js/features/catalog.js`（层 2，`index.html` 插在
 `io-export.js` 之后）。目录 JSON schema 为 `plotpin-catalog/v1`，根为 `{schema, items:[...]}`，
@@ -261,6 +283,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `snapshot.spec.mjs` | 1000 对象快照 < 2s、体积实测；内嵌照片转为 `photoId` 引用；删除快照不影响工程；回滚进入撤销栈且可撤销/重做、回滚后可继续编辑；构造样本六类差异分类与 0 误报；叠加开关与关闭清理；**快照资产保活/删除后可回收**；20 快照（7.64MB）可达集扫描 41.5–42.6ms |
 | `collab.spec.mjs` | B-06：双标签等待→已连接→对端断开可见；消息层 TTL/key 上限/重复 hello 去重/`send` 抛错不冒泡/异常断开进 `error`；LWW 覆盖写撤销栈且 `Ctrl+Z` 恢复本地值、冲突行可见；离线短间隔重连不丢本地修改；邀请串三步建连 + 邀请串超 42 字节时只提示不渲染二维码（**同机双标签，不代表双设备 WebRTC**）；`COLLAB_SOAK=1` 时额外跑 5 分钟离线浸泡 |
 | `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（7 列表头、数值、合计、目录版本/导出时间）→ 替换目录后重导仍为冻结单价、改数量后按新目录重算 → 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 → 跨厂商重名未填厂商不带价、填厂商后按精确键计价 |
+| `table-batch.spec.mjs` | B-08 原义：CSV 条件替换命中 2 台并改写业务类型/台账、批量新增落点 (10,20) 可复算；严格模式下非法更新行整批拒绝（无「合并导入」按钮），现有对象数量与文本不变 |
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 §5.4。

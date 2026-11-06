@@ -116,10 +116,7 @@ function objectRowsAll(){
     f.name
   ));
 }
-/** 公式注入防护：`= + - @ Tab CR` 开头且**不是纯数字**的单元格加前导单引号，Excel/WPS 按文本处理。
- * 纯数字（负数/科学计数/坐标与角度列表）原样输出，避免 CSV→导入往返时数值被当成文本（审计 P1-3）。 */
-const NUMERIC_CELL_RE=/^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*[,;，]\s*-?\d+(?:\.\d+)?)*$/;
-function formulaGuard(s){ return /^[=+\-@\t\r]/.test(s)&&!NUMERIC_CELL_RE.test(s); }
+/* 公式注入防护（formulaGuard / formulaUnguard）在 io-fields.js：导出加引号、导入去引号共用一份实现 */
 function delimitedFromTable(table,delim){
   const cols=table[0];
   const body=DSV.formatRows(table.slice(1),{
