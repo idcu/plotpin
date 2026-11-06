@@ -1,0 +1,1675 @@
+{
+  "_source": "a0aecf0:js/common/symbols.js",
+  "_note": "旧版 64 图元基线：旧工程 objectTypes 会持久化 symbol paths，逐图标 path 哈希锁定几何不被改写。",
+  "_count": 64,
+  "symbols": [
+    {
+      "id": "sym.camera_gun",
+      "name": "枪机摄像头",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 9h11v6H3z",
+          "fill": false
+        },
+        {
+          "d": "M14 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0",
+          "fill": false
+        },
+        {
+          "d": "M6 15v4",
+          "fill": false
+        },
+        {
+          "d": "M3 19h6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "6f17ea2207ce92401793d70441b9832d11dd9eb3d3570cf6edffd31c9865eb84"
+    },
+    {
+      "id": "sym.dome",
+      "name": "球机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M4 15a8 8 0 0 1 16 0",
+          "fill": false
+        },
+        {
+          "d": "M2 15h20",
+          "fill": false
+        },
+        {
+          "d": "M12 13a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "22e53e4ecd666a8e777289b991f7b4128972ee0569ec7f83cd2f413dc4bcec4b"
+    },
+    {
+      "id": "sym.hemisphere",
+      "name": "半球摄像机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M5 15a7 7 0 0 1 14 0",
+          "fill": false
+        },
+        {
+          "d": "M3 15h18",
+          "fill": false
+        },
+        {
+          "d": "M8 15a4 4 0 0 1 8 0",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "14cd4b702c89b3417cb715f576fe120b34b87748c5e5a49992d5d47c3663b523"
+    },
+    {
+      "id": "sym.ptz",
+      "name": "云台摄像机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M12 3v3",
+          "fill": false
+        },
+        {
+          "d": "M6 9a6 6 0 0 1 12 0v4H6z",
+          "fill": false
+        },
+        {
+          "d": "M4 16h16",
+          "fill": false
+        },
+        {
+          "d": "M9 19h6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "874e8dfcb02facb789b48fff432d966686b9c99278929a98d975d1762e6e9a0d"
+    },
+    {
+      "id": "sym.ir_beam",
+      "name": "红外对射",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 9h4v6H3z",
+          "fill": false
+        },
+        {
+          "d": "M17 9h4v6h-4z",
+          "fill": false
+        },
+        {
+          "d": "M7 12h3",
+          "fill": false
+        },
+        {
+          "d": "M14 12h3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "5a64224a9a806731f02efbd31cc015eaa15d8dfa03dfa6dbf6f206c2b9054f32"
+    },
+    {
+      "id": "sym.card_reader",
+      "name": "门禁读卡器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M8 3h8v18H8z",
+          "fill": false
+        },
+        {
+          "d": "M10 7h4v3h-4z",
+          "fill": false
+        },
+        {
+          "d": "M10 13h1",
+          "fill": false
+        },
+        {
+          "d": "M13 13h1",
+          "fill": false
+        },
+        {
+          "d": "M10 16h1",
+          "fill": false
+        },
+        {
+          "d": "M13 16h1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "845cd90bd62cdb3cc7c26b7b4f6ef95a467c1acf6c108c0d8d5d0985e7345dce"
+    },
+    {
+      "id": "sym.keypad",
+      "name": "密码键盘",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M6 3h12v18H6z",
+          "fill": false
+        },
+        {
+          "d": "M9 7h1",
+          "fill": false
+        },
+        {
+          "d": "M12 7h1",
+          "fill": false
+        },
+        {
+          "d": "M15 7h1",
+          "fill": false
+        },
+        {
+          "d": "M9 11h1",
+          "fill": false
+        },
+        {
+          "d": "M12 11h1",
+          "fill": false
+        },
+        {
+          "d": "M15 11h1",
+          "fill": false
+        },
+        {
+          "d": "M9 15h1",
+          "fill": false
+        },
+        {
+          "d": "M12 15h1",
+          "fill": false
+        },
+        {
+          "d": "M15 15h1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "0d64442a9d83f647209da1bce49ae279900638eae733a47a44b56d9fba61d78a"
+    },
+    {
+      "id": "sym.exit_button",
+      "name": "出门按钮",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16",
+          "fill": false
+        },
+        {
+          "d": "M7 12h9",
+          "fill": false
+        },
+        {
+          "d": "M13 9l3 3-3 3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "d945fe8dc11828e516b61864b4b0e0d22d0d078b2cfddb8988e73867b94817a2"
+    },
+    {
+      "id": "sym.electric_lock",
+      "name": "电控锁",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M5 9h7v8H5z",
+          "fill": false
+        },
+        {
+          "d": "M7 9V7a2 2 0 0 1 4 0",
+          "fill": false
+        },
+        {
+          "d": "M8.5 12v2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "e34faa88950526313121735ecb6dc28e2f20fac3ce43d9aee318aa4f4307aa0b"
+    },
+    {
+      "id": "sym.turnstile",
+      "name": "闸机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 5h4v14H3z",
+          "fill": false
+        },
+        {
+          "d": "M17 5h4v14h-4z",
+          "fill": false
+        },
+        {
+          "d": "M8 12h4",
+          "fill": false
+        },
+        {
+          "d": "M12 9l3 3-3 3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "f404dfeec1562b8dcc2bf85ce40d79a8145848ecbcad45c138d08f5f747ba6e9"
+    },
+    {
+      "id": "sym.smoke",
+      "name": "烟感探测器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18",
+          "fill": false
+        },
+        {
+          "d": "M12 8v3",
+          "fill": false
+        },
+        {
+          "d": "M12 14v1",
+          "fill": false
+        },
+        {
+          "d": "M8 10l1 1",
+          "fill": false
+        },
+        {
+          "d": "M16 10l-1 1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "1e76275a1f1969f0db875c71aa843502bb7850fdfc743162269fd603a9cf903b"
+    },
+    {
+      "id": "sym.heat",
+      "name": "温感探测器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18",
+          "fill": false
+        },
+        {
+          "d": "M12 7v6",
+          "fill": false
+        },
+        {
+          "d": "M10 15a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "ac7b9558efbfe5377b639ed97d053024518e3192726cfb09428fbb4bc86a8736"
+    },
+    {
+      "id": "sym.gas",
+      "name": "燃气探测器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M4 7h16v10H4z",
+          "fill": false
+        },
+        {
+          "d": "M7 14c1-2 2-2 3 0",
+          "fill": false
+        },
+        {
+          "d": "M12 14c1-2 2-2 3 0",
+          "fill": false
+        },
+        {
+          "d": "M17 14c1-2 2-2 2 0",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "708a3c4f448169d4a135b1c21b64598b12caf9c9c89098a0ac6ad389394696a4"
+    },
+    {
+      "id": "sym.panic",
+      "name": "紧急按钮",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M5 4h14v16H5z",
+          "fill": false
+        },
+        {
+          "d": "M12 8v5",
+          "fill": false
+        },
+        {
+          "d": "M12 16v1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "83fd96e964cb457eb29630d50b51588563d32f4e82d7e64898e0d5fff9a8e59e"
+    },
+    {
+      "id": "sym.sound_light",
+      "name": "声光报警器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8",
+          "fill": false
+        },
+        {
+          "d": "M5 8a8 8 0 0 1 0 8",
+          "fill": false
+        },
+        {
+          "d": "M19 8a8 8 0 0 0 0 8",
+          "fill": false
+        },
+        {
+          "d": "M2 5h4",
+          "fill": false
+        },
+        {
+          "d": "M2 19h4",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "10a2774464417e0d803c749a728a0681902f86c4dfebf4abcc73f89ca2ccfeea"
+    },
+    {
+      "id": "sym.siren",
+      "name": "警号",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M4 10l9-6v16l-9-6z",
+          "fill": false
+        },
+        {
+          "d": "M16 8a6 6 0 0 1 0 8",
+          "fill": false
+        },
+        {
+          "d": "M19 6a10 10 0 0 1 0 12",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "ab2ea2279bac39f743257b7d8bd3d9b39f51c7dea38bda2dde271fba094cd77e"
+    },
+    {
+      "id": "sym.glass_break",
+      "name": "玻璃破碎探测器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M4 4l6 6",
+          "fill": false
+        },
+        {
+          "d": "M10 10l-3 3",
+          "fill": false
+        },
+        {
+          "d": "M7 13l9 7",
+          "fill": false
+        },
+        {
+          "d": "M13 5l4 4",
+          "fill": false
+        },
+        {
+          "d": "M17 9l3-3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "47dc3c36dcadd12acab4c0b2f1072edad4a039d1dc6efc63c2d4896972483b58"
+    },
+    {
+      "id": "sym.vibration",
+      "name": "震动探测器",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 16l3-8 3 8 3-11 3 11 3-8 3 8",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "e8f591dc115154cf1fe9b45e61852479fafcb555bd55eeb649010077cf30ce70"
+    },
+    {
+      "id": "sym.curtain",
+      "name": "红外幕帘",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M5 4v16",
+          "fill": false
+        },
+        {
+          "d": "M19 4v16",
+          "fill": false
+        },
+        {
+          "d": "M9 8h6",
+          "fill": false
+        },
+        {
+          "d": "M9 12h6",
+          "fill": false
+        },
+        {
+          "d": "M9 16h6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "f2118600d96d91a8fee7a242daac995efbf60fe0f9a6a6ba864df15b949adcf4"
+    },
+    {
+      "id": "sym.microwave",
+      "name": "微波对射",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 12h5",
+          "fill": false
+        },
+        {
+          "d": "M16 12h5",
+          "fill": false
+        },
+        {
+          "d": "M8 9l-3 3 3 3",
+          "fill": false
+        },
+        {
+          "d": "M16 9l3 3-3 3",
+          "fill": false
+        },
+        {
+          "d": "M12 7v10",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "c4f71da40eb669c6ac232ac44b6d909a5fe50f6b723fa707a9a6e9b40d320ed4"
+    },
+    {
+      "id": "sym.fence",
+      "name": "电子围栏",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M4 5v14",
+          "fill": false
+        },
+        {
+          "d": "M9 5v14",
+          "fill": false
+        },
+        {
+          "d": "M14 5v14",
+          "fill": false
+        },
+        {
+          "d": "M19 5v14",
+          "fill": false
+        },
+        {
+          "d": "M4 10h15",
+          "fill": false
+        },
+        {
+          "d": "M4 15h15",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "ca3786682d5c1699d32de223f6959e34b94a3b11815c6e7bbdb2253589eb1485"
+    },
+    {
+      "id": "sym.fiber_fence",
+      "name": "光纤振动围栏",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 16c2-4 4 4 6 0s4 4 6 0",
+          "fill": false
+        },
+        {
+          "d": "M3 8c2-4 4 4 6 0s4 4 6 0",
+          "fill": false
+        },
+        {
+          "d": "M19 4v16",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "b137b4be82bb5e12eaf644d62f381197f6f5ff6d020db36cd5494f92d52606ed"
+    },
+    {
+      "id": "sym.laser",
+      "name": "激光对射",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M4 4v16",
+          "fill": false
+        },
+        {
+          "d": "M20 4v16",
+          "fill": false
+        },
+        {
+          "d": "M4 8h16",
+          "fill": false
+        },
+        {
+          "d": "M4 12h16",
+          "fill": false
+        },
+        {
+          "d": "M4 16h16",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "201d0d01eb48cc8bca9a0a51653100d98e623d2ca0880444b3a8b48425bfb2c1"
+    },
+    {
+      "id": "sym.patrol",
+      "name": "巡更点",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M12 3l2.5 5 5 .8-3.6 3.6.8 5-4.7-2.4-4.7 2.4.8-5L4.5 8.8 9.5 8z",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "2ffdcd935289746d87b3e5df9eeb99496107e3921e8726d2dfd56c015889bcfc"
+    },
+    {
+      "id": "sym.door_station",
+      "name": "可视对讲门口机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M5 3h14v18H5z",
+          "fill": false
+        },
+        {
+          "d": "M9 7h6v4H9z",
+          "fill": false
+        },
+        {
+          "d": "M10 14h1",
+          "fill": false
+        },
+        {
+          "d": "M13 14h1",
+          "fill": false
+        },
+        {
+          "d": "M11 17h2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "145f98e52b7ec72fe3db29fe49d46bc5afb71e3367ea8f15215d3f0f9803d1e6"
+    },
+    {
+      "id": "sym.indoor_monitor",
+      "name": "室内分机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 5h18v11H3z",
+          "fill": false
+        },
+        {
+          "d": "M9 20h6",
+          "fill": false
+        },
+        {
+          "d": "M12 16v4",
+          "fill": false
+        },
+        {
+          "d": "M6 8h5",
+          "fill": false
+        },
+        {
+          "d": "M6 11h8",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "0c2cddd9ed4a934d451f84283bfdd39e85f72367f3aa9b3bda35bc5f93b4383c"
+    },
+    {
+      "id": "sym.master_station",
+      "name": "管理机",
+      "cat": "安防",
+      "paths": [
+        {
+          "d": "M3 4h18v10H3z",
+          "fill": false
+        },
+        {
+          "d": "M8 17h8",
+          "fill": false
+        },
+        {
+          "d": "M12 14v3",
+          "fill": false
+        },
+        {
+          "d": "M6 7h6",
+          "fill": false
+        },
+        {
+          "d": "M6 10h3",
+          "fill": false
+        },
+        {
+          "d": "M14 13h3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "ac48b0b55d5f453538390380fa89d772ec26e38b9b60ea60e114e346d922ccfb"
+    },
+    {
+      "id": "sym.switch",
+      "name": "交换机",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 8h18v8H3z",
+          "fill": false
+        },
+        {
+          "d": "M6 11h1",
+          "fill": false
+        },
+        {
+          "d": "M9 11h1",
+          "fill": false
+        },
+        {
+          "d": "M12 11h1",
+          "fill": false
+        },
+        {
+          "d": "M15 11h1",
+          "fill": false
+        },
+        {
+          "d": "M18 11h1",
+          "fill": false
+        },
+        {
+          "d": "M6 13h1",
+          "fill": false
+        },
+        {
+          "d": "M9 13h1",
+          "fill": false
+        },
+        {
+          "d": "M12 13h1",
+          "fill": false
+        },
+        {
+          "d": "M15 13h1",
+          "fill": false
+        },
+        {
+          "d": "M18 13h1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "0b1fc5115a0e8be9ad0bf1061f161425cdd32739b2c40ad97e7a764d5d839b04"
+    },
+    {
+      "id": "sym.router",
+      "name": "路由器",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 13h18v6H3z",
+          "fill": false
+        },
+        {
+          "d": "M6 10l-2-5",
+          "fill": false
+        },
+        {
+          "d": "M18 10l2-5",
+          "fill": false
+        },
+        {
+          "d": "M9 10V5",
+          "fill": false
+        },
+        {
+          "d": "M15 10V5",
+          "fill": false
+        },
+        {
+          "d": "M6 16h2",
+          "fill": false
+        },
+        {
+          "d": "M10 16h2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "beb2aa2d0ee4d56ab81e3d74dda601dbf04f9116c532aba81718a950c8502351"
+    },
+    {
+      "id": "sym.wifi",
+      "name": "无线 AP",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M4 14a8 8 0 0 1 16 0",
+          "fill": false
+        },
+        {
+          "d": "M7 17a5 5 0 0 1 10 0",
+          "fill": false
+        },
+        {
+          "d": "M3 19h18",
+          "fill": false
+        },
+        {
+          "d": "M12 18v1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "3797f23d2a6c31ee670a6be993f7b15bcec8ee886962a1a3eb12e7104aa8355d"
+    },
+    {
+      "id": "sym.info_point",
+      "name": "信息点",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M5 4h14v16H5z",
+          "fill": false
+        },
+        {
+          "d": "M12 8v1",
+          "fill": false
+        },
+        {
+          "d": "M12 11v6",
+          "fill": false
+        },
+        {
+          "d": "M9 17h6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "b515cbfba85906d7c52b7a4eea80d318e76b0e71f7aadfb235c5026fc50c22f0"
+    },
+    {
+      "id": "sym.telephone",
+      "name": "电话点",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M6 3l3 4-2 3c2 4 5 7 9 9l3-2 4 3-1 3c-1 2-3 2-5 1C9 21 3 15 2 7 1 5 2 3 4 3z",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "95114b7defb1073dde5b8327bf7da1c047433dda185a20a86ccfc62f6b2f3709"
+    },
+    {
+      "id": "sym.fiber_patch",
+      "name": "光纤配线架",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 6h18v12H3z",
+          "fill": false
+        },
+        {
+          "d": "M6 9h1",
+          "fill": false
+        },
+        {
+          "d": "M9 9h1",
+          "fill": false
+        },
+        {
+          "d": "M12 9h1",
+          "fill": false
+        },
+        {
+          "d": "M15 9h1",
+          "fill": false
+        },
+        {
+          "d": "M6 12h6",
+          "fill": false
+        },
+        {
+          "d": "M6 15h12",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "07e4f12d4fce77c504c9da2fabc3f9cd6ad114768cefb9f207d05746b933710a"
+    },
+    {
+      "id": "sym.rack",
+      "name": "机柜",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M5 3h14v18H5z",
+          "fill": false
+        },
+        {
+          "d": "M5 8h14",
+          "fill": false
+        },
+        {
+          "d": "M5 13h14",
+          "fill": false
+        },
+        {
+          "d": "M5 18h14",
+          "fill": false
+        },
+        {
+          "d": "M7 5h2",
+          "fill": false
+        },
+        {
+          "d": "M7 10h2",
+          "fill": false
+        },
+        {
+          "d": "M7 15h2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "7c990a8f3b7af4c40729938b3fe185525df7b888e3cea16eef7c2b2594beefa9"
+    },
+    {
+      "id": "sym.ups",
+      "name": "UPS 电源",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M4 7h16v12H4z",
+          "fill": false
+        },
+        {
+          "d": "M7 10h4v5H7z",
+          "fill": false
+        },
+        {
+          "d": "M13 10h4",
+          "fill": false
+        },
+        {
+          "d": "M13 13h4",
+          "fill": false
+        },
+        {
+          "d": "M8 19v2",
+          "fill": false
+        },
+        {
+          "d": "M16 19v2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "e33d48b6c651f5ab24564eef22ca728dd1817a702c0365af365322a81854b408"
+    },
+    {
+      "id": "sym.amplifier",
+      "name": "广播功放",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 7h18v10H3z",
+          "fill": false
+        },
+        {
+          "d": "M6 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
+          "fill": false
+        },
+        {
+          "d": "M11 9v6",
+          "fill": false
+        },
+        {
+          "d": "M14 9v6",
+          "fill": false
+        },
+        {
+          "d": "M17 9v6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "e55284a5eb8e47857fbb8e7954c5bafd7e5e40568618b67cea21e8a7e04307f8"
+    },
+    {
+      "id": "sym.ceiling_speaker",
+      "name": "吸顶音箱",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16",
+          "fill": false
+        },
+        {
+          "d": "M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8",
+          "fill": false
+        },
+        {
+          "d": "M12 12h.1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "ca5499c9590c35e645cd8fe7e13e87f1c36d5d817fd25f6ed8b2e3261d5ba52a"
+    },
+    {
+      "id": "sym.wall_speaker",
+      "name": "壁挂音箱",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M4 4h12v16H4z",
+          "fill": false
+        },
+        {
+          "d": "M7 8h6v8H7z",
+          "fill": false
+        },
+        {
+          "d": "M18 8h3",
+          "fill": false
+        },
+        {
+          "d": "M18 12h3",
+          "fill": false
+        },
+        {
+          "d": "M18 16h3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "a2355b5d3a4bf5ae97dd26ff6283bbdcfc0ec4dbbd674b862f332e18f859875a"
+    },
+    {
+      "id": "sym.nvr",
+      "name": "网络录像机",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 5h18v14H3z",
+          "fill": false
+        },
+        {
+          "d": "M6 9h8",
+          "fill": false
+        },
+        {
+          "d": "M6 12h8",
+          "fill": false
+        },
+        {
+          "d": "M6 15h8",
+          "fill": false
+        },
+        {
+          "d": "M17 9v1",
+          "fill": false
+        },
+        {
+          "d": "M17 13v1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "6173ee241fbe484ba631ad947732f5dcdba93c3efa19d36c62073f5d06f92de1"
+    },
+    {
+      "id": "sym.dvr",
+      "name": "硬盘录像机",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 5h18v14H3z",
+          "fill": false
+        },
+        {
+          "d": "M6 8h5v5H6z",
+          "fill": false
+        },
+        {
+          "d": "M6 15h12",
+          "fill": false
+        },
+        {
+          "d": "M14 8h4",
+          "fill": false
+        },
+        {
+          "d": "M14 11h4",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "54a1f2def7650daab1678632ed6db1977c1963d7d32355730212414282c66d72"
+    },
+    {
+      "id": "sym.monitor",
+      "name": "监视器",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 4h18v12H3z",
+          "fill": false
+        },
+        {
+          "d": "M9 20h6",
+          "fill": false
+        },
+        {
+          "d": "M12 16v4",
+          "fill": false
+        },
+        {
+          "d": "M6 7h12",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "7158729048bcbac75c8ef8b8b8952ad16caf8b34ba757a9ad9fe009e9e6fd28c"
+    },
+    {
+      "id": "sym.tv",
+      "name": "电视",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M4 6h16v12H4z",
+          "fill": false
+        },
+        {
+          "d": "M8 3l4 3 4-3",
+          "fill": false
+        },
+        {
+          "d": "M8 9h8",
+          "fill": false
+        },
+        {
+          "d": "M8 12h5",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "06ba87fbd5d8518db8e6106604d3dde6ca49c54492ff4a9db16aa4e9bc1cb128"
+    },
+    {
+      "id": "sym.projector",
+      "name": "投影机",
+      "cat": "弱电",
+      "paths": [
+        {
+          "d": "M3 9h12v8H3z",
+          "fill": false
+        },
+        {
+          "d": "M15 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0",
+          "fill": false
+        },
+        {
+          "d": "M18 12l4-3",
+          "fill": false
+        },
+        {
+          "d": "M18 13l4 3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "24c5030c8b7c2ca78dd5dc2629221c476249fc9ccb0489b4d4d78346937a0816"
+    },
+    {
+      "id": "sym.barrier",
+      "name": "道闸",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M5 4v16",
+          "fill": false
+        },
+        {
+          "d": "M2 20h7",
+          "fill": false
+        },
+        {
+          "d": "M6 8h14",
+          "fill": false
+        },
+        {
+          "d": "M17 5v7",
+          "fill": false
+        },
+        {
+          "d": "M6 8l9-3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "f24837386ba1527123c874a5d6afc632e107bfcc664935d89df14b1f62db7195"
+    },
+    {
+      "id": "sym.loop",
+      "name": "地感线圈",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M5 6h14v12H5z",
+          "fill": false
+        },
+        {
+          "d": "M8 6v1",
+          "fill": false
+        },
+        {
+          "d": "M11 6v1",
+          "fill": false
+        },
+        {
+          "d": "M14 6v1",
+          "fill": false
+        },
+        {
+          "d": "M17 6v1",
+          "fill": false
+        },
+        {
+          "d": "M8 17v1",
+          "fill": false
+        },
+        {
+          "d": "M11 17v1",
+          "fill": false
+        },
+        {
+          "d": "M14 17v1",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "8027ec5940d7d086136e2c435f68706b31820d18e39e8ef08d907ae62fcbc498"
+    },
+    {
+      "id": "sym.parking_space",
+      "name": "车位",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M4 4h16v16H4z",
+          "fill": false
+        },
+        {
+          "d": "M9 17V7h4a3 3 0 0 1 0 6H9",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "11ccf07b81d54797ac8e39c1d359d700d5c994d21dfd31c62a4d46f7514a9634"
+    },
+    {
+      "id": "sym.charger",
+      "name": "充电桩",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M6 4h12v16H6z",
+          "fill": false
+        },
+        {
+          "d": "M13 7l-4 6h3l-1 4 4-6h-3z",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "7f01690fc8ef823d2ca7e8fb9514cb44d46e5bdf8ac704c7b06dc686f0586f41"
+    },
+    {
+      "id": "sym.guide_screen",
+      "name": "诱导屏",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M3 6h18v10H3z",
+          "fill": false
+        },
+        {
+          "d": "M8 20h8",
+          "fill": false
+        },
+        {
+          "d": "M12 16v4",
+          "fill": false
+        },
+        {
+          "d": "M7 11h3l-2-2",
+          "fill": false
+        },
+        {
+          "d": "M14 11h3l-2 2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "65c78f975a743ca4667379d55439c59f1784cd5ee45e72bd397b6cdf9cd9cb45"
+    },
+    {
+      "id": "sym.parking_guide",
+      "name": "车位引导",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M4 4h16v16H4z",
+          "fill": false
+        },
+        {
+          "d": "M8 17V7h4a3 3 0 0 1 0 6H8",
+          "fill": false
+        },
+        {
+          "d": "M16 8v9",
+          "fill": false
+        },
+        {
+          "d": "M16 12l2-2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "65d89fb3ac90e27c6d288253cbfa221e410180ae84d555a9cae6dc80c73b8c54"
+    },
+    {
+      "id": "sym.ticket_machine",
+      "name": "取卡机",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M6 3h12v18H6z",
+          "fill": false
+        },
+        {
+          "d": "M9 7h6v3H9z",
+          "fill": false
+        },
+        {
+          "d": "M9 13h6",
+          "fill": false
+        },
+        {
+          "d": "M9 16h4",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "06b8643abf71d5e8b390dd493bbeaba305d4151c4173abc42603ec9101f378f6"
+    },
+    {
+      "id": "sym.booth",
+      "name": "岗亭",
+      "cat": "停车",
+      "paths": [
+        {
+          "d": "M4 10l8-6 8 6",
+          "fill": false
+        },
+        {
+          "d": "M6 10v10h12V10",
+          "fill": false
+        },
+        {
+          "d": "M9 14h6v6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "0c8c3b265fd5f69fbfaa602a821cc9d9fad1591326fba6f77dfe8d4900c3a941"
+    },
+    {
+      "id": "sym.hydrant",
+      "name": "消火栓",
+      "cat": "消防",
+      "paths": [
+        {
+          "d": "M9 7h6v13H9z",
+          "fill": false
+        },
+        {
+          "d": "M7 10h10",
+          "fill": false
+        },
+        {
+          "d": "M12 7V4",
+          "fill": false
+        },
+        {
+          "d": "M9 20h6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "c035e14f9dd3fe3c5277adda7e7ddd9784ff994e25c124a78bf58db99300cb29"
+    },
+    {
+      "id": "sym.sprinkler",
+      "name": "喷淋头",
+      "cat": "消防",
+      "paths": [
+        {
+          "d": "M4 5h16",
+          "fill": false
+        },
+        {
+          "d": "M12 5v6",
+          "fill": false
+        },
+        {
+          "d": "M12 11l-3 3",
+          "fill": false
+        },
+        {
+          "d": "M12 11l3 3",
+          "fill": false
+        },
+        {
+          "d": "M12 11v4",
+          "fill": false
+        },
+        {
+          "d": "M6 9c0 2 2 2 2 0",
+          "fill": false
+        },
+        {
+          "d": "M16 9c0 2 2 2 2 0",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "0af9b823b4e0c0c85e71d8bb42455ce1b90cc363cf0b6b449110b046d052c498"
+    },
+    {
+      "id": "sym.manual_call",
+      "name": "手动报警按钮",
+      "cat": "消防",
+      "paths": [
+        {
+          "d": "M5 3h14v18H5z",
+          "fill": false
+        },
+        {
+          "d": "M12 7v8",
+          "fill": false
+        },
+        {
+          "d": "M12 17v1",
+          "fill": false
+        },
+        {
+          "d": "M9 20h6",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "83336fa3a802c75d16112521a6200a56894dab9d3f33633dcf42fc07f814a84d"
+    },
+    {
+      "id": "sym.emergency_light",
+      "name": "应急照明",
+      "cat": "消防",
+      "paths": [
+        {
+          "d": "M6 10h8v8H6z",
+          "fill": false
+        },
+        {
+          "d": "M14 12l5-4v8l-5-4",
+          "fill": false
+        },
+        {
+          "d": "M4 5l2 2",
+          "fill": false
+        },
+        {
+          "d": "M8 3v3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "b4f7c033e95746a15345dd3f783bdb2161610541edf71426c6c0eaeea0a454c9"
+    },
+    {
+      "id": "sym.exit_sign",
+      "name": "疏散指示",
+      "cat": "消防",
+      "paths": [
+        {
+          "d": "M3 5h18v12H3z",
+          "fill": false
+        },
+        {
+          "d": "M9 11h10",
+          "fill": false
+        },
+        {
+          "d": "M16 8l3 3-3 3",
+          "fill": false
+        },
+        {
+          "d": "M6 17v3",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "9e4b08d810fcc40d357628f7a59b5e2419c7dbb3763de8eac24b16ec987828c3"
+    },
+    {
+      "id": "sym.elevator",
+      "name": "电梯",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M5 3h14v18H5z",
+          "fill": false
+        },
+        {
+          "d": "M12 3v18",
+          "fill": false
+        },
+        {
+          "d": "M8 8l1-2 1 2",
+          "fill": false
+        },
+        {
+          "d": "M8 16l1 2 1-2",
+          "fill": false
+        },
+        {
+          "d": "M16 8l-1-2-1 2",
+          "fill": false
+        },
+        {
+          "d": "M16 16l-1 2-1-2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "744d9ab56b4592733be89c1e4ecb76e9aa59bc87cbfe2d49e2d4e39900e5d320"
+    },
+    {
+      "id": "sym.door_sensor",
+      "name": "门磁",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M4 4h7v16H4z",
+          "fill": false
+        },
+        {
+          "d": "M15 7h5v4h-5z",
+          "fill": false
+        },
+        {
+          "d": "M15 14h5v4h-5z",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "e7bddfce17f81a4a63ef11cb53d00f0eba38e78f7a437dc8c7c13555e80bace0"
+    },
+    {
+      "id": "sym.window_sensor",
+      "name": "窗磁",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M4 8h16v8H4z",
+          "fill": false
+        },
+        {
+          "d": "M12 8v8",
+          "fill": false
+        },
+        {
+          "d": "M6 5h4",
+          "fill": false
+        },
+        {
+          "d": "M14 19h4",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "7f493f4483d352ae665c26491a019fb6436e0be1554cc57e33b7d0b1a957d2b8"
+    },
+    {
+      "id": "sym.temp_humidity",
+      "name": "温湿度传感器",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M9 4a2 2 0 0 1 4 0v10a4 4 0 1 1-4 0z",
+          "fill": false
+        },
+        {
+          "d": "M11 10v6",
+          "fill": false
+        },
+        {
+          "d": "M17 6c2 3 3 4 3 6a3 3 0 0 1-6 0c0-2 1-3 3-6z",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "b7b0921dffd1b23e5c03f04c85c7c5be2ef6534dbdf76680ffed0ff4f8edcf1d"
+    },
+    {
+      "id": "sym.water_leak",
+      "name": "漏水检测",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M12 3c4 6 7 8 7 12a7 7 0 0 1-14 0c0-4 3-6 7-12z",
+          "fill": false
+        },
+        {
+          "d": "M8 16c1-1 2-1 3 0s2 1 3 0",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "938e6ef55d9bc46f9d541f2c6c8d468bdc4476cbeea97d4c1f640f7bc9776dac"
+    },
+    {
+      "id": "sym.elevator_monitor",
+      "name": "电梯监控",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M4 3h10v18H4z",
+          "fill": false
+        },
+        {
+          "d": "M9 3v18",
+          "fill": false
+        },
+        {
+          "d": "M7 8l1-2 1 2",
+          "fill": false
+        },
+        {
+          "d": "M17 7h5v6h-5z",
+          "fill": false
+        },
+        {
+          "d": "M19 13v4",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "3363ce893e44bced708b44bcc4c61a87dae7def2d7fb0b3f76704b623c02bfb6"
+    },
+    {
+      "id": "sym.face_recognition",
+      "name": "人脸识别",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M4 8V4h4",
+          "fill": false
+        },
+        {
+          "d": "M20 8V4h-4",
+          "fill": false
+        },
+        {
+          "d": "M4 16v4h4",
+          "fill": false
+        },
+        {
+          "d": "M20 16v4h-4",
+          "fill": false
+        },
+        {
+          "d": "M9 10h1",
+          "fill": false
+        },
+        {
+          "d": "M15 10h1",
+          "fill": false
+        },
+        {
+          "d": "M9 15c2 2 4 2 6 0",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "4ccd597af9ebc4a68bdcd992db55db26be367162b329e575e3da292070f90531"
+    },
+    {
+      "id": "sym.anpr",
+      "name": "车牌识别",
+      "cat": "通用",
+      "paths": [
+        {
+          "d": "M4 8h9v7H4z",
+          "fill": false
+        },
+        {
+          "d": "M9 11.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
+          "fill": false
+        },
+        {
+          "d": "M13 11h4",
+          "fill": false
+        },
+        {
+          "d": "M3 18h18",
+          "fill": false
+        },
+        {
+          "d": "M6 18v2",
+          "fill": false
+        },
+        {
+          "d": "M18 18v2",
+          "fill": false
+        }
+      ],
+      "pathsSha256": "5e2c58d7614c93c1e11991d24bd0907b46c8a87b57b541f3bb7cf3b7e028e6e5"
+    }
+  ]
+}

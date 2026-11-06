@@ -1797,6 +1797,25 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   /* 空页面列表抛错 */
   let threw=false; try{ api.Pdf.buildImagePdf([]); }catch(e){ threw=true; }
   eq('PDF-空页面拒绝', threw, true);
+
+  /* A2：PDF 字节级 golden（只覆盖容器层；画布 JPEG 由浏览器编码，不在本判据内）
+   * 输入固定 → 输出必须逐字节确定；基线文件用 UPDATE_GOLDEN=1 重建。 */
+  const pdfPages=[
+    {width:120,height:90,b64:'AAECAwQFBgcICQ=='},
+    {width:64,height:48,b64:'CgsMDQ4PEA=='}
+  ];
+  const pdfA=api.Pdf.buildImagePdf(pdfPages);
+  const pdfB=api.Pdf.buildImagePdf(pdfPages);
+  const shaA=createHash('sha256').update(Buffer.from(pdfA)).digest('hex');
+  const shaB=createHash('sha256').update(Buffer.from(pdfB)).digest('hex');
+  eq('A2-PDF 同输入两次字节一致', shaA, shaB);
+  const pdfGolden=join(root,'tests','golden','fixed-pages.pdf');
+  if(process.env.UPDATE_GOLDEN==='1'){
+    writeFileSync(pdfGolden,Buffer.from(pdfA));
+  }else{
+    ok('A2-PDF 容器逐字节 golden', Buffer.compare(Buffer.from(pdfA),readFileSync(pdfGolden))===0);
+  }
+  eq('A2-PDF golden SHA-256', shaA, createHash('sha256').update(readFileSync(pdfGolden)).digest('hex'));
 }
 
 /* 36. DXF 高级实体：凸度弧 / ELLIPSE / SPLINE / INSERT 块 / MTEXT ---------------- */
@@ -3700,8 +3719,39 @@ asyncSuites.push((async()=>{
     eq('golden-'+name+'.svg 逐字节一致', svg, wantSvg);
     eq('golden-'+name+'.dxf 逐字节一致', dxf, wantDxf);
   }
+  function goldenSvgOnly(name,build){
+    build();
+    const svg=api.buildSceneSvg();
+    if(process.env.UPDATE_GOLDEN==='1'){ writeFileSync(join(goldenRoot,name+'.svg'),svg,'utf8'); return; }
+    eq('golden-'+name+'.svg 逐字节一致', svg, readFileSync(join(goldenRoot,name+'.svg'),'utf8'));
+  }
   goldenCase('plain-scene',plainFixture);
   goldenCase('symbol-scene',symbolFixture);
+
+  /* A1：旧工程 64 图元逐图标视觉回归
+   * fixture 来自 a0aecf0:js/common/symbols.js（旧工程 objectTypes 会持久化 symbol paths）；
+   * 逐图标 path 哈希锁定几何未被新归一化改写，再用全量 SVG golden 锁定渲染管线。 */
+  const legacy=JSON.parse(readFileSync(join(root,'tests','fixtures','legacy-symbols.json'),'utf8'));
+  const legacyCanon=paths=>paths.map(p=>(p.fill?'F':'S')+p.d).join('\u0001');
+  eq('A1-旧图元数量=64', legacy.symbols.length, 64);
+  eq('A1-旧图元 id 唯一', new Set(legacy.symbols.map(s=>s.id)).size, 64);
+  for(const sym of legacy.symbols){
+    const got=api.symbolPathsFor({symbol:sym.paths});
+    eq('A1-'+sym.id+' 路径条数未变', got.length, sym.paths.length);
+    eq('A1-'+sym.id+' 路径哈希未变', createHash('sha256').update(legacyCanon(got.map(p=>({d:p.d,fill:!!p.fill})))).digest('hex'), sym.pathsSha256);
+    const polys=api.symbolPolylinesInWorld({symbol:sym.paths,symbolViewBox:{x:0,y:0,w:24,h:24}},10,10,4,30,{x:0,y:0,w:24,h:24});
+    const polysOk=polys.length>0&&polys.every(p=>p.points.every(q=>Number.isFinite(q[0])&&Number.isFinite(q[1])));
+    ok('A1-'+sym.id+' 可折线化且坐标有限', polysOk);
+  }
+  goldenSvgOnly('legacy-symbols',()=>{
+    api.resetState();
+    api.state.meta.name='旧工程 64 图元基线';
+    api.state.site={id:'site.legacy',name:'基准场地',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:80}};
+    api.state.background={kind:'empty',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:0.1,calibrated:false,transform:null};
+    api.state.objectTypes=legacy.symbols.map(sym=>({id:sym.id,kind:'point',name:sym.name,color:'#1e293b',icon:'symbol',scaleShape:'none',builtin:true,symbol:sym.paths,symbolViewBox:{x:0,y:0,w:24,h:24},category:sym.cat}));
+    api.state.objects=legacy.symbols.map((sym,i)=>api.baseObject('point',sym.id,{name:sym.name,x:12+(i%8)*12,y:10+Math.floor(i/8)*9,angle:(i*15)%360,phys:0}));
+  });
+  ok('A1-SVG 含 64 个旧符号组', (api.buildSceneSvg().match(/scale\(/g)||[]).length>=64);
   api.resetState();
 }
 
@@ -4132,6 +4182,105 @@ asyncSuites.push((async()=>{
   ok('定位-返回成功', located);
   ok('定位-选中主对象与关联对象', api.selectedIds.has(v.objectId) && (!v.peerId || api.selectedIds.has(v.peerId)));
   ok('定位-异常对象安全返回', (await api.locateRuleViolation({objectId:'missing',floorId:api.state.activeFloorId})) === false);
+}
+
+/* 57.8 规则采样误差 golden（A5）：固定几何 + 容差断言 ---------------------- */
+{
+  api.resetState();
+  api.state.objectTypes.push(
+    {id:'test.rule.circle',kind:'point',name:'测试圆',color:'#111827',icon:'custom',scaleShape:'circle',builtin:false},
+    {id:'test.rule.square',kind:'point',name:'测试方',color:'#111827',icon:'custom',scaleShape:'square',builtin:false},
+    {id:'test.rule.sector',kind:'point',name:'测试扇形',color:'#111827',icon:'custom',scaleShape:'sector',fov:90,builtin:false}
+  );
+  const fp=(id,x,y,phys,angle)=>api.ruleObjectFootprint({kind:'point',typeId:id,x,y,phys,angle:angle||0});
+  const relErr=(a,b)=>Math.abs(a-b)/b;
+
+  /* 圆 r=5：采样段 seg=max(16,min(48,ceil(r*8)))=40，内接多边形理论误差约 0.41% */
+  const circle=fp('test.rule.circle',0,0,10,0);
+  eq('A5-圆采样段数=40', circle.polygons[0].length, 40);
+  ok('A5-圆面积误差 <2%', relErr(circle.area,Math.PI*25)<0.02);
+  ok('A5-圆内接多边形面积略小于真圆', circle.area<Math.PI*25);
+
+  /* 方形 10×10 旋转 30°：面积应严格保持 100 */
+  const square=fp('test.rule.square',0,0,10,30);
+  approx('A5-旋转方形面积=100', square.area, 100, 1e-6);
+
+  /* 扇形 fov 90 / r=10：面积 ≈ πr²/4（72 段采样误差 <1%） */
+  const sector=fp('test.rule.sector',0,0,10,0);
+  ok('A5-扇形面积误差 <1%', relErr(sector.area,Math.PI*100/4)<0.01);
+  ok('A5-扇形面积略小于真值', sector.area<Math.PI*100/4);
+
+  /* 净距：两圆 r=2、中心距 10 → 6；圆与方（4×4，中心距 8）→ 4 */
+  const c1=fp('test.rule.circle',0,0,4,0), c2=fp('test.rule.circle',10,0,4,0);
+  approx('A5-两圆净距=6', api.ruleGapGeometry(c1,c2), 6, 0.01);
+  api.state.objectTypes.push({id:'test.rule.rect',kind:'point',name:'测试方形域',color:'#111827',icon:'custom',scaleShape:'square',builtin:false});
+  const sq=fp('test.rule.rect',8,0,4,0);
+  approx('A5-圆与方净距=4', api.ruleGapGeometry(c1,sq), 4, 0.01);
+  approx('A5-净距对称', api.ruleGapGeometry(sq,c1), api.ruleGapGeometry(c1,sq), 1e-9);
+
+  /* 重叠面积：两个 100×100 方、偏移 50 → 5000 */
+  const r1=api.baseObject('rect','rect.area',{x:0,y:0,width:100,height:100,angle:0});
+  const r2=api.baseObject('rect','rect.area',{x:50,y:0,width:100,height:100,angle:0});
+  const f1=api.ruleObjectFootprint(r1), f2=api.ruleObjectFootprint(r2);
+  approx('A5-两方重叠面积=5000', api.rulePolygonIntersectionArea(f1.polygons[0],f2.polygons[0]), 5000, 1e-6);
+
+  /* 凹多边形三角化：L 形 7500 ∩ 方形 2500 = 2500（走 ruleTriangulate 而非包围盒回退） */
+  const L=[[0,0],[100,0],[100,50],[50,50],[50,100],[0,100]];
+  const half=[[0,0],[50,0],[50,50],[0,50]];
+  approx('A5-凹多边形交面积=2500', api.rulePolygonIntersectionArea(L,half), 2500, 1e-6);
+  approx('A5-凹多边形与自身交面积=7500', api.rulePolygonIntersectionArea(L,L), 7500, 1e-6);
+}
+
+/* 57.9 DXF 折线与 SVG 几何一致性（A6） ------------------------------------- */
+{
+  /* 1) 合成非对称符号：viewBox 24、size 24、对象在 (100,100)、angle 0。
+   * 按「中心缩放 + 局部 Y 翻转」规格独立推导：x∈[88,100]，y∈[100,112]。 */
+  api.resetState();
+  api.state.site=null;
+  api.state.objectTypes.push({id:'test.sym.box',kind:'point',name:'测试符号',color:'#111827',icon:'symbol',scaleShape:'none',builtin:false,symbol:[{d:'M0 0h12v12H0z',fill:false}],symbolViewBox:{x:0,y:0,w:24,h:24}});
+  api.state.objects=[api.baseObject('point','test.sym.box',{x:100,y:100,phys:24,angle:0,name:'BOX'})];
+  const boxExp=api.dxfEntitiesForExport();
+  eq('A6-合成符号折线数=1', boxExp.entities.filter(e=>e.type==='LWPOLYLINE').length, 1);
+  eq('A6-合成符号保留 POINT 锚点', boxExp.entities.filter(e=>e.type==='POINT').length, 1);
+  const box=boxExp.entities.find(e=>e.type==='LWPOLYLINE');
+  eq('A6-合成符号顶点数=4', box.points.length, 4);
+  eq('A6-合成符号闭合标记', box.closed, true);
+  const bxs=box.points.map(p=>p[0]), bys=box.points.map(p=>p[1]);
+  approx('A6-合成符号 bbox.minX', Math.min(...bxs), 88, 1e-6);
+  approx('A6-合成符号 bbox.maxX', Math.max(...bxs), 100, 1e-6);
+  approx('A6-合成符号 bbox.minY', Math.min(...bys), 100, 1e-6);
+  approx('A6-合成符号 bbox.maxY', Math.max(...bys), 112, 1e-6);
+
+  /* 2) symbol-scene 三个真实符号：DXF 折线逐点等于 symbolPolylinesInWorld（同一几何源），
+   *    且 SVG 中确实使用 symbolPathsFor 的 path 数据。 */
+  api.resetState();
+  api.state.site=null;
+  const scene=[
+    api.baseObject('point','sym.camera_gun',{name:'S1',x:12,y:14,angle:0,phys:0}),
+    api.baseObject('point','sym.smoke',{name:'S2',x:40,y:30,angle:45,phys:0}),
+    api.baseObject('point','sym.dome',{name:'S3',x:60,y:50,angle:30,phys:2.5})
+  ];
+  api.state.objects=scene;
+  const expected=[];
+  for(const o of scene){
+    const t=api.state.objectTypes.find(x=>x.id===o.typeId);
+    const size=(o.phys||0)>0?o.phys:0.6;
+    for(const poly of api.symbolPolylinesInWorld(t,o.x,o.y,size,o.angle,t.symbolViewBox)) expected.push(poly);
+  }
+  const expEnt=api.dxfEntitiesForExport();
+  const lines=expEnt.entities.filter(e=>e.type==='LWPOLYLINE');
+  eq('A6-三符号折线数一致', lines.length, expected.length);
+  eq('A6-降级报告符号数=3', expEnt.report.symbolPoints, 3);
+  for(let i=0;i<expected.length;i++){
+    eq('A6-折线'+i+'顶点数一致', lines[i].points.length, expected[i].points.length);
+    let same=lines[i].points.every((p,j)=>Math.abs(p[0]-expected[i].points[j][0])<=1e-9&&Math.abs(p[1]-expected[i].points[j][1])<=1e-9);
+    ok('A6-折线'+i+'逐点一致', same&&lines[i].closed===expected[i].closed);
+  }
+  const svg=api.buildSceneSvg();
+  for(const o of scene){
+    const t=api.state.objectTypes.find(x=>x.id===o.typeId);
+    for(const p of api.symbolPathsFor(t)) ok('A6-'+t.id+' SVG 使用同一 path 源', svg.includes(p.d));
+  }
 }
 
 /* 58. 中英界面切换与无障碍标记 --------------------------------------------- */

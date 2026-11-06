@@ -82,7 +82,7 @@ code += `\n;globalThis.__bench = {
   get state(){ return state; },
   resetState(){ state=createInitialState(); resetFrameRef(); return state; },
   baseObject, drawScene, invalidateStatic, visibleWorldRect, objectBounds, boundsIntersect, selectedIds,
-  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules, buildSymbolIndex
+  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules, buildSymbolIndex, parseSvgSymbol
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 const api = sandbox.__bench;
@@ -273,6 +273,35 @@ out.coverageZoomRatios = zoomRatios.map(r => +(r * 100).toFixed(2));
   out.symbolLibraryCount = api.buildSymbolIndex().length;
 }
 
+/* 8) SVG 符号导入极限：199 路径 / 总字节贴近 64 KB（安全上限内的可达最坏组合）
+ *    SVG_ELEMENTS=200 会把根 <svg> 计入，因此 path 元素有效上限是 199（实测边界）。
+ *    另测「200 × 5000 字符」超限样本：该组合约 1 MB，会被 64 KB 上限结构性拒绝，
+ *    只验证快速失败，不设耗时门禁。 */
+{
+  const svgHead = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">';
+  const svgTail = '</svg>';
+  const pathBody = 'M0 0' + 'h1v1'.repeat(74); /* 单条 300 字符 */
+  const reachable = svgHead + Array(199).fill('<path d="' + pathBody + '"/>').join('') + svgTail;
+  const overPath = 'M0 0' + 'h1v1'.repeat(1249); /* 单条 5000 字符 */
+  const overLimit = svgHead + Array(200).fill('<path d="' + overPath + '"/>').join('') + svgTail;
+
+  const reachableSamples = timeSamples(20, () => { api.parseSvgSymbol(reachable); });
+  let rejectSamples = [];
+  let rejectError = '';
+  for (let i = 0; i < 20; i++) {
+    const t0 = now();
+    try { api.parseSvgSymbol(overLimit); } catch (e) { rejectError = String(e && e.message || e); }
+    rejectSamples.push(now() - t0);
+  }
+  out.svgImportPaths = 199;
+  out.svgImportReachableBytes = reachable.length;
+  out.svgImportReachableMs = +avgOf(reachableSamples).toFixed(3);
+  out.svgRejectBytes = overLimit.length;
+  out.svgRejectMs = +avgOf(rejectSamples).toFixed(3);
+  out.svgRejectContains64KB = /64 KB/i.test(rejectError);
+  if (!out.svgRejectContains64KB) console.error('❌ SVG 超限样本未按 64 KB 上限拒绝：' + rejectError);
+}
+
 out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
 
 if (process.argv.includes('--json')) {
@@ -295,6 +324,8 @@ if (process.argv.includes('--json')) {
   }
   console.log(`  符号渲染：${out.symbolObjects} 个符号点 重建 ${out.symbolRebuildMs} ms / 缓存帧 ${out.symbolCachedMs} ms / 直接帧 ${out.symbolDirectMs} ms（目标 ≤ 60ms）`);
   console.log(`  符号库加载：索引构建 ${out.symbolLoadMs} ms（${out.symbolLibraryCount} 个图元，目标 ≤ 10ms）`);
+  console.log(`  SVG 导入：199 路径（元素上限 200 含根节点）/ ${out.svgImportReachableBytes} 字节 ${out.svgImportReachableMs} ms（安全上限内可达最坏组合）`);
+  console.log(`  SVG 超限拒绝：200 路径 × 5000 字符 / ${out.svgRejectBytes} 字节 ${out.svgRejectMs} ms（快失败，不设耗时门禁）`);
 }
 
 /* 门禁：阻断项（超出一项即红），P99 仅告警。--no-gate 供本地快速跑。 */
@@ -311,9 +342,11 @@ if (!process.argv.includes('--no-gate')) {
     { name: '规则检查(2000对象/30类型)', value: out.ruleCheckMs, limit: 500, op: '≤', unit: 'ms' },
     { name: '符号渲染(500图元直接帧)', value: out.symbolDirectMs, limit: 60, op: '≤', unit: 'ms' },
     { name: '符号库索引加载', value: out.symbolLoadMs, limit: 10, op: '≤', unit: 'ms' },
+    { name: 'SVG 导入(199路径/≤64KB)', value: out.svgImportReachableMs, limit: 50, op: '≤', unit: 'ms' },
     { name: '视口裁剪率', value: out.culledRatio, limit: 0.6, op: '≥', unit: '' }
   ].filter(g => !(out.ruleCheckBruteMs !== undefined && g.name === 'heapUsed')); /* --brute 会物化 2M 候选对，heap 门禁不适用 */
   const failed = [];
+  if (!out.svgRejectContains64KB) failed.push('❌ SVG 超限样本未被 64 KB 上限拒绝（安全边界失效）');
   for (const g of gates) {
     const bad = g.op === '≤' ? g.value > g.limit : g.value < g.limit;
     if (bad) {
@@ -330,5 +363,5 @@ if (!process.argv.includes('--no-gate')) {
     failed.forEach(f => console.error(f));
     process.exit(1);
   }
-  console.log(`✅ 渲染基准通过：缓存帧 avg ${out.cachedMs} ms ≤ 8 ms / P95 ${out.cachedP95Ms} ms ≤ 3 ms，重建 ${out.rebuildMs} ms ≤ 60 ms，heapUsed ${out.heapUsedMB} MB ≤ 64 MB，裁剪 ${(out.culledRatio * 100).toFixed(1)}% ≥ 60%，覆盖率 ${out.coverageMs} ms ≤ 300 ms，大场地覆盖率 ${out.coverageBigMs} ms ≤ 300 ms，缩放差异 ${out.coverageZoomSpreadPp}pp ≤ 1pp`);
+  console.log(`✅ 渲染基准通过：缓存帧 avg ${out.cachedMs} ms ≤ 8 ms / P95 ${out.cachedP95Ms} ms ≤ 3 ms，重建 ${out.rebuildMs} ms ≤ 60 ms，heapUsed ${out.heapUsedMB} MB ≤ 64 MB，裁剪 ${(out.culledRatio * 100).toFixed(1)}% ≥ 60%，覆盖率 ${out.coverageMs} ms ≤ 300 ms，大场地覆盖率 ${out.coverageBigMs} ms ≤ 300 ms，缩放差异 ${out.coverageZoomSpreadPp}pp ≤ 1pp，SVG 导入 ${out.svgImportReachableMs} ms ≤ 50 ms`);
 }

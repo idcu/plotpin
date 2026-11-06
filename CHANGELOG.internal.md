@@ -2,6 +2,35 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 收口：关闭 A1–A6 可自动化验证项
+
+- **Commit Hash**：本条提交（`test(closeout): 关闭 A1–A6 自动化验证…`）；哈希在下一提交回填。
+- **核心改动点**
+  - `tests/fixtures/legacy-symbols.json`（新增）：从 `a0aecf0:js/common/symbols.js` 提取旧版 **64** 图元，逐图标记录 `paths` 与 `pathsSha256`；旧工程 `objectTypes` 持久化 symbol paths，因此可直接验证旧图标渲染。
+  - `scripts/selftest.mjs`（A1/A2/A5/A6）：新增 A1 逐图标 path 哈希 + 可折线化断言 + `tests/golden/legacy-symbols.svg`（56,839 B）逐字节；A2 `tests/golden/fixed-pages.pdf`（1,128 B）逐字节 + 同输入两次 SHA-256 一致；A5 规则采样固定期望/容差（圆/旋转方/扇形/净距/重叠/凹多边形三角化）；A6 DXF 折线与 SVG 几何一致性（合成非对称符号独立推导 bbox + `symbol-scene` 折线逐点一致）。
+  - `scripts/bench.mjs`（A3）：`__bench` 暴露 `parseSvgSymbol`；新增可达最坏组合（199 路径 / 62,154 B）与超限拒绝（200×5000 字符 / 1,002,466 B）打点；新增阻断门禁 `SVG 导入(199路径/≤64KB) ≤ 50ms`。**既有阈值未改。**
+  - 文档：`docs/known-issues.md` 标记 A1/A2/A3/A5/A6 已关闭、A4 降级 M8；`docs/engineering.md` §5.1 增补该门禁行、断言数 2327→2584；README 断言数三处同步 2584。
+
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/selftest.mjs` | **2584 通过 / 0 失败**（41 个脚本；基线 2327，新增 257 条） | 0 |
+| `node scripts/bench.mjs` | 全部门禁通过：avg 0.33ms / P95 0.36ms / 重建 21.31ms / 直接 21.01ms / heap 29.53MB / 覆盖率 7.8ms / 大场地 14.5ms / 规则 12.9ms / 符号 3.23·0.08·3.03ms / 索引 0.013ms / 裁剪 99.4%；**SVG 导入 1.058ms（199 路径 / 62,154 B）**；超限拒绝 0.026ms | 0 |
+| `node scripts/build.mjs --check` | 719.0 KB（736,298 B）/ gzip 226,912 B；SHA256 `977a7478…`；二次构建一致（测试与文档不进 dist，体积不变） | 0 |
+| `node scripts/check.mjs --selftest` | 语法 / 入口 / 离线 / 断言数 / 契约 / API / 分层 / 自测全部通过 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/e2e.mjs` | 65 passed / 1 skipped（58.8s） | 0 |
+| `npm run ci` | 上述链路顺序执行通过 | 0 |
+| `node scripts/check-discipline.mjs` | **12/13（L3）**，缺口仍为第 11 问（engineering.md 拆分留待第 2 项） | 0 |
+
+- **遗留 / 风险**
+  - A4 降级 M8：无 50 条真实图纸语料与人工判定基准，未用构造样本冒充。
+  - A1 不覆盖旧版画布渲染器像素差异；以 path 源哈希 + SVG golden 作为等价判据。
+  - A2 只覆盖 PDF 容器层，Canvas JPEG 编码不在判据内。
+  - A3「200×5000」结构性不可达（64 KB 上限拒绝）；SVG 元素上限 200 含根节点，path 有效上限 199。
+  - 未改业务逻辑、未改既有阈值、未删断言、未 push、未读取/修改 `camera-*`。
+
 ## 2026-11-06 · 收口：全量回归 + 文档一致性 + 遗留项归档
 
 - **Commit Hash**：本条提交（`docs(closeout): 全量回归数据、文档事实修正与遗留项三类归档`）。
