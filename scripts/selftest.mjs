@@ -3770,6 +3770,21 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+/* 57.1 插件 API 版本化与能力白名单（C-01） -------------------------------- */
+{
+  const PP=api.PlotPin;
+  ok('插件-API 版本常量', PP.apiVersion==='1.0.0');
+  ok('插件-能力表冻结且七项', Object.isFrozen(PP.capabilities)&&Object.keys(PP.capabilities).length===7);
+  ok('插件-能力表含五类核心能力', ['state:read','state:write','annotate','types','icons'].every(c=>!!PP.capabilities[c]));
+  ok('插件-兼容声明 1.0', PP.checkPlugin({apiVersion:'1.0',capabilities:[]}).ok);
+  ok('插件-拒绝主版本不兼容并给原因', (()=>{const r=PP.checkPlugin({apiVersion:'2.0',capabilities:[]});return !r.ok&&/主版本/.test(r.reason);})());
+  ok('插件-拒绝缺失 apiVersion', (()=>{const r=PP.checkPlugin({capabilities:[]});return !r.ok&&/apiVersion/.test(r.reason);})());
+  ok('插件-拒绝未知能力', (()=>{const r=PP.checkPlugin({apiVersion:'1.0',capabilities:['network']});return !r.ok&&/未知能力/.test(r.reason);})());
+  ok('插件-拒绝缺失能力声明', (()=>{const r=PP.checkPlugin({apiVersion:'1.0'});return !r.ok&&/capabilities/.test(r.reason);})());
+  ok('插件-拒绝非法 id', !PP.checkPlugin({id:'bad id!',apiVersion:'1.0',capabilities:[]}).ok);
+  eq('插件-初始沙箱插件列表为空', PP.listPlugins().length, 0);
+}
+
 /* 58. 中英界面切换与无障碍标记 --------------------------------------------- */
 {
   const I=api.I18N;

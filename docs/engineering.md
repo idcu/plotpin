@@ -106,8 +106,65 @@ SHA256 `d1dea4e647bd…`；820 KB 门禁余量 **5,825 → 175,355 B**。口径�
 验证解析器只取顶层键。落地时做过一次真牙齿测试——往 `PlotPin` 里加一个 `_internalSync()`
 立即报"1 处泄漏"，移除即恢复。
 
-> **为什么不给插件做沙箱**：同源纯 JS 没有隔离可言。这里的边界是**评审与签名**，
-> 写"我们打算做沙箱"比不做更危险。清单能保证的只有一件事：**哪些名字是你公开承诺过的**。
+### 4.1 插件版本、能力白名单与隔离（C-01）
+
+`PlotPin.apiVersion = "1.0.0"` 是**插件 API 版本**，与 `PlotPin.version`（应用版本，须与
+`package.json` 一致）不是一回事。版本规则：
+
+| 声明 | 结果 |
+|---|---|
+| `apiVersion: "1"` / `"1.0"` / `"1.0.0"` | 兼容 |
+| `apiVersion: "1.x"`（x > 0，如 `1.1`） | 拒绝：次版本高于宿主，`reason` 写明宿主最高版本 |
+| `apiVersion: "2.0"` | 拒绝：主版本不兼容，`reason` 写明双方版本 |
+| 缺失 / 非法格式 | 拒绝：`reason` 说明合法写法 |
+
+`PlotPin.checkPlugin({id, apiVersion, capabilities})` 是同步预检（不执行代码），
+`loadPlugin` 内部先调用它；**任何校验失败都返回 `{ok:false, reason}` 并 toast，不抛异常、不崩溃**。
+旧的同源 `<script>` 插件路径（直接调用 `PlotPin.register*`）保留为**受信任兼容入口**，不套版本与能力门；
+需要隔离的插件应迁移到：
+
+```js
+PlotPin.loadPlugin({ id, apiVersion: '1.0', capabilities: ['state:read', 'export'], code })
+```
+
+能力白名单（**未声明的能力一律不可用**；未知能力在 `checkPlugin` 阶段即拒绝）：
+
+| 能力 | 允许做的事 |
+|---|---|
+| `state:read` | `PlotPin.getState()`、导出器/导入器上下文中的 `ctx.state` |
+| `state:write` | `PlotPin.addObjects(list, msg)`，经主工程 `sanitizeObjects` 清洗、重新编号后提交 |
+| `annotate` | `PlotPin.addAnnotation(spec, msg)`，仅 `text` / `dimension` |
+| `types` | `registerObjectType` / `unregisterObjectType` |
+| `icons` | 自定义类型允许携带 `symbol` 图元；**未声明时 symbol 一律拒绝** |
+| `export` | 注册 / 注销 / 执行导出器 |
+| `import` | 注册 / 注销 / 执行导入器 |
+
+**隔离执行**：`loadPlugin` 把插件源码拼进 `Blob`，用 `new Worker(blobURL)` 在独立线程执行；
+主线程与 Worker 只通过带随机 token 的 `postMessage` 通信（注册 RPC / 调用 / 下载 / toast）。
+Worker 内先做全局硬化：`fetch`、`indexedDB`、`XMLHttpRequest`、`WebSocket`、`EventSource`、
+`importScripts`、`caches`、`localStorage`、`sessionStorage`、`navigator`、`location`、
+`postMessage`、`addEventListener`、`self`、`Worker`、`SharedWorker` 在**全局对象与原型链**上都置空/删除；
+Web Worker 本身没有 DOM / `window` / `parent`，主工程的 `state`、`PlotPin` 内部对象也不可达。
+CSP 在 `index.html` 增加 `worker-src 'self' blob:`；Worker 继承父页 `script-src`（无
+`'unsafe-inline'` / `'unsafe-eval'`），`new Function` / `eval` 被 CSP 拒绝。
+
+**超时与失败隔离**：初始化与每次调用（含导出/导入）上限 **2000 ms**，超时由主线程
+`worker.terminate()` 硬终止；插件抛异常、能力越界、注册冲突都只会让**该插件**进入
+`disabled` 状态（`PlotPin.listPlugins()` 可读 `reason`，同时 toast「插件已禁用：…」），
+主工程继续可操作。`unloadPlugin` 可主动卸载；已注册导出器/导入器立即撤销，
+类型只在**没有对象使用**时移除（既有图纸的 `typeId` 外观不被破坏，与 `typeInUse()` 口径一致）。
+
+**图标仍走 A-02 白名单**：`icon` 无论如何都经 `normalizeIcon`（只认 16 个内置名，其余回落
+`custom`）；`symbol` 的 `d` / `fill` 只按几何数据保存，类型名/颜色/id 在渲染处走 `esc`。
+沙箱能力门不能绕过这两道清洗，e2e 用带 `"><img onerror=…>` 的类型名/图标做过验证。
+
+**明确限制**：一个插件一个 Worker；`code` 必须是字符串（`file://` 下不允许 `fetch` 插件文件）；
+单次 `addObjects` 最多 500 个对象；导入文件大小沿用 `APP_LIMITS.IMPORT_FILE_MAX_BYTES`；
+Worker 是**隔离边界**而不是完整语言级沙箱——插件仍可访问 `console`、`Blob`、`crypto` 等
+无主工程权限的 Worker 全局，且不设 CPU/内存配额（只靠 2 s 超时 terminate）。
+
+> **旧说明已作废**：此前「同源纯 JS 没有隔离可言、不做沙箱」的边界描述不再成立；
+> 受信任的旧路径仍在，但**不可信插件必须走 `loadPlugin`**。
 
 ---
 
@@ -140,11 +197,11 @@ SHA256 `d1dea4e647bd…`；820 KB 门禁余量 **5,825 → 175,355 B**。口径�
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 820 KB（839,680 B） | 648.8 KB（664,325 B） | 余量 175,355 B（构建期无损压缩后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 C 系列功能留空间） |
-| 产物体积（gzip） | 只打印，不阻断 | 200.6 KB（205,465 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `d1dea4e647bd…` | 从源重建、二次构建确定性一致 |
+| 单文件体积 | ≤ 820 KB（839,680 B） | 669.3 KB（685,350 B） | 余量 154,330 B（C-01 沙箱后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 C 系列功能留空间） |
+| 产物体积（gzip） | 只打印，不阻断 | 206.4 KB（211,396 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `488bc04e9b5a…` | 从源重建、二次构建确定性一致 |
 | CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 40 = 40 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 2184 | 只增不减 |
+| 断言数 | ≥ 1870 且 0 失败 | 2194 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在

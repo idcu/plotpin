@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-2184%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-2194%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在同一层可叠加「图片底图 + 矢量场地」双槽（每层最多 1 图 + 1 场地），在底图上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -108,12 +108,12 @@ npx serve .
 │   └── common/               # 项目专有库：i18n、LWW 合并、符号库；XML/ZIP/XLSX/DSV/DXF/PDF/PDF-image/QR/资产/几何走 ngm.vendor
 ├── contracts/
 │   ├── conventions.json      # 机器可读契约：版本号 / i18n 键 / 文件头 / 枚举同源
-│   └── plugin-api.json       # PlotPin 对外承诺的 13 个键（双向比对）
+│   └── plugin-api.json       # PlotPin 对外承诺的 19 个键（双向比对；含沙箱 loadPlugin）
 ├── scripts/                  # check（门禁总闸）/ check-contracts（契约判据）/ selftest / badge / bench / build
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
     ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
-    ├── features.md           # 29 条顶层特性 + 27 条子项（含边界与实现口径）
+    ├── features.md           # 29 条顶层特性 + 32 条子项（含边界与实现口径）
     ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
     └── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
 ```
@@ -157,12 +157,16 @@ npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象�
 **插件 API 面**（`contracts/plugin-api.json`）是另一条：`PlotPin.*` 的每个键都必须在清单里登记，
 清单里的每个键也必须真的存在——`npm run api` 双向比对，`npm run api:selftest` 验证解析器。
 「代码有、清单没有」是 API 泄漏：插件一旦依赖，你改名就是静默破坏兼容。
+`PlotPin.apiVersion = "1.0.0"` 与 `PlotPin.version`（应用版本）分开；`PlotPin.checkPlugin` 做加载前自检，
+`PlotPin.loadPlugin({id, apiVersion, capabilities, code})` 在独立 Worker 执行并按能力白名单通信（2 s 超时硬终止）。
+能力表、版本规则、隔离机制与明确限制见 [docs/engineering.md](docs/engineering.md) §4.1；
+可运行示例见 [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js)。
 刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、真实浏览器渲染基线）逐一写在
 [docs/engineering.md](docs/engineering.md) 里——不设不是忘了，是明说不保证。
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希与全库命名空间可达性回收（草稿/撤销重做/剪贴板/拖拽原件/全部工程库记录，禁止跨工程误删）、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、**全量中英文案（动态短语/插值模板/内置类型名/载入工程兼容）**、**弹窗焦点管理、页签方向键与画布键盘策略**、**SVG 视觉快照与真实 DOM 焦点桩**、**停车规划布局（车位数/通道数/旋转排列/边界与净宽检查）**、**实时协作传输辅助（48KB 分块、SDP 清洗、本地提交防抖）、协作消息层护栏（TTL/key/字节上限、重复 hello 去重、发送异常不冒泡）与邀请串编解码/二维码容量判定**、**多楼层汇总（逐层分类/面积/长度与合计）**、**资源上限与底图降采样策略（长边限制/透明保留/HTML 转义）**、**对象对齐与分布（包围盒边界/中线/等间距）**、**批量编号与层级（跨层避让/置顶置底）**、**多楼层台账导出与按楼层导入路由**、**版本快照与差异分类（独立命名空间/照片引用化/六类差异/回滚撤销关系）**、**导出字段表单一来源（CSV/TSV/XLSX/PDF/报告与 SVG/DXF 同源；8 种产物改造前后逐字节一致）**、静态资源引用完整性等纯逻辑模块，当前共 **2184 项断言全部通过**。
+底图资产哈希与全库命名空间可达性回收（草稿/撤销重做/剪贴板/拖拽原件/全部工程库记录，禁止跨工程误删）、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、**全量中英文案（动态短语/插值模板/内置类型名/载入工程兼容）**、**弹窗焦点管理、页签方向键与画布键盘策略**、**SVG 视觉快照与真实 DOM 焦点桩**、**停车规划布局（车位数/通道数/旋转排列/边界与净宽检查）**、**实时协作传输辅助（48KB 分块、SDP 清洗、本地提交防抖）、协作消息层护栏（TTL/key/字节上限、重复 hello 去重、发送异常不冒泡）与邀请串编解码/二维码容量判定**、**多楼层汇总（逐层分类/面积/长度与合计）**、**资源上限与底图降采样策略（长边限制/透明保留/HTML 转义）**、**对象对齐与分布（包围盒边界/中线/等间距）**、**批量编号与层级（跨层避让/置顶置底）**、**多楼层台账导出与按楼层导入路由**、**版本快照与差异分类（独立命名空间/照片引用化/六类差异/回滚撤销关系）**、**导出字段表单一来源（CSV/TSV/XLSX/PDF/报告与 SVG/DXF 同源；8 种产物改造前后逐字节一致）**、静态资源引用完整性等纯逻辑模块，当前共 **2194 项断言全部通过**。
 
 ---
 
@@ -171,7 +175,7 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ 多楼层多底图、设备台账二维码、照片附件（已交付）。
 - ✅ 顶栏「清空」：一键清空当前楼层双槽/对象/标注/校准/选中态并恢复默认取景框，二次确认且可 `Ctrl+Z` 整体撤销（已交付）。
 - ✅ PWA/Service Worker 离线缓存（缓存名版本化 + 激活清理旧缓存 + 新版本可用提示，离线打开不白屏）、64 个行业符号库与自定义 SVG 图元（已交付）。
-- ✅ 单文件发行包（构建期无损压缩，当前 **648.8 KB / 664,325 B**、gzip 200.6 KB；体积门禁 ≤820 KB / 839,680 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
+- ✅ 单文件发行包（构建期无损压缩，当前 **669.3 KB / 685,350 B**、gzip 206.4 KB；体积门禁 ≤820 KB / 839,680 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
 - ✅ 停车场规划模式：双面垂直车位 + 通道净距检查、横/纵排列、实时预览与独立图层（已交付）。
 - ✅ 离线协作（CRDT 家族 LWW）：对象/楼层级 Last-Writer-Wins + 删除墓碑 + 工程 JSON 合并；存储 v2 为每个楼层补 `updatedAt`，v1 旧档读取即迁移（已交付，工程库「合并他人工程」）。
 - ✅ 实时协作：本机 BroadcastChannel 多标签 + 跨设备 WebRTC 手动信令（无服务器、零依赖）；邀请串三步建连、连接状态常驻可见、LWW 覆盖提示并可 `Ctrl+Z` 回滚，消息层设 TTL / key / 字节上限与发送异常保护（已交付；内置二维码编码器 42 字节上限装不下 SDP 邀请串，面板只提示不渲染假码）。
@@ -181,7 +185,7 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ 版本快照与图纸对比：按工程版本链生成/列表/删除/回滚（独立 `snap:` 命名空间，20 条/16MB 上限），A/B 差异六类分类与可开关叠加高亮；快照底图/照片引用纳入资产可达集保活，删除快照后资产可回收（已交付）。
 - ✅ 资源上限收口：缩放/图标/段长阈值集中为 `APP_LIMITS`、段长标注阈值可在设置调整、底图解码尺寸硬上限（已交付）。
 - ✅ 对象对齐与分布：多选按包围盒六向对齐，水平/垂直等间距分布且首末不动（已交付）。
-- ✅ 安全硬化：类型 `icon` 白名单 + 类型名/颜色/id 全量转义 + CSP（`script-src` 无 `'unsafe-inline'`，单文件包按脚本文本签 sha256 白名单），封堵导入 JSON / 旧存档 / 插件注册 / 类型列表 4 条注入路径（已交付）。
+- ✅ 安全硬化：类型 `icon` 白名单 + 类型名/颜色/id 全量转义 + CSP（`script-src` 无 `'unsafe-inline'`，单文件包按脚本文本签 sha256 白名单；`worker-src 'self' blob:` 仅用于插件 Worker），封堵导入 JSON / 旧存档 / 插件注册 / 类型列表 4 条注入路径（已交付）。
 - ✅ 导出安全：CSV/TSV 公式注入防护（`= + - @`/Tab/CR 开头且非纯数字加前导单引号，纯数字豁免），XLSX 单元格一律 `inlineStr` 文本、无公式节点（已交付）。
 - ✅ 导出字段表单一来源：CSV/TSV/XLSX 表头、PDF/打印报告清单与 SVG/DXF 标注读数共用 `js/features/io-fields.js` 的同一字段描述表；8 种导出产物改造前后 SHA-256 全部一致，表头与字段语义不漂移（已交付）。
 - ✅ 设备产品库与 BOM 报价：厂商目录 JSON 导入/导出/删除（IndexedDB `catalog:current`，校验→落盘→替换内存的事务化导入），属性面板厂商/型号选型与数量，跨厂商重名不静默错绑，跨楼层 BOM 聚合与 CSV/XLSX 报价导出（共用统一字段表与公式防护）；导出携带目录版本/导出时间并写 `quote:last` 快照，替换目录后重导沿用冻结单价；无目录降级为名称/数量（已交付）。
@@ -196,7 +200,7 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ i18n 插值模板（B-14）：动态整句改用 `{name}` 占位 + 集中字典 `TEMPLATES`，消除 `前缀 + 数值 + 后缀` 拼接；覆盖剪贴板、表格/DXF/PDF/底图导入、楼层与工程库、快照、协作合并、报价与 PDF 页脚等 UI 与报告文案。中文模式原样填充（语义不变），英文整句命中字典；用户输入只作参数，DOM 仍走 `textContent` / `esc()`，不扩大注入面。可复跑统计 `node scripts/i18n-scan.mjs`：英文覆盖率 **25.64% → 33.79%**（已字典化 269 → 347 条，缺口 125 → 49 条），体积 **820,168 → 831,533 B（+11,365 B）**，仍低于 820 KB 门禁（已交付）。
 - ✅ 移动端 / PWA 补强（B-15）：SW 缓存名 `plotpin-v3` 版本化，`activate` 清理所有旧缓存；安装逐项 `allSettled`，单个资源 404 不阻断升级；`fetch` 网络优先、离线回退缓存，导航兜底 `index.html`，无缓存时返回内置离线提示页（不白屏）；`updatefound → installed` 且已有控制器时提示「新版本可用：刷新页面后生效」。移动端加 `viewport-fit=cover` 与 `env(safe-area-inset-*)`（桌面为 0，旧布局不变），触屏目标 ≥44px，横屏压缩顶栏、侧栏收窄且可纵向滚动工具栏；窄屏侧栏遮罩降到顶栏之下并支持点空白关闭。实测（同机 Chromium 移动模拟 390×844 / DPR3 vs 桌面 1600×900，单轮）：首屏 FCP 84 vs 96ms，2000 对象重建 P95 7.2 vs 5.9ms、缓存帧 P95 0.2 vs 0.2ms、rAF 间隔 P95 17.8 vs 18.2ms；**真机未测**（已交付）。
 - ✅ 体积压缩专项（2026-11）：构建期无损压缩（只删注释 / 缩进 / 空白，字符串、模板与正则字面量原样保留；CSP 哈希按压缩后文本重算，压缩后逐脚本 `vm.Script` 解析），产物 **833,855 → 664,325 B（−20.33%）**、gzip **273,289 → 205,465 B（−24.81%）**；820 KB 门禁余量 5,825 → 175,355 B。selftest 2184/0、e2e 51/1，dist 压缩产物同套断言全过（已交付）。
-- ✅ 批量编号与层级：前缀/起始/步长重排编号（跨楼层避让），置顶/置底调整叠放顺序（已交付）。
+- ✅ 插件沙箱 / 版本兼容 / 示例（C-01，2026-11）：新增 `PlotPin.apiVersion="1.0.0"` 与 `checkPlugin` 版本协商（1.x；不兼容返回可读 `reason` 而非崩溃）；`loadPlugin` 用独立 Worker 执行插件，能力白名单 7 项（`state:read` / `state:write` / `annotate` / `types` / `icons` / `export` / `import`）未声明一律不可用；Worker 全局与原型链硬化（无 DOM / `window` / `parent`，删 `fetch` / `indexedDB` / `XHR` / `WebSocket` / `importScripts` 等），初始化与单次调用 **>2 s 超时 terminate** 并禁用插件、toast 写原因；异常/原型污染不触达主工程；图标仍走 A-02 `normalizeIcon` 白名单与 `esc`。旧同源 `<script>` 路径保留为受信任兼容入口，迁移说明与能力表见 `docs/engineering.md` §4.1；示例 `plugins/sample-sandboxed.js`。实测体积 **664,325 → 685,350 B（+21,025 B，+3.16%）**、gzip **205,465 → 211,396 B（+5,931 B）**；selftest **2194/0**、e2e **61 passed / 1 skipped**（新增 10 条恶意/兼容用例）；dist file:// 双击实测 Worker 沙箱可用（已交付）。
 
 > 触屏已支持：Pointer Events 单指绘制/移动，**双指捏合缩放、双指平移**（缩放锚定双指中点）；≤860px 窄屏侧栏自动变覆盖层（☰ 面板开关，点画布/遮罩空白关闭）；安全区与触控目标见 B-15。
 
@@ -229,7 +233,7 @@ Place device markers on any base map (image or vector site), draw true-to-scale 
 - **Editing**: single/rubber/multi select, move, resize, rotate, node editing, layers, custom types, grid snapping, undo/redo.
 - **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback with explicit capability detection; versioned network-first Service Worker (cache `plotpin-v3`, old-cache cleanup, update prompt) with offline cache for hosted deployments.
 - **Engineering**: layered offscreen rendering cache + viewport culling, parser input limits for ZIP/XLSX/DXF/PDF, zero-dependency CI gate and render benchmark.
-- **Distribution**: `npm run build` produces a fully inlined single-file HTML with SHA256 checksum; plugin registration API for custom object types, importers and exporters.
+- **Distribution**: `npm run build` produces a fully inlined single-file HTML with SHA256 checksum; plugin registration API for custom object types, importers and exporters, plus a versioned Worker sandbox (`PlotPin.loadPlugin`) with a capability whitelist and 2 s per-call timeout.
 - **Internationalization & a11y**: Chinese/English switch covering chrome, property panels, dialogs, notifications, built-in type names, reports and QR labels (custom type names preserved); ARIA roles/states, modal focus trap, live region for toasts and visible keyboard focus rings.
 - **Import / export**: JSON project (embedded map + device photos across all floors), hi-res PNG, vector SVG, CSV/TSV and real `.xlsx` (OOXML via vendored `@idcu/format-*` modules, no npm/CDN at runtime), print-to-PDF report; drag-and-drop import supported.
 
@@ -246,6 +250,33 @@ npm run build
 ```
 
 ### Plugins
+
+**Recommended: isolated sandbox** (`PlotPin.loadPlugin`) — code runs in a dedicated Worker with no
+DOM / `window` / `parent` / IndexedDB / network; only declared capabilities are available:
+
+```js
+PlotPin.loadPlugin({
+  id: 'sandbox-markdown',
+  apiVersion: '1.0',                    // host API is 1.0.0; incompatible versions get a readable reason
+  capabilities: ['state:read', 'export'],
+  code: `
+    PlotPin.registerExporter({
+      id: 'md', label: 'Markdown', ext: '.md',
+      run(ctx) { ctx.download('# ' + (ctx.projectName || 'PlotPin'), 'out.md'); }
+    });
+  `
+}).then(r => { if (!r.ok) console.warn(r.reason); });   // r.ok=false: plugin disabled, app unaffected
+
+/* Capability table: state:read | state:write | annotate | types | icons | export | import
+ * Limits: 2 s per call/init (hard terminate), one Worker per plugin, code must be a string,
+ *         ≤500 objects per addObjects call, icons still go through the A-02 whitelist. */
+```
+
+A complete runnable example lives in [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js);
+details and migration rules are in [docs/engineering.md](docs/engineering.md) §4.1.
+
+**Legacy (trusted, compatibility entry)** — a same-origin `<script>` may still call `register*`
+directly. It has full page permissions and is **not** sandboxed or capability-gated:
 
 ```html
 <script src="js/features/plugins.js"></script>
@@ -274,7 +305,7 @@ PlotPin.registerImporter({
 ### Test
 
 ```bash
-node scripts/selftest.mjs   # 2184 assertions, no dependencies
+node scripts/selftest.mjs   # 2194 assertions, no dependencies
 node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁（CI 用 --selftest）
 node scripts/bench.mjs      # 渲染基准（avg/P95/重建/heapUsed 超阈值则退出码 1）
 node scripts/build.mjs --check   # 单文件发行包：源重建 ↔ dist-manifest 哈希比对 + 无外链 + 体积上限

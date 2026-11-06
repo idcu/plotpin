@@ -2,6 +2,51 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · C-01 插件沙箱 / 版本兼容 / 示例与文档
+
+- **Commit Hash**：本条提交（`feat(plugin): 隔离 Worker 沙箱 + 版本/能力门 + 安全 e2e（+21,025 B）`）。复盘用 `git log --grep="隔离 Worker 沙箱" -1 --format=%H`。
+- **核心改动点**
+  - `js/features/plugins.js`：新增 `PlotPin.apiVersion="1.0.0"`、`checkPlugin`（同步预检 id / apiVersion / capabilities）、`loadPlugin` / `unloadPlugin` / `listPlugins`；能力白名单 7 项（`state:read` / `state:write` / `annotate` / `types` / `icons` / `export` / `import`），未知能力与未声明能力一律拒绝。
+  - 隔离执行：插件源码拼进 `Blob` → `new Worker(blobURL)`。Worker 内先硬化全局与**原型链**（`fetch` / `indexedDB` / `XMLHttpRequest` / `WebSocket` / `EventSource` / `importScripts` / `caches` / `localStorage` / `sessionStorage` / `navigator` / `location` / `postMessage` / `addEventListener` / `self` / `Worker` / `SharedWorker` 置空或删除），仅保留带随机 token 的消息协议与 `PlotPin` facade。
+  - 版本协商：只接受 1.x 且次版本不高于宿主；`2.x` / `1.1` / 缺失 / 非法格式均返回 `{ok:false, reason}` 并 toast，不创建 Worker、不抛异常。
+  - 写操作经主工程清洗：`state:write` 的 `addObjects` 剥掉插件 id/时间戳，交给 `sanitizeObjects` 重新编号并 `commitChange`；`annotate` 仅允许 `text` / `dimension`；单次 ≤500 个对象。
+  - 失败隔离：初始化与每次调用（含导出/导入）上限 **2000 ms**，超时主线程 `worker.terminate()`；异常/能力越界/注册冲突只把该插件置 `disabled`，`listPlugins()` 带 `reason`，toast「插件已禁用：…」；`unloadPlugin` 立即撤销导出/导入，类型仅在 `typeInUse()` 为假时移除。
+  - 图标仍走 A-02：`icon` 一律 `normalizeIcon` 白名单；`symbol` 必须额外声明 `icons` 能力；类型名/颜色/id 在渲染处继续 `esc`。
+  - `index.html` CSP 增加 `worker-src 'self' blob:`（`script-src` 仍无 `'unsafe-inline'` / `'unsafe-eval'`，Worker 继承后 `Function` / `eval` 不可用）。
+  - 旧同源 `<script>` 路径（`registerExporter/Importer/ObjectType`）保持原签名与行为，作为**受信任兼容入口**；迁移说明写入 `docs/engineering.md` §4.1。
+  - 示例 `plugins/sample-sandboxed.js`（可运行：`state:read + export`，导出 `.md`）；文档同步 README（中英）、`docs/features.md`、`docs/modules.md`、`contracts/plugin-api.json`（13 → 19 键）。
+- **实测验证数据**
+  - **体积**：664,325 → **685,350 B（+21,025 B / +3.16%）**；gzip 205,465 → **211,396 B（+5,931 B / +2.89%）**；820 KB 门禁余量 175,355 → **154,330 B**；SHA256 `488bc04e9b5a825a1992fa9586d876c5b7329e947618a22fb76d5e153d33efc2`。
+  - **selftest**：**2194 通过 / 0 失败**（基线 2184，新增 10 条：API 版本常量、能力表冻结/七项/五类核心、1.0 兼容、2.0 拒绝并带原因、缺失 apiVersion 拒绝、未知能力拒绝、缺失 capabilities 拒绝、非法 id 拒绝、初始插件列表为空）。
+  - **e2e**：**61 passed / 1 skipped**（基线 51/1，新增 10 条 `tests/e2e/plugin-sandbox.spec.mjs`）。恶意用例逐条：
+    1. `parent.document` → 加载失败并 disabled，`reason` 含 `parent is not defined`；`document.body.dataset.pwned` 未写入；随后画布成功绘制新点。
+    2. `fetch("/plugin-net-probe")` → disabled，`reason` 含 `fetch`；Playwright 监听该路径**新增请求数 = 0**；随后可绘制。
+    3. `indexedDB.open(...)` → disabled，`reason` 含 `Cannot read properties of undefined (reading 'open')`；主工程 `state.schema` 不变、主线程 `indexedDB` 仍为 object；随后可绘制。
+    4. 加载期 `while(true){}` → 2 s 超时 terminate，断言总耗时 <2.5 s，`status=disabled` 且 `reason` 含「超时」；随后可绘制。
+    5. 导出器 `run` 抛 `boom-run` → `exportViaPlugin` 返回 `{ok:false}`（<2.5 s），插件 disabled，`reason` 含 `boom-run`；随后可绘制。
+    6. `Object.prototype` / `Array.prototype` 污染 + `__proto__` 消息 → 主工程 `({}).polluted` / `[].polluted` / `Object.prototype.polluted` 均为 `undefined`；插件可正常卸载。
+    7. 未声明 `icons` 却带 `symbol` → disabled，`reason` 含 `icons`；声明 `types+icons` 后恶意 `name`/`icon` 回落 `custom`，`#typeList` 的 `<img>` 数为 0，文本包含被截断的 payload，`symbol` 1 条。
+    8. 未声明 `types` 调 `registerObjectType` → disabled，`reason` 含 `types`，toast 含「插件已禁用」，`state.objectTypes` 未新增。
+    9. `apiVersion:"2.0"` 与缺失 `apiVersion` → 均 `{ok:false}` + 可读原因，`listPlugins().length` 仍 0（不创建 Worker）。
+    10. 示例插件 `sample-sandboxed.js` → `active`；导出下载文件名 `sandbox-markdown.md`，内容首行 `# ` 且含对象名 `P-01`；`unloadPlugin` 后插件列表归零、导出下拉选项移除。
+  - **dist file:// 双击**：额外 Playwright 探针（不进 CI）实测 `file:///…/dist/plotpin-standalone.html`：CSP 含 `worker-src 'self' blob:`；插件加载 `active`，导出 `probe.txt` 内容 `probe-ok`；恶意 `parent.document` disabled 且主工程 `state` 可读。
+  - **构建门禁**：`node scripts/build.mjs` 产物体积 685,350 B ≤ 839,680 B；CSP 哈希 40 = 40；`build --check` 二次构建确定性一致；`npm run ci` 全绿。
+- **未验证项**
+  - **真机 / Firefox / Safari** 未测：Worker-from-Blob、`file://` 双击、全局删除原型链属性只在 Chromium（Playwright bundled）验证；其他内核行为未取证。
+  - **沙箱导入器未跑端到端**：只验证了注册/能力门与代码路径，未构造一个真实自定义扩展名文件跑 `importViaPlugin` 的下载/写对象链路。
+  - **CPU/内存配额未做**：只靠 2 s 超时 terminate；插件在 2 s 内的 CPU 占用与内存峰值未打点。
+  - **旧插件迁移未自动化**：旧同源路径由既有 csp/smoke 用例覆盖，但没有「旧插件改写成 loadPlugin」的迁移测试。
+- **遗留 TODO / 风险**
+  - Worker 是**隔离边界**，不是完整语言级沙箱：插件仍可访问 `console` / `Blob` / `crypto` 等无主工程权限的 Worker 全局；我们清掉了网络/存储/DOM 入口，但未做静态代码扫描或字节码级隔离。
+  - 依赖 CSP 无 `'unsafe-eval'` 来封 `Function` / `eval`；若未来为其他需求放开 `'unsafe-eval'`，Worker 内可绕过全局硬化，必须同步复核插件沙箱。
+  - `loadPlugin` 只接受 `code` 字符串；`file://` 下不能用 `fetch` 读取插件文件，需宿主内联或用户粘贴。`worker-src` 放行了 `blob:`，是 A-14 CSP 的显式扩展。
+  - 插件在 `loaded` 之后异步抛错/超时仍会禁用整个插件；长期存活的后台定时器没有单独的配额或回收策略。
+- **受影响调用方 / 公共抽象**
+  - `PlotPin.registerExporter/registerImporter/registerObjectType/unregister*` 签名与返回不变，旧调用方零改动；`exportViaPlugin` / `importViaPlugin` 全局函数新增 `sandbox` 分支，旧 `run(ctx)` 仍走原路径。
+  - 新增内部公共抽象：`checkPluginApiVersion` / `checkPluginCapabilities` / `sandboxSource` / `pluginAddObjects` / `invokeSandbox` / `disablePlugin` / `typeOwners`（仅在 `plugins.js` 内复用，不新增全局名）。
+  - `contracts/plugin-api.json` 由 13 键扩到 19 键（新增 `apiVersion` / `capabilities` / `checkPlugin` / `loadPlugin` / `unloadPlugin` / `listPlugins`）；`scripts/check-plugin-api.mjs` 继续双向比对。
+  - `index.html` CSP 增加 `worker-src 'self' blob:`；构建期 CSP 哈希重算逻辑未改。
+
 ## 2026-11-06 · 体积压缩专项：构建期无损压缩（833,855 → 664,325 B）
 
 - **Commit Hash**：本条提交（`perf(build): 构建期无损压缩产物，回收 169,530 B（行为不变）`）。复盘用 `git log --grep="构建期无损压缩产物" -1 --format=%H`。
