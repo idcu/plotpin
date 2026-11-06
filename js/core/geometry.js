@@ -10,6 +10,13 @@ const dist=(a,b)=>__geo.distance(a,b);
 function rotatePoint(p,c,angDeg){ return __geo.rotatePoint(p,c,angDeg); }
 function polygonArea(points){ return __geo.polygonArea(points); }
 function polylineLength(points){ return __geo.polylineLength(points); }
+/** 三点夹角（度），顶点为 points[0]：画布/SVG/DXF 共用唯一实现 */
+function dimensionAngleDeg(points){
+  const v0=points[0],v1=points[1],v2=points[2];
+  const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]),a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
+  const deg=Math.abs((a2-a1)*180/Math.PI);
+  return deg>180?360-deg:deg;
+}
 function pointInPolygon(p,poly){ return __geo.pointInPolygon(p,poly); }
 function distanceToSegment(p,a,b){ return __geo.distanceToSegment(p,a,b); }
 /* -------------------- 对象捕捉 OSNAP（纯数据，屏幕阈值由调用方换算为世界米） -------------------- */

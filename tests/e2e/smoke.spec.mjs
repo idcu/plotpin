@@ -99,3 +99,29 @@ test('导出入口可用：JSON 导出真实下载并可解析', async ({ page }
   expect(parsed.objects[0].kind).toBe('point');
   expect(errors).toEqual([]);
 });
+
+test('导出字段表：CSV/XLSX 表头与行值同源，台账列与公式防护不回退', async ({ page }) => {
+  const errors = await openApp(page);
+  await drawPointAtCanvasCenter(page);
+  await page.evaluate(() => {
+    const o = state.objects[0];
+    o.name = 'P-01';
+    o.props = { model: 'A-1', mountHeight: 3.5, ip: '10.0.0.1', owner: '=SUM(A1)', note: '含,逗号' };
+  });
+  const header = await page.evaluate(() => TABLE_COLUMNS.join(','));
+  const xlsxHeader = await page.evaluate(() => xlsxExportTable()[0].join(','));
+  expect(xlsxHeader).toBe(header);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.selectOption('#exportKind', 'csv');
+  await page.click('#exportBtn');
+  const download = await downloadPromise;
+  const text = readFileSync(await download.path(), 'utf8').replace(/^\ufeff/, '');
+  const lines = text.split('\n');
+  expect(lines[0]).toBe(header);
+  expect(lines.length).toBe(2);
+  expect(lines[1].startsWith('P-01,')).toBe(true);
+  expect(lines[1]).toContain("'=SUM(A1)");
+  expect(lines[1]).toContain('"含,逗号"');
+  expect(errors).toEqual([]);
+});

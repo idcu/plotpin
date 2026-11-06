@@ -2,6 +2,38 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-08 导出/表格统一「字段描述表 + 行渲染器」
+
+- **Commit Hash**：本条提交（`refactor(export): 统一导出字段描述表与行渲染器`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="B-08" -1 --format=%H`。
+- **核心改动点**
+  - 新增 `js/features/io-fields.js`（层 2，插在 `io-table.js` 与 `io-export.js` 之间）：`EXPORT_FIELD_DEFS` 是唯一字段描述表，声明键名、取值函数与 `table/ledger` 标记；`TABLE_COLUMNS` 由 `table:true` 条目派生（27 列表头与顺序原样保留），`buildExportRow(o,floorName)` 是唯一行渲染器，`objectRows` 退化为保留原签名的包装。
+  - 同源抽象：`exportShapeSummary` 统一形状外接盒/角度/形状参数；`exportParamText` 统一 PDF「参数」合成列；`LEDGER_FIELDS` 由字段表 `ledger` 标记派生（`[['型号','model'],['安装高度','mountHeight'],['IP','ip'],['责任人','owner']]`），导出与 `io-table.js` 的表格导入共用同一映射；`xlsxExportTable()` 把 XLSX 表头+行改为纯函数。
+  - 各格式接入：CSV/TSV 仍走 `delimitedText`（`DSV.formatRows` + `formulaGuard` 不变）；XLSX 走 `xlsxExportTable`；PDF 清单的 `PDF_COLS` 保留列宽/列序，值只从 `objectRows()` 行读取，删除格式层 `vals/param` 二次拼装；打印报告 `REPORT_LIST_COLS` 改用同一行的「参数」。
+  - 标注读数同源：`dimensionMeasure(o)` 统一测距链总长/两点距离/面积+周长/夹角，SVG 与 DXF 只保留各自文本模板；夹角 `dimensionAngleDeg(points)` 下沉到 `js/core/geometry.js`，画布 `drawDimension`、SVG、DXF 三处共用。
+  - 盲区 GeoJSON：`BLIND_SPOT_FIELDS`（region/regionId/index）+ `buildBlindSpotGeoJson(cov)` 唯一生成属性与 `coverageSpec`；`exportBlindSpotsGeoJson()` 只负责前置提示与下载。
+  - **不新增运行时依赖、不读取/修改 `camera-*`、未 push。**
+- **golden 对比（改造前后同一固定样本，真实 Chromium）**
+  - 样本：14 类对象（点/摄像头点/矩形/圆/椭圆/扇形/平行四边形/开放折线/闭合折线/测距/距离/面积/角度/文字）+ 矢量场地 + 全部标注开关；对象 id、`updatedAt`、系统时间均固定。
+  - 口径：HEAD 工作树与改造后各跑一次临时 Playwright 采集脚本（不进仓库），对下载文件做 SHA-256；PDF 清单页含 `new Date()` → 冻结时间；GeoJSON 的 `regionId` 来自对象 id → 固定 id；PNG/PDF 光栅在同机同浏览器下确定性可复现。
+  - 结果 **8/8 字节级一致**：CSV 2,227 B (`14aba1fa…`)、TSV 2,227 B (`90fb499e…`)、XLSX 30,762 B (`f44512c6…`)、GeoJSON 249,101 B (`95438fa5…`)、PNG 786,440 B (`52c6f559…`)、PDF 339,954 B (`c0d2be9a…`)、SVG 17,062 B (`571cdf71…`)、DXF 7,249 B (`d6f31bf5…`)。
+  - 不回退项逐项核对：`guardFormula`（责任人 `=SUM(A1)` 输出前导单引号、纯数字豁免）、XLSX 全 `inlineStr`、SITE 图层/DXF 场地实体、SVG 场地节点与标注、照片/二维码（JSON/标签页未改）、楼层汇总规则均无变化。
+- **体积与门禁**
+  - 单文件：**741.3 KB（759,056 B）→ 744.6 KB（762,500 B），+3,444 B（+0.45%）**；≤750 KB（768,000 B）门禁通过，余量 5,500 B。
+  - 增量来源：新增字段表模块约 6.5 KB；删除 `objectRows` 内联分支、PDF `param/vals`、GeoJSON 属性拼装、`angleDimDeg` 后净增 3.4 KB。未达「体积不增加」目标，原因是单一字段表以声明式条目换取去重，条目本身的文本量大于被删分支；仍在上限内。
+  - selftest：1914 → **1944 通过 / 0 失败**（+30 条：字段表列序/台账映射/PDF+报告列同源、7 类形状参数、四种标注读数、XLSX 表头同源、盲区 GeoJSON 属性/闭合/口径）。
+  - e2e：**34 passed / 1 skipped**；新增 `smoke.spec.mjs` 1 例：CSV 表头 == `xlsxExportTable()[0]` == `TABLE_COLUMNS`，台账列 `'=SUM(A1)` 防护与备注逗号引用保持。
+  - `build.mjs` / `--check`、`check.mjs --selftest`、`ci`、`gates`、`discipline` 全绿。
+- **受影响调用方**
+  - 签名/行为不变：`objectRows(objs, floorName)`、`objectRowsAll()`、`delimitedText(delim)`、`exportDelimited`、`exportXlsx`、`exportSVG/PDF/DXF/PNG`、`exportBlindSpotsGeoJson`。
+  - 常量迁移（名称/值/顺序不变）：`TABLE_COLUMNS`、`PDF_COLS`、`REPORT_LIST_COLS` 从 `io-export.js` 移到 `io-fields.js`；`LEDGER_FIELDS` 从 `io-table.js` 移到 `io-fields.js` 并改为派生。
+  - **唯一可观察变化**：打印报告清单「参数」列此前因行对象无该键恒为空白，现填入与 PDF 清单相同的合成值（矩形/圆形/闭合/标注类型）；属于补齐列语义，8 种 golden 不受影响（报告不在 8 种内）。
+- **文档同步**：`docs/engineering.md`（§5.1 体积/哈希/断言/CSP 39=39、B-08 段、§5.2 smoke 描述）、`docs/features.md`（导出字段口径）、`docs/modules.md`（新模块/公共抽象/影响面、脚本数 39）、`README.md`（徽章 1944、路线图、目录注释）、本文件。
+- **遗留风险 / 未统一项**
+  - PNG/PDF 图纸页本身没有表格字段输出，仍由 `drawScene` + `annotationItems` 唯一渲染；本轮统一的是其清单/标注取值，不是光栅管线。
+  - SVG/DXF 的单位文本模板仍各自保留（`㎡` vs `m2`、`°` vs `deg`），只统一数值来源；若强行统一模板会改变既有产物字节，违背本轮不回退要求。
+  - `objectLength/objectArea` 在「长度」「面积」两列仍各调用一次（旧实现即如此），属纯函数重复计算，未在本轮改动以免影响行值顺序/精度。
+  - `areaParamText`（侧栏清单的人类可读形状描述）仍独立于导出「参数」列；两者语义不同（前者含半径/张角细节），未合并。
+
 ## 2026-11-06 · B-06 协作易用性（消息层加固 / 邀请 / 状态 / 冲突）
 
 - **Commit Hash**：本条提交（`feat(collab): 邀请串/连接状态/冲突回滚与消息层加固`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="B-06" -1 --format=%H`。

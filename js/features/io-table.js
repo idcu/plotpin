@@ -57,8 +57,7 @@ function applyRowShape(o,label,v){
   return false;
 }
 function tableNum(v){ const n=Number(String(v??'').trim()); return Number.isFinite(n)&&String(v??'').trim()!==''?n:NaN; }
-/** 设备台账扩展字段（型号/安装高度/IP/责任人）→ o.props，导出与导入共用同一映射 */
-const LEDGER_FIELDS=[['型号','model'],['安装高度','mountHeight'],['IP','ip'],['责任人','owner']];
+/** 设备台账扩展字段（型号/安装高度/IP/责任人）→ o.props：映射唯一定义在 io-fields.js 的字段表（ledger 标记） */
 function applyLedgerCells(o,c){
   LEDGER_FIELDS.forEach(([col,key])=>{
     const raw=c(col);

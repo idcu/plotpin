@@ -94,7 +94,7 @@ code += `\n;globalThis.__api = {
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
   createInitialState, migrateProject, buildProject, countProjectObjects, baseObject,
   importLimitErrors, importLimitMessage,
-  polygonArea, polylineLength, pointInPolygon, distanceToSegment, nearestPointOnSegment,
+  polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
   translateObject, alignObjects, distributeObjects, objectBounds,
@@ -132,7 +132,9 @@ code += `\n;globalThis.__api = {
   xmlEscape, modalBody, safeHTML, sanitizeSiteStyle,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
-  objectRows, objectRowsAll, formatNodeCoords, parseNodeCoords,
+  objectRows, objectRowsAll, buildExportRow, exportShapeSummary, exportParamText, xlsxExportTable,
+  EXPORT_FIELD_DEFS, PDF_COLS, REPORT_LIST_COLS,
+  formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
   outlineOf, objectIndexById, ensureVendor, siteDomainOf,
@@ -151,6 +153,7 @@ code += `\n;globalThis.__api = {
   undo, redo, pushHistory, get history(){ return history; },
   snapshotHistoryState, materializeHistoryState, isHistorySnapshot, historyValueEqual,
   applyLedgerCells, LEDGER_FIELDS,
+  dimensionMeasure, BLIND_SPOT_FIELDS, buildBlindSpotGeoJson,
   csvCell: (v,d)=>csvCell(v,d),
   formulaGuard, delimitedText,
   TABLE_COLUMNS,
@@ -1207,6 +1210,64 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('导出-点设备无闭合列', byCode['P1']['闭合'], '');
   eq('导出-点设备无节点坐标列', byCode['P1']['节点坐标'], '');
   ok('导出-列头含全部新列', ['形状','形状参数','闭合','标注类型','节点坐标'].every(k=>api.TABLE_COLUMNS.includes(k)));
+}
+
+/* 28.3 导出字段表 + 行渲染器单一来源（B-08）：列/台账/参数/读数/盲区属性同源 */
+{
+  const D=api.EXPORT_FIELD_DEFS;
+  eq('字段表-表格列与字段表一致', api.TABLE_COLUMNS.join(','), D.filter(f=>f.table).map(f=>f.key).join(','));
+  eq('字段表-台账映射唯一来源', JSON.stringify(api.LEDGER_FIELDS), JSON.stringify([['型号','model'],['安装高度','mountHeight'],['IP','ip'],['责任人','owner']]));
+  const keys=new Set(D.map(f=>f.key));
+  ok('字段表-PDF列均来自字段表', api.PDF_COLS.every(([k])=>keys.has(k)));
+  ok('字段表-报告列均来自字段表', api.REPORT_LIST_COLS.every(k=>keys.has(k)));
+  eq('字段表-PDF列序保持', api.PDF_COLS.map(([k])=>k).join(','), '编号,名称,对象类型,业务类型,图层,X,Y,参数,长度,面积');
+  eq('字段表-报告列序保持', api.REPORT_LIST_COLS.join(','), '编号,对象类型,业务类型,图层,X,Y,参数');
+
+  const st=api.resetState();
+  const mk=(kind,type,name)=>{ const o=api.baseObject(kind,type,{name}); o.updatedAt='2026-01-01T00:00:00.000Z'; return o; };
+  const rect=mk('rect','rect.area','R1'); api.applyRowShape(rect,'矩形',{x:0,y:0,w:10,h:6,angle:0,params:[]});
+  const circle=mk('rect','rect.area','C1'); api.applyRowShape(circle,'圆形',{x:0,y:0,w:10,h:0,angle:0,params:[]});
+  const sector=mk('rect','rect.area','S1'); api.applyRowShape(sector,'扇形',{x:0,y:0,w:10,h:0,angle:0,params:[30,120]});
+  const para=mk('rect','rect.area','G1'); api.applyRowShape(para,'平行四边形',{x:0,y:0,w:8,h:4,angle:0,params:[30]});
+  const closed=mk('line','line.custom','L1'); Object.assign(closed,{points:[[0,0],[10,0],[10,10],[0,10]],closed:true});
+  const open=mk('line','line.custom','L2'); Object.assign(open,{points:[[0,0],[10,0],[10,10]],closed:false});
+  const ruler=mk('dimension','dimension.distance','D1'); Object.assign(ruler,{subtype:'ruler',points:[[0,0],[3,4],[3,9]]});
+  const distDim=mk('dimension','dimension.distance','D2'); Object.assign(distDim,{subtype:'distance',points:[[0,0],[6,8]]});
+  const areaDim=mk('dimension','dimension.distance','D3'); Object.assign(areaDim,{subtype:'area',points:[[0,0],[10,0],[10,10],[0,10]]});
+  const angDim=mk('dimension','dimension.distance','D4'); Object.assign(angDim,{subtype:'angle',points:[[0,0],[10,0],[0,10]]});
+  st.objects.push(rect,circle,sector,para,closed,open,ruler,distDim,areaDim,angDim);
+  const rows=Object.fromEntries(api.objectRows().map(r=>[r['编号'],r]));
+
+  ok('字段表-行含全部键', D.every(f=>f.key in rows['R1']));
+  eq('字段表-矩形参数', rows['R1']['参数'], '矩形');
+  eq('字段表-圆形参数', rows['C1']['参数'], '圆形');
+  eq('字段表-圆形宽度取外接盒', rows['C1']['宽度'], '10.00');
+  eq('字段表-扇形参数', rows['S1']['参数'], '扇形 30,120');
+  eq('字段表-平行四边形参数', rows['G1']['参数'], '平行四边形 30');
+  eq('字段表-闭合折线参数', rows['L1']['参数'], '闭合');
+  eq('字段表-开放折线参数', rows['L2']['参数'], '');
+  eq('字段表-测距参数', rows['D1']['参数'], ' 测距');
+  eq('字段表-面积标注参数', rows['D3']['参数'], ' 面积');
+
+  eq('字段表-XLSX表头同源', api.xlsxExportTable()[0].join(','), api.TABLE_COLUMNS.join(','));
+  ok('字段表-XLSX单元格均为字符串', api.xlsxExportTable().slice(1).every(r=>r.every(v=>typeof v==='string')));
+
+  approx('字段表-测距读数', api.dimensionMeasure(ruler).length, 10, 1e-9);
+  approx('字段表-两点距离读数', api.dimensionMeasure(distDim).length, 10, 1e-9);
+  approx('字段表-面积读数', api.dimensionMeasure(areaDim).area, 100, 1e-9);
+  approx('字段表-周长读数', api.dimensionMeasure(areaDim).perimeter, 40, 1e-9);
+  approx('字段表-夹角读数', api.dimensionMeasure(angDim).deg, 90, 1e-9);
+
+  const cov={targetCells:4,gridCells:4,spec:{version:2},
+    regions:[{id:'R-01',name:'R-01',minX:0,minY:0,nx:2,ny:2,cell:1,grid:new Uint8Array([1,1,1,0])}]};
+  const fc=api.buildBlindSpotGeoJson(cov);
+  eq('盲区GeoJSON-无盲区返回null', api.buildBlindSpotGeoJson({regions:[]}), null);
+  eq('盲区GeoJSON-面数', fc.features.length, 1);
+  eq('盲区GeoJSON-属性表顺序', Object.keys(fc.features[0].properties).join(','), 'region,regionId,index');
+  eq('盲区GeoJSON-属性值', fc.features[0].properties.regionId, 'R-01');
+  eq('盲区GeoJSON-序号从1开始', fc.features[0].properties.index, 1);
+  ok('盲区GeoJSON-多边形闭合', fc.features[0].geometry.coordinates[0].length===5);
+  eq('盲区GeoJSON-口径版本', fc.coverageSpec.version, 2);
 }
 
 /* 29. 表格规划与应用：折线/测距/形状重建、基点平移、非法行告警 -------------- */

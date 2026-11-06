@@ -60,22 +60,10 @@ function exportBlindSpotsGeoJson(){
   if(!coverageResult||!coverageResult.regions||!coverageResult.regions.length){
     return toast('请先执行「覆盖率分析」','warn');
   }
-  const rects=blindSpotRects(coverageResult);
-  if(!rects.length) return toast('当前没有盲区可导出','warn');
-  const features=rects.map((r,i)=>({
-    type:'Feature',
-    properties:{region:r.regionName,regionId:r.regionId,index:i+1},
-    geometry:{type:'Polygon',coordinates:[r.points.concat([r.points[0]])]}
-  }));
-  /* 导出的报告必须自带口径，避免与历史 v1（随缩放变化）数值混用 */
-  const cells=coverageResult.regions.map(r=>r.cell);
-  const spec=coverageResult.spec||{version:2};
-  const fc={type:'FeatureCollection',
-    coverageSpec:{version:spec.version,targetCells:coverageResult.targetCells,gridCells:coverageResult.gridCells,
-      cellMinM:cells.length?Math.min(...cells):0,cellMaxM:cells.length?Math.max(...cells):0,zoomIndependent:true},
-    features};
+  const fc=buildBlindSpotGeoJson(coverageResult);
+  if(!fc) return toast('当前没有盲区可导出','warn');
   downloadBlob(new Blob([JSON.stringify(fc,null,2)],{type:'application/geo+json'}),safeName()+'-盲区.geojson');
-  toast('盲区多边形已导出：'+features.length+' 个面（合计 '+fmt(blindSpotArea(coverageResult))+' ㎡，口径 v'+spec.version+'）','success');
+  toast('盲区多边形已导出：'+fc.features.length+' 个面（合计 '+fmt(blindSpotArea(coverageResult))+' ㎡，口径 v'+fc.coverageSpec.version+'）','success');
 }
 async function exportJSON(){
   state.meta.updatedAt=nowISO();
@@ -111,34 +99,10 @@ async function exportJSON(){
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
   toast('JSON 工程已导出（含底图与设备照片）','success');
 }
-const TABLE_COLUMNS=['编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','X','Y','角度','宽度','高度','形状','形状参数','闭合','标注类型','节点坐标','节点数','长度','面积','显示','锁定','备注','更新时间','楼层'];
+/** 行渲染器与列定义在 io-fields.js（字段描述表唯一源）；此包装保留既有签名 */
 function objectRows(objs=state.objects,floorName){
   const fname=floorName===undefined?currentFloorName():floorName;
-  return objs.map(o=>{
-    const t=getType(o.typeId),l=layerOf(o);
-    /* 非矩形区域：宽/高列填外接盒尺寸（圆/扇形=2r，椭圆=2rx×2ry），形状列保留精确类型，面积仍取精确值 */
-    let w='',h='',ang=o.angle||0,shape='',shapeParam='';
-    if(o.kind==='rect'){
-      const tt=areaShapeType(o), sh=o.shape||{};
-      shape=AREA_SHAPE_LABELS[tt]||'';
-      if(tt==='rect'){ w=o.width; h=o.height; }
-      else if(tt==='parallelogram'){ w=o.width; h=o.height; shapeParam=String(Math.round(parallelogramSkew(sh))); }
-      else if(tt==='circle'){ w=h=2*sh.r; }
-      else if(tt==='ellipse'){ w=2*sh.rx; h=2*sh.ry; }
-      else { w=h=2*sh.r; shapeParam=Math.round(Number(sh.a0)||0)+','+Math.round(Number(sh.a1)||0); }
-    }
-    return {
-      编号:o.name,名称:o.text||'',对象类型:kindName(o.kind),业务类型:t.name,图层:l.name,
-      型号:o.props.model||'',安装高度:o.props.mountHeight!==undefined?o.props.mountHeight:'',IP:o.props.ip||'',责任人:o.props.owner||'',
-      X:fmt(o.x),Y:fmt(o.y),角度:ang,宽度:w?fmt(w):'',高度:h?fmt(h):'',
-      形状:shape,'形状参数':shapeParam,
-      闭合:o.kind==='line'?(o.closed?'是':'否'):'',
-      标注类型:o.kind==='dimension'?(DIM_SUB_LABELS[o.subtype]||o.subtype||''):'',
-      节点坐标:(o.kind==='line'||o.kind==='dimension')&&o.points?.length?formatNodeCoords(o.points):'',
-      节点数:o.points?.length||0,长度:objectLength(o)?fmt(objectLength(o)):'',面积:objectArea(o)?fmt(objectArea(o)):'',
-      显示:o.visible?'是':'否',锁定:o.locked?'是':'否',备注:o.props.note||'',更新时间:o.updatedAt,楼层:fname
-    };
-  });
+  return objs.map(o=>buildExportRow(o,fname));
 }
 /** 全楼层行（当前层对象取 state.objects，其余层取楼层条目） */
 function objectRowsAll(){
@@ -170,8 +134,7 @@ function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[
 /** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返）。
  * 所有单元格写 `t="inlineStr"`（文本），即使值以 =/@ 开头也不会成为公式，与 CSV 防护互补。 */
 function exportXlsx(){
-  const cols=TABLE_COLUMNS;
-  const table=[cols,...objectRowsAll().map(r=>cols.map(c=>String(r[c]??'')))];
+  const table=xlsxExportTable();
   const buf=ensureVendor('Xlsx').build(table, '图纸标注');
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
   toast('XLSX 已导出（可再次导入更新对象属性）','success');
@@ -364,26 +327,25 @@ function buildSceneSvg(){
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       const dash=o.subtype==='ruler'?' stroke-dasharray="7,4"':'';
       const dcolor=o.subtype==='ruler'?'#0891b2':'#111827';
+      const dm=dimensionMeasure(o);   /* 数值唯一源；文本模板仍按 SVG 既有格式 */
       shapes.push(`<polyline points="${pts}" fill="none" stroke="${dcolor}" stroke-width="1.8"${dash}/>`);
       if(o.subtype==='ruler'){
         o.points.forEach(p=>shapes.push(`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="none" stroke="#0891b2" stroke-width="1.5"/>`));
         const ep=o.points[o.points.length-1];
-        markers.push(`<text x="${X(ep[0])+6}" y="${Y(ep[1])-6}" text-anchor="start" font-size="12" fill="#0e7490">Σ ${fmt(objectLength(o))} m</text>`);
+        markers.push(`<text x="${X(ep[0])+6}" y="${Y(ep[1])-6}" text-anchor="start" font-size="12" fill="#0e7490">Σ ${fmt(dm.length)} m</text>`);
       }
-      if(o.subtype==='distance') markers.push(`<text x="${(X(o.points[0][0])+X(o.points[1][0]))/2}" y="${(Y(o.points[0][1])+Y(o.points[1][1]))/2-8}" text-anchor="middle" font-size="12">${fmt(dist(o.points[0],o.points[1]))} m</text>`);
+      if(o.subtype==='distance') markers.push(`<text x="${(X(o.points[0][0])+X(o.points[1][0]))/2}" y="${(Y(o.points[0][1])+Y(o.points[1][1]))/2-8}" text-anchor="middle" font-size="12">${fmt(dm.length)} m</text>`);
       if(o.subtype==='area'&&o.points.length>=3){
         /* 与画布 drawDimension 的 area 分支一致：中心附近面积+周长 */
         const cx=o.points.reduce((s,p)=>s+X(p[0]),0)/o.points.length+8;
         const cy=o.points.reduce((s,p)=>s+Y(p[1]),0)/o.points.length;
-        markers.push(`<text x="${cx}" y="${cy}" font-size="12">面积 ${fmt(polygonArea(o.points))} ㎡</text>`);
-        markers.push(`<text x="${cx}" y="${cy+16}" font-size="12">周长 ${fmt(polylineLength(o.points.concat([o.points[0]])))} m</text>`);
+        markers.push(`<text x="${cx}" y="${cy}" font-size="12">面积 ${fmt(dm.area)} ㎡</text>`);
+        markers.push(`<text x="${cx}" y="${cy+16}" font-size="12">周长 ${fmt(dm.perimeter)} m</text>`);
       }
       if(o.subtype==='angle'&&o.points.length>=3){
         /* 与画布一致：按三点算夹角，标在顶点旁 */
-        const v0=o.points[0], v1=o.points[1], v2=o.points[2];
-        const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]), a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
-        let deg=Math.abs((a2-a1)*180/Math.PI); if(deg>180) deg=360-deg;
-        markers.push(`<text x="${X(v0[0])+30}" y="${Y(v0[1])-8}" font-size="12">${fmt(deg)}°</text>`);
+        const v0=o.points[0];
+        markers.push(`<text x="${X(v0[0])+30}" y="${Y(v0[1])-8}" font-size="12">${fmt(dm.deg)}°</text>`);
       }
     }
   });
@@ -397,11 +359,6 @@ function buildSceneSvg(){
 }
 
 /* -------------------- DXF 导出（CAD 互通，坐标输出毫米） -------------------- */
-function angleDimDeg(o){
-  const v0=o.points[0],v1=o.points[1],v2=o.points[2];
-  const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]),a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
-  let deg=Math.abs((a2-a1)*180/Math.PI); return deg>180?360-deg:deg;
-}
 /** 场地 DXF 实体：独立 SITE 图层闭合 LWPOLYLINE；隐藏场地不导出 */
 function siteDxfEntities(){
   const site=state.site;
@@ -430,11 +387,11 @@ function dxfEntitiesForExport(){
       else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:true});
     }else if(o.kind==='dimension'&&o.points.length>=2){
       entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:outlineOf(o),closed:o.subtype==='area'});
-      const ep=o.points[o.points.length-1];
-      const label=o.subtype==='ruler'?'Σ '+fmt(objectLength(o))+' m'
-        :o.subtype==='distance'?fmt(dist(o.points[0],o.points[1]))+' m'
-        :o.subtype==='area'?fmt(polygonArea(o.points))+' m2'
-        :fmt(angleDimDeg(o))+' deg';
+      const ep=o.points[o.points.length-1], dm=dimensionMeasure(o);
+      const label=o.subtype==='ruler'?'Σ '+fmt(dm.length)+' m'
+        :o.subtype==='distance'?fmt(dm.length)+' m'
+        :o.subtype==='area'?fmt(dm.area)+' m2'
+        :fmt(dm.deg)+' deg';
       entities.push({type:'TEXT',layer,color:'#111827',x:ep[0],y:ep[1],text:label,height:.7});
     }else if(o.kind==='text'){
       entities.push({type:'TEXT',layer,color:o.style.color||'#111827',x:o.x,y:o.y,text:o.text||'文字',height:o.height||1});
@@ -465,7 +422,6 @@ async function renderPdfDrawingPage(floorName){
   cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription(),margin,H-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
-const PDF_COLS=[['编号',110],['名称',120],['对象类型',100],['业务类型',130],['图层',110],['X',90],['Y',90],['参数',190],['长度',90],['面积',100]];
 async function renderPdfListPages(floorName){
   const W=1240,H=1748, margin=48, rowH=30, headH=40;
   const rows=objectRows(), pages=[];
@@ -493,9 +449,8 @@ async function renderPdfListPages(floorName){
       g.strokeStyle='#e2e8f0'; g.beginPath(); g.moveTo(margin,y+rowH); g.lineTo(W-margin,y+rowH); g.stroke();
       g.fillStyle='#1f2937';
       x=margin+8;
-      const param=r['形状']!==''&&r['形状']!=='矩形'?r['形状']+(r['形状参数']?' '+r['形状参数']:''):(r['形状']==='矩形'?'矩形':(r['闭合']==='是'?'闭合':'')+(r['标注类型']?' '+r['标注类型']:''));
-      const vals=[r['编号'],r['名称'],L(r['对象类型']),r['业务类型'],r['图层'],r['X'],r['Y'],param,r['长度'],r['面积']];
-      PDF_COLS.forEach(([name,w],i)=>{ let s=String(vals[i]??''); if(g.measureText(s).width>w-14) s=s.slice(0,10)+'…'; g.fillText(s,x,y+20); x+=w; });
+      /* 列布局来自字段表投影；值一律取 objectRows() 的行，不在格式层二次拼装 */
+      PDF_COLS.forEach(([name,w])=>{ let s=String(name==='对象类型'?L(r[name]):(r[name]??'')); if(g.measureText(s).width>w-14) s=s.slice(0,10)+'…'; g.fillText(s,x,y+20); x+=w; });
       y+=rowH;
     });
     pages.push({width:W,height:H,b64:await canvasToJpegBase64(c,.9)});
@@ -528,8 +483,7 @@ async function exportPDF(){
 }
 
 /* -------------------- 打印 / PDF 报告 -------------------- */
-const REPORT_LIST_COLS=['编号','对象类型','业务类型','图层','X','Y','参数'];
-/** 对象清单页（每层独立分页，超 180 行截断并提示） */
+/** 对象清单页（每层独立分页，超 180 行截断并提示）；列布局取自 io-fields.js */
 function reportListPageHtml(rows,title){
   return `<div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
       <h2>${esc(title)}</h2>

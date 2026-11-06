@@ -826,7 +826,7 @@ function drawDimension(c,o,toS){
     const v0=o.points[0], v1=o.points[1], v2=o.points[2];
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke();
     const a1=Math.atan2(v1[1]-v0[1],v1[0]-v0[0]), a2=Math.atan2(v2[1]-v0[1],v2[0]-v0[0]);
-    let deg=Math.abs((a2-a1)*180/Math.PI); if(deg>180) deg=360-deg;
+    const deg=dimensionAngleDeg(o.points);
     const r=24; c.beginPath(); c.arc(ps[0][0],ps[0][1],r,-a1,-a2,true); c.stroke();
     c.fillText(fmt(deg)+'°',ps[0][0]+30,ps[0][1]-8);
   }

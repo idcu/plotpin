@@ -126,10 +126,10 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 750 KB | 741.3 KB（759,056 B） | 留约 1.2% 余量 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `bcd743d4…` | 从源重建、二次构建确定性一致 |
-| CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 37 = 37 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 1914 | 只增不减 |
+| 单文件体积 | ≤ 750 KB | 744.6 KB（762,500 B） | 留约 0.72% 余量（B-08 新增字段表模块 +3,444 B） |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `88c92ea8…` | 从源重建、二次构建确定性一致 |
+| CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 39 = 39 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
+| 断言数 | ≥ 1870 且 0 失败 | 1944 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在
@@ -196,6 +196,21 @@ B-06 新增 `collab.spec.mjs` 5 个用例；同机双标签 WebRTC 建连 `open=
 5 分钟离线浸泡实测通过（5.1min 用例，重连后本地新增对象对端可见）；双设备真机 WebRTC
 **未验证**（本轮只有同一台机器上的两个标签页）。详见 CHANGELOG.internal.md。
 
+**导出字段表单一来源（B-08，2026-11）**：新增 `js/features/io-fields.js`。`EXPORT_FIELD_DEFS` 是
+CSV/TSV/XLSX/PDF 清单/打印报告的唯一字段来源：`TABLE_COLUMNS` 由 `table:true` 条目派生，
+`buildExportRow` 是唯一行渲染器，`exportShapeSummary` 统一形状外接盒与形状参数，
+`exportParamText` 统一「参数」合成列，`LEDGER_FIELDS` 由字段表 `ledger` 标记派生并与表格导入共用，
+`xlsxExportTable` 为纯函数。SVG/DXF 标注读数统一走 `dimensionMeasure`，夹角由
+`dimensionAngleDeg`（`js/core/geometry.js`）供画布/SVG/DXF 三处共用；盲区 GeoJSON 属性由
+`BLIND_SPOT_FIELDS` + `buildBlindSpotGeoJson` 唯一生成，导出函数只负责提示与下载。
+验证口径：固定工程样本（14 类对象 + 场地 + 四种标注 + 形状族）在 HEAD 工作树与改造后的真实 Chromium
+分别导出 8 种产物，**8/8 字节级 SHA-256 一致**：CSV 2,227 B、TSV 2,227 B、XLSX 30,762 B、
+GeoJSON 249,101 B、PNG 786,440 B、PDF 339,954 B、SVG 17,062 B、DXF 7,249 B。PDF 清单页标题含
+`new Date()`，采集时冻结时间；GeoJSON 的 `regionId` 来自对象 id，采集时固定 id；其余无时间/随机量。
+单文件体积 **741.3 KB → 744.6 KB（759,056 → 762,500 B，+3,444 B / +0.45%）**：新增字段表模块约 6.5 KB，
+删除各格式重复拼装（`objectRows` 内联分支、PDF `param`、GeoJSON 属性、`angleDimDeg`）后净增 3.4 KB；
+≤750 KB 门禁仍通过（余量 5,500 B）。
+
 **门禁牙齿（`npm run gates`）**：上面这些判据本身也会假绿（只打印不比对、缺文件退 0、
 模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 5 种破坏——
 P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败——
@@ -208,7 +223,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 
 | 文件 | 守什么 |
 |---|---|
-| `smoke.spec.mjs` | 页面加载无脚本错误 / 入口无远程引用 / CSP 声明；点工具落点与选择命中；JSON 导出真实下载可解析 |
+| `smoke.spec.mjs` | 页面加载无脚本错误 / 入口无远程引用 / CSP 声明；点工具落点与选择命中；JSON 导出真实下载可解析；CSV/XLSX 表头与行值来自同一字段表，台账列与公式防护不回退 |
 | `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删）；非法 JSON 导入失败后现场不变；跨楼层照片导出/导入不丢 |
 | `csp.spec.mjs` | 4 条注入路径（导入 JSON / 旧存档 / 插件注册 / 类型列表渲染）在浏览器中确实无法执行 JS |
 | `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层、切换楼层后刷新与操作后状态一致 |
