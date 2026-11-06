@@ -51,7 +51,8 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic 
 | `pickScreenHandle` | `js/core/geometry.js`（屏幕阈值唯一实现） | `render.js` 对象手柄命中、`interaction.js` 场地手柄命中（半径 9px 同源） |
 | `siteLayerOf / siteIsVisible / siteIsLocked` | `js/core/model.js`（场地与业务对象共用图层可见/锁定语义） | 视口取景、渲染、交互守卫、属性面板 |
 | `renderNodeEditor(o, opts) / bindNodeEditorEvents(box, spec) / layerOptionsHTML(id)` | `js/features/props.js` | 折线/闭合区域节点编辑与场地多边形顶点编辑共用同一套 DOM 与事件契约 |
-| `calibPoints / calibSelection / calibUndoStack` 及 `calibHitAt / calibPushUndo / calibUndo` | `js/core/model.js`（状态） / `js/core/interaction.js`（控制点编辑） | 比例尺与仿射校准：拖拽/增删/撤销只改临时控制点，`Enter`/✓ 提交时才 `solveImageAffine + migrateObjectsByAffine` |
+| `calibPoints / calibSelection / calibUndoStack` 及 `calibHitAt / calibPushUndo / calibUndo` | `js/core/model.js`（状态） / `js/core/interaction.js`（控制点编辑） | 比例尺与仿射校准：拖拽/增删/撤销只改临时控制点，`Enter`/✓ 提交时才 `applyWorldTransform`（内部复用 `solveImageAffine` + `migrateObjectsByAffine`） |
+| `applyWorldTransform(M, opts) / siteShapeByAffine(shape, M) / scaleWorldAround(center, factor)` | `js/core/geometry.js`（世界变换唯一入口；对象、底图仿射/米每像素一次迁移，场地默认不动、可 `{site:true}` 显式迁移；`scaleWorldAround` 为兼容旧签名的包装） | `interaction.js` 的比例尺/仿射校准提交；任何「整体缩放/纠偏」不得再直接遍历对象，必须走该入口 |
 | `imageHandleList / imageHandleDragTo / affTranslate / affRotateAbout / affScaleAbout / affShearX / siteCornerPoints` | `js/core/geometry.js`（图片整体变换唯一实现） | `render.js` 手柄绘制、`interaction.js` 拖拽、`selftest.mjs` 变换断言 |
 | `collectSnapCandidates` 内的场地角点追加 | `js/core/geometry.js` | 场地不在 objects，单独追加折点→端点 / 圆心→center；图层隐藏时不参与 |
 | `applyVectorSite / siteDxfEntities` | `js/features/io-import.js` / `js/features/io-export.js` | 仅功能域内部 |

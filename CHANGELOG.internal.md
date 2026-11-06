@@ -2,6 +2,31 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-12：世界变换统一入口 applyWorldTransform
+
+- **Commit Hash**：本条提交（`fix(calib): 比例尺/仿射统一走 applyWorldTransform，底图仿射同步迁移`）。复盘用 `git log --grep="世界变换统一入口" -1 --format=%H`。
+- **核心改动点**
+  - `js/core/geometry.js` 新增 `applyWorldTransform(M, opts)`：对象迁移复用 `migrateObjectsByAffine`（坐标/角度/设备物理尺寸 `phys`/文字字高/线宽/圆·椭圆·扇形参数）；图片底图有 `transform` 时左乘 `M`（或 `opts.bgTransform` 直接落新仿射），无 `transform` 时只按面积因子缩放 `metersPerPixel`；迁移后按新仿射重算等效 m/p。退化/非法变换返回 `{ok:false}` 且不动任何状态。
+  - 新增纯函数 `siteShapeByAffine(shape,M)`：场地轴对齐时保留类型并精确缩放（平行四边形的倾角按 tan·sx/sy 重算），含旋转/切变时矩形/平行四边形转多边形、圆升级椭圆。`applyWorldTransform` 的 `opts.site` **默认关闭**，沿用「场地优先校准」语义（场地是真值参考），需要整体换坐标系时显式开启。
+  - `js/core/interaction.js`：`finishCalibration` 改调 `applyWorldTransform([factor,0,0,0,factor,0])`（此前只改 m/p + 手写对象缩放，漏 `phys`/文字字高，且已有 `transform` 时底图不跟随）；`finishAffine` 改调 `applyWorldTransform(M,{bgTransform:tNew})`；`scaleWorldAround(center,factor)` 保留旧签名，实现为统一入口的包装。
+  - 文档：`docs/features.md`、`docs/engineering.md`（B-12 段 + e2e 表 + 体积/SHA/断言数表）、`docs/modules.md`、`README.md`、本文件。
+- **实测验证数据**
+  - selftest **2105 → 2133 通过 / 0 失败**（+28）：摘要、对象坐标/物理尺寸、场地 opt-in 与默认不动、底图 transform 复合与 m/p、无 transform 仅缩放 m/p、退化拒绝、场地圆→椭圆/旋转矩形→多边形、旧签名等价。
+  - e2e `world-transform.spec.mjs` **2 passed（2.9s）**；全量 e2e **43 passed / 1 skipped（47.3s）**。
+  - 底图不变量：2× 世界缩放后，对象与「同一图像像素」的屏幕偏差 < 0.5 px；`metersPerPixel` 0.05→0.1，`transform.a` 0.05→0.1（既有仿射被左乘）；场地保持 100×70（默认不迁移）。
+  - 体积 **796,031 → 800,804 B（+4,773 B / +0.60%）**；gzip **260,906 → 262,303 B（+1,397 B）**；820 KB 门禁余量 **38,876 B**；SHA256 `3dd0d50d02868ecdcabf50538fb05bdef7b0a0481e982a0f5345bacbf8fb547c`。
+- **未验证项**
+  - 圆/椭圆/扇形在含切变的一般仿射下按两轴长度近似（切变无法用椭圆参数精确表达，中心与外包框正确，边界有近似误差）。
+  - 真实 CAD 现场「比例尺↔仿射」多次交替校准无样本，仅合成状态与浏览器内状态验证。
+  - 多楼层同时校准未做：校准只作用于当前楼层（与既有行为一致），未验证跨楼层坐标系共享场景。
+- **遗留 TODO / 风险**
+  - `applyWorldTransform` 的场地 opt-in 目前没有 UI 入口（仅供内部/未来换坐标系使用）；若后续需要「整体平移全部场地」需补 UI 与确认文案。
+  - 切变场景若需精确场地轮廓，可改为对场地边界采样后统一转多边形（当前仅矩形/平行四边形已转）。
+- **受影响调用方 / 公共抽象**
+  - 新增全局函数：`applyWorldTransform`、`siteShapeByAffine`；`scaleWorldAround` 改为兼容包装（调用方仍可用）。
+  - `finishCalibration` / `finishAffine` 的最终落盘行为扩展为同步迁移底图仿射；外部无其它调用方。
+  - 未新增运行时依赖，`ngm.vendor` 未修改；无数据结构变更（比例尺路径仅在底图已有 `transform` 时左乘改写，原本为 `null` 的保持 `null`）。
+
 ## 2026-11-06 · B-02：DXF 预检 / 单位确认 / 双落点 + DWG 兼容入口
 
 - **Commit Hash**：本条提交（`feat(dxf): 导入预检、单位确认与只读参考层；DWG 入口识别`）。复盘用 `git log --grep="导入预检、单位确认与只读参考层" -1 --format=%H`。

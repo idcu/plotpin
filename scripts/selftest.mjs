@@ -164,6 +164,7 @@ code += `\n;globalThis.__api = {
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform, imageHandleList, imageHandleDragTo,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
+  applyWorldTransform, siteShapeByAffine, scaleWorldAround,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s,
   siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
@@ -2171,6 +2172,66 @@ asyncSuites.push((async()=>{
   approx('迁移-椭圆ry', objs2[0].shape.ry, 9, 1e-9);
   approx('迁移-非等比矩形宽', objs2[1].width, 8, 1e-9);
   approx('迁移-非等比矩形高', objs2[1].height, 6, 1e-9);
+
+  /* 39.8 B-12：applyWorldTransform 统一迁移对象 + 场地 + 底图（含已有仿射 transform） */
+  {
+    const st=api.resetState();
+    st.objects.push(api.baseObject('point','point.marker',{x:10,y:10,angle:0,phys:2}));
+    st.site={kind:'rect',shape:{type:'rect',x:-5,y:-2,w:100,h:70}};
+    st.background={kind:'image',width:800,height:600,metersPerPixel:1,calibrated:true,
+      transform:{a:1,b:0,c:0,d:0,e:-1,f:600}};
+    const r=api.applyWorldTransform([2,0,0,0,2,0],{site:true});
+    eq('B-12-返回摘要', {ok:r.ok,objects:r.objects,site:r.site,background:r.background}, {ok:true,objects:1,site:true,background:true});
+    eq('B-12-对象坐标×2', [st.objects[0].x,st.objects[0].y], [20,20]);
+    approx('B-12-设备物理尺寸×2', st.objects[0].phys, 4, 1e-9);
+    eq('B-12-场地基点×2', [st.site.shape.x,st.site.shape.y], [-10,-4]);
+    approx('B-12-场地宽×2', st.site.shape.w, 200, 1e-9);
+    approx('B-12-场地高×2', st.site.shape.h, 140, 1e-9);
+    eq('B-12-场地类型保持', st.site.kind, 'rect');
+    /* 底图：S∘T，且 m/p 与显式 transform 的等效比例一致 */
+    approx('B-12-底图 transform a', st.background.transform.a, 2, 1e-9);
+    approx('B-12-底图 transform e', st.background.transform.e, -2, 1e-9);
+    approx('B-12-底图 transform f', st.background.transform.f, 1200, 1e-9);
+    approx('B-12-底图 m/p=等效比例', st.background.metersPerPixel, 2, 1e-9);
+    /* 默认遵守「场地优先校准」：场地是真值参考，世界变换默认不迁移场地 */
+    const stSite=api.resetState();
+    stSite.site={kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:70}};
+    const rSite=api.applyWorldTransform([2,0,0,0,2,0]);
+    eq('B-12-默认摘要 site=false', rSite.site, false);
+    eq('B-12-默认不迁移场地宽', stSite.site.shape.w, 100);
+    eq('B-12-默认不迁移场地类型', stSite.site.kind, 'rect');
+    /* 无 transform 的底图只按面积因子缩放 m/p，保持默认映射 */
+    const st2=api.resetState();
+    st2.background={kind:'image',width:800,height:600,metersPerPixel:0.1,transform:null};
+    api.applyWorldTransform([3,0,0,0,3,0]);
+    approx('B-12-无 transform 仅缩放 m/p', st2.background.metersPerPixel, 0.3, 1e-9);
+    eq('B-12-无 transform 不写 transform', st2.background.transform, null);
+    /* 非法/退化变换：不改动任何状态 */
+    const st3=api.resetState();
+    st3.objects.push(api.baseObject('point','point.marker',{x:3,y:4,angle:0,phys:2}));
+    const bad=api.applyWorldTransform([0,0,0,0,0,0]);
+    eq('B-12-退化变换 ok=false', bad.ok, false);
+    eq('B-12-退化变换不改坐标', [st3.objects[0].x,st3.objects[0].y], [3,4]);
+    /* 场地纯函数：轴对齐圆→圆、非等比圆→椭圆、旋转矩形→多边形轮廓 */
+    approx('B-12-场地等比圆半径×2', api.siteShapeByAffine({type:'circle',cx:10,cy:5,r:3},[2,0,0,0,2,0]).r, 6, 1e-9);
+    { const e=api.siteShapeByAffine({type:'circle',cx:10,cy:5,r:3},[2,0,0,0,3,0]);
+      eq('B-12-场地非等比圆→椭圆', e.type, 'ellipse');
+      eq('B-12-场地椭圆中心', [e.cx,e.cy], [20,15]);
+      approx('B-12-场地椭圆 rx', e.rx, 6, 1e-9);
+      approx('B-12-场地椭圆 ry', e.ry, 9, 1e-9); }
+    { const p=api.siteShapeByAffine({type:'rect',x:0,y:0,w:10,h:5},[0,1,0,-1,0,0]);
+      eq('B-12-旋转矩形转多边形', p.type, 'polygon');
+      eq('B-12-旋转矩形顶点映射', p.points[0], [0,0]);
+      eq('B-12-旋转矩形第二顶点', p.points[1].map(n=>Math.round(n)), [0,-10]); }
+    /* 旧签名 scaleWorldAround 与统一入口结果一致 */
+    const a1=api.baseObject('point','point.marker',{x:6,y:6,angle:0,phys:1});
+    const a2=api.baseObject('point','point.marker',{x:6,y:6,angle:0,phys:1});
+    const st4=api.resetState(); st4.objects.push(a1);
+    api.scaleWorldAround([5,5],2);
+    approx('B-12-旧签名围绕中心缩放', a1.x, 7, 1e-9);
+    api.migrateObjectsByAffine([a2],[2,0,-5,0,2,-5]);
+    approx('B-12-旧签名等价于统一仿射', a2.x, 7, 1e-9);
+  }
 }
 
 /* 40. 矢量场地标注：边界折点 / 几何中心 / 面积周长（三开关默认值与旧档迁移） -------- */

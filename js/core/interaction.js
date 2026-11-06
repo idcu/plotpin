@@ -880,25 +880,16 @@ async function finishCalibration(){
   const factor=Number(value)/old;
   /* 米/像素改变后，世界坐标(0,0) 仍对应图片左上角，已有对象必须围绕世界原点同比缩放，
      才能保持其在底图上的像素位置不变（围绕校准点缩放会让点位相对底图漂移，见评估报告 5.1）。
-     校准两点间的新世界距离 = 旧距离×factor = 输入值，校准语义同时成立。 */
-  state.background.metersPerPixel*=factor; state.background.calibrated=true;
-  scaleWorldAround([0,0],factor);
+     校准两点间的新世界距离 = 旧距离×factor = 输入值，校准语义同时成立。
+     B-12：统一走 applyWorldTransform，对象/场地/底图（含已有仿射 transform）一起迁移，避免只改其一时错位。 */
+  state.background.calibrated=true;
+  applyWorldTransform([factor,0,0,0,factor,0]);
   calibPoints=[]; fitView(); commitChange(L('比例尺已校准')); setTool('select');
 }
+/** 兼容旧签名：围绕 center 等比缩放（B-12 起转为 applyWorldTransform 的包装，场地与底图同步迁移） */
 function scaleWorldAround(center,factor){
-  const mapP=p=>[center[0]+(p[0]-center[0])*factor,center[1]+(p[1]-center[1])*factor];
-  state.objects.forEach(o=>{
-    if(o.points&&o.points.length) o.points=o.points.map(mapP);
-    o.x=center[0]+(o.x-center[0])*factor; o.y=center[1]+(o.y-center[1])*factor;
-    o.width*=factor; o.height*=factor;
-    if(o.shape){
-      if(Number.isFinite(Number(o.shape.r))) o.shape.r*=factor;
-      if(Number.isFinite(Number(o.shape.rx))) o.shape.rx*=factor;
-      if(Number.isFinite(Number(o.shape.ry))) o.shape.ry*=factor;
-    }
-    if(o.style?.strokeWidth!==undefined) o.style.strokeWidth=Number(o.style.strokeWidth)*factor;
-    syncFirstPoint(o);
-  });
+  const c=center||[0,0], k=Number(factor);
+  return applyWorldTransform([k,0,c[0]*(1-k),0,k,c[1]*(1-k)]);
 }
 
 /* ==================== 多点仿射校准（旋转 / 不等比缩放 / 纠偏） ==================== */
@@ -927,13 +918,11 @@ async function finishAffine(){
   try{ sol=solveImageAffine(affinePairs); }catch(err){ toast(err.message||'校准点退化（共线/重合），无法求解','error'); return; }
   pushHistory();
   const tNew=sol.T, tOld=imageTransformOf(bg);
-  /* M = 新(像素→世界) ∘ 旧(世界→像素)：把既有对象从旧世界坐标搬到新世界坐标 */
+  /* M = 新(像素→世界) ∘ 旧(世界→像素)：把既有对象/场地从旧世界坐标搬到新世界坐标，
+     底图直接落新 transform（B-12 统一入口，避免只迁移对象导致场地/底图错位） */
   const M=affMul([tNew.a,tNew.b,tNew.c,tNew.d,tNew.e,tNew.f], affInv([tOld.a,tOld.b,tOld.c,tOld.d,tOld.e,tOld.f]));
-  migrateObjectsByAffine(state.objects,M);
-  bg.transform=tNew;
+  applyWorldTransform(M,{bgTransform:tNew});
   bg.calibrated=true;
-  const nom=Math.sqrt(Math.abs(tNew.a*tNew.e-tNew.b*tNew.d));
-  if(nom>0) bg.metersPerPixel=nom;   /* 等效米/像素（供描述显示；真实映射以 transform 为准） */
   affinePairs=[]; fitView();
   commitChange('已完成仿射校准');
   setTool('select');
