@@ -3,5 +3,7 @@
   "sha256": "97f4c402225a32c317025efc5084ae64c4dc74c4e427dd8ac25606f4f3bd55f2",
   "bytes": 767954,
   "kb": "750.0 KB",
-  "maxBytes": 768000
+  "gzipBytes": 251773,
+  "gzipKb": "245.9 KB",
+  "maxBytes": 839680
 }

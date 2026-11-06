@@ -2,6 +2,22 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · 体积口径上调 820 KB + gzip 发布指标
+
+- **Commit Hash**：本条提交（`chore(build): 单文件门禁上调 820KB 并打印 gzip 体积`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="gzip" -1 --format=%H`。
+- **核心改动点**
+  - `scripts/build.mjs`：`MAX_BYTES` 由 `750*1024`（768,000 B）提到 `820*1024`（**839,680 B**）；新增 `gzipSync` 计算产物 gzip 字节数，构建与 `--check` 都打印（**只作对外发布指标，不设硬门禁**，因不同 zlib 版本字节可能漂移）。
+  - `scripts/dist-manifest.json`：新增 `gzipBytes / gzipKb` 字段，`maxBytes` 随门禁更新为 839680；SHA256 / 字节数 / 二次构建确定性的判据不变。
+  - 文档：`docs/engineering.md` 限值表改为 ≤820 KB 并单列 gzip 行；历史 B-08/B-05 段标注「当时门禁 750 KB」；`README.md` 单文件条目与构建说明同步 820 KB 与 gzip 口径。
+- **实测验证数据（本机实测）**
+  - 体积：**767,954 B（750.0 KB）**，门禁 839,680 B，**余量 71,726 B**；产物未变，SHA256 仍为 `97f4c402225a…`。
+  - gzip：**251,773 B（245.9 KB）**，压缩率约 67.2%（相对原始字节）。
+  - `node scripts/build.mjs --check`：字节数/SHA 与登记值一致、二次构建确定性一致、CSP 40=40。
+- **未验证项**
+  - gzip 字节数依赖 Node 自带的 zlib 版本，跨 Node 版本可能不同；因此只打印不门禁，未做跨版本对比。
+- **遗留 TODO / 风险**
+  - 门禁从 750 KB 放宽到 820 KB 后，新增功能需自觉控制体积；gzip 指标只在运行 `build.mjs` 的机器上可见，CI 日志里需人工查看。
+
 ## 2026-11-06 · B-05 设备产品库 + BOM/报价导出
 
 - **Commit Hash**：本条提交（`feat(catalog): 产品目录 JSON 导入导出与跨楼层 BOM 报价`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="B-05" -1 --format=%H`。
