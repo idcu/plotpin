@@ -146,8 +146,8 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 （只扫 `current` + `proj:*`）隔离；每个工程最多保留 **20 条 / 16 MB**，超出按创建时间淘汰最旧。
 快照保存对象、楼层、场地、底图 `assetId`、照片 `photoId` 与校准参数（`transform` /
 `metersPerPixel`），生成前把内嵌照片转成内容寻址资产，**不复制 base64**。
-真实 Chromium 实测（`snapshot.spec.mjs`，本机 Windows）：1000 对象生成快照
-**14.7–16.4 ms**（含 IndexedDB 写入），快照数据 **400779 B ≈ 391.4 KB**（约 400 B/对象），
+真实 Chromium 实测（`snapshot.spec.mjs`，本机 Windows，5 轮）：1000 对象生成快照
+**14.7–35.3 ms**（含 IndexedDB 写入，受机器负载波动），快照数据 **400779 B ≈ 391.4 KB**（约 400 B/对象），
 远低于 2s 建议值。A/B 差异按对象 id 跨楼层匹配，固定分类
 新增 / 删除 / 属性修改 / 移动 / 换楼层 / 类型变更；忽略 `id/z/createdAt/updatedAt/photoDataUrl`
 等运行时字段。构造样本（20 个未变 + 六类各 1 条）实测分类全部正确、**误报 0/20（0%）**；

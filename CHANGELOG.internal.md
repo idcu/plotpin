@@ -13,7 +13,7 @@
   - UI：新增 `js/features/snapshot-ui.js`（快照列表/生成/删除/回滚确认、A/B 选择与差异清单、叠加开关）；工程库每行新增「版本」按钮；`openModal` 新增可选 `opts.onClose`，确保 Esc/遮罩/关闭都清理叠加态；`deleteProjectById` 删除该工程快照链（`snap:<pid>:`），不影响其它工程。
   - `APP_LIMITS` 新增 `SNAPSHOT_MAX_PER_PROJECT` / `SNAPSHOT_MAX_BYTES_PER_PROJECT`（唯一源），`index.html` 增加两个脚本（core 层 `snapshot.js` 在 `persistence.js` 之后，features 层 `snapshot-ui.js` 在 `io.js` 之后）。
 - **实测验证数据（真实 Chromium，本机 Windows，2026-11-06）**
-  - 1000 对象生成快照：**wall 14.8 / 16.5ms**（meta 14.7 / 16.4ms），快照数据 **400779 B ≈ 391.4KB**（约 400B/对象），目标 <2s 达成。
+  - 1000 对象生成快照：**wall 14.8 / 16.5 / 18.5 / 27.2 / 35.3ms**（meta 14.7–35.2ms，5 轮；波动来自机器负载），快照数据 **400779 B ≈ 391.4KB**（约 400B/对象），目标 <2s 达成。
   - 照片：1000 对象中塞入 50KB `data:image`，快照 JSON 内 **无 `data:image`**，`props.photoId` 存在；照片按内容寻址复用，不随快照线性膨胀。
   - 删除快照：`snap:` 键 1→0，`proj:` 主记录仍存在（对象数 1000），当前 `state` 与工程数据不变。
   - 回滚与撤销：3 对象 → 回滚到 2 对象快照，`history.past` >0；`undo` 回 3，`redo` 回 2；回滚后再新增对象成功（3），`undoBtn` 可用；UI 回滚按钮先弹确认框（文案含「撤销栈」「Ctrl+Z」）。
