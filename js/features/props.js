@@ -354,9 +354,12 @@ function renderProps(){
       ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh==='sector'?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
       : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。'))}</div>`;
     const ci=currentCatalog?currentCatalog.items:[];
-    const catList=ci.length?`<datalist id="catModels">${ci.map(it=>`<option value="${esc(it.model)}">`).join('')}</datalist>`:'';
+    const vendors=Array.from(new Set(ci.map(it=>it.vendor)));
+    const catList=ci.length?`<datalist id="catModels">${ci.map(it=>`<option value="${esc(it.model)}">`).join('')}</datalist><datalist id="catVendors">${vendors.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`:'';
+    const amb=ci.length&&!o.props.vendor&&o.props.model&&ci.filter(it=>it.model===o.props.model).length>1;
     specific=`${row('X 坐标',num('x',fmt(o.x)))}${row('Y 坐标',num('y',fmt(o.y)))}${row('朝向角',num('angle',Math.round(o.angle),1))}
-      ${row('型号',txt('propModel',o.props.model,ci.length?' list="catModels"':''))}${row('数量',num('propQty',o.props.qty===undefined?1:o.props.qty,1))}${catList}
+      ${row('厂商',txt('propVendor',o.props.vendor,ci.length?' list="catVendors"':''))}${row('型号',txt('propModel',o.props.model,ci.length?' list="catModels"':''))}${row('数量',num('propQty',o.props.qty===undefined?1:o.props.qty,1))}${catList}
+      ${amb?`<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该型号在多厂商重名，请填写厂商后计价'))}</div>`:''}
       ${row('安装高度 (m)',num('propMountHeight',o.props.mountHeight===undefined?'':o.props.mountHeight))}
       ${row('IP',txt('propIp',o.props.ip))}${row('责任人',txt('propOwner',o.props.owner))}
       ${row('照片',`<input type="file" accept="image/*" data-photo-input><button type="button" class="icon-btn danger" data-photo-clear title="${esc(L('移除照片'))}" ${o.props.photoId?'':'disabled'}>×</button>`)}
@@ -605,7 +608,7 @@ function applyField(el,o,changed){
     const n=Number(el.value);
     if(el.value!==''&&Number.isFinite(n)&&n>=0)o.props.qty=n; else delete o.props.qty;
   }
-  else if(k==='propModel'||k==='propIp'||k==='propOwner'){
+  else if(k==='propVendor'||k==='propModel'||k==='propIp'||k==='propOwner'){
     o.props=o.props||{};
     const key=k.slice(4).toLowerCase(), v=String(el.value||'').trim();
     if(key==='model'&&v!==String(o.props.model||'')) delete o.props.vendor;

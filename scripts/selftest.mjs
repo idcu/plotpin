@@ -184,7 +184,8 @@ code += `\n;globalThis.__api = {
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
-  quoteTable, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
+  quoteTable, quoteAggregate, quoteColumns, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
+  catalogVersion, QUOTE_SNAPSHOT_KEY, quoteSignature, quoteSnapshotTable, quoteMetaTable,
   get currentCatalog(){ return currentCatalog; }, setCurrentCatalog(v){ currentCatalog=v; },
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
@@ -5092,6 +5093,23 @@ asyncSuites.push(async()=>{
   const pT = parsed[parsed.length-1];
   eq('报价-CSV 合计往返', [Number(pT[2]),Number(pT[4])], [6,5750]);
 
+  /* 75.4b 目录版本指纹与报价快照（单价冻结 / 行集合变化才重新计价） */
+  const ver1 = api.catalogVersion(cat);
+  const ver2 = api.catalogVersion({ schema:'plotpin-catalog/v1', items:[{ vendor:'海康', model:'DS-2CD', price:1300 }] });
+  ok('版本-稳定且非空', ver1 === api.catalogVersion(cat) && ver1 !== 'none');
+  ok('版本-单价变化即变化', ver1 !== ver2);
+  eq('版本-无目录为 none', api.catalogVersion(null), 'none');
+  const snap = { v:1, cols:5, rows:table.map(r=>r.slice()), catalogVersion:ver1, exportedAt:'2026-01-01T00:00:00.000Z' };
+  ok('快照-同签名命中', !!api.quoteSnapshotTable(table, snap));
+  ok('快照-行数变化不命中', !api.quoteSnapshotTable(table.slice(0, 4), snap));
+  const qtyChanged = api.quoteTable(cat).map(r=>r.slice());
+  qtyChanged[1][2] = 9;
+  ok('快照-数量变化不命中', !api.quoteSnapshotTable(qtyChanged, snap));
+  const mtable = api.quoteMetaTable(table, { catalogVersion:ver1, exportedAt:'T' });
+  eq('元数据-表头追加', mtable[0], ['厂商','名称','数量','单价','小计','目录版本','导出时间']);
+  eq('元数据-数据行数值不变', [mtable[1][3], mtable[1][4], mtable[1][5], mtable[1][6]], [rA[3], rA[4], '', '']);
+  eq('元数据-合计行记录版本/时间', [mtable[4][5], mtable[4][6]], [ver1, 'T']);
+
   /* 75.5 无目录降级：仅名称/数量，金额不臆造 */
   const t2 = api.quoteTable(null);
   eq('降级-表头仅名称数量', t2[0], ['名称','数量']);
@@ -5105,6 +5123,24 @@ asyncSuites.push(async()=>{
   st.objects.push(pe);
   const evilText = api.delimitedFromTable(api.quoteTable(evil), ',');
   ok('报价-CSV 公式防护', evilText.includes("'=SUM(A1)"));
+
+  /* 75.7 跨厂商重名：未填厂商不得静默错绑；填厂商后按精确键计价 */
+  const dup = api.catalogValidate({ schema:'plotpin-catalog/v1', items:[
+    { vendor:'海康', model:'DUP-M', price:100 },
+    { vendor:'大华', model:'DUP-M', price:80 }
+  ] });
+  const st2 = api.resetState();
+  const od = api.baseObject('point','point.marker',{ name:'PD', x:5, y:5 });
+  od.props = { model:'DUP-M', qty:2 };
+  st2.objects.push(od);
+  const t3 = api.quoteTable(dup);
+  eq('重名-未填厂商不带价', [t3[1][0], t3[1][3], t3[1][4]], ['', '', '']);
+  eq('重名-明确标记重复型号', api.quoteAggregate(dup).ambiguous, ['DUP-M']);
+  od.props.vendor = '大华';
+  const t4 = api.quoteTable(dup);
+  eq('重名-填厂商后精确绑定', [t4[1][0], t4[1][3], t4[1][4]], ['大华', 80, 160]);
+  api.setCurrentCatalog(null);
+  api.resetState();
 }
 
 asyncSuites.push((async()=>{

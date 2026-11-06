@@ -2,6 +2,34 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-05 补强：报价快照 + 厂商维度绑定
+
+- **Commit Hash**：本条提交（`feat(quote): 报价快照与厂商维度绑定`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="报价快照与厂商维度绑定" -1 --format=%H`。
+- **核心改动点**
+  - `io-fields.js`：`quoteTable` 拆为 `quoteAggregate`（聚合 + `ambiguous` 判定）与 `quoteColumns`（列映射），`quoteTable` 仍是唯一出口；新增 `quoteSignature / quoteSnapshotTable / quoteMetaTable`。
+  - 快照语义：导出时把当次表格写入 IndexedDB `quote:last`（`{v,cols,rows,catalogVersion,exportedAt}`）；下次导出若行集合（列数 + 厂商/型号/数量）不变则**沿用冻结单价**，替换目录不改写已定稿报价；数量/型号变化才按当前目录重算并更新快照。
+  - 元数据：有价格列时，CSV/XLSX 追加「目录版本 / 导出时间」两列，**只写在合计行**（数据行后两格为空），数值行不变。
+  - `catalog.js`：新增 `catalogVersion(cat)`（items 的 FNV-1a 32 位内容指纹，无目录为 `none`）与 `QUOTE_SNAPSHOT_KEY='quote:last'`。
+  - `props.js`：新增「厂商」输入（`data-field="propVendor"`，目录存在时 datalist `catVendors`）；型号在多厂商重名且未填厂商时面板显示提示；`applyField` 支持 `propVendor`。
+  - `exportQuote` 改为 async：读快照 → 命中则冻结 → 否则重算并落盘 → 下载；跨厂商重名未计价时用 warn 提示（不静默、不阻断）。
+  - 文档：`docs/features.md`、`docs/modules.md`（3 行抽象表 + B-05 影响范围）、`docs/engineering.md`（限值表/B-05/e2e 表）、`README.md`、本文件。
+- **实测验证数据**
+  - 体积 **767,954 → 771,344 B（+3,390 B / +0.44%）**；820 KB 门禁余量 **68,336 B**；gzip **253,036 B（247.1 KB）**；SHA256 `d0b4f4d642b2…`。
+  - selftest **1994 通过 / 0 失败**（1982 → +12：版本指纹 3、快照命中/不命中 3、元数据 3、重名绑定 3）。
+  - e2e **35 passed / 1 skipped（44.8s）**；`catalog.spec` 单独 **1 passed（3.5s，用例 2.7s）**，新增断言：7 列表头、合计行目录版本/导出时间、替换目录后重导 1,200 不变、改数量后 2,000 重算、重名未填厂商不带价、填厂商后 80/160。
+  - `npm run ci` 通过：bench 缓存帧 avg 0.33ms / P95 0.38ms ≤ 3ms、重建 21.73ms ≤ 60ms、heap 19.49MB ≤ 64MB、裁剪 99.4%、覆盖率 8ms；门禁牙齿 5/5。
+- **未验证项**
+  - **Excel/WPS 人工打开未验证**：7 列 CSV/XLSX 只在 `DSV.parseRows` / `Xlsx.readRows` 中做数值往返，未在桌面 Excel/WPS 确认合计行版本/时间列的显示。
+  - 快照复用仅在“行集合不变”前提成立；跨厂商改名但数量不变也算变化（会重算），未做长时间/多工程并发导出的浸泡测试。
+- **遗留 TODO / 风险**
+  - **重导沿用冻结单价的副作用**：想用新目录价格更新已导出报价，必须改变行集合（数量或厂商/型号）；这是为满足「替换目录不变形」的显式取舍，界面上没有「刷新快照」按钮（避免新增 UI）。
+  - `quote:last` 存在 `projects` 仓库中，键独立于工程记录：删除工程不会自动删除该快照，下一次导出若行集合同签名会继续沿用；「清空全部数据」路径未专项验证。
+  - 报价仍不含类别/单位/楼层列（体积与列宽取舍）。
+- **受影响调用方**
+  - 报价 CSV/XLSX 从 5 列变 7 列（数据行尾部多两个空单元），既有只看前 5 列的消费者不受影响；`quoteTable` 返回值格式（二维数组）不变。
+  - 新增/拆分全局：`quoteAggregate / quoteColumns / quoteSignature / quoteSnapshotTable / quoteMetaTable / catalogVersion / QUOTE_SNAPSHOT_KEY`；`quoteTable` 与 `QUOTE_FIELD_DEFS` 签名不变。
+  - `props.js` 的 `applyField` 新增 `propVendor` 分支；`exportQuote` 由同步变 async（`exportBtn` 调用处不变，内部已 catch）。
+
 ## 2026-11-06 · 体积口径上调 820 KB + gzip 发布指标
 
 - **Commit Hash**：本条提交（`chore(build): 单文件门禁上调 820KB 并打印 gzip 体积`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="gzip" -1 --format=%H`。

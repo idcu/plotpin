@@ -89,23 +89,49 @@ const QUOTE_FIELD_DEFS=[
   {key:'厂商',p:1,get:r=>r.vendor},{key:'名称',get:r=>r.model},{key:'数量',get:r=>r.qty},
   {key:'单价',p:1,get:r=>r.item?r.item.price:''},{key:'小计',p:1,get:r=>r.amount===undefined?'':r.amount}
 ];
-function quoteTable(cat){
-  const g=new Map(),idx=new Map(),byModel=new Map();
+/** 跨楼层 BOM 聚合（唯一实现）：返回行对象与「型号跨厂商重名且未填厂商」清单 */
+function quoteAggregate(cat){
+  const g=new Map(),idx=new Map(),byModel=new Map(),ambiguous=new Set();
   ((cat&&cat.items)||[]).forEach(x=>{idx.set(x.vendor+'\u0001'+x.model,x);byModel.set(x.model,byModel.has(x.model)?null:x)});
   syncActiveFloor();
   (state.floors||[]).forEach(f=>(f.id===state.activeFloorId?state.objects:f.objects||[]).forEach(o=>{
     const p=(o&&o.props)||{},v=String(p.vendor||'').trim(),m=String(p.model||'').trim();
     if(!v&&!m)return;
     const it=idx.get(v+'\u0001'+m)||(!v&&m?byModel.get(m):null),gk=it?it.vendor+'\u0001'+it.model:v+'\u0001'+m;
+    if(!it&&!v&&m&&byModel.has(m)&&byModel.get(m)===null)ambiguous.add(m);
     const x=g.get(gk)||{vendor:it?it.vendor:v,model:it?it.model:m,item:it,qty:0},q=Number(p.qty);
     x.qty+=Number.isFinite(q)&&q>=0?q:1;g.set(gk,x);
   }));
   const rows=Array.from(g.values());
   rows.forEach(x=>{if(x.item)x.amount=roundMoney(x.qty*x.item.price)});
-  const d=QUOTE_FIELD_DEFS.filter(f=>!f.p||!!(cat&&cat.items&&cat.items.length));
   if(rows.length)rows.push({vendor:'',model:'合计',qty:rows.reduce((n,x)=>n+x.qty,0),
     amount:rows.every(x=>x.item)?roundMoney(rows.reduce((n,x)=>n+x.amount,0)):''});
-  return [d.map(f=>f.key),...rows.map(x=>d.map(f=>f.get(x)))];
+  return {rows,ambiguous:Array.from(ambiguous)};
+}
+/** 行对象 → 表格（表头与列序唯一来源；无目录时降级为名称/数量） */
+function quoteColumns(agg,cat){
+  const d=QUOTE_FIELD_DEFS.filter(f=>!f.p||!!(cat&&cat.items&&cat.items.length));
+  return [d.map(f=>f.key),...agg.rows.map(x=>d.map(f=>f.get(x)))];
+}
+function quoteTable(cat){return quoteColumns(quoteAggregate(cat),cat)}
+/* 报价快照：签名 = 厂商/型号/数量（行集合不变才允许沿用冻结单价） */
+function quoteSignature(t){return JSON.stringify([t[0].length].concat(t.slice(1, -1).map(r=>r.slice(0,3))))}
+/** 快照与当前行集合一致时返回快照表格；否则 null（调用方按当前目录重新计价） */
+function quoteSnapshotTable(fresh,snap){
+  if(!snap||!Array.isArray(snap.rows)||snap.rows.length!==fresh.length)return null;
+  if(quoteSignature(snap.rows)!==quoteSignature(fresh))return null;
+  return snap.rows.map(r=>r.slice());
+}
+/** 在表格末尾追加目录版本/导出时间列（仅在有价格列时；不改变数据行数值） */
+function quoteMetaTable(t,meta){
+  if(t[0].length!==5)return t;
+  const out=t.map((r,i)=>{
+    const v=r.concat(['','']);
+    if(i===t.length-1&&r[1]==='合计'){v[5]=meta.catalogVersion;v[6]=meta.exportedAt}
+    return v;
+  });
+  out[0][5]='目录版本';out[0][6]='导出时间';
+  return out;
 }
 /** 盲区 GeoJSON 属性字段表（导出唯一来源） */
 const BLIND_SPOT_FIELDS=[

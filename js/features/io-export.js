@@ -131,13 +131,30 @@ function delimitedFromTable(table,delim){
 function delimitedText(delim){
   return delimitedFromTable([TABLE_COLUMNS,...objectRowsAll().map(r=>TABLE_COLUMNS.map(c=>r[c]))],delim);
 }
-function exportQuote(kind){
-  const t=quoteTable(currentCatalog),csv=kind==='csv';
-  if(t.length<2)return toast('无可汇总型号：先绑定型号并填数量','warn');
-  downloadBlob(new Blob([csv?delimitedFromTable(t,','):ensureVendor('Xlsx').build(t,'产品报价')],
-    {type:csv?'text/csv;charset=utf-8':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
-    safeName()+'-产品报价.'+(csv?'csv':'xlsx'));
-  toast('报价表已导出','success');
+async function exportQuote(kind){
+  const csv=kind==='csv';
+  try{
+    const agg=quoteAggregate(currentCatalog),fresh=quoteColumns(agg,currentCatalog);
+    if(fresh.length<2)return toast('无可汇总型号：先绑定型号并填数量','warn');
+    let t=fresh,meta=null,reused=false;
+    try{
+      const snap=await idbGetKey(QUOTE_SNAPSHOT_KEY),hit=quoteSnapshotTable(fresh,snap);
+      if(hit){t=hit;meta={catalogVersion:snap.catalogVersion,exportedAt:snap.exportedAt};reused=true}
+      else{
+        meta={catalogVersion:catalogVersion(currentCatalog),exportedAt:new Date().toISOString()};
+        try{await idbPutKey(QUOTE_SNAPSHOT_KEY,{v:1,cols:fresh[0].length,rows:fresh.map(r=>r.slice()),
+          catalogVersion:meta.catalogVersion,exportedAt:meta.exportedAt})}catch(_){}
+      }
+    }catch(_){}
+    if(!meta)meta={catalogVersion:catalogVersion(currentCatalog),exportedAt:new Date().toISOString()};
+    const out=quoteMetaTable(t,meta);
+    downloadBlob(new Blob([csv?delimitedFromTable(out,','):ensureVendor('Xlsx').build(out,'产品报价')],
+      {type:csv?'text/csv;charset=utf-8':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
+      safeName()+'-产品报价.'+(csv?'csv':'xlsx'));
+    const n=agg.ambiguous.length;
+    toast(reused?'报价表已导出（沿用上次单价快照）':n?'报价表已导出；'+n+' 个型号跨厂商重名未计价（请填厂商）':'报价表已导出',
+      reused||!n?'success':'warn');
+  }catch(e){toast('报价导出失败：'+e.message,'error')}
 }
 /** 分隔文本导出（CSV/TSV） */
 function exportDelimited(delim,ext,mime){

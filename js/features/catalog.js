@@ -1,5 +1,5 @@
 /* catalog.js —— 产品目录校验/存储与导入导出 */
-const CATALOG_SCHEMA='plotpin-catalog/v1',CATALOG_KEY='catalog:current';
+const CATALOG_SCHEMA='plotpin-catalog/v1',CATALOG_KEY='catalog:current',QUOTE_SNAPSHOT_KEY='quote:last';
 let currentCatalog=null;
 function catalogValidate(r){
   if(!r||typeof r!=='object'||Array.isArray(r))throw Error('目录根对象非法');
@@ -23,6 +23,15 @@ function catalogValidate(r){
 async function catalogLoad(){try{const r=await idbGetKey(CATALOG_KEY);if(r)currentCatalog=catalogValidate(r)}catch(_){currentCatalog=null}return currentCatalog}
 async function importCatalog(raw,save){const c=catalogValidate(raw);await(save||(x=>idbPutKey(CATALOG_KEY,x)))(c);currentCatalog=c;return c}
 function roundMoney(n){return Math.round(n*100)/100}
+/* 目录版本：内容指纹（FNV-1a 32 位），用于报价快照追溯 */
+function catalogVersion(cat){
+  const items=(cat&&cat.items)||[];
+  if(!items.length)return 'none';
+  const s=JSON.stringify(items);
+  let h=2166136261;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}
+  return 'c'+((h>>>0).toString(16).padStart(8,'0'));
+}
 function exportCatalogJSON(){
   if(!currentCatalog)return toast('未载入目录','warn');
   downloadBlob(new Blob([JSON.stringify(currentCatalog,null,2)],{type:'application/json'}),safeName()+'-产品目录.json');
