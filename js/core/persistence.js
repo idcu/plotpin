@@ -645,9 +645,16 @@ function migrateProject(p){
   state=buildProject(p);
   return state;
 }
-/** 删除墓碑清洗：按 (kind,id) 去重取最晚删除时间；非法/无时间的条目丢弃，并限制总量 */
+/** 删除墓碑清洗：按 (kind,id) 去重取最晚删除时间；非法/无时间的条目丢弃。
+ *  淘汰策略（A-11）：**按对象 id 长期保留**，不再按删除时间倒序整段截断——
+ *  截断会丢掉较早的墓碑，与仍持有旧对象的离线端合并时已删对象会复活（审计 P1-4）。
+ *  只有超过保留窗口（TOMBSTONE_RETENTION_DAYS）或硬上限（TOMBSTONE_MAX）时才淘汰。
+ *  @param {any[]} arr 原始墓碑数组
+ *  @param {number} [nowMs] 保留窗口基准时间（缺省 Date.now；自测可注入固定值） */
 const TOMBSTONE_LIMIT=APP_LIMITS.TOMBSTONE_MAX;
-function sanitizeTombstones(arr){
+function sanitizeTombstones(arr,nowMs){
+  const now=Number.isFinite(nowMs)?nowMs:Date.now();
+  const cutoff=now-APP_LIMITS.TOMBSTONE_RETENTION_DAYS*86400000;
   const latest=new Map();
   (Array.isArray(arr)?arr:[]).forEach(raw=>{
     if(!raw||typeof raw!=='object'||!raw.id) return;
@@ -655,6 +662,7 @@ function sanitizeTombstones(arr){
     const id=safeId(raw.id,'DEL');
     const deletedAt=typeof raw.deletedAt==='string'?raw.deletedAt.trim():'';
     if(!deletedAt||!Number.isFinite(Date.parse(deletedAt))) return;
+    if(Date.parse(deletedAt)<cutoff) return;              /* 仅超过保留窗口的旧墓碑才淘汰 */
     const key=kind+':'+id;
     if(!latest.has(key)||deletedAt>latest.get(key).deletedAt) latest.set(key,{id,kind,deletedAt});
   });
@@ -662,7 +670,8 @@ function sanitizeTombstones(arr){
     .sort((a,b)=>a.deletedAt===b.deletedAt?String(a.kind+a.id).localeCompare(String(b.kind+b.id)):b.deletedAt.localeCompare(a.deletedAt))
     .slice(0,TOMBSTONE_LIMIT);
 }
-/** 记录一次删除（对象或楼层）；重复删除同一目标时刷新删除时间 */
+/** 记录一次删除（对象或楼层）；重复删除同一目标时刷新删除时间。
+ *  增量淘汰：攒够 TOMBSTONE_EVICT_BATCH 条才压缩一次（而非每次删除都全量排序）。 */
 function markTombstone(id,kind='object'){
   if(!id) return null;
   state.tombstones=Array.isArray(state.tombstones)?state.tombstones:[];
@@ -671,7 +680,7 @@ function markTombstone(id,kind='object'){
   const hit=state.tombstones.find(t=>t&&t.id===String(id)&&(t.kind||'object')===k);
   if(hit) hit.deletedAt=at;
   else state.tombstones.push({id:String(id),deletedAt:at,kind:k});
-  if(state.tombstones.length>TOMBSTONE_LIMIT){
+  if(state.tombstones.length>TOMBSTONE_LIMIT+APP_LIMITS.TOMBSTONE_EVICT_BATCH){
     state.tombstones=sanitizeTombstones(state.tombstones);
   }
   return at;

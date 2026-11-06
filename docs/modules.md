@@ -67,6 +67,8 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | `buildProject(p) / countProjectObjects(p)` | `js/core/persistence.js`（JSON→工程候选对象；不写全局 `state` / 对象总数统计） | `importJsonFile`、`openProjectById`、`duplicateProjectById` 的“先校验后替换”事务；`migrateProject` 仍 = `buildProject` + 立即替换 |
 | `projectObjectLists(st)` | `js/core/persistence.js`（工程级遍历对象的唯一入口：当前楼层 + 其余楼层） | `ensureObjectPhotoAssets`（全楼层照片转存）、`countProjectObjects`、JSON 导出（全楼层照片内嵌）；禁止工程级逻辑只扫 `state.objects` |
 | `importLimitErrors(spec) / importLimitMessage(errs)` | `js/core/config.js`（导入限值唯一校验入口与中文提示） | JSON/CSV/TSV/XLSX/DXF/PDF/图片/合并导入；限值来自 `APP_LIMITS` |
+| `sanitizeTombstones(arr, nowMs)` | `js/core/persistence.js`（删除墓碑清洗唯一实现：按 `(kind,id)` 去重取最晚删除时间；**按对象 id 长期保留**，仅在超出 `TOMBSTONE_RETENTION_DAYS` 窗口或 `TOMBSTONE_MAX` 上限时淘汰） | `buildProject`（载入/导入/合并）、`markTombstone` 的增量淘汰；`nowMs` 供自测注入固定时间，缺省 `Date.now()` |
+| `markTombstone(id, kind)` | `js/core/persistence.js`（记录删除墓碑；攒够 `TOMBSTONE_EVICT_BATCH` 条才压缩一次，避免删除密集时每次删除都全量排序） | 对象删除、清空楼层、删除楼层、停车场重建；合并侧 `merge.js` 只读墓碑写结果 |
 | `markSurfaceSize(canvas, cssW, cssH) / surfaceCssSize(ctx)` | `js/core/render.js`（绘图表面逻辑尺寸的唯一来源） | `drawScreenTag` 的夹边、离屏静态层、PNG/PDF 导出画布。离屏 canvas 的 `clientWidth` 恒为 0，必须用登记尺寸，否则屏幕标签被压到 (2,2) |
 
 影响范围：`siteHandleList/siteAreaPerimeter/siteBoundaryPoints/siteShapeCenter` 保留旧签名（可直接传旧 `kind` 矢量 background 对象），`scripts/selftest.mjs` 的既有断言不需要改写调用方式；`resizeSiteByHandle(h,p)` 是写 `state.site` 的薄包装，新代码应优先用 `siteHandleDragTo(site,h,p)`，它不读全局、便于单测。删除重复后 `render.js` 不再声明 `siteBoundaryPoints/siteShapeCenter/siteAreaPerimeter/siteBasePoint/siteRadiusText`，`interaction.js` 不再声明 `siteHandleList/resizeSiteByHandle`——同名函数只保留 `geometry.js` 一份，避免两份实现漂移。

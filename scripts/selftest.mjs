@@ -4510,6 +4510,69 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+/* 71. A-11 墓碑按对象 id 保留 + 增量淘汰（离线旧端合并不复活） ------------------------ */
+{
+  const L = api.APP_LIMITS;
+  eq('A-11 墓碑硬上限 2 万', L.TOMBSTONE_MAX, 20000);
+  eq('A-11 增量淘汰批量', L.TOMBSTONE_EVICT_BATCH, 2000);
+  eq('A-11 保留窗口 730 天', L.TOMBSTONE_RETENTION_DAYS, 730);
+
+  const NOW = Date.parse('2026-11-06T00:00:00.000Z');
+  const RECENT = '2026-10-01T01:00:00.000Z';
+  const EXPIRED = '2023-01-01T00:00:00.000Z';
+
+  /* 旧实现按 deletedAt 倒序截断到 2000：5000 条会被砍掉，最早的删除丢失 → 旧端复活 */
+  const many = Array.from({ length: 5000 }, (_, i) => ({ id: 'D' + i, kind: 'object', deletedAt: RECENT }));
+  const kept = api.sanitizeTombstones(many, NOW);
+  eq('A-11 未超上限按 id 全量保留', kept.length, 5000);
+  ok('A-11 最早的删除仍在', kept.some(t => t.id === 'D0'));
+
+  const mixed = api.sanitizeTombstones([
+    { id: 'OLD', kind: 'object', deletedAt: EXPIRED },
+    { id: 'NEW', kind: 'object', deletedAt: RECENT }
+  ], NOW);
+  eq('A-11 仅超保留窗口的旧墓碑被淘汰', mixed.map(t => t.id).join(','), 'NEW');
+
+  const huge = api.sanitizeTombstones(
+    Array.from({ length: L.TOMBSTONE_MAX + 100 }, (_, i) => ({ id: 'H' + i, kind: 'object', deletedAt: RECENT })), NOW);
+  eq('A-11 超硬上限才截断', huge.length, L.TOMBSTONE_MAX);
+
+  /* 增量淘汰：攒够一批才压缩一次，单次删除不触发全量排序 */
+  api.resetState();
+  api.state.tombstones = Array.from({ length: L.TOMBSTONE_MAX + L.TOMBSTONE_EVICT_BATCH - 1 },
+    (_, i) => ({ id: 'S' + i, kind: 'object', deletedAt: RECENT }));
+  api.markTombstone('S-NEW', 'object');
+  eq('A-11 未攒够一批不压缩', api.state.tombstones.length, L.TOMBSTONE_MAX + L.TOMBSTONE_EVICT_BATCH);
+  api.markTombstone('S-NEW2', 'object');
+  eq('A-11 攒够一批压缩回硬上限', api.state.tombstones.length, L.TOMBSTONE_MAX);
+  ok('A-11 压缩后保留最新删除', api.state.tombstones.some(t => t.id === 'S-NEW2'));
+
+  /* 离线旧端：本地删了 3000 个对象（超过旧上限 2000），旧端仍持有全部对象 */
+  const objs = Array.from({ length: 3000 }, (_, i) => ({
+    id: 'G' + i, name: 'G' + i, kind: 'point', typeId: 'point.marker', layerId: 'layer.default',
+    x: i, y: 0, points: [], width: 0, height: 0, angle: 0, phys: 0, iconSize: 1,
+    style: {}, props: {}, annot: {}, visible: true, locked: false, z: i,
+    createdAt: RECENT, updatedAt: RECENT
+  }));
+  const base = extra => Object.assign({
+    schema: 'offline-drawing-annotation/v1', meta: { name: '离线工程', updatedAt: RECENT },
+    settings: {}, background: { kind: 'empty' }, viewport: { zoom: 1, panX: 0, panY: 0 },
+    layers: [{ id: 'layer.default', name: '默认图层' }], objectTypes: [],
+    objects: [], floors: [{ id: 'floor.default', name: '1F', updatedAt: RECENT }],
+    activeFloorId: 'floor.default', tombstones: []
+  }, extra);
+  const localRaw = base({
+    tombstones: Array.from({ length: 3000 }, (_, i) => ({ id: 'G' + i, kind: 'object', deletedAt: '2026-10-02T00:00:00.000Z' }))
+  });
+  /* 清洗是加载/保存必经环节：旧实现这里会砍到 2000 条 */
+  localRaw.tombstones = api.sanitizeTombstones(localRaw.tombstones, NOW);
+  const res = api.mergeProjectData(localRaw, base({ objects: objs }));
+  eq('A-11 旧端 3000 个已删对象全部被压制', (res.project.objects || []).length, 0);
+  ok('A-11 合并后墓碑仍保留可继续传播', (res.project.tombstones || []).some(t => t.id === 'G0'));
+  eq('A-11 远端被墓碑删除计入统计', res.stats.deleted, 3000);
+  api.resetState();
+}
+
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites.map(s=>typeof s==='function'?s():s));
 console.log(`\n${fail === 0 ? '✅' : '❌'} 逻辑层自测：${pass} 通过 / ${fail} 失败，共 ${pass + fail} 项断言（加载 ${srcs.length} 个脚本）`);

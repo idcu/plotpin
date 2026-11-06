@@ -34,7 +34,9 @@ const APP_LIMITS = Object.freeze({
   IMPORT_ENTITIES_MAX: 100000,              /* DXF/PDF 实体上限 */
   OBJECTS_MAX: 100000,                      /* 单工程对象上限（含所有楼层） */
   HISTORY_MAX: 20,                          /* 撤销栈深度 */
-  TOMBSTONE_MAX: 2000                       /* 删除墓碑保留上限 */
+  TOMBSTONE_MAX: 20000,                     /* 删除墓碑硬上限：按对象 id 长期保留，仅在超限时淘汰 */
+  TOMBSTONE_EVICT_BATCH: 2000,              /* 增量淘汰批量：攒够一批才压缩一次，避免每次删除都全量排序 */
+  TOMBSTONE_RETENTION_DAYS: 730             /* 墓碑保留窗口：只有超过该天数的旧墓碑才允许按时间淘汰 */
 });
 /** 导入限值统一校验：传 {bytes,chars,rows,entities,objects,pixels} 的已知项，返回超限字段列表（空=通过） */
 function importLimitErrors(spec){

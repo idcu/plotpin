@@ -2,7 +2,8 @@
  *
  * 不做网络传输：两个离线编辑的工程各导出一份 JSON，任一方「合并他人工程」即可取回对方的增删改。
  * 合并单位是对象（按 id），冲突按 updatedAt 较新者胜出；同一时间戳用内容字典序兜底，保证结果确定。
- * 删除通过墓碑（tombstones）传播：删除时间晚于对象更新时间才生效，较新的编辑可以让对象「复活」。
+ * 删除通过墓碑（tombstones）传播：删除时间**不早于**对象更新时间即生效（平局删除胜，保证「已删除」不会被同毫秒编辑复活）；
+ * 删除时间早于对象更新时间时墓碑失效并被清理，较新的编辑可以让对象「复活」。
  * 楼层按 id 合并：新增楼层追加；楼层墓碑晚于该层最后写入时整层删除。图层/对象类型按 id 取并集，本地优先。
  */
 function mergeProjectData(currentRaw, incomingRaw){
@@ -286,7 +287,8 @@ function mergeFloorObjects(fa, fb, tombs, stats){
     if (a.has(id)) return;
     const ob = b.get(id);
     const tomb = tombs.object.get(id);
-    if (tomb && tomb.deletedAt >= mergeTime(ob)) return;
+    /* 墓碑删掉远端对象也要计入统计（此前漏计，合并提示少报删除数） */
+    if (tomb && tomb.deletedAt >= mergeTime(ob)) { stats.deleted++; return; }
     if (tomb) tombs.object.delete(id);
     stats.added++;
     add(id, ob);
