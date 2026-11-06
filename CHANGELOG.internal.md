@@ -2,6 +2,36 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-07：图框 / 标题栏 / 比例尺 / 图例模板（默认关闭，golden 不变）
+
+- **Commit Hash**：本条提交（`feat(export): 图框/标题栏/比例尺/图例模板（默认关闭，golden 不变）`）。复盘用 `git log --grep="图框/标题栏/比例尺/图例模板" -1 --format=%H`。
+- **核心改动点**
+  - `js/core/model.js`：新增 `TITLE_BLOCK_FIELDS`（8 字段：工程名/图号/比例/日期/版本/设计/审核/单位）、`TITLE_BLOCK_TEXT_MAX=80`、`titleBlockText`（去除控制字符 + trim + 截断）、`createTitleBlock`、`normalizeTitleBlock`；`createInitialState().meta` 增加 `titleBlock`。
+  - 默认模板：`enabled:false`（**默认关闭**）、`frame:true`、`scaleBar:true`、`legend:true`；字段默认 `projectName:''`（导出回退 `meta.name`）、`drawingNo:''`（显示 `—`）、`scale:''`（按当前缩放自动 `1:N`）、`date:''`（取导出当天）、`version:'V1.0'`、`designer/checker/unitName:''`。
+  - `js/core/persistence.js`：`buildProject` 归一 `meta.titleBlock`；旧工程缺字段 → `normalizeTitleBlock` 整体降级为默认（保持关闭），不阻塞载入。
+  - `js/features/io-export.js`：新增 `titleBlockSpec(W,H,ppu,format)`（**唯一布局源**，未启用返回 `null`）、`titleBlockEffective`、`titleBlockRatio`、`niceScaleBarMeters`、`titleBlockLegendData`、`drawTitleBlockOnCanvas`（PNG/PDF 共用）、`exportTitleBlockSvg`（全部文本 `esc()`）；接入 `renderToDataURL`（PNG）、`renderPdfDrawingPage`（PDF）、`buildSceneSvg`（SVG）；导出下拉新增 `title-block` → `openTitleBlockDialog()`。
+  - `index.html` / `js/common/i18n.js`：导出下拉「图框模板…」与弹窗/复选框/字段标签的中英文案（`L()` 中文短语键，避免误用 DICT key）。
+  - 文档：`docs/features.md`（图框/标题栏段）、`docs/modules.md`（两组公共抽象）、`docs/engineering.md`（B-07 技术段 + e2e 表行 + 体积/SHA/断言表）、`README.md`（路线图）、本文件。
+- **实测验证数据**
+  - selftest **2147 → 2171 通过 / 0 失败（+24）**：默认关闭且子项为 true、版本 `V1.0`；旧档降级保留已填字段；控制字符清洗与 80 字符截断；`buildProject` 持久化与旧档降级；默认 SVG 不含「图例」、`titleBlockSpec` 返回 `null`、`exportTitleBlockSvg(null)===''`；启用后 8 单元格、自动比例 `1:378`（ppu=10）、比例尺 `[10,100]` 米、`titleBlockRatio(10,'png')=378` / `('pdf')=591`、SVG 含 `&lt;`/`&amp;` 且不含 `<script>`、`buildSceneSvg()` 含 `>图例<` 与「工程名」。
+  - **golden**：既有 SVG 视觉快照哈希 `e6ba5542046cb68f42e8cf9639dbb3e2061914e4a3f79bebf2513fde308b97bf` **字节不变**（默认关闭时 `titleBlockSpec` 返回 `null`，调用点直接跳过，不追加换行/空标签）；重复导出稳定。
+  - e2e `title-block.spec.mjs` **1 passed**：放 1 个可见点对象 → 导出下拉「图框模板…」→ 启用并填 8 字段 → `state.meta.titleBlock` 落值（`drawingNo='T-101'`）→ SVG 回读「工程名/B-07 工程/T-101/1:100/2026-11-06」与 `>图例<`、不含 `<script>` → PNG 签名 `89 50 4e 47 0d 0a 1a 0a` 且 >10KB → PDF `%PDF-` 且 >10KB。
+  - 全量 e2e **47 passed / 1 skipped（47.9s）**（B-13 时 46 passed，新增 1 条）。
+  - `npm run ci` 全绿：重建 26.02ms、缓存帧 avg 0.4ms（P50 0.37 / P95 0.55 / P99 0.89）、直接全量 25.02ms、heapUsed 12.91MB、裁剪 99.4%（13/2000）、覆盖率 9ms / 大场地 15.8ms / 缩放差异 0pp；门禁牙齿 5/5。
+  - 体积 **806,138 → 820,168 B（+14,030 B / +1.74%）**；gzip **264,284 → 269,196 B（+4,912 B）**；820 KB 门禁余量 **19,512 B**；SHA256 `f61c18b58e11b76be0dc1e46889e1c7a6ffbed7d4551ad7b0c21e65991eb1b57`；`build --check` 二次构建确定性一致。
+- **未验证项**
+  - **PNG/PDF 无独立 golden 基线**：旧版未采集这两种二进制的哈希，默认不变性由「未启用返回 `null` + 三个调用点跳过」与 selftest 直接断言保证，未逐字节比对新旧 PNG/PDF 产物。
+  - PDF 为位图页，标题栏文字**不可检索/不可复制**（与 B-13 限制一致）；未验证 A4 打印边距/出血与不同打印机的实际输出位置。
+  - 图例排序使用 `localeCompare('zh')`，跨浏览器/ICU 版本可能存在顺序差异；本机 Chromium 内稳定，未做多引擎验证。
+  - 未验证极小导出画布（宽度 < 约 400px）下标题栏最小 300px 宽的遮挡比例。
+- **遗留 TODO / 风险**
+  - 协作/合并对 `meta` 采用**整体本地优先**（`Object.assign(B.meta, A.meta)`），不做字段级 LWW：远端标题栏字段在本地已有 `titleBlock` 时不会自动并入，也不计入冲突数；如需协同编辑标题栏，需双方各自设置或合并后人工对齐（属于新决策）。
+  - 启用图框后右下标题栏会遮挡该区域图形内容，属预期；用户可单独关闭 `frame/titleBlock` 子项，但目前**没有单独的“只关标题栏”开关**（关闭 `enabled` 会同时关闭四项叠加层）。
+- **受影响调用方 / 公共抽象**
+  - 新增公共抽象：`TITLE_BLOCK_FIELDS / titleBlockText / createTitleBlock / normalizeTitleBlock`（model）、`titleBlockSpec / titleBlockEffective / titleBlockRatio / niceScaleBarMeters / titleBlockLegendData / exportTitleBlockSvg / drawTitleBlockOnCanvas`（io-export）。
+  - 调用方：`buildProject`（归一）、`renderToDataURL`、`renderPdfDrawingPage`、`buildSceneSvg`、`openTitleBlockDialog`、`selftest` §75.10、`e2e title-block`；三格式只读同一 spec，禁止各写一套布局。
+  - 未新增运行时依赖；未读取/修改 `camera-*`；未 push。
+
 ## 2026-11-06 · B-13：多页 PDF / 图纸集（页序 · 页码 · 每页独立原点）
 
 - **Commit Hash**：本条提交（`fix(pdf): 多页 PDF 按页序独立原点落位，导出页码全局连续`）。复盘用 `git log --grep="多页 PDF 按页序独立原点" -1 --format=%H`。

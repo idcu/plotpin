@@ -16,11 +16,38 @@ $('exportBtn').onclick=()=>{
   if(kind==='catalog-json') exportCatalogJSON();
   if(kind==='catalog-delete') deleteCatalog();
   if(kind==='labels') exportLabelSheet();
+  if(kind==='title-block') openTitleBlockDialog();
 };
 function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800);
 }
 function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
+/** 图框/标题栏配置弹窗：字段值全部经 normalizeTitleBlock 清洗后再落盘 */
+function openTitleBlockDialog(){
+  const tb=normalizeTitleBlock(state.meta&&state.meta.titleBlock);
+  const inputs=TITLE_BLOCK_FIELDS.map(def=>
+    '<label style="display:block;margin:7px 0"><span style="display:inline-block;width:58px;color:#475569">'+esc(L(def.label))+'</span>'+
+    '<input id="tb_'+def.key+'" maxlength="'+TITLE_BLOCK_TEXT_MAX+'" value="'+esc(tb.fields[def.key]||'')+'" style="width:calc(100% - 66px)"></label>'
+  ).join('');
+  const checks=
+    '<label style="display:block;margin:8px 0"><input type="checkbox" id="tb_enabled"'+(tb.enabled?' checked':'')+'> '+esc(L('启用图框、标题栏、比例尺与图例'))+'</label>'+
+    '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_frame"'+(tb.frame?' checked':'')+'> '+esc(L('绘制图框边框'))+'</label>'+
+    '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_scaleBar"'+(tb.scaleBar?' checked':'')+'> '+esc(L('绘制比例尺'))+'</label>'+
+    '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_legend"'+(tb.legend?' checked':'')+'> '+esc(L('绘制图例（按可见对象类型/图层）'))+'</label>';
+  openModal(L('图框 / 标题栏模板'),
+    '<p class="hint-text">'+esc(L('默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。'))+'</p>'+checks+'<hr>'+inputs,
+    [{text:L('取消'),click:closeModal},
+     {text:L('保存'),class:'primary',click:()=>{
+       const fields={};
+       TITLE_BLOCK_FIELDS.forEach(def=>{ const el=$('tb_'+def.key); fields[def.key]=el?el.value:''; });
+       const next=normalizeTitleBlock({enabled:$('tb_enabled')?.checked,frame:$('tb_frame')?.checked,
+         scaleBar:$('tb_scaleBar')?.checked,legend:$('tb_legend')?.checked,fields});
+       pushHistory();
+       state.meta.titleBlock=next; state.meta.updatedAt=nowISO();
+       commitChange(L('图框模板已保存'));
+       closeModal();
+     }}]);
+}
 /** 二维码 SVG 的唯一实现在 js/common/qr.js（qrSvg）；此处直接复用。 */
 /**
  * 设备二维码标签：每个可见点设备一张，扫码得到 `PLOTPIN:编号`，可在工程内搜索编号定位。
@@ -167,6 +194,153 @@ function exportXlsx(){
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
   toast('XLSX 已导出（可再次导入更新对象属性）','success');
 }
+/* -------------------- 图框 / 标题栏 / 比例尺 / 图例（B-07） --------------------
+ * 默认 enabled:false → 既有 PNG/PDF/SVG 导出路径完全不调用本组函数，产物字节不变。
+ * 启用后：图框（内边框）+ 右下标题栏（8 字段）+ 左下比例尺 + 右上图例（按当前可见对象/图层生成）。
+ * 三种格式共用 titleBlockSpec（同一几何/文案源），颜色/字号由各自渲染器负责。 */
+const TITLE_BLOCK_DPI={png:96,svg:96,pdf:150};
+function titleBlockEffective(){
+  const tb=normalizeTitleBlock(state.meta&&state.meta.titleBlock);
+  const values=Object.assign({},tb.fields);
+  if(!values.projectName) values.projectName=state.meta.name||'未命名图纸工程';
+  if(!values.drawingNo) values.drawingNo='—';
+  if(!values.date) values.date=new Date().toLocaleDateString('zh-CN');
+  if(!values.version) values.version='V1.0';
+  return {tb,values};
+}
+/** 比例尺取“整齐”长度：目标像素内取 1/2/5×10^n 米（保证刻度可读且不越界） */
+function niceScaleBarMeters(ppu,targetPx=140){
+  const k=ppu>0?ppu:1, raw=targetPx/k;
+  const p=Math.pow(10,Math.floor(Math.log10(raw)));
+  const m=raw/p, nice=m>=5?5:m>=2?2:1;
+  return {meters:nice*p,px:nice*p*k};
+}
+/** 自动比例 1:N：N = 每米像素 / 每像素物理尺寸（PNG/SVG 按 96dpi，PDF 按 150dpi 页面） */
+function titleBlockRatio(ppu,format){
+  const dpi=TITLE_BLOCK_DPI[format]||96;
+  return Math.max(1,Math.round(dpi/((ppu>0?ppu:1)*0.0254)));
+}
+/** 图例：按当前可见对象的类型聚合（名称/颜色/数量），并列出涉及图层；上限 8 类/6 层，多余显示 +N */
+function titleBlockLegendData(){
+  const map=new Map(), layerSet=new Set();
+  state.objects.filter(isVisible).forEach(o=>{
+    const t=getType(o.typeId)||{};
+    const id=t.id||o.typeId||'?';
+    const e=map.get(id)||{name:t.name||id,color:(o.style&&o.style.color)||t.color||'#64748b',count:0};
+    e.count++; map.set(id,e);
+    const l=layerOf(o); if(l&&l.name) layerSet.add(l.name);
+  });
+  const all=Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name,'zh'));
+  const layers=Array.from(layerSet).sort();
+  return {items:all.slice(0,8),more:Math.max(0,all.length-8),layers:layers.slice(0,6),layerMore:Math.max(0,layers.length-6)};
+}
+/** 导出叠加层唯一布局源：返回 null 表示未启用（调用方直接跳过，保证默认产物不变） */
+function titleBlockSpec(W,H,ppu,format){
+  const {tb,values}=titleBlockEffective();
+  if(!tb.enabled) return null;
+  const pad=12, ratio=titleBlockRatio(ppu,format);
+  const blockW=Math.min(440,Math.max(300,W*0.46)), rowH=30, blockH=rowH*4;
+  const bx=W-pad-blockW, by=H-pad-blockH;
+  const cells=[];
+  for(let r=0;r<4;r++) for(let c=0;c<2;c++){
+    const def=TITLE_BLOCK_FIELDS[r*2+c], half=blockW/2;
+    const val=def.key==='scale'?(values.scale||('1:'+ratio)):values[def.key];
+    cells.push({x:bx+c*half,y:by+r*rowH,w:half,h:rowH,label:L(def.label),value:val||'—',key:def.key});
+  }
+  const bar=niceScaleBarMeters(ppu,140);
+  const legend=titleBlockLegendData(), lineH=18;
+  const legendW=Math.min(240,Math.max(170,W*0.3));
+  const legendH=26+legend.items.length*lineH+(legend.layers.length?16:0)+(legend.more?16:0);
+  return {
+    tb,values,ratio,
+    frame:tb.frame?{x:8,y:8,w:Math.max(1,W-16),h:Math.max(1,H-16)}:null,
+    block:{x:bx,y:by,w:blockW,h:blockH,rowH,cells},
+    scaleBar:tb.scaleBar?{x:pad+18,y:H-pad-42,w:bar.px,h:8,meters:bar.meters}:null,
+    legend:tb.legend?{x:W-pad-legendW,y:pad+10,w:legendW,h:legendH,lineH,...legend}:null
+  };
+}
+/** Canvas 渲染（PNG / PDF 位图页共用）：字号/坐标单位为 CSS 像素 */
+function drawTitleBlockOnCanvas(c,W,H,spec){
+  if(!spec) return;
+  c.save();
+  if(spec.frame){ c.strokeStyle='#111827'; c.lineWidth=1.5; c.strokeRect(spec.frame.x,spec.frame.y,spec.frame.w,spec.frame.h); }
+  const b=spec.block;
+  c.fillStyle='#ffffff'; c.fillRect(b.x,b.y,b.w,b.h);
+  c.strokeStyle='#111827'; c.lineWidth=1; c.strokeRect(b.x,b.y,b.w,b.h);
+  c.beginPath();
+  for(let r=1;r<4;r++){ const y=b.y+r*b.rowH; c.moveTo(b.x,y); c.lineTo(b.x+b.w,y); }
+  c.moveTo(b.x+b.w/2,b.y); c.lineTo(b.x+b.w/2,b.y+b.h); c.stroke();
+  c.textBaseline='alphabetic';
+  spec.block.cells.forEach(cell=>{
+    c.fillStyle='#4b5563'; c.font='10px Microsoft YaHei,Arial'; c.fillText(cell.label,cell.x+6,cell.y+12);
+    c.fillStyle='#111827'; c.font='12px Microsoft YaHei,Arial';
+    let v=String(cell.value);
+    while(v.length>1&&c.measureText(v).width>cell.w-12) v=v.slice(0,-1);
+    c.fillText(v,cell.x+6,cell.y+26);
+  });
+  if(spec.scaleBar){
+    const s=spec.scaleBar, seg=s.w/2;
+    c.fillStyle='#111827'; c.fillRect(s.x,s.y,seg,s.h);
+    c.fillStyle='#ffffff'; c.fillRect(s.x+seg,s.y,seg,s.h);
+    c.strokeStyle='#111827'; c.lineWidth=1; c.strokeRect(s.x,s.y,s.w,s.h);
+    c.fillStyle='#111827'; c.font='10px Microsoft YaHei,Arial';
+    c.fillText('0',s.x,s.y-3);
+    c.textAlign='center'; c.fillText(fmt(s.meters/2),s.x+seg,s.y-3); c.textAlign='right';
+    c.fillText(fmt(s.meters)+' m',s.x+s.w,s.y-3); c.textAlign='left';
+  }
+  if(spec.legend){
+    const lg=spec.legend;
+    c.fillStyle='rgba(255,255,255,.92)'; c.fillRect(lg.x,lg.y,lg.w,lg.h);
+    c.strokeStyle='#111827'; c.lineWidth=1; c.strokeRect(lg.x,lg.y,lg.w,lg.h);
+    c.fillStyle='#111827'; c.font='bold 11px Microsoft YaHei,Arial'; c.fillText(L('图例'),lg.x+6,lg.y+16);
+    c.font='11px Microsoft YaHei,Arial';
+    let y=lg.y+34;
+    lg.items.forEach(it=>{
+      c.fillStyle=it.color; c.fillRect(lg.x+7,y-8,8,8);
+      c.strokeStyle='#111827'; c.strokeRect(lg.x+7,y-8,8,8);
+      c.fillStyle='#111827'; c.fillText(it.name+' ×'+it.count,lg.x+20,y); y+=lg.lineH;
+    });
+    if(lg.more){ c.fillStyle='#4b5563'; c.fillText('… +'+lg.more+' 类',lg.x+7,y); y+=lg.lineH; }
+    if(lg.layers.length){ c.fillStyle='#4b5563'; c.fillText('图层：'+lg.layers.join('、')+(lg.layerMore?' +'+lg.layerMore:''),lg.x+7,y); }
+  }
+  c.restore();
+}
+/** SVG 渲染：所有文本走 esc()（与既有导出同一转义表），几何与 titleBlockSpec 同源 */
+function exportTitleBlockSvg(spec){
+  if(!spec) return '';
+  const out=[];
+  if(spec.frame) out.push(`<rect x="${spec.frame.x}" y="${spec.frame.y}" width="${spec.frame.w}" height="${spec.frame.h}" fill="none" stroke="#111827" stroke-width="1.5"/>`);
+  const b=spec.block;
+  out.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#ffffff" stroke="#111827" stroke-width="1"/>`);
+  for(let r=1;r<4;r++) out.push(`<line x1="${b.x}" y1="${b.y+r*b.rowH}" x2="${b.x+b.w}" y2="${b.y+r*b.rowH}" stroke="#111827" stroke-width="1"/>`);
+  out.push(`<line x1="${b.x+b.w/2}" y1="${b.y}" x2="${b.x+b.w/2}" y2="${b.y+b.h}" stroke="#111827" stroke-width="1"/>`);
+  spec.block.cells.forEach(cell=>{
+    out.push(`<text x="${cell.x+6}" y="${cell.y+12}" font-size="10" fill="#4b5563">${esc(cell.label)}</text>`);
+    out.push(`<text x="${cell.x+6}" y="${cell.y+26}" font-size="12" fill="#111827">${esc(cell.value)}</text>`);
+  });
+  if(spec.scaleBar){
+    const s=spec.scaleBar, seg=s.w/2;
+    out.push(`<rect x="${s.x}" y="${s.y}" width="${seg}" height="${s.h}" fill="#111827"/>`);
+    out.push(`<rect x="${s.x+seg}" y="${s.y}" width="${seg}" height="${s.h}" fill="#ffffff" stroke="#111827" stroke-width="1"/>`);
+    out.push(`<text x="${s.x}" y="${s.y-3}" font-size="10" fill="#111827">0</text>`);
+    out.push(`<text x="${s.x+seg}" y="${s.y-3}" text-anchor="middle" font-size="10" fill="#111827">${esc(fmt(s.meters/2))}</text>`);
+    out.push(`<text x="${s.x+s.w}" y="${s.y-3}" text-anchor="end" font-size="10" fill="#111827">${esc(fmt(s.meters))} m</text>`);
+  }
+  if(spec.legend){
+    const lg=spec.legend;
+    out.push(`<rect x="${lg.x}" y="${lg.y}" width="${lg.w}" height="${lg.h}" fill="#ffffff" fill-opacity=".92" stroke="#111827" stroke-width="1"/>`);
+    out.push(`<text x="${lg.x+6}" y="${lg.y+16}" font-size="11" font-weight="bold" fill="#111827">${esc(L('图例'))}</text>`);
+    let y=lg.y+34;
+    lg.items.forEach(it=>{
+      out.push(`<rect x="${lg.x+7}" y="${y-8}" width="8" height="8" fill="${esc(it.color)}" stroke="#111827" stroke-width="1"/>`);
+      out.push(`<text x="${lg.x+20}" y="${y}" font-size="11" fill="#111827">${esc(it.name+' ×'+it.count)}</text>`);
+      y+=lg.lineH;
+    });
+    if(lg.more){ out.push(`<text x="${lg.x+7}" y="${y}" font-size="11" fill="#4b5563">${esc('… +'+lg.more+' 类')}</text>`); y+=lg.lineH; }
+    if(lg.layers.length) out.push(`<text x="${lg.x+7}" y="${y}" font-size="11" fill="#4b5563">${esc('图层：'+lg.layers.join('、')+(lg.layerMore?' +'+lg.layerMore:''))}</text>`);
+  }
+  return out.join('\n');
+}
 function renderToDataURL(scale=2){
   const d=worldDims(), margin=30;
   const z=Math.min(2600/d.w,1800/d.h,60);
@@ -175,6 +349,7 @@ function renderToDataURL(scale=2){
   markSurfaceSize(c,cw,ch);
   const cc=c.getContext('2d'); cc.scale(scale,scale);
   drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6});
+  drawTitleBlockOnCanvas(cc,cw,ch,titleBlockSpec(cw,ch,z,'png'));
   return c.toDataURL('image/png');
 }
 function exportPNG(){
@@ -377,11 +552,13 @@ function buildSceneSvg(){
       }
     }
   });
+  /* B-07：默认关闭时不得多出任何字节（视觉快照 golden 按整段 SVG 哈希） */
+  const tbSvg=exportTitleBlockSvg(titleBlockSpec(sw,sh,ppu,'svg'));
   const svg=`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${sw}" height="${sh}" viewBox="0 0 ${sw} ${sh}">
 <rect width="100%" height="100%" fill="white"/>
 <g>${shapes.join('\n')}</g><g font-family="Microsoft YaHei,Arial,sans-serif">${markers.join('\n')}</g>
-<text x="${margin}" y="${sh-8}" font-size="11" fill="#666">${esc(state.meta.name)} · ${esc(siteDescription())}</text>
+<text x="${margin}" y="${sh-8}" font-size="11" fill="#666">${esc(state.meta.name)} · ${esc(siteDescription())}</text>${tbSvg?'\n'+tbSvg:''}
 </svg>`;
   return svg;
 }
@@ -467,6 +644,7 @@ async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
   const d=worldDims(), margin=36;
   const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
   drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
+  drawTitleBlockOnCanvas(cc,W,H,titleBlockSpec(W,H,z,'pdf'));
   cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
   const pageTag=pageNo?' · '+L('第')+' '+pageNo+' / '+pageTotal+' '+L('页'):'';
   cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()+pageTag,margin,H-14);

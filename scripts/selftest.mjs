@@ -130,6 +130,9 @@ code += `\n;globalThis.__api = {
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
+  createTitleBlock, normalizeTitleBlock, TITLE_BLOCK_FIELDS, TITLE_BLOCK_TEXT_MAX,
+  titleBlockEffective, titleBlockSpec, titleBlockRatio, niceScaleBarMeters, titleBlockLegendData,
+  exportTitleBlockSvg, drawTitleBlockOnCanvas,
   xmlEscape, modalBody, safeHTML, sanitizeSiteStyle,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
@@ -5453,6 +5456,50 @@ asyncSuites.push((async()=>{
   api.setCurrentCatalog(null);
   api.resetState();
 })());
+
+/* 75.10 B-07 图框/标题栏：默认模板、旧档降级、持久化、导出叠加与默认不变 --- */
+{
+  api.resetState();
+  const d = api.createTitleBlock();
+  eq('B-07 默认关闭', d.enabled, false);
+  eq('B-07 默认子项', [d.frame, d.scaleBar, d.legend], [true, true, true]);
+  eq('B-07 默认版本', d.fields.version, 'V1.0');
+  eq('B-07 默认比例留空', d.fields.scale, '');
+  const legacy = api.normalizeTitleBlock({ fields: { projectName: '旧工程', drawingNo: 'A-01' } });
+  eq('B-07 旧档降级关闭', legacy.enabled, false);
+  eq('B-07 旧档保留字段', [legacy.fields.projectName, legacy.fields.drawingNo], ['旧工程', 'A-01']);
+  eq('B-07 旧档补默认', [legacy.fields.version, legacy.frame, legacy.scaleBar, legacy.legend], ['V1.0', true, true, true]);
+  const dirty = api.normalizeTitleBlock({ enabled: true, fields: { projectName: '\u0000A\nB' + 'x'.repeat(100) } });
+  eq('B-07 控制字符清洗', /\u0000|\n/.test(dirty.fields.projectName), false);
+  eq('B-07 超长截断', dirty.fields.projectName.length, api.TITLE_BLOCK_TEXT_MAX);
+  /* 持久化：buildProject 归一 titleBlock；缺字段旧档不报错、按默认降级 */
+  const built = api.buildProject({ schema: api.SCHEMA, meta: { name: 'TB', titleBlock: { enabled: true,
+    fields: { projectName: 'P', drawingNo: 'D-1', scale: '1:100', date: '2026-11-06', version: 'V2', designer: '设计甲', checker: '审核乙', unitName: '某单位' } } }, objects: [] });
+  eq('B-07 持久化启用', built.meta.titleBlock.enabled, true);
+  eq('B-07 持久化字段', built.meta.titleBlock.fields.scale, '1:100');
+  const builtOld = api.buildProject({ schema: api.SCHEMA, meta: { name: 'OLD' }, objects: [] });
+  eq('B-07 旧档 buildProject 默认降级', builtOld.meta.titleBlock.enabled, false);
+  /* 默认（未启用）不改变既有 SVG 导出 */
+  eq('B-07 默认 SVG 不叠加图例', api.buildSceneSvg().includes('图例'), false);
+  eq('B-07 默认 spec 为 null', api.titleBlockSpec(1200, 800, 10, 'png'), null);
+  eq('B-07 默认叠加 SVG 为空', api.exportTitleBlockSvg(null), '');
+  /* 启用后：8 字段 / 自动比例 / 比例尺取整齐长度 / SVG 统一转义 */
+  api.state.meta.titleBlock = api.normalizeTitleBlock({ enabled: true,
+    fields: { projectName: 'P<&>"', scale: '', date: '2026-11-06' } });
+  const spec = api.titleBlockSpec(1200, 800, 10, 'png');
+  ok('B-07 启用后 spec 存在', !!spec);
+  eq('B-07 8 字段单元', spec.block.cells.length, 8);
+  eq('B-07 自动比例', spec.block.cells.find(c => c.key === 'scale').value, '1:378');
+  ok('B-07 比例尺存在', !!spec.scaleBar);
+  eq('B-07 比例尺整齐长度', [spec.scaleBar.meters, Math.round(spec.scaleBar.w)], [10, 100]);
+  eq('B-07 比例尺 1:N (96dpi)', api.titleBlockRatio(10, 'png'), 378);
+  eq('B-07 比例尺 1:N (150dpi PDF)', api.titleBlockRatio(10, 'pdf'), 591);
+  const svgTB = api.exportTitleBlockSvg(spec);
+  ok('B-07 SVG 转义注入面', !svgTB.includes('<script>') && svgTB.includes('&lt;') && svgTB.includes('&amp;'));
+  const svgOn = api.buildSceneSvg();
+  ok('B-07 启用后 SVG 叠加标题栏', svgOn.includes('>图例<') && svgOn.includes('工程名'));
+  api.resetState();
+}
 
 /* ---------------- 结果汇总 ---------------- */
 await Promise.all(asyncSuites.map(s=>typeof s==='function'?s():s));

@@ -106,13 +106,47 @@ let calibUndoStack = [];     /* 校准控制点专用撤销栈（增/删/拖拽�
  * @property {string} activeFloorId
  * @property {Tombstone[]} tombstones
  */
+/* -------------------- 图框 / 标题栏模板（B-07） -------------------- */
+/** 标题栏文本上限（字符）；超长截断，控制字符替换为空格，避免 SVG/PDF 文本层被污染 */
+const TITLE_BLOCK_TEXT_MAX=80;
+/** 字段顺序即导出渲染顺序；required 仅表示常用字段（空值时导出显示占位符） */
+const TITLE_BLOCK_FIELDS=[
+  {key:'projectName',label:'工程名'},
+  {key:'drawingNo',label:'图号'},
+  {key:'scale',label:'比例'},
+  {key:'date',label:'日期'},
+  {key:'version',label:'版本'},
+  {key:'designer',label:'设计'},
+  {key:'checker',label:'审核'},
+  {key:'unitName',label:'单位'}
+];
+function titleBlockText(v){
+  return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,TITLE_BLOCK_TEXT_MAX);
+}
+/** 默认模板：总开关关闭（保证既有 PNG/PDF/SVG 导出字节不变）；日期/比例留空=导出时自动 */
+function createTitleBlock(){
+  return {enabled:false,frame:true,scaleBar:true,legend:true,
+    fields:{projectName:'',drawingNo:'',scale:'',date:'',version:'V1.0',designer:'',checker:'',unitName:''}};
+}
+/** 旧档/脏数据归一：缺字段按默认模板降级，布尔项缺省开启（仅当 enabled 后生效） */
+function normalizeTitleBlock(raw){
+  const out=createTitleBlock();
+  if(!raw||typeof raw!=='object') return out;
+  out.enabled=!!raw.enabled;
+  out.frame=raw.frame!==false;
+  out.scaleBar=raw.scaleBar!==false;
+  out.legend=raw.legend!==false;
+  const f=raw.fields&&typeof raw.fields==='object'?raw.fields:{};
+  TITLE_BLOCK_FIELDS.forEach(def=>{ if(f[def.key]!==undefined) out.fields[def.key]=titleBlockText(f[def.key]); });
+  return out;
+}
 /* -------------------- 初始化 / 工程数据 -------------------- */
 /** @returns {ProjectState} 新工程状态 */
 function createInitialState(){
   const now = new Date().toISOString();
   return {
     schema: SCHEMA,
-    meta: { id: uid('PRJ'), name: '未命名图纸工程', createdAt: now, updatedAt: now },
+    meta: { id: uid('PRJ'), name: '未命名图纸工程', createdAt: now, updatedAt: now, titleBlock: createTitleBlock() },
     settings: { unit:'m', precision:2, gridVisible:true, gridSize:1, snap:true, showLabels:true, markerScale:1,
       showCursor:true,   /* 鼠标十字准星与实时世界坐标 */
       showSegLen:true,   /* 全局缺省：未单独配置「段长」的对象显示段长与总长 */

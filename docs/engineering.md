@@ -126,11 +126,11 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 820 KB（839,680 B） | 787.2 KB（806,138 B） | 余量 33,542 B（门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 B 系列功能留空间） |
-| 产物体积（gzip） | 只打印，不阻断 | 258.1 KB（264,284 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `1675f80528fc…` | 从源重建、二次构建确定性一致 |
+| 单文件体积 | ≤ 820 KB（839,680 B） | 801.4 KB（820,168 B） | 余量 19,512 B（B-07 后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 B 系列功能留空间） |
+| 产物体积（gzip） | 只打印，不阻断 | 262.9 KB（269,196 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `f61c18b58e11…` | 从源重建、二次构建确定性一致 |
 | CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 40 = 40 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 2147 | 只增不减 |
+| 断言数 | ≥ 1870 且 0 失败 | 2171 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在
@@ -349,6 +349,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `world-transform.spec.mjs` | B-12：已仿射校准底图 + 矩形场地 + 点位做 2× 世界缩放后，对象世界坐标 ×2、与底图同一像素屏幕偏差 < 0.5 px，`metersPerPixel` 0.05→0.1、`transform.a` 同步 ×2，设备物理尺寸 ×2；场地默认保持 100×70（场地优先校准）。退化变换 `ok=false` 且对象/mp 不变；`scaleWorldAround` 旧签名可用、无 transform 时只缩放 m/p；显式 `{site:true}` 时圆场地等比放大仍为圆 |
 | `perf-render.spec.mjs` | B-11：真实 Chromium 1600×900 离屏渲染基线（A 基础场景 / B 标注+图元，均 2000 对象）。输出重建 / 缓存命中 / 直接全量的 avg·P50·P95·P99、`staticKey`、`filter+sort`、`measureText` 与 `Path2D` 单帧调用、heapDelta、zoom=6 裁剪率；断言为宽松上限（重建 P95 <160ms、缓存帧 P50 <8ms / P95 <12ms、直接 P95 <160ms、裁剪 >60%）只作防回归，不作为性能承诺 |
 | `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
+| `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
@@ -357,6 +358,22 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 修复旧行为「所有页叠在同一原点」。导出侧 `pdfPagePlan()` 以楼层顺序生成「图纸页 + 清单页」计划，
 页码全局连续并写入页脚；清单分页数与渲染共用 `pdfListRowsPerPage()`。往返校验覆盖页数、页序、页宽/页高
 （`selftest` §37b，用 `Pdf.buildImagePdf` 生成两页后 `parsePdf` 回读），矢量坐标回读仍受「PDF 导出为位图」限制（见风险）。
+
+**图框 / 标题栏 / 比例尺 / 图例（B-07，2026-11）**：字段 schema 只有 `js/core/model.js` 一处
+（`TITLE_BLOCK_FIELDS` / `createTitleBlock` / `normalizeTitleBlock`），默认 `enabled:false`，
+`frame/scaleBar/legend` 默认开、版本默认 `V1.0`，文本清洗控制字符并截断到 80 字符。
+导出侧 `titleBlockSpec(W,H,ppu,format)` 是**唯一布局源**，未启用返回 `null`，三处调用点（PNG
+`renderToDataURL` / PDF `renderPdfDrawingPage` / SVG `buildSceneSvg`）直接跳过——默认产物零字节差异，
+`selftest` 以 `buildSceneSvg` 视觉快照哈希 `e6ba5542…` 断言。启用后 PNG/PDF 共用
+`drawTitleBlockOnCanvas`、SVG 用 `exportTitleBlockSvg`，两者读同一 spec（几何/文案不各写一套）；
+SVG 所有文本走既有 `esc()`，与底图 `href`、场地 `fill/stroke` 同一道转义防线。
+比例尺取 1/2/5×10ⁿ 米的整齐长度（目标 140px），比例 `1:N` 中 N = dpi /(每米像素 × 0.0254)，
+PNG/SVG 按 96dpi、PDF 按 150dpi 图纸页换算（同一缩放导出 PNG 与 PDF 的比例数不同属预期）。
+图例只统计**可见对象**，按类型聚合名称/颜色/数量，上限 8 类 / 6 层，超出显示 `+N`。
+持久化：字段存 `state.meta.titleBlock`，`buildProject` 归一后随 `meta` 进入撤销/重做快照（B-10 结构共享
+不改语义）；协作/合并走 `mergeProjectData` 的 `meta` **整体本地优先**（`Object.assign(B.meta, A.meta)`），
+不做字段级 LWW，也不单独统计标题栏冲突；旧工程缺 `meta.titleBlock` 时 `normalizeTitleBlock`
+整体降级为「关闭 + 默认字段」，不阻塞载入。
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 §5.4。

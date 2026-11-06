@@ -18,6 +18,7 @@
       exportJson: 'JSON 工程', exportPng: 'PNG 高清图', exportSvg: 'SVG 矢量图',
       exportPdf: 'PDF 矢量（图纸+清单）', exportDxf: 'DXF（CAD 互通）',
       exportCsv: 'CSV 表格', exportTsv: 'TSV 表格', exportXlsx: 'Excel (.xlsx)',
+      exportTitleBlock: '图框模板…',
       exportLabels: '设备二维码标签 (HTML)',
       baseSite: '底图/场地', scaleBtn: '比例尺', affineBtn: '仿射校准', coverageBtn: '覆盖率分析', parkingBtn: '停车规划', collabBtn: '协作',
       panelToggle: '☰ 面板', fitBtn: '适应',
@@ -79,6 +80,7 @@
       exportJson: 'JSON project', exportPng: 'PNG (high-res)', exportSvg: 'SVG (vector)',
       exportPdf: 'PDF (drawing + list)', exportDxf: 'DXF (CAD)',
       exportCsv: 'CSV table', exportTsv: 'TSV table', exportXlsx: 'Excel (.xlsx)',
+      exportTitleBlock: 'Title block…',
       exportLabels: 'Device QR labels (HTML)',
       baseSite: 'Base/Site', scaleBtn: 'Scale', affineBtn: 'Affine', coverageBtn: 'Coverage', parkingBtn: 'Parking', collabBtn: 'Collab',
       panelToggle: '☰ Panel', fitBtn: 'Fit',
@@ -584,7 +586,17 @@
     '通用标记':'Generic marker', '摄像头':'Camera', '球机':'Dome camera', '路灯':'Street light', '道闸':'Barrier gate',
     '充电桩':'Charger', '警示点':'Warning point', '自定义点':'Custom point', '普通区域':'Generic area', '车位区域':'Parking bay',
     '建筑/遮挡':'Building/obstruction', '通道':'Aisle', '围墙/边界':'Wall/boundary', '围栏':'Fence',
-    '车行线':'Vehicle lane', '人行线':'Pedestrian lane', '自定义线':'Custom line', '尺寸标注':'Dimension'
+    '车行线':'Vehicle lane', '人行线':'Pedestrian lane', '自定义线':'Custom line', '尺寸标注':'Dimension',
+    /* B-07 图框 / 标题栏 */
+    '图框 / 标题栏模板':'Frame / title block template',
+    '启用图框、标题栏、比例尺与图例':'Enable frame, title block, scale bar and legend',
+    '绘制图框边框':'Draw frame border', '绘制比例尺':'Draw scale bar',
+    '绘制图例（按可见对象类型/图层）':'Draw legend (visible types / layers)',
+    '默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。':
+      'Off by default; when off the export is identical to the previous version. Empty date = export date, empty scale = auto 1:N by current zoom.',
+    '图框模板已保存':'Title block saved',
+    '工程名':'Project name', '图号':'Drawing no.', '比例':'Scale', '日期':'Date', '版本':'Version',
+    '设计':'Designer', '审核':'Reviewer', '单位':'Company', '图例':'Legend'
   };
   Object.assign(PHRASES, MORE);
 

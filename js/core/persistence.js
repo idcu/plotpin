@@ -597,6 +597,8 @@ function buildProject(p){
   const base=createInitialState();
   const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
   meta.name=typeof meta.name==='string'&&meta.name.trim()?meta.name:base.meta.name;
+  /* B-07：图框/标题栏随 meta 持久化；旧档缺字段 → 默认模板（enabled:false，不改变既有导出） */
+  meta.titleBlock=normalizeTitleBlock(meta.titleBlock);
   const settings=Object.assign(base.settings,typeof p.settings==='object'&&p.settings?p.settings:{});
   settings.unit='m';
   // 注意：base.settings 已被上面的 Object.assign 就地合并，兜底值必须用字面量，不能再引用 base
