@@ -347,6 +347,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（7 列表头、数值、合计、目录版本/导出时间）→ 替换目录后重导仍为冻结单价、改数量后按新目录重算 → 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 → 跨厂商重名未填厂商不带价、填厂商后按精确键计价 |
 | `table-batch.spec.mjs` | B-08 原义：CSV 条件替换命中 2 台并改写业务类型/台账、批量新增落点 (10,20) 可复算；严格模式下非法更新行整批拒绝（无「合并导入」按钮），现有对象数量与文本不变 |
 | `world-transform.spec.mjs` | B-12：已仿射校准底图 + 矩形场地 + 点位做 2× 世界缩放后，对象世界坐标 ×2、与底图同一像素屏幕偏差 < 0.5 px，`metersPerPixel` 0.05→0.1、`transform.a` 同步 ×2，设备物理尺寸 ×2；场地默认保持 100×70（场地优先校准）。退化变换 `ok=false` 且对象/mp 不变；`scaleWorldAround` 旧签名可用、无 transform 时只缩放 m/p；显式 `{site:true}` 时圆场地等比放大仍为圆 |
+| `perf-render.spec.mjs` | B-11：真实 Chromium 1600×900 离屏渲染基线（A 基础场景 / B 标注+图元，均 2000 对象）。输出重建 / 缓存命中 / 直接全量的 avg·P50·P95·P99、`staticKey`、`filter+sort`、`measureText` 与 `Path2D` 单帧调用、heapDelta、zoom=6 裁剪率；断言为宽松上限（重建 P95 <160ms、缓存帧 P50 <8ms / P95 <12ms、直接 P95 <160ms、裁剪 >60%）只作防回归，不作为性能承诺 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
@@ -455,6 +456,32 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
   （实测 10k 对象下单次 < 1ms），不属于需要修的热路径；未发现其它随对象数平方增长的分配/查找路径。
 - **仍需 B-09 决策**：10k 全视野静态层重建 199–297ms、导入后首帧 212–222ms，分块重建仍是主要候选；
   本轮不直接改渲染架构。
+
+**B-11 结论：渲染候选优化逐项实测（2026-11，只做有数据支撑的项）**
+
+新增 `tests/e2e/perf-render.spec.mjs`，在真实 Chromium 中创建 1600×900 离屏 canvas，
+直接调用 `drawScene` 计时（预热 3 次；重建 10 次、缓存命中 200 次、直接全量 10 次、`sceneStaticKey` 500 次；
+另用 `CanvasRenderingContext2D.prototype.measureText` 与 `window.Path2D` 插桩统计单帧真实调用）。
+两个场景均为 2000 对象：A 与 `bench.mjs` 同口径（点位/区域/折线各 1/3，不显示名称），
+B 为 2000 个行业 SVG 图元点且显示名称标注（更接近真实图纸的 `measureText` / `Path2D` 压力）。
+
+| 场景 | 重建 avg / P50 / P95 | 缓存帧 P50 / P95 | 直接全量 avg / P95 | staticKey | measureText | Path2D | filter+sort | 裁剪率 |
+|---|---|---|---|---|---|---|---|---|
+| A | 5.74–6.85 / 5.4–7.2 / 8.1–8.6 ms | 0.1 / 0.2 ms | 2.93–3.47 / 4.7 ms | 0.00–0.01 ms | 480 次 / 0.3–0.5 ms | 0 次 | 0.07 ms | 99.1% |
+| B | 4.24–5.44 / 3.9–5.0 / 6.0–8.2 ms | 0.1 / 0.2 ms | 2.42–2.65 / 3.3–3.8 ms | 0.00–0.01 ms | 245 次 / 0.1–0.5 ms | 940 次 / 0.6–1.5 ms | 0.05–0.06 ms | 99.1% |
+
+两轮运行（单独跑 + 全量 e2e）区间；`heapDelta` 20 次重建前后均为 **0 MB**。
+
+| 候选 | 结论 | 数据依据 |
+|---|---|---|
+| `staticKey` 精确化（减少签名字段 / 避免 JSON.stringify） | **不做** | 500 次签名累计 0.00–0.01ms/次，占重建帧 <0.2%；已包含 `settings/site/transform` 全量比较，精确化只能省下噪声级成本 |
+| 图层/对象索引（替代每帧 `filter+sort`） | **不做** | 2000 对象下 `filter(可见且未选中)+sort(z)` 实测 0.05–0.07ms，是重建帧的 0.7–1.6%；索引需维护增删改同步，收益不足以抵消复杂度 |
+| `measureText` LRU | **不引入** | 场景 A 480 次 / 0.3–0.5ms、B 245 次 / 0.1–0.5ms，全部发生在重建帧内；缓存命中帧根本不调用。实现后同进程交替 24 轮 A/B，帧级差异不可重复，故回退 |
+| Path2D 缓存 | **不引入** | 场景 B 940 次构造 / 0.6–1.5ms；实现后 A/B 交替实测（on 3.76ms vs off 4.08ms、on 6.46ms vs off 6.11ms）方向不稳定，低于运行间噪声，按「无数据支撑不引入」回退 |
+| 分块渲染 / Worker + OffscreenCanvas | **不做（无证据）** | 缓存帧 P95 仅 0.2ms，重建 P95 6.0–8.6ms，均在 16.7ms 帧预算内，**没有「渲染占满主线程」的实测证据**；10k 规模的重建 199–297ms 沿用 B-01 结论，分块仍留给 B-09 决策 |
+
+**未验证（原因）**：只测本机 headless Chromium（SwiftShader 软件光栅）与 1600×900 离屏画布，
+未覆盖真机 GPU、Safari/Firefox、低端移动设备；2000 对象规模下的结论不外推到 10k 对象重建耗时。
 
 ---
 

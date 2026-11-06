@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-11：渲染性能收敛（真实 Chromium 实测后按数据取舍）
+
+- **Commit Hash**：本条提交（`test(perf): 真实 Chromium 渲染基线，四项候选实测无稳定收益不引入`）。复盘用 `git log --grep="真实 Chromium 渲染基线" -1 --format=%H`。
+- **核心改动点**
+  - 新增 `tests/e2e/perf-render.spec.mjs`：真实 Chromium 内建 1600×900 离屏 canvas，直接调用 `drawScene`。两个 2000 对象场景——A 与 `bench.mjs` 同口径（点位/区域/折线各 1/3、不显示名称），B 为行业 SVG 图元点 + 名称标注。测量：预热 3 次，重建 10 次、缓存命中 200 次、直接全量 10 次、`sceneStaticKey` 500 次；用 `CanvasRenderingContext2D.prototype.measureText` 与 `window.Path2D` 插桩统计单帧真实调用；heapDelta；zoom=6 裁剪率。
+  - **运行时零改动**：`js/core/render.js` 的 Path2D 缓存与 `measureText` LRU 两次本地实现后，均因 A/B 差异不可重复而 `git checkout --` 回退；`staticKey` 精确化与图层/对象索引经测量收益低于噪声，未落地。本轮只留下可复跑的基线与宽松防回归断言，不引入未验证收益的代码。
+  - 文档：`docs/engineering.md`（§5.4 B-11 结论表 + e2e 表行）、`README.md`、本文件。`docs/features.md` / `docs/modules.md` 不涉及（无用户可见行为与公共 API 变更）。
+- **实测验证数据**（两轮：单独跑 + 全量 e2e；headless Chromium / SwiftShader，本机）
+  - 场景 A：重建 avg **5.74–6.85ms**、P50 5.4–7.2、P95 **8.1–8.6**；缓存帧 P50 **0.1** / P95 **0.2**；直接全量 avg 2.93–3.47 / P95 4.7；`staticKey` 0.00–0.01ms；`measureText` **480 次 / 0.3–0.5ms**；Path2D 0 次；`filter+sort` 0.07ms；heapDelta **0 MB**；裁剪率 **99.1%**。
+  - 场景 B：重建 avg **4.24–5.44ms**、P50 3.9–5.0、P95 **6.0–8.2**；缓存帧 P95 **0.2**；直接全量 avg 2.42–2.65 / P95 3.3–3.8；`measureText` **245 次 / 0.1–0.5ms**；Path2D **940 次 / 0.6–1.5ms**；`filter+sort` 0.05–0.06ms；heapDelta 0 MB。
+  - A/B 交替（同进程 24 轮）：Path2D 缓存 on 3.76 vs off 4.08、on 6.46 vs off 6.11；`measureText` 缓存后 warm 仍 245 次未全命中——方向不稳定，故不引入。
+  - 门禁：selftest **2133 通过 / 0 失败**（未变）；e2e **44 passed / 1 skipped（47.0s）**（新增 1 条 perf 用例）；`npm run ci` 全绿（两次 bench：缓存帧 avg 0.35–0.42ms / P95 0.47–0.66ms、重建 23.7–28.17ms、heapUsed 20.19–20.26MB、裁剪 99.4%）。
+  - 体积 **800,804 B（不变）**；gzip **262,303 B（不变）**；820 KB 门禁余量 **38,876 B**；SHA256 `3dd0d50d0286…`（仅测试文件变更，不进单文件产物）。
+- **未验证项**
+  - 仅本机 headless Chromium（软件光栅）+ 1600×900 离屏画布；未覆盖真机 GPU、Safari/Firefox、低端移动设备。
+  - 2000 对象结论不外推：10k 对象全视野重建 199–297ms（B-01）未在本套件复测，分块/Worker 仍留给 B-09 决策。
+- **遗留 TODO / 风险**
+  - 真机 GPU 与 DPR2/移动端渲染基线仍缺失；若后续要做 Worker/分块，需先用本套件采集「主线程持续饱和」证据。
+  - 宽松断言只防数值量级回退（如 P95 突增一个数量级），不能替代人工前后对比。
+- **受影响调用方 / 公共抽象**
+  - 无运行时调用方受影响；无新增/修改公共函数，`index.html` 与单文件产物不变。
+  - 新增测试脚本 `tests/e2e/perf-render.spec.mjs`（devDependency Playwright，已批准）；未新增运行时依赖。
+
 ## 2026-11-06 · B-12：世界变换统一入口 applyWorldTransform
 
 - **Commit Hash**：本条提交（`fix(calib): 比例尺/仿射统一走 applyWorldTransform，底图仿射同步迁移`）。复盘用 `git log --grep="世界变换统一入口" -1 --format=%H`。
