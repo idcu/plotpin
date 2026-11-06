@@ -1859,6 +1859,67 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   approx('高级-MTEXT字高', mt.height, 2.5, 1e-9);
 }
 
+/* 36.1 B-03：DXF 版本审计 + SOLID/3DFACE/LEADER/ATTRIB 补充解析矩阵 --------------- */
+{
+  const P=(c,v)=>c+'\n'+v+'\n';
+  const head=ver=>P(0,'SECTION')+P(2,'HEADER')+P(9,'$ACADVER')+P(1,ver)+P(9,'$INSUNITS')+P(70,4)+P(0,'ENDSEC');
+  const sample=ver=>head(ver)+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'LINE')+P(8,'WALL')+P(10,0)+P(20,0)+P(11,10)+P(21,0)
+    +P(0,'CIRCLE')+P(8,'0')+P(10,20)+P(20,20)+P(40,5)
+    /* SOLID：DXF 约定 12/13 与视觉顺序相反，适配层重排为 0,1,3,2 */
+    +P(0,'SOLID')+P(8,'FLOOR')+P(10,0)+P(20,0)+P(11,10)+P(21,0)+P(12,0)+P(22,10)+P(13,10)+P(23,10)
+    /* 3DFACE：按自然顺序 0,1,2,3 */
+    +P(0,'3DFACE')+P(8,'WALL')+P(10,30)+P(20,0)+P(11,40)+P(21,0)+P(12,40)+P(22,10)+P(13,30)+P(23,10)
+    +P(0,'LEADER')+P(8,'TAG')+P(10,0)+P(20,30)+P(10,5)+P(20,30)+P(10,5)+P(20,35)
+    +P(0,'ATTRIB')+P(8,'TEXT')+P(10,30)+P(20,40)+P(40,2)+P(1,'门牌 A')
+    +P(0,'DIMENSION')+P(8,'0')+P(10,0)+P(20,0)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const versions={AC1009:'R12',AC1014:'R14',AC1015:'2000',AC1018:'2004',AC1021:'2007',AC1024:'2010',AC1027:'2013',AC1032:'2018'};
+  for(const [ver,name] of Object.entries(versions)){
+    const meta=api.Dxf.inspect(sample(ver));
+    eq('B-03-版本识别 '+ver, meta.version, ver);
+    eq('B-03-版本名称 '+ver, meta.versionName, name);
+    eq('B-03-已知版本 '+ver, meta.knownVersion, true);
+    const r=api.Dxf.parseDxf(sample(ver));
+    eq('B-03-可解析实体数 '+ver, r.entities.length, 6);   /* LINE/SOLID/3DFACE/LEADER→折线 + 圆 + ATTRIB→文字 */
+    eq('B-03-补充实体数 '+ver, r.supplemental, 4);
+    eq('B-03-不支持的 DIMENSION '+ver, r.inspect.unsupportedTypes.DIMENSION, 1);
+    eq('B-03-支持计数 '+ver, r.inspect.supportedCount, 6);
+  }
+  const r=api.Dxf.parseDxf(sample('AC1032'));
+  const solid=r.entities.find(e=>e.source==='SOLID');
+  eq('B-03-SOLID 闭合', solid.closed, true);
+  eq('B-03-SOLID 顺序重排', JSON.stringify(solid.points), JSON.stringify([[0,0],[0.01,0],[0.01,0.01],[0,0.01]]));
+  const face=r.entities.find(e=>e.source==='3DFACE');
+  eq('B-03-3DFACE 顺序保持', JSON.stringify(face.points), JSON.stringify([[0.03,0],[0.04,0],[0.04,0.01],[0.03,0.01]]));
+  const lead=r.entities.find(e=>e.source==='LEADER');
+  eq('B-03-LEADER 三点开放', lead.points.length===3&&!lead.closed, true);
+  eq('B-03-ATTRIB 转文字', r.entities.find(e=>e.source==='ATTRIB').text, '门牌 A');
+  approx('B-03-ATTRIB 字高', r.entities.find(e=>e.source==='ATTRIB').height, 0.002, 1e-9);
+  /* 单位换算同样作用到补充实体：INSUNITS=4（毫米）→ 米 */
+  const mm=api.Dxf.parseDxf(head('AC1032')+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'3DFACE')+P(8,'0')+P(10,0)+P(20,0)+P(11,1000)+P(21,0)+P(12,1000)+P(22,1000)+P(13,0)+P(23,1000)
+    +P(0,'ENDSEC')+P(0,'EOF'));
+  approx('B-03-补充实体单位换算', mm.entities[0].points[1][0], 1, 1e-9);
+  /* 二进制 DXF 明确拒绝；未知版本如实标记 */
+  const bin=api.Dxf.inspect('AutoCAD Binary DXF\r\n\u0000\u0000more');
+  eq('B-03-二进制识别', bin.binary, true);
+  eq('B-03-二进制不产出实体', api.Dxf.parseDxf('AutoCAD Binary DXF\r\n\u0000\u0000more').entities.length, 0);
+  const unk=api.Dxf.inspect(head('AC1099'));
+  eq('B-03-未知版本保留代码', unk.version, 'AC1099');
+  eq('B-03-未知版本不标已知', unk.knownVersion, false);
+  /* R12 POLYLINE 的 VERTEX 42 凸度：如实计数（当前按折线导入，弧段拉直） */
+  const r12=api.Dxf.inspect(head('AC1009')+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'POLYLINE')+P(8,'0')+P(70,0)+P(0,'VERTEX')+P(8,'0')+P(10,0)+P(20,0)+P(42,0.5)
+    +P(0,'VERTEX')+P(8,'0')+P(10,10)+P(20,0)+P(0,'SEQEND')+P(0,'ENDSEC')+P(0,'EOF'));
+  eq('B-03-R12 凸度丢失计数', r12.r12Bulge, 1);
+  const onlyDim=api.Dxf.parseDxf(head('AC1032')+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'DIMENSION')+P(8,'0')+P(10,0)+P(20,0)+P(0,'HATCH')+P(8,'0')+P(10,0)+P(20,0)
+    +P(0,'ENDSEC')+P(0,'EOF'));
+  eq('B-03-仅不支持实体不产出对象', onlyDim.entities.length, 0);
+  eq('B-03-不支持类型如实记录', Object.keys(onlyDim.inspect.unsupportedTypes).sort().join(','), 'DIMENSION,HATCH');
+}
+
 /* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
 asyncSuites.push((async()=>{
   const toLatin=bytes=>{ let s=''; for(let i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]); return s; };

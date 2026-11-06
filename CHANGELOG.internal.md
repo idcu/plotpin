@@ -2,6 +2,34 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-03：DXF 实体与版本兼容
+
+- **Commit Hash**：本条提交（`feat(dxf): 版本审计与 SOLID/3DFACE/LEADER/ATTRIB 补充解析`）。复盘用 `git log --grep="版本审计与 SOLID" -1 --format=%H`。
+- **核心改动点**
+  - `js/common/dxf.js`（适配层，**不改 `ngm.vendor`**）新增 `Dxf.inspect(text)`：读 `$ACADVER` / `$INSUNITS`，统计 ENTITIES、BLOCKS 与实体类型，识别二进制 DXF，输出 `{version, versionName, knownVersion, insUnits, entityCounts, supplementalTypes, unsupportedTypes, entityTotal, supportedCount, blocks, r12Bulge, binary}`。
+  - `Dxf.parseDxf(text)` 在公共模块结果之上补充解析 `SOLID`（0,1,3,2 重排闭合）、`3DFACE`（自然闭合）、`LEADER`（开放折线）、`ATTRIB`/`ATTDEF`（文字），并按 `parsed.unit` 做同样的单位换算；公共模块原实体、`unit` 字段与 app 字段映射保持不变。
+  - `importDxfFile`：二进制 DXF 明确提示「另存为 ASCII DXF」；导入结果追加版本、补充解析、跳过类型、R12 凸度丢失提示；仅含不支持实体时不再泛化为「不支持的文件类型」，而是列出具体类型与条数。
+  - 暂不支持类型（DIMENSION / HATCH / MLINE / XLINE / RAY / IMAGE / WIPEOUT / REGION / 3DSOLID 等）不猜测几何，计数上报。
+  - 文档：`docs/features.md`、`docs/modules.md`、`docs/engineering.md`（B-03 段 + e2e 表）、`README.md`、本文件。
+- **实测验证数据**
+  - selftest **2016 → 2086 通过 / 0 失败**（+70：8 版本 × 7 项 + SOLID/3DFACE/LEADER/ATTRIB/单位/二进制/未知版本/R12 凸度/仅不支持实体）。
+  - e2e `dxf-version.spec.mjs` **2 passed（3.7s 单独运行；524ms + 454ms）**；全量 e2e **39 passed / 1 skipped（46.8s）**。
+  - 版本矩阵：AC1009/AC1014/AC1015/AC1018/AC1021/AC1024/AC1027/AC1032 全部识别并解析（合成 DXF）。
+  - 体积 **779,096 → 787,499 B（+8,403 B / +1.08%）**；gzip **255,447 → 258,127 B（+2,680 B）**；820 KB 门禁余量 **52,181 B**；SHA256 `41e89298db22…`。
+- **未验证项**
+  - **无真实 CAD 样本**：仓库没有 AutoCAD/BricsCAD 导出的 DXF，样本矩阵为按组码规范手工合成；真实 R13/R14 文件、代理对象、外部参照、动态块、标注样式未验证。
+  - R12 `POLYLINE` 的 VERTEX 凸度（42）仍按折线导入、弧段拉直，仅提示不修复（公共模块未读取该组码；修改 vendor 会破坏 `ngm.lock` 约束）。
+  - 二进制 DXF 只做识别与提示，不做转换。
+- **遗留 TODO / 风险**
+  - SOLID/3DFACE 仅保留外轮廓，颜色/填充/线宽等 DXF 样式不映射。
+  - ATTRIB 按 WCS 坐标落为文字，不继承 INSERT 的旋转/缩放（公共模块的块展开不包含 ATTRIB）。
+  - 文本旋转（组码 50）、MTEXT 附件点与多行排版仍未映射。
+  - `inspect` 的实体计数是原始记录数（POLYLINE + VERTEX 分别计数），与导入后对象数不是一一对应。
+- **受影响调用方 / 公共抽象**
+  - 新增全局 `Dxf.inspect / Dxf.supplementalEntities / Dxf.VERSION_NAMES / Dxf.CORE_TYPES / Dxf.SUPPLEMENT_TYPES`；`Dxf.parseDxf / Dxf.parse` 签名不变，返回值新增 `inspect` 与 `supplemental` 两个字段。
+  - `importDxfFile` 行为：支持实体结果与旧字段映射不变；新增补充实体；二进制/仅不支持实体/版本提示更明确。
+  - 未新增运行时依赖，`ngm.vendor` 未修改。
+
 ## 2026-11-06 · B-08 原义：表格批量布点 + 条件批量替换
 
 - **Commit Hash**：本条提交（`feat(table): 表格批量布点与条件批量替换`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="表格批量布点与条件批量替换" -1 --format=%H`。

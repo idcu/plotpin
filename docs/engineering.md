@@ -192,7 +192,7 @@ Version 3-M、`Qr.MAX_BYTES=42`，实测邀请串 **767 字节**远超该上限�
 `floorMetaUpdated` / `floorsDeleted`，`mergeHistoryNeeded(stats)` 是「是否需要为合并写撤销栈」
 的唯一判据（`history:'overwrite'` 只在覆盖发生时才 `pushHistory`）。
 实测：selftest 1886 → **1914 通过 / 0 失败**（+28，含邀请串往返、QR 容量、TTL/key/字节
-上限、hello 去重、合并历史判据）；e2e **37 passed / 1 skipped**（43.1s，5 分钟浸泡默认跳过），
+上限、hello 去重、合并历史判据）；e2e **39 passed / 1 skipped**（46.8s，5 分钟浸泡默认跳过），
 B-06 新增 `collab.spec.mjs` 5 个用例；同机双标签 WebRTC 建连 `open=true`、**73–95ms**（3 次）。
 5 分钟离线浸泡实测通过（5.1min 用例，重连后本地新增对象对端可见）；双设备真机 WebRTC
 **未验证**（本轮只有同一台机器上的两个标签页）。详见 CHANGELOG.internal.md。
@@ -211,6 +211,26 @@ GeoJSON 249,101 B、PNG 786,440 B、PDF 339,954 B、SVG 17,062 B、DXF 7,249 B�
 单文件体积 **741.3 KB → 744.6 KB（759,056 → 762,500 B，+3,444 B / +0.45%）**：新增字段表模块约 6.5 KB，
 删除各格式重复拼装（`objectRows` 内联分支、PDF `param`、GeoJSON 属性、`angleDimDeg`）后净增 3.4 KB；
 当时的 ≤750 KB 门禁通过（余量 5,500 B；门禁已于 2026-11-06 提到 820 KB）。
+
+**DXF 实体/版本增强（B-03，2026-11）**：`js/common/dxf.js` 适配层不改 `ngm.vendor`，在公共模块之上补齐
+版本审计与公共模块未覆盖的常见实体。`Dxf.inspect(text)` 读取 `$ACADVER` / `$INSUNITS`，扫描 ENTITIES 与
+BLOCKS 段，返回 `{version, versionName, knownVersion, insUnits, entityCounts, supplementalTypes,
+unsupportedTypes, entityTotal, supportedCount, blocks, r12Bulge, binary}`；二进制 DXF 直接返回空实体，
+由 `importDxfFile` 提示「另存为 ASCII DXF」。`Dxf.parseDxf(text)` 在公共模块结果上追加
+`SOLID`（按 0,1,3,2 重排闭合顺序）、`3DFACE`（自然顺序）、`LEADER`（开放折线）、`ATTRIB`/`ATTDEF`（文字），
+并按 `parsed.unit` 做同样的毫米/厘米/英寸/英尺换算；公共模块原实体、`unit` 字段与 app 侧字段映射保持不变。
+暂不支持的类型（DIMENSION / HATCH / MLINE / XLINE / RAY / IMAGE / WIPEOUT / REGION / 3DSOLID 等）不猜测
+几何，计数后随导入提示如实列出。R12 `POLYLINE` 的 VERTEX 凸度（42）公共模块会丢弃，`inspect` 单独计数并在
+导入后提示「弧段被拉直」。
+验收数据：selftest **2016 → 2086 通过 / 0 失败**（B-03 新增 70 项：8 个版本 × 版本号/名称/已知性/实体数/
+补充实体数/不支持类型/支持计数 + SOLID 重排、3DFACE 顺序、LEADER 开放、ATTRIB 文字与字高、单位换算、
+二进制识别、未知版本、R12 凸度、仅不支持实体）。e2e `dxf-version.spec.mjs` **2 passed（3.7s 单独运行）**，
+全量 e2e **39 passed / 1 skipped（46.8s）**：AC1032 混合实体（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）
+导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含「版本 AC1032」与「补充解析」；二进制 DXF 给出明确指引
+且不产生对象。体积 **779,096 → 787,499 B（+8,403 B / +1.08%）**，gzip **255,447 → 258,127 B（+2,680 B）**，
+820 KB 门禁余量 **52,181 B**。
+**真实 CAD 样本矩阵未验证（未验证 + 原因）**：仓库无 AutoCAD/BricsCAD 导出的真实 DXF 样本，当前矩阵使用
+按 DXF 组码规范合成的 ASCII 样本；R13/R14 真实文件、带代理对象/外部参照/动态块的文件未覆盖。
 
 **表格驱动布点与条件批量替换（B-08 原义，2026-11）**：在既有「按编号更新 / 无编号新增」之上扩展
 `rowsToObjectsPlan`：表头可含 `操作`（新增 / 更新 / 替换）与 6 个 `匹配…` 条件列（编号、名称、名称包含、
@@ -284,6 +304,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `collab.spec.mjs` | B-06：双标签等待→已连接→对端断开可见；消息层 TTL/key 上限/重复 hello 去重/`send` 抛错不冒泡/异常断开进 `error`；LWW 覆盖写撤销栈且 `Ctrl+Z` 恢复本地值、冲突行可见；离线短间隔重连不丢本地修改；邀请串三步建连 + 邀请串超 42 字节时只提示不渲染二维码（**同机双标签，不代表双设备 WebRTC**）；`COLLAB_SOAK=1` 时额外跑 5 分钟离线浸泡 |
 | `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（7 列表头、数值、合计、目录版本/导出时间）→ 替换目录后重导仍为冻结单价、改数量后按新目录重算 → 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 → 跨厂商重名未填厂商不带价、填厂商后按精确键计价 |
 | `table-batch.spec.mjs` | B-08 原义：CSV 条件替换命中 2 台并改写业务类型/台账、批量新增落点 (10,20) 可复算；严格模式下非法更新行整批拒绝（无「合并导入」按钮），现有对象数量与文本不变 |
+| `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象 |
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 §5.4。

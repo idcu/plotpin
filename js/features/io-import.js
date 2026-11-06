@@ -86,11 +86,26 @@ async function handleImportFile(f){
 
 /* -------------------- DXF 导入（CAD 互通） -------------------- */
 async function importDxfFile(f){
+  let text;
+  try{ text=await f.text(); }
+  catch(e){ return toast('DXF 读取失败：'+e.message,'error'); }
+  const Dxf=ensureVendor('Dxf');
+  const meta=Dxf.inspect?Dxf.inspect(text):null;
+  if(meta&&meta.binary){
+    return toast('该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入','error');
+  }
   let parsed;
-  try{ parsed=ensureVendor('Dxf').parseDxf(await f.text()); }
+  try{ parsed=Dxf.parseDxf(text); }
   catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
   const ents=parsed.entities;
-  if(!ents.length) return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
+  const suppression=[],unsupported=meta?Object.keys(meta.unsupportedTypes):[];
+  if(!ents.length){
+    if(unsupported.length){
+      const n=Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0);
+      return toast('DXF 中暂未找到可导入实体；文件含暂不支持的类型：'+unsupported.join(' / ')+'（'+n+' 条），已无法保真转换','error');
+    }
+    return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
+  }
   const entErrs=importLimitErrors({entities:ents.length});
   if(entErrs.length) return toast('DXF 导入失败：'+importLimitMessage(entErrs),'error');
   pushHistory();
@@ -134,7 +149,19 @@ async function importDxfFile(f){
     state.site.shape.h=Math.max(state.site.shape.h,maxY+10);
   }
   selectedIds.clear();
-  commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字');
+  /* 保真度如实上报：版本 / 补充解析 / 跳过类型 / R12 凸度丢失，全部写进导入结果提示 */
+  if(meta&&meta.version){
+    suppression.push('版本 '+meta.version+(meta.versionName?'（'+meta.versionName+'）':'')+(meta.knownVersion?'':'（未知版本，按通用规则解析）'));
+  }
+  if(meta&&meta.supplementalTypes&&Object.keys(meta.supplementalTypes).length){
+    suppression.push('补充解析 '+Object.keys(meta.supplementalTypes).join('/'));
+  }
+  if(unsupported.length){
+    suppression.push('跳过暂不支持 '+unsupported.join('/')+'（'+Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0)+' 条）');
+  }
+  commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字'+
+    (suppression.length?' · '+suppression.join(' · '):''));
+  if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
   fitView();
 }
 
