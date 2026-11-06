@@ -45,7 +45,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | 能力 | 归属 | 调用方 |
 |---|---|---|
 | `createEmptyBackground / createSiteSlot / isImageBackground / siteShapeOf` | `js/core/model.js` | 全仓 |
-| `siteDomainOf / siteBounds / siteOutlinePoints / imageWorldFrame` | `js/core/geometry.js` | 视口、渲染、导出、交互 |
+| `siteDomainOf / siteBounds / siteOutlinePoints / imageWorldFrame` | `js/core/geometry.js`（`siteDomainOf` 的宽高直接取自 `siteBounds`，包围盒只有一个源） | 视口、渲染、导出、交互 |
 | `siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` | `js/core/geometry.js`（场地几何唯一实现） | `render.js` 标注、`io-export.js` SVG、属性面板 |
 | `siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` | `js/core/geometry.js`（手柄几何唯一实现；交互层只做命中与事件分发） | `render.js` 手柄绘制、`interaction.js` 拖拽 |
 | `pickScreenHandle` | `js/core/geometry.js`（屏幕阈值唯一实现） | `render.js` 对象手柄命中、`interaction.js` 场地手柄命中（半径 9px 同源） |
@@ -56,6 +56,10 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：36 个 classic 
 | `collectSnapCandidates` 内的场地角点追加 | `js/core/geometry.js` | 场地不在 objects，单独追加折点→端点 / 圆心→center；图层隐藏时不参与 |
 | `applyVectorSite / siteDxfEntities` | `js/features/io-import.js` / `js/features/io-export.js` | 仅功能域内部 |
 | `annotToggleGroupHTML(items, opts) / bindAnnotToggleInputs(box, spec)` | `js/features/props.js`（标注开关渲染与事件绑定的唯一实现） | 点设备/区域/折线的属性面板与场地属性面板共用；新增开关组只需传 `items` 与 `attr` |
+| `outlineOf(o)` | `js/core/geometry.js`（对象轮廓顶点唯一源：rect 形状族 → `shapeWorldPoints` 采样多边形，line/dimension → 节点副本，point/text → `[]`；每次返回新数组） | `io-export.js` 的 SVG 区域/折线/标注与 DXF `LWPOLYLINE`；顶点数与坐标由 `selftest` §72 golden 断言锁定 |
+| `dxfEntitiesForExport()` | `js/features/io-export.js`（纯函数：按当前工程组装 DXF 实体+图层，不触发下载） | `exportDXF()` 与 `selftest`（DXF golden：实体序列与顶点数） |
+| `objectIndexById(list?)` | `js/core/model.js`（id → 对象索引；缺省索引当前楼层 `state.objects`，重复 id 保留首个） | `interaction.js` 拖拽起点、批量移动、位移判定、Esc 回滚：把 N 次 `find` 收敛为一次建索引 |
+| `ensureVendor(name)` | `js/core/config.js`（第三方公共模块可用性唯一检查点；缺失抛「公共模块未加载：<中文名>」） | `io-export.js`（Dxf/Xlsx/Pdf/Qr）、`io-import.js`（Xlsx/Dxf/PdfRead） |
 | `siteAnnotToggleKeys(site) / renderSiteAnnotToggles(site)` | `js/features/props.js`（按场地形状筛选有效开关） | 场地属性面板；无场地返回空串，锁定（含图层锁定）时 `disabled` |
 | `SITE_ANNOT_SETTING_KEYS / siteAnnotSettingOn / setSiteAnnotSetting` | `js/core/model.js`（仍写 `state.settings` 原键，不改 schema） | 场地属性面板、`drawSiteAnnotations`、SVG 导出、`selftest.mjs` |
 | `clearCurrentFloor()` | `js/core/persistence.js`（当前楼层全清并恢复默认取景框，返回清理摘要） | 顶栏「清空」按钮（先 `pushHistory` 再调用）；自测直接调用。影响：清空写入对象墓碑、同步当前楼层条目、清空校准运行时状态，不重置图层/类型/楼层结构 |

@@ -19,7 +19,7 @@ function downloadBlob(blob,name){
 function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
 /** 二维码 SVG：一个 path 画全部暗模块（29×29 版式，crispEdges 保证打印锐利） */
 function qrSvg(text,px=96){
-  const qr=Qr.encodeText(text);
+  const qr=ensureVendor('Qr').encodeText(text);
   let d='';
   for(let r=0;r<qr.size;r++) for(let c=0;c<qr.size;c++){
     if(qr.modules[r][c]) d+=`M${c} ${r}h1v1h-1z`;
@@ -36,7 +36,7 @@ function exportLabelSheet(){
   const cards=pts.map(o=>{
     const t=getType(o.typeId);
     const base='PLOTPIN:'+(o.name||o.id);
-    const payload=Qr.byteLength(base)<=Qr.MAX_BYTES?base:'PLOTPIN:'+o.id;
+    const payload=ensureVendor('Qr').byteLength(base)<=Qr.MAX_BYTES?base:'PLOTPIN:'+o.id;
     let svg;
     try{ svg=qrSvg(payload); }
     catch(e){ svg=`<div style="color:#b91c1c;font-size:12px">${esc(e.message)}</div>`; }
@@ -174,7 +174,7 @@ function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[
 function exportXlsx(){
   const cols=TABLE_COLUMNS;
   const table=[cols,...objectRowsAll().map(r=>cols.map(c=>String(r[c]??'')))];
-  const buf=Xlsx.build(table, '图纸标注');
+  const buf=ensureVendor('Xlsx').build(table, '图纸标注');
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
   toast('XLSX 已导出（可再次导入更新对象属性）','success');
 }
@@ -307,7 +307,7 @@ function buildSceneSvg(){
   state.objects.filter(isVisible).forEach(o=>{
     const t=getType(o.typeId), color=o.style.color||t.color;
     if(o.kind==='rect'){
-      const pts=shapeWorldPoints(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
+      const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       shapes.push(`<polygon points="${pts}" fill="${color}" fill-opacity="${styleVal(o,'fillAlpha',.15)}" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
       if(o.name&&annotOn(o,'name')){ const ce=shapeLabelCenter(o); markers.push(`<text x="${X(ce[0])}" y="${Y(ce[1])}" text-anchor="middle" font-size="14" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`); }
       const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
@@ -315,7 +315,7 @@ function buildSceneSvg(){
       markers.push(annotItemsSvg(o));
     }else if(o.kind==='line'&&o.points.length){
       /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致） */
-      const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`);
+      const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`);
       if(o.closed) pts.push(pts[0]);
       shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
       /* 编号与画布一致：开放折线取中点节点，闭合折线取质心（面积/周长胶囊可见时上移 30px 避让，避免重叠） */
@@ -363,7 +363,7 @@ function buildSceneSvg(){
     }else if(o.kind==='text'){
       markers.push(`<text x="${X(o.x)}" y="${Y(o.y)}" transform="rotate(${-o.angle} ${X(o.x)} ${Y(o.y)})" text-anchor="middle" font-size="${Math.max(10,o.height*ppu*.55)}" fill="${o.style.color||'#111'}">${esc(o.text||'文字')}</text>`);
     }else if(o.kind==='dimension'&&o.points.length>=2){
-      const pts=o.points.map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
+      const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       const dash=o.subtype==='ruler'?' stroke-dasharray="7,4"':'';
       const dcolor=o.subtype==='ruler'?'#0891b2':'#111827';
       shapes.push(`<polyline points="${pts}" fill="none" stroke="${dcolor}" stroke-width="1.8"${dash}/>`);
@@ -410,7 +410,9 @@ function siteDxfEntities(){
   if(!site||!siteIsVisible(site)) return [];
   return [{type:'LWPOLYLINE',layer:'SITE',color:'#16a34a',points:siteOutlinePoints(site).map(p=>p.slice()),closed:true}];
 }
-function exportDXF(){
+/** 纯函数：按当前工程组装 DXF 实体与图层（导出与自测共用；不触发下载）。
+ *  对象顶点统一走 outlineOf（A-15），保证 SVG/DXF 顶点源一致。 */
+function dxfEntitiesForExport(){
   const entities=[];
   const layers=state.layers.map(l=>({name:l.name,color:'#7c3aed'}));
   /* 矢量场地：独立 SITE 图层，闭合 LWPOLYLINE（不进 objects/CSV/XLSX） */
@@ -423,13 +425,13 @@ function exportDXF(){
     if(o.kind==='point'){
       entities.push({type:'POINT',layer,color,x:o.x,y:o.y});
     }else if(o.kind==='line'){
-      entities.push({type:'LWPOLYLINE',layer,color,points:o.points.map(p=>p.slice()),closed:!!o.closed});
+      entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:!!o.closed});
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);
       if(tt==='circle') entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
-      else entities.push({type:'LWPOLYLINE',layer,color,points:shapeWorldPoints(o),closed:true});
+      else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:true});
     }else if(o.kind==='dimension'&&o.points.length>=2){
-      entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:o.points.map(p=>p.slice()),closed:o.subtype==='area'});
+      entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:outlineOf(o),closed:o.subtype==='area'});
       const ep=o.points[o.points.length-1];
       const label=o.subtype==='ruler'?'Σ '+fmt(objectLength(o))+' m'
         :o.subtype==='distance'?fmt(dist(o.points[0],o.points[1]))+' m'
@@ -440,8 +442,12 @@ function exportDXF(){
       entities.push({type:'TEXT',layer,color:o.style.color||'#111827',x:o.x,y:o.y,text:o.text||'文字',height:o.height||1});
     }
   });
+  return {entities,layers};
+}
+function exportDXF(){
+  const {entities,layers}=dxfEntitiesForExport();
   if(!entities.length) return toast('当前没有可导出的对象','warn');
-  downloadBlob(new Blob([Dxf.buildDxf(entities,layers)],{type:'image/vnd.dxf;charset=utf-8'}),safeName()+'.dxf');
+  downloadBlob(new Blob([ensureVendor('Dxf').buildDxf(entities,layers)],{type:'image/vnd.dxf;charset=utf-8'}),safeName()+'.dxf');
   toast('DXF 已导出（坐标单位：毫米，可用 AutoCAD/LibreCAD 打开）','success');
 }
 
@@ -514,7 +520,7 @@ async function exportPDF(){
         });
       }
     }
-    const buf=Pdf.buildImagePdf(pages);
+    const buf=ensureVendor('Pdf').buildImagePdf(pages);
     downloadBlob(new Blob([buf],{type:'application/pdf'}),safeName()+'.pdf');
     const msg=fs.rows.length>1
       ? '多楼层 PDF 已导出：'+fs.rows.length+' 层 / '+pages.length+' 页'

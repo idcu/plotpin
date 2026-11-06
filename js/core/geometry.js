@@ -301,6 +301,18 @@ function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
   }
   return [[o.x,o.y]].concat(sectorArcPoints(o.x,o.y,Math.max(EPS,Number(sh.r)||0),Number(sh.a0)||0,sectorSweep(sh),seg));
 }
+/**
+ * 对象轮廓顶点（世界坐标米）——SVG / DXF 导出的唯一顶点源（A-15）。
+ * rect（含圆/椭圆/扇形/平行四边形参数化形状）→ 采样闭合多边形；line/dimension → 节点序列；
+ * point/text 无轮廓返回 []。**返回新数组**，调用方可安全修改/序列化（DXF 构造器会就地消费）。
+ * 闭合语义由调用方决定：区域恒闭合、折线看 o.closed、面积标注看 subtype。
+ */
+function outlineOf(o){
+  if(!o||typeof o!=='object') return [];
+  if(o.kind==='rect') return shapeWorldPoints(o);
+  if(o.kind==='line'||o.kind==='dimension') return (o.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
+  return [];
+}
 /** 世界坐标命中（米） */
 function shapeHit(o,p){
   const tt=areaShapeType(o);
@@ -400,38 +412,13 @@ function convertAreaShape(o,newType){
 }
 
 /* -------------------- 矢量场地（矩形/圆形/椭圆/扇形/多边形） -------------------- */
-/** 场地世界域（米）：图片=像素×m/px；矢量形状直接以米定义、规整在第一象限 */
+/** 场地世界域（米）：图片=像素×m/px；矢量形状直接以米定义、规整在第一象限。
+ *  尺寸唯一取自 siteBounds（A-15），不再按形状各写一套 min/max。 */
 function siteDomainOf(bg){
   bg=bg||state.site;
   if(!bg) return {w:100,h:70};
-  if(bg.kind==='image'){
-    const f=imageWorldFrame(bg);   /* 仿射校准后取四角轴对齐包围框，保证域尺寸与渲染/网格一致 */
-    if(f) return {w:Math.max(.01,f.w),h:Math.max(.01,f.h)};
-    return {w:Math.max(.01,bg.width*bg.metersPerPixel),h:Math.max(.01,bg.height*bg.metersPerPixel)};
-  }
-  const sh=bg.shape||{type:'rect',w:100,h:70};
-  if(sh.type==='circle'){ const r=positiveNum(sh.r,50); return {w:r*2,h:r*2}; }
-  if(sh.type==='ellipse'){
-    const rx=positiveNum(sh.rx,50), ry=positiveNum(sh.ry,35);
-    return {w:Math.max(.01,rx*2),h:Math.max(.01,ry*2)};
-  }
-  if(sh.type==='sector'){
-    const r=positiveNum(sh.r,50), cx=positiveNum(sh.cx,r), cy=positiveNum(sh.cy,r);
-    const pts=sectorArcPoints(cx,cy,r,Number(sh.a0)||0,sectorSweep(sh)).concat([[cx,cy]]);
-    const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
-    return {w:Math.max(.01,Math.max(...xs)-Math.min(...xs)),h:Math.max(.01,Math.max(...ys)-Math.min(...ys))};
-  }
-  if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3){
-    const xs=sh.points.map(p=>Number(p[0])||0),ys=sh.points.map(p=>Number(p[1])||0);
-    /* 与 siteBounds 一致：取 max-min，负坐标场地不会被错误地钳到 0 */
-    return {w:Math.max(.01,Math.max(...xs)-Math.min(...xs)),h:Math.max(.01,Math.max(...ys)-Math.min(...ys))};
-  }
-  if(sh.type==='parallelogram'){
-    const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
-    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
-    return {w:Math.max(.01,Math.max(...xs)-Math.min(...xs)),h:Math.max(.01,Math.max(...ys)-Math.min(...ys))};
-  }
-  return {w:Math.max(.01,positiveNum(sh.w,100)),h:Math.max(.01,positiveNum(sh.h,70))};
+  const b=siteBounds(bg);
+  return {w:b.w,h:b.h};
 }
 function positiveNum(v,fb){ const n=Number(v); return Number.isFinite(n)&&n>0?n:fb; }
 /**

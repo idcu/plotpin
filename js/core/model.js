@@ -296,6 +296,17 @@ function styleVal(o, key, fallback){
   return fallback;
 }
 function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注'})[k] || k; }
+/**
+ * 对象索引：id → 对象。供一次操作内多次按 id 查找（拖拽 originals、批量移动/回滚）复用，
+ * 把 N 次 `state.objects.find()` 的 O(N²) 扫描收敛为一次 O(N) 建索引（A-15）。
+ * @param {Array} [list] 对象数组，缺省为当前楼层 state.objects
+ * @returns {Map<string, object>}
+ */
+function objectIndexById(list){
+  const arr=list||state.objects||[], m=new Map();
+  for(const o of arr){ if(o&&o.id&&!m.has(o.id)) m.set(o.id,o); }
+  return m;
+}
 
 /* -------------------- 折线节点编辑（纯数据，供面板与画布双击共用） -------------------- */
 /* 开放折线与测距链(ruler)可自由增删节点；闭合区域最少 3 点 */

@@ -56,6 +56,23 @@ function importLimitMessage(errs){
   return (errs||[]).map(k=>map[k]||k).join('、');
 }
 
+/* -------------------- 第三方公共模块（ngm.vendor）可用性 -------------------- */
+/* 说明：导出/导入依赖 vendor 提供的适配器全局（Dxf/Xlsx/Pdf/PdfRead/Qr/ContentAssets）与底层
+ * `__idcu*` 命名空间。单文件包或裁剪部署里任一模块缺失时，原先会在调用处抛
+ * `Cannot read properties of undefined`；统一走 ensureVendor() 给出可读中文错误。 */
+const VENDOR_LABELS=Object.freeze({
+  Dxf:'DXF 解析/生成', Xlsx:'XLSX 读写', Pdf:'PDF 导出', PdfRead:'PDF 解析', Qr:'二维码编码',
+  ContentAssets:'资产库',
+  __idcuDxf:'DXF 解析/生成', __idcuXlsx:'XLSX 读写', __idcuPdf:'PDF 生成',
+  __idcuPdfImage:'PDF 多页生成', __idcuQr:'二维码编码', __idcuAssets:'资产库', __idcuGeometry:'几何内核'
+});
+/** 取第三方公共模块；缺失时抛出带中文模块名的错误 */
+function ensureVendor(name){
+  const v=typeof globalThis!=='undefined'?globalThis[name]:undefined;
+  if(!v) throw new Error('公共模块未加载：'+(VENDOR_LABELS[name]||name));
+  return v;
+}
+
 /* 点类型的 scaleShape：设置对象“物理尺寸(m)”后按世界坐标渲染（随底图缩放），
  * none=始终屏幕固定图标（纯位置标识）；circle 圆 / square 方 / sector 扇形视场（fov 张角）/ bar 杆 */
 const POINT_SCALE_SHAPES = {none:'仅位置图标', circle:'圆形覆盖', square:'方形区域', sector:'扇形视场', bar:'杆/线段'};

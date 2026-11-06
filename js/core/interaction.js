@@ -292,7 +292,8 @@ canvas.addEventListener('pointerdown',e=>{
         if(e.shiftKey||e.ctrlKey||e.metaKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
         else if(!selectedIds.has(o.id)){ selectedIds.clear(); selectedIds.add(o.id); }
         drag={type:'move',start:wp,originals:new Map(),moved:false};
-        selectedIds.forEach(id=>{ const obj=state.objects.find(x=>x.id===id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
+        const idx=objectIndexById();
+        selectedIds.forEach(id=>{ const obj=idx.get(id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
       }else{
         selectedIds.clear(); selectedIds.add(o.id);
       }
@@ -376,7 +377,8 @@ canvas.addEventListener('pointermove',e=>{
       if(Math.hypot(delta[0],delta[1])*state.viewport.zoom<2) return;
       pushHistory(); drag.moved=true;
     }
-    drag.originals.forEach((orig,id)=>{ moveObjectBy(state.objects.find(o=>o.id===id),orig,delta); });
+    const moveIdx=objectIndexById();
+    drag.originals.forEach((orig,id)=>{ moveObjectBy(moveIdx.get(id),orig,delta); });
     requestRender(); return;
   }
   if(drag?.type==='node'){
@@ -658,8 +660,9 @@ function objectMovedFrom(orig,o){
 function dragChanged(d){
   if(!d) return false;
   if(d.type==='move'){
+    const idx=objectIndexById();
     let changed=false;
-    d.originals.forEach((orig,id)=>{ if(objectMovedFrom(orig,state.objects.find(x=>x.id===id))) changed=true; });
+    d.originals.forEach((orig,id)=>{ if(objectMovedFrom(orig,idx.get(id))) changed=true; });
     return changed;
   }
   if(d.type==='siteHandle') return !sameSerializable(d.originalShape,state.site?.shape);
@@ -676,7 +679,8 @@ function cancelActiveDrag(){
   if(d.type==='pan') return true;
   const changed=dragChanged(d);
   if(d.type==='move'){
-    d.originals.forEach((orig,id)=>{ const o=state.objects.find(x=>x.id===id); if(o) Object.assign(o,deepClone(orig)); });
+    const idx=objectIndexById();
+    d.originals.forEach((orig,id)=>{ const o=idx.get(id); if(o) Object.assign(o,deepClone(orig)); });
     if(d.moved) history.past.pop();
   }else if(['node','rotate','rect','shapeHandle'].includes(d.type)){
     const o=state.objects.find(x=>x.id===d.id);

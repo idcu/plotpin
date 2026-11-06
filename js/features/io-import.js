@@ -60,7 +60,7 @@ async function handleImportFile(f){
   }
   if(ext==='xlsx'){
     try{
-      const rows=await Xlsx.readRows(await f.arrayBuffer());
+      const rows=await ensureVendor('Xlsx').readRows(await f.arrayBuffer());
       if(!rows.length) return toast('XLSX 中没有可导入的工作表','warn');
       const rowErrs=importLimitErrors({rows:rows.length});
       if(rowErrs.length) return toast('表格导入失败：'+importLimitMessage(rowErrs),'error');
@@ -82,7 +82,7 @@ async function handleImportFile(f){
 /* -------------------- DXF 导入（CAD 互通） -------------------- */
 async function importDxfFile(f){
   let parsed;
-  try{ parsed=Dxf.parseDxf(await f.text()); }
+  try{ parsed=ensureVendor('Dxf').parseDxf(await f.text()); }
   catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
   const ents=parsed.entities;
   if(!ents.length) return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
@@ -133,7 +133,7 @@ async function importDxfFile(f){
 /* -------------------- PDF 底图导入（矢量优先，扫描件取最大内嵌图） -------------------- */
 async function importPdfFile(f){
   let pdf;
-  try{ pdf=await PdfRead.parsePdf(await f.arrayBuffer()); }
+  try{ pdf=await ensureVendor('PdfRead').parsePdf(await f.arrayBuffer()); }
   catch(e){ return toast('PDF 解析失败：'+e.message,'error'); }
   const k=pdf.unitMeter;
   /* PDF 单位点→米：内容坐标已按 MediaBox 左下角归零（Y 向上），直接映射 */

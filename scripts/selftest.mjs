@@ -134,7 +134,8 @@ code += `\n;globalThis.__api = {
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
-  buildSceneSvg, siteDxfEntities, siteOutlinePoints,
+  buildSceneSvg, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
+  outlineOf, objectIndexById, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
@@ -4570,6 +4571,75 @@ asyncSuites.push(async()=>{
   eq('A-11 旧端 3000 个已删对象全部被压制', (res.project.objects || []).length, 0);
   ok('A-11 合并后墓碑仍保留可继续传播', (res.project.tombstones || []).some(t => t.id === 'G0'));
   eq('A-11 远端被墓碑删除计入统计', res.stats.deleted, 3000);
+  api.resetState();
+}
+
+/* 72. A-15 公共抽象：outlineOf golden / objectIndexById / siteBounds 唯一源 / ensureVendor */
+{
+  api.resetState();
+  const push=(kind,typeId,patch)=>api.state.objects.push(api.baseObject(kind,typeId,patch));
+  push('rect','rect.area',{id:'A15_RECT',name:'R',x:3,y:3,width:8,height:5,angle:0});
+  push('rect','rect.area',{id:'A15_CIRCLE',name:'C',x:20,y:3,width:0,height:0,shape:{type:'circle',r:4}});
+  push('rect','rect.area',{id:'A15_PARA',name:'P',x:30,y:3,width:6,height:4,shape:{type:'parallelogram',skew:25}});
+  push('line','line.boundary',{id:'A15_LINE',name:'L',points:[[2,2],[10,2],[10,8]]});
+  push('dimension','dimension.distance',{id:'A15_DIM',name:'D',points:[[3,11],[13,11]],subtype:'distance'});
+  push('point','point.camera',{id:'A15_CAM',name:'K',x:7,y:13});
+  push('text','text.label',{id:'A15_TXT',name:'T',x:14,y:13,text:'X'});
+  const O=api.state.objects, rectO=O[0];
+  /* golden 基线（替换前捕获）：区域 4 顶点、顺序左上→右上→右下→左下；圆按 SHAPE_SEGMENTS=72 采样 */
+  eq('A-15 区域轮廓顶点数', api.outlineOf(rectO).length, 4);
+  eq('A-15 区域轮廓坐标', JSON.stringify(api.outlineOf(rectO)), JSON.stringify([[3,3],[11,3],[11,8],[3,8]]));
+  eq('A-15 圆轮廓采样数', api.outlineOf(O[1]).length, 72);
+  eq('A-15 折线轮廓顶点数', api.outlineOf(O[3]).length, 3);
+  eq('A-15 标注轮廓顶点数', api.outlineOf(O[4]).length, 2);
+  eq('A-15 点/文字无轮廓', api.outlineOf(O[5]).length+api.outlineOf(O[6]).length, 0);
+  const oc=api.outlineOf(O[3]); oc[0][0]=999;
+  eq('A-15 轮廓返回副本不污染对象', O[3].points[0][0], 2);
+
+  /* golden：SVG 区域 polygon 4 个坐标对、折线/标注 polyline 3/2 个坐标对（与替换前一致） */
+  const svg=api.buildSceneSvg();
+  const poly=svg.match(/<polygon points="([^"]+)"/);
+  eq('A-15 SVG 区域顶点数', poly?poly[1].trim().split(/\s+/).length:0, 4);
+  const pls=[...svg.matchAll(/<polyline points="([^"]+)"/g)].map(m=>m[1].trim().split(/\s+/).length);
+  eq('A-15 SVG 折线/标注顶点数', JSON.stringify(pls), JSON.stringify([3,2]));
+
+  /* golden：DXF 实体序列与顶点数（新增纯函数 dxfEntitiesForExport 后可断言，不触发下载）
+     注：resetState 默认带 100×70 矩形场地，其 SITE LWPOLYLINE 恒排在对象之前 */
+  const dx=api.dxfEntitiesForExport();
+  eq('A-15 DXF 实体序列', dx.entities.map(e=>e.type).join(','), 'LWPOLYLINE,LWPOLYLINE,CIRCLE,LWPOLYLINE,LWPOLYLINE,LWPOLYLINE,TEXT,POINT,TEXT');
+  eq('A-15 DXF 顶点数（场地/区域/平行四边形/折线/标注）',
+    dx.entities.filter(e=>e.type==='LWPOLYLINE').map(e=>e.points.length).join(','), '4,4,4,3,2');
+  eq('A-15 DXF 与 outlineOf 顶点一致', JSON.stringify(dx.entities[1].points), JSON.stringify(api.outlineOf(rectO)));
+
+  /* siteBounds 唯一源：域尺寸直接取自包围盒；旋转椭圆不再固定 2rx×2ry */
+  api.state.site={id:'site.a15',name:'S',kind:'polygon',visible:true,locked:false,annot:{},style:{},
+    shape:{type:'polygon',points:[[-5,-3],[15,2],[8,20]]}};
+  const sb=api.siteBounds(api.state.site), sd=api.siteDomainOf(api.state.site);
+  eq('A-15 场地域尺寸取自 siteBounds', JSON.stringify(sd), JSON.stringify({w:sb.w,h:sb.h}));
+  const ell={id:'site.e15',name:'E',kind:'ellipse',visible:true,locked:false,annot:{},style:{},
+    shape:{type:'ellipse',cx:0,cy:0,rx:10,ry:2,angle:90}};
+  eq('A-15 旋转椭圆域宽=2·ry', api.siteDomainOf(ell).w, 4);
+  eq('A-15 旋转椭圆域高=2·rx', api.siteDomainOf(ell).h, 20);
+
+  /* ensureVendor：已加载模块原样返回；缺失/未知给出可读中文错误 */
+  ok('A-15 ensureVendor 返回已加载模块', api.ensureVendor('Dxf')===api.Dxf);
+  let vmsg='';
+  try{ api.ensureVendor('NotAVendor'); }catch(e){ vmsg=e.message; }
+  eq('A-15 ensureVendor 缺失中文提示', vmsg, '公共模块未加载：NotAVendor');
+  let dmsg='';
+  try{ api.ensureVendor('__idcuNotExists'); }catch(e){ dmsg=e.message; }
+  ok('A-15 ensureVendor 未知模块含名称', dmsg.includes('__idcuNotExists'));
+
+  /* objectIndexById：一次建索引替代多次 find；重复 id 以首个为准 */
+  api.resetState();
+  api.state.objects.push(
+    api.baseObject('point','point.marker',{id:'IDX_A'}),
+    api.baseObject('point','point.marker',{id:'IDX_B'})
+  );
+  const idx=api.objectIndexById();
+  eq('A-15 索引命中', idx.get('IDX_A')===api.state.objects[0], true);
+  eq('A-15 索引大小', idx.size, 2);
+  eq('A-15 索引缺失返回 undefined', idx.get('NOPE'), undefined);
   api.resetState();
 }
 
