@@ -11,7 +11,7 @@ $('newBtn').onclick=()=>showConfirm(L('新建将清空当前工程。已自动�
    先二次确认并 pushHistory，清空可用 Ctrl+Z 整体撤销 */
 $('clearFloorBtn').onclick=()=>{
   const n=(state.objects||[]).length;
-  const msg=L('将清空当前楼层的图片底图、矢量场地、')+' '+n+' '+L('个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。');
+  const msg=L('将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。',{n});
   showConfirm(msg).then(ok=>{
     if(!ok) return;
     pushHistory();
@@ -56,7 +56,7 @@ function openFloorManager(){
     const v=await showPrompt({title:L('新增楼层'),label:L('楼层名称'),value:'F'+(floors.length+1)});
     if(v===null) return;
     const id=await addFloor(v);
-    if(id){ closeModal(); openFloorManager(); toast(L('已新增楼层：')+currentFloorName(),'success'); }
+    if(id){ closeModal(); openFloorManager(); toast(L('已新增楼层：{name}',{name:currentFloorName()}),'success'); }
   };
   document.querySelectorAll('.proj-row[data-floor]').forEach(row=>{
     row.querySelectorAll('button[data-fop]').forEach(btn=>btn.onclick=async()=>{
@@ -64,7 +64,7 @@ function openFloorManager(){
       try{
         if(op==='switch'){
           closeModal();
-          if(await switchFloor(id)) toast(L('已切换到楼层：')+currentFloorName(),'success');
+          if(await switchFloor(id)) toast(L('已切换到楼层：{name}',{name:currentFloorName()}),'success');
         }else if(op==='rename'){
           const f=floors.find(x=>x.id===id);
           const v=await showPrompt({title:L('重命名楼层'),label:L('楼层名称'),value:f?f.name:''});
@@ -72,11 +72,11 @@ function openFloorManager(){
           if(renameFloor(id,v)){ closeModal(); openFloorManager(); }
         }else if(op==='del'){
           const f=floors.find(x=>x.id===id);
-          const ok=await showConfirm(L('确定删除楼层「')+(f?f.name:id)+L('」及其全部对象？此操作可撤销。'));
+          const ok=await showConfirm(L('确定删除楼层「{name}」及其全部对象？此操作可撤销。',{name:(f?f.name:id)}));
           if(!ok) return;
           if(await deleteFloor(id)){ closeModal(); openFloorManager(); toast(L('楼层已删除')); }
         }
-      }catch(e){ toast(L('楼层操作失败：')+e.message,'error'); }
+      }catch(e){ toast(L('楼层操作失败：{msg}',{msg:e.message}),'error'); }
     });
   });
 }
@@ -120,20 +120,21 @@ async function openProjectLibrary(){
       if(!f) return;
       try{
         const fileErrs=importLimitErrors({bytes:f.size});
-        if(fileErrs.length) throw new Error(L('文件超限')+'：'+importLimitMessage(fileErrs));
+        if(fileErrs.length) throw new Error(L('文件超限：{detail}',{detail:importLimitMessage(fileErrs)}));
         const text=await f.text();
         const textErrs=importLimitErrors({chars:text.length});
-        if(textErrs.length) throw new Error(L('文件超限')+'：'+importLimitMessage(textErrs));
+        if(textErrs.length) throw new Error(L('文件超限：{detail}',{detail:importLimitMessage(textErrs)}));
         const incoming=JSON.parse(text);
         const objErrs=importLimitErrors({objects:countProjectObjects(incoming)});
-        if(objErrs.length) throw new Error(L('文件超限')+'：'+importLimitMessage(objErrs));
+        if(objErrs.length) throw new Error(L('文件超限：{detail}',{detail:importLimitMessage(objErrs)}));
         const stats=await mergeProjectJSON(incoming);
         closeModal();
         const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded;
-        const conflict=stats.conflicts?`；${L('冲突')} ${stats.conflicts} ${L('项按较新版本保留')}`:'';
-        toast(`${L('合并完成：')}${L('新增')} ${stats.added} · ${L('更新')} ${stats.updated} · ${L('删除')} ${stats.deleted} · ${L('新增楼层')} ${stats.floorsAdded}${conflict}`,
+        const conflict=stats.conflicts?L('；冲突 {n} 项按较新版本保留',{n:stats.conflicts}):'';
+        toast(L('合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{conflict}',
+          {added:stats.added,updated:stats.updated,deleted:stats.deleted,floorsAdded:stats.floorsAdded,conflict}),
           changed?'success':'warn');
-      }catch(e){ toast(L('合并失败：')+e.message,'error'); }
+      }catch(e){ toast(L('合并失败：{msg}',{msg:e.message}),'error'); }
     };
     input.click();
   };
@@ -142,7 +143,7 @@ async function openProjectLibrary(){
       const id=row.dataset.id, op=btn.dataset.op;
       try{
         if(op==='open'){
-          closeModal(); await openProjectById(id); toast(L('已打开工程：')+(state.meta.name||''),'success');
+          closeModal(); await openProjectById(id); toast(L('已打开工程：{name}',{name:(state.meta.name||'')}),'success');
         }else if(op==='snap'){
           const cur=projects.find(p=>p.id===id);
           closeModal(); await openSnapshotManager(id,cur?.name||'');
@@ -155,11 +156,11 @@ async function openProjectLibrary(){
           await duplicateProjectById(id); toast(L('已复制一份到工程库'),'success'); openProjectLibrary();
         }else if(op==='del'){
           const cur=projects.find(p=>p.id===id);
-          const ok=await showConfirm(L('确定删除工程「')+(cur?.name||id)+L('」？此操作不可撤销（不影响已导出的文件）。'));
+          const ok=await showConfirm(L('确定删除工程「{name}」？此操作不可撤销（不影响已导出的文件）。',{name:(cur?.name||id)}));
           if(!ok) return;
           await deleteProjectById(id); toast(L('工程已删除')); openProjectLibrary();
         }
-      }catch(e){ toast(L('操作失败：')+e.message,'error'); }
+      }catch(e){ toast(L('操作失败：{msg}',{msg:e.message}),'error'); }
     }));
   });
 }

@@ -15,8 +15,8 @@ async function importJsonFile(f){
     if(textErrs.length) throw new Error('超限：'+importLimitMessage(textErrs));
     const p=JSON.parse(text);
     if(p.schema===CATALOG_SCHEMA){
-      try{ await importCatalog(p); renderProps(); toast('目录已导入：'+currentCatalog.items.length+' 个型号','success'); }
-      catch(e){ toast('目录导入失败：'+e.message,'error'); }
+      try{ await importCatalog(p); renderProps(); toast(L('目录已导入：{n} 个型号',{n:currentCatalog.items.length}),'success'); }
+      catch(e){ toast(L('目录导入失败：{msg}',{msg:e.message}),'error'); }
       return;
     }
     if(!isReadableSchema(p.schema)) throw new Error('SCHEMA');
@@ -42,25 +42,25 @@ async function importJsonFile(f){
     }
     const msg=String(err&&err.message||'');
     if(msg==='SCHEMA') toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error');
-    else if(msg.startsWith('超限：')) toast('工程导入失败：'+msg.slice(3),'error');
-    else toast('工程导入失败（已回滚）：'+msg,'error');
+    else if(msg.startsWith('超限：')) toast(L('工程导入失败：{msg}',{msg:msg.slice(3)}),'error');
+    else toast(L('工程导入失败（已回滚）：{msg}',{msg}),'error');
   }
 }
 async function handleImportFile(f){
   const ext=extOfFile(f.name);
   const fileErrs=importLimitErrors({bytes:f.size});
-  if(fileErrs.length) return toast('导入失败：'+importLimitMessage(fileErrs),'error');
+  if(fileErrs.length) return toast(L('导入失败：{msg}',{msg:importLimitMessage(fileErrs)}),'error');
   if(ext==='json') return importJsonFile(f);
   if(ext==='csv'||ext==='tsv'||ext==='txt'){
     try{
       const text=await f.text();
       const textErrs=importLimitErrors({chars:text.length});
-      if(textErrs.length) return toast('表格导入失败：'+importLimitMessage(textErrs),'error');
+      if(textErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(textErrs)}),'error');
       const rows=DSV.parseRows(text,ext==='tsv'?'\t':DSV.detectDelimiter(text));
       const rowErrs=importLimitErrors({rows:rows.length});
-      if(rowErrs.length) return toast('表格导入失败：'+importLimitMessage(rowErrs),'error');
+      if(rowErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(rowErrs)}),'error');
       showTableImportPreview(f.name,rowsToObjectsPlan(rows));
-    }catch(e){ toast('表格读取失败：'+e.message,'error'); }
+    }catch(e){ toast(L('表格读取失败：{msg}',{msg:e.message}),'error'); }
     return;
   }
   if(ext==='xlsx'){
@@ -68,9 +68,9 @@ async function handleImportFile(f){
       const rows=await ensureVendor('Xlsx').readRows(await f.arrayBuffer());
       if(!rows.length) return toast('XLSX 中没有可导入的工作表','warn');
       const rowErrs=importLimitErrors({rows:rows.length});
-      if(rowErrs.length) return toast('表格导入失败：'+importLimitMessage(rowErrs),'error');
+      if(rowErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(rowErrs)}),'error');
       showTableImportPreview(f.name,rowsToObjectsPlan(rows));
-    }catch(e){ toast('XLSX 解析失败：'+e.message,'error'); }
+    }catch(e){ toast(L('XLSX 解析失败：{msg}',{msg:e.message}),'error'); }
     return;
   }
   if(ext==='dwg') return importDwgFile(f);
@@ -82,7 +82,7 @@ async function handleImportFile(f){
     const imp=PlotPin.findImporter(ext);
     if(imp) return importViaPlugin(imp,f);
   }
-  toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）','error');
+  toast(L('不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）',{ext:(ext||'未知')}),'error');
 }
 
 /* -------------------- DWG 兼容入口（不内置 DWG 内核，只做识别与转换指引） -------------------- */
@@ -99,7 +99,7 @@ async function importDwgFile(f){
     for(const b of buf) head+=String.fromCharCode(b);
   }catch(e){ /* 读取失败按无法识别处理，仍给出转换指引 */ }
   const info=dwgVersionInfo(head);
-  openModal(L('DWG 文件兼容入口：')+f.name,
+  openModal(L('DWG 文件兼容入口：{name}',{name:f.name}),
     '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('检测到 DWG 文件版本：'))+'<b>'+esc(info.label)+'</b></p>'+
     '<p class="hint-text">'+esc(L('PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：'))+'</p>'+
     '<ul class="hint-text" style="margin:8px 0 0;padding-left:20px;line-height:1.7">'+
@@ -151,7 +151,7 @@ function dxfRefLayerName(fileName,version){
 async function importDxfFile(f){
   let text;
   try{ text=await f.text(); }
-  catch(e){ return toast('DXF 读取失败：'+e.message,'error'); }
+  catch(e){ return toast(L('DXF 读取失败：{msg}',{msg:e.message}),'error'); }
   const Dxf=ensureVendor('Dxf');
   const meta=Dxf.inspect?Dxf.inspect(text):null;
   if(meta&&meta.binary){
@@ -159,7 +159,7 @@ async function importDxfFile(f){
   }
   let parsed;
   try{ parsed=Dxf.parseDxf(text,{strictUnits:true}); }
-  catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
+  catch(e){ return toast(L('DXF 解析失败：{msg}',{msg:e.message}),'error'); }
   const ents=parsed.entities;
   const uns=meta?Object.keys(meta.unsupportedTypes):[];
   if(!ents.length){
@@ -170,15 +170,15 @@ async function importDxfFile(f){
     return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
   }
   const entErrs=importLimitErrors({entities:ents.length});
-  if(entErrs.length) return toast('DXF 导入失败：'+importLimitMessage(entErrs),'error');
+  if(entErrs.length) return toast(L('DXF 导入失败：{msg}',{msg:importLimitMessage(entErrs)}),'error');
   /* 预检：单位确认 + 落点选择，确认后才提交 */
   const detected=meta&&meta.insUnits!=null?meta.insUnits:null;
   const unitOpts=[];
-  if(detected!=null) unitOpts.push(['auto',L('按文件单位：')+Dxf.unitLabel(detected)+'（$INSUNITS='+detected+'）']);
+  if(detected!=null) unitOpts.push(['auto',L('按文件单位：{unit}（$INSUNITS={code}）',{unit:Dxf.unitLabel(detected),code:detected})]);
   else unitOpts.push(['auto',L('按文件（未声明，按米处理）')]);
-  [4,5,6,1,2].forEach(c=>{ if(c!==detected) unitOpts.push([String(c),L('按')+Dxf.unitLabel(c)]); });
+  [4,5,6,1,2].forEach(c=>{ if(c!==detected) unitOpts.push([String(c),L('按{unit}',{unit:Dxf.unitLabel(c)})]); });
   const lines=dxfFidelityLines(meta,parsed);
-  openModal(L('DXF 导入预检：')+f.name,
+  openModal(L('DXF 导入预检：{name}',{name:f.name}),
     '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('先核对版本、单位与保真度，再决定落点；导入失败会整批回滚。'))+'</p>'+
     '<div style="margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;line-height:1.7">'+
       lines.map(l=>'<div class="hint-text">'+esc(l)+'</div>').join('')+'</div>'+
@@ -198,11 +198,11 @@ function applyDxfImport(fileName,text,meta,opts){
   const Dxf=ensureVendor('Dxf');
   let parsed;
   try{ parsed=Dxf.parseDxf(text,{strictUnits:true,forceUnit:opts.unit==='auto'?null:Number(opts.unit)}); }
-  catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
+  catch(e){ return toast(L('DXF 解析失败：{msg}',{msg:e.message}),'error'); }
   const ents=parsed.entities;
   if(!ents.length) return toast('DXF 中没有可导入实体','error');
   const entErrs=importLimitErrors({entities:ents.length});
-  if(entErrs.length) return toast('DXF 导入失败：'+importLimitMessage(entErrs),'error');
+  if(entErrs.length) return toast(L('DXF 导入失败：{msg}',{msg:importLimitMessage(entErrs)}),'error');
   const backup=snapshotHistoryState(state), prevFuture=history.future;
   pushHistory();
   try{
@@ -257,9 +257,10 @@ function applyDxfImport(fileName,text,meta,opts){
     selectedIds.clear();
     const unitCode=opts.unit==='auto'?(meta&&meta.insUnits!=null?meta.insUnits:0):Number(opts.unit);
     const lines=dxfFidelityLines(meta,parsed).filter(l=>!l.startsWith('单位：'));
-    commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字'+
-      ' · 单位 '+Dxf.unitLabel(unitCode)+(opts.reference?' · 落点 只读参考层（已锁定）':'')+
-      (lines.length?' · '+lines.join(' · '):''));
+    const extra=' · '+L('单位')+' '+Dxf.unitLabel(unitCode)+(opts.reference?' · '+L('落点 只读参考层（已锁定）'):'')+
+      (lines.length?' · '+lines.join(' · '):'');
+    commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
+      {line:counts.line,rect:counts.rect,point:counts.point,text:counts.text,extra}));
     if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
     fitView();
   }catch(e){
@@ -276,14 +277,14 @@ function applyDxfImport(fileName,text,meta,opts){
 async function importPdfFile(f){
   let pdf;
   try{ pdf=await ensureVendor('PdfRead').parsePdf(await f.arrayBuffer()); }
-  catch(e){ return toast('PDF 解析失败：'+e.message,'error'); }
+  catch(e){ return toast(L('PDF 解析失败：{msg}',{msg:e.message}),'error'); }
   const k=pdf.unitMeter;
   /* PDF 单位点→米：内容坐标已按 MediaBox 左下角归零（Y 向上），直接映射 */
   if(!pdf.paths.length && !pdf.texts.length && !pdf.images.length){
     return toast('PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）','error');
   }
   const pdfErrs=importLimitErrors({entities:pdf.paths.length+pdf.texts.length});
-  if(pdfErrs.length) return toast('PDF 导入失败：'+importLimitMessage(pdfErrs),'error');
+  if(pdfErrs.length) return toast(L('PDF 导入失败：{msg}',{msg:importLimitMessage(pdfErrs)}),'error');
   /* 扫描件/带底图的 PDF：最大内嵌图作为图片底图 */
   let bgNote='';
   if(pdf.images.length){
@@ -306,7 +307,7 @@ async function importPdfFile(f){
     state.background.transform=null;   /* 新图像素坐标改变，清除旧仿射校准 */
     bgDataUrl=dataUrl;
     try{ bgImage=await loadImageSrc(dataUrl); }catch(e){ bgImage=null; }
-    bgNote='底图 '+img.width+'×'+img.height;
+    bgNote=L('底图 {w}×{h}',{w:img.width,h:img.height});
     /* 矢量叠加仍以 PDF 页世界尺寸为场地，图片米/像素一致 */
   }
   /* 矢量内容：路径转折线/区域，文本转文字对象。点→米。
@@ -351,15 +352,16 @@ async function importPdfFile(f){
     state.site.shape.h=Math.max(state.site.shape.h,hM||70);
   }
   selectedIds.clear();
-  const pageNote=pageList&&pageList.length>1?' / '+pageList.length+' 页（独立原点）':'';
-  commitChange('PDF 已导入：'+counts.line+' 线 / '+counts.area+' 区域 / '+counts.text+' 文字'+pageNote+(bgNote?' / '+bgNote:''));
+  const pageNote=pageList&&pageList.length>1?L(' / {n} 页（独立原点）',{n:pageList.length}):'';
+  commitChange(L('PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}',
+    {line:counts.line,area:counts.area,text:counts.text,notes:pageNote+(bgNote?' / '+bgNote:'')}));
   fitView();
 }
 
 /* -------------------- 底图/场地：选择弹窗与矢量场地应用 -------------------- */
 function openSitePicker(){
   openModal(L('底图 / 场地'),
-    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(L('图片底图')+'：'+(isImageBackground(state.background)?(state.background.fileName||L('已导入')):L('未设置'))+'；'+siteDescription(state.site))}</div>
+    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(L('图片底图：{file}；{site}',{file:(isImageBackground(state.background)?(state.background.fileName||L('已导入')):L('未设置')),site:siteDescription(state.site)}))}</div>
      <div class="site-pick">
        <button class="site-card" data-site="image"><b>🖼 ${esc(L('上传图片底图'))}</b><span class="hint-text">${esc(L('PNG/JPG/WebP/BMP；再用「比例尺」校准米/像素'))}</span></button>
        <button class="site-card" data-site="rect-num"><b>▭ ${esc(L('矩形场地（输入尺寸）'))}</b><span class="hint-text">${esc(L('直接输入长×宽（米）'))}</span></button>
@@ -435,7 +437,7 @@ function applyVectorSite(kind,shape){
   site.updatedAt=nowISO();
   if(!state.site) state.site=site;
   selectedIds.clear();
-  fitView(); commitChange(L('已设置为')+L(siteKindName(kind))); setTool('select');
+  fitView(); commitChange(L('已设置为{name}',{name:L(siteKindName(kind))})); setTool('select');
 }
 
 /* -------------------- 底图导入：字节入资产库 + 大图自动降采样 -------------------- */
@@ -477,14 +479,14 @@ async function importBackgroundFile(f){
   }
   let prepared;
   try{ prepared=await prepareBackgroundBytes(f); }
-  catch(e){ return toast('底图读取失败：'+e.message,'error'); }
+  catch(e){ return toast(L('底图读取失败：{msg}',{msg:e.message}),'error'); }
   /* 先完成解码与 dataUrl 生成，再改现场：失败不留半更新状态（审计 P1-9） */
   let dataUrl;
   try{ dataUrl=await bytesToDataUrl(prepared.bytes,prepared.mime); }
-  catch(e){ return toast('底图读取失败：'+e.message,'error'); }
+  catch(e){ return toast(L('底图读取失败：{msg}',{msg:e.message}),'error'); }
   let image;
   try{ image=await loadImageSrc(dataUrl); }
-  catch(e){ return toast('底图读取失败：'+e.message,'error'); }
+  catch(e){ return toast(L('底图读取失败：{msg}',{msg:e.message}),'error'); }
   const id=assetIdFor(prepared.bytes);
   let stored=true;
   try{ await assetPut(id,{bytes:prepared.bytes,mime:prepared.mime}); }

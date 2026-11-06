@@ -416,38 +416,128 @@
     '已添加折线':'Polyline added', '已添加测距':'Measure added', '已添加尺寸标注':'Dimension added'
   };
 
-  /* 带数字/文件名的动态提示：正则模板翻译（整句匹配，避免误伤用户数据） */
-  const PATTERNS = [
-    [/^已粘贴 (\d+) 个对象$/, 'Pasted $1 objects'],
-    [/^已复制 (\d+) 个对象到剪贴板$/, 'Copied $1 objects to clipboard'],
-    [/^至少保留 (\d+) 个节点$/, 'Keep at least $1 nodes'],
-    [/^捕捉已锁定：(.+)（Tab 切换，循环回自动）$/, 'Snap locked: $1 (Tab to cycle back to Auto)'],
-    [/^已导入 SVG 图元：(.+)$/, 'SVG symbol imported: $1'],
-    [/^SVG 导入失败：(.+)$/, 'SVG import failed: $1'],
-    [/^表格读取失败：(.+)$/, 'Table read failed: $1'],
-    [/^XLSX 解析失败：(.+)$/, 'XLSX parse failed: $1'],
-    [/^DXF 解析失败：(.+)$/, 'DXF parse failed: $1'],
-    [/^PDF 解析失败：(.+)$/, 'PDF parse failed: $1'],
-    [/^底图读取失败：(.+)$/, 'Base map read failed: $1'],
-    [/^照片保存失败：(.+)$/, 'Photo save failed: $1'],
-    [/^DXF 已导入：(\d+) 线 \/ (\d+) 圆 \/ (\d+) 点 \/ (\d+) 文字$/,
-      'DXF imported: $1 lines / $2 circles / $3 points / $4 texts'],
-    [/^PDF 已导入：(\d+) 线 \/ (\d+) 区域 \/ (\d+) 文字(.*)$/,
-      'PDF imported: $1 lines / $2 areas / $3 texts$4'],
-    [/^表格导入完成：更新 (\d+) 项，新增 (\d+) 项$/, 'Table import complete: $1 updated, $2 created'],
-    [/^已导出 (\d+) 张设备二维码标签（可打印）$/, 'Exported $1 device QR labels (printable)'],
-    [/^盲区多边形已导出：(\d+) 个面（合计 (.+) ㎡）$/, 'Blind-spot polygons exported: $1 features ($2 m² total)'],
-    [/^PDF 已导出：图纸 1 页 \+ 清单 (\d+) 页$/, 'PDF exported: 1 drawing page + $1 list pages'],
-    [/^多楼层 PDF 已导出：(\d+) 层 \/ (\d+) 页$/, 'Multi-floor PDF exported: $1 floors / $2 pages'],
-    [/^已对齐 (\d+) 个对象$/, 'Aligned $1 objects'],
-    [/^已分布 (\d+) 个对象$/, 'Distributed $1 objects'],
-    [/^已重新编号 (\d+) 个对象$/, 'Renumbered $1 objects'],
-    [/^已置顶 (\d+) 个对象$/, 'Brought $1 objects to front'],
-    [/^已置底 (\d+) 个对象$/, 'Sent $1 objects to back'],
-    [/^PDF 生成失败：(.+)$/, 'PDF generation failed: $1'],
-    [/^不支持的文件类型：\.(.+)（支持 JSON 工程 \/ DXF \/ PDF \/ CSV·TSV·XLSX 表格 \/ 图片底图）$/,
-      'Unsupported file type: .$1 (supported: JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)']
-  ];
+  /* 插值模板：中文整句（含 {占位}）→ 英文整句。调用方只传数据，不再拼接句子；
+     中文模式原样填充占位，保证中文语义与改造前一致。 */
+  const TEMPLATES = {
+    '已粘贴 {n} 个对象': 'Pasted {n} objects',
+    '已复制 {n} 个对象到剪贴板': 'Copied {n} objects to clipboard',
+    '至少保留 {n} 个节点': 'Keep at least {n} nodes',
+    '捕捉已锁定：{label}（Tab 切换，循环回自动）': 'Snap locked: {label} (Tab to cycle back to Auto)',
+    '已导入 SVG 图元：{name}': 'SVG symbol imported: {name}',
+    'SVG 导入失败：{msg}': 'SVG import failed: {msg}',
+    '表格读取失败：{msg}': 'Table read failed: {msg}',
+    'XLSX 解析失败：{msg}': 'XLSX parse failed: {msg}',
+    'DXF 解析失败：{msg}': 'DXF parse failed: {msg}',
+    'DXF 读取失败：{msg}': 'DXF read failed: {msg}',
+    'DXF 导入失败：{msg}': 'DXF import failed: {msg}',
+    'PDF 导入失败：{msg}': 'PDF import failed: {msg}',
+    '目录已导入：{n} 个型号': 'Catalog imported: {n} models',
+    '目录导入失败：{msg}': 'Catalog import failed: {msg}',
+    '工程导入失败：{msg}': 'Project import failed: {msg}',
+    '工程导入失败（已回滚）：{msg}': 'Project import failed (rolled back): {msg}',
+    '导入失败：{msg}': 'Import failed: {msg}',
+    '表格导入失败：{msg}': 'Table import failed: {msg}',
+    '表格导入失败：存在非法行，已整批取消': 'Table import failed: invalid rows; batch cancelled',
+    'PDF 解析失败：{msg}': 'PDF parse failed: {msg}',
+    '底图读取失败：{msg}': 'Base map read failed: {msg}',
+    '照片保存失败：{msg}': 'Photo save failed: {msg}',
+    'DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}':
+      'DXF imported: {line} lines / {rect} circles / {point} points / {text} texts{extra}',
+    'PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}':
+      'PDF imported: {line} lines / {area} areas / {text} texts{notes}',
+    '表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项':
+      'Table import complete: {updated} updated, {replaced} replaced, {created} created',
+    '已导出 {n} 张设备二维码标签（可打印）': 'Exported {n} device QR labels (printable)',
+    '盲区多边形已导出：{n} 个面（合计 {area} ㎡，口径 v{version}）':
+      'Blind-spot polygons exported: {n} features ({area} m² total, spec v{version})',
+    'PDF 已导出：图纸 1 页 + 清单 {n} 页': 'PDF exported: 1 drawing page + {n} list pages',
+    '多楼层 PDF 已导出：{floors} 层 / {pages} 页': 'Multi-floor PDF exported: {floors} floors / {pages} pages',
+    'PDF 生成失败：{msg}': 'PDF generation failed: {msg}',
+    '不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）':
+      'Unsupported file type: .{ext} (supported: JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)',
+    /* 「前缀：+ 动态值」家族：模板化后不再拼句子，英文整句可命中字典 */
+    '发送失败：{msg}': 'Send failed: {msg}',
+    '已连接对端：{name}': 'Peer connected: {name}',
+    '同步失败：{msg}': 'Sync failed: {msg}',
+    '启用本机同步失败：{msg}': 'Failed to enable local sync: {msg}',
+    '连接异常：{detail}': 'Connection error: {detail}',
+    '生成邀请失败：{msg}': 'Failed to create invite: {msg}',
+    '邀请串无效：{msg}': 'Invalid invite string: {msg}',
+    '应用信令失败：{msg}': 'Failed to apply signal: {msg}',
+    '二维码生成失败：{msg}': 'QR code generation failed: {msg}',
+    '读取快照失败：{msg}': 'Failed to read snapshots: {msg}',
+    '楼层操作失败：{msg}': 'Floor operation failed: {msg}',
+    '合并失败：{msg}': 'Merge failed: {msg}',
+    '操作失败：{msg}': 'Operation failed: {msg}',
+    '文件超限：{detail}': 'File too large: {detail}',
+    '报告生成失败：{msg}': 'Report generation failed: {msg}',
+    '已切换到楼层：{name}': 'Switched to floor: {name}',
+    '已新增楼层：{name}': 'Floor added: {name}',
+    '已打开工程：{name}': 'Project opened: {name}',
+    '已设置为{name}': 'Set to {name}',
+    'DWG 文件兼容入口：{name}': 'DWG compatibility entry: {name}',
+    'DXF 导入预检：{name}': 'DXF import pre-check: {name}',
+    '按文件单位：{unit}（$INSUNITS={code}）': 'By file unit: {unit} ($INSUNITS={code})',
+    '按{unit}': 'By {unit}',
+    '无法导入（整批未生效）：{name}': 'Import failed (nothing applied): {name}',
+    '无法导入：{name}': 'Cannot import: {name}',
+    '表格导入预览：{name}': 'Table import preview: {name}',
+    '应用建议（新增 {n} 台）': 'Apply suggestions (add {n})',
+    '已按建议新增 {n} 台摄像头': 'Added {n} camera(s) as suggested',
+    '确定删除楼层「{name}」及其全部对象？此操作可撤销。':
+      'Delete floor "{name}" and all its objects? This can be undone.',
+    '确定删除工程「{name}」？此操作不可撤销（不影响已导出的文件）。':
+      'Delete project "{name}"? This cannot be undone (exported files are unaffected).',
+    '将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。':
+      'Clear the image base, vector site, {n} objects and annotations on this floor, plus all calibration control points and affine settings; selection and view will reset. Undo with Ctrl+Z.',
+    '其余提示略 {n}': 'Remaining warnings omitted: {n}',
+    '其余错误略 {n}': 'Remaining errors omitted: {n}',
+    '第 {n} / {total} 页': 'Page {n} / {total}',
+    ' · 第 {n} / {total} 页': ' · Page {n} / {total}',
+    '共 {n} 个对象 · 第 {page} / {total} 页 · {time}': 'Objects: {n} · Page {page} / {total} · {time}',
+    '楼层元数据覆盖 {n}': 'Floor metadata overrides: {n}',
+    '冲突 {n}': 'Conflicts: {n}',
+    '已同步：{detail}': 'Synced: {detail}',
+    '已同步：{detail} · 可按 Ctrl+Z 回滚': 'Synced: {detail} · Ctrl+Z to roll back',
+    '合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{conflict}':
+      'Merge complete: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{conflict}',
+    '；冲突 {n} 项按较新版本保留': '; {n} conflicts kept by the newer version',
+    '已对齐 {n} 个对象': 'Aligned {n} objects',
+    '已分布 {n} 个对象': 'Distributed {n} objects',
+    '已重新编号 {n} 个对象': 'Renumbered {n} objects',
+    '生成快照失败：{msg}': 'Snapshot creation failed: {msg}',
+    '快照操作失败：{msg}': 'Snapshot operation failed: {msg}',
+    '删除快照「{name}」？只删除该版本记录，不影响当前工程与其它快照。':
+      'Delete snapshot "{name}"? Only this version record is removed; the current project and other snapshots are unaffected.',
+    '快照已生成：{n} 个对象 · {size} · {ms}ms': 'Snapshot created: {n} objects · {size} · {ms}ms',
+    '回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。':
+      'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack first (Ctrl+Z to revert); the rollback is saved immediately and editing continues.',
+    '已回滚到快照：{time}': 'Rolled back to snapshot: {time}',
+    '仿射校准 · 第 {n} 点': 'Affine calibration · point {n}',
+    '该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ({x}, {y})':
+      'Site coordinates X,Y for this point (meters, comma-separated). Pixel recorded: ({x}, {y})',
+    '已记录 {n} 个点，Enter/✓ 求解': 'Recorded {n} points; Enter/✓ to solve',
+    '比例尺校准需要 2 个控制点（当前 {n} 个）': 'Scale calibration needs 2 control points (currently {n})',
+    '删除失败：{msg}': 'Delete failed: {msg}',
+    '报价导出失败：{msg}': 'Quote export failed: {msg}',
+    '报价表已导出；{n} 个型号跨厂商重名未计价（请填厂商）':
+      'Quote table exported; {n} models with the same name across vendors were not priced (fill in the vendor)',
+    '鼠标：{x}, {y} {unit}{osnap}': 'Cursor: {x}, {y} {unit}{osnap}',
+    '◈ 捕捉：{label} ✕': '◈ Snap: {label} ✕',
+    '新增于 {floor}': 'Added on {floor}',
+    '删除于 {floor}': 'Removed from {floor}',
+    '楼层：{a} → {b}': 'Floor: {a} → {b}',
+    '当前：{desc}': 'Current: {desc}',
+    '图片底图：{file}；{site}': 'Image base: {file}; {site}',
+    ' / {n} 页（独立原点）': ' / {n} pages (independent origins)',
+    '底图 {w}×{h}': 'Base image {w}×{h}'
+  };
+  /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
+  function fillTemplate(text, params) {
+    if (!params) return text;
+    return String(text).replace(/\{(\w+)\}/g, (m, k) => (params[k] === undefined ? m : String(params[k])));
+  }
+
   /** 动态短语补充（整句精确匹配即可翻译的常用提示） */
   const MORE = {
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '已取消仿射校准':'Affine calibration cancelled',
@@ -596,7 +686,41 @@
       'Off by default; when off the export is identical to the previous version. Empty date = export date, empty scale = auto 1:N by current zoom.',
     '图框模板已保存':'Title block saved',
     '工程名':'Project name', '图号':'Drawing no.', '比例':'Scale', '日期':'Date', '版本':'Version',
-    '设计':'Designer', '审核':'Reviewer', '单位':'Company', '图例':'Legend'
+    '设计':'Designer', '审核':'Reviewer', '单位':'Company', '图例':'Legend',
+    '落点 只读参考层（已锁定）':'Imported to a read-only reference layer (locked)',
+    /* 校准 / 场地 / 目录 / 报价等界面短句（B-14 补齐缺口） */
+    '矢量场地：未设置':'Vector site: not set',
+    '已取消比例尺校准':'Scale calibration cancelled',
+    '比例尺校准需要先载入图片底图':'Load a base-map image before scale calibration',
+    '已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点':'Two control points set: drag to adjust, Enter to apply, Delete to remove the selected point',
+    '仿射校准需要先载入图片底图':'Load a base-map image before affine calibration',
+    '图片变换需要先载入图片底图':'Load a base-map image before image transform',
+    '图片已变换':'Image transformed',
+    '场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸':'Site too small (< 0.5 m); enter dimensions in the base-map dialog',
+    '比例尺校准仅适用于图片底图':'Scale calibration only applies to image base maps',
+    '仿射校准至少需要 2 个对应点':'Affine calibration needs at least 2 point pairs',
+    'IndexedDB 不可用：已降级为 localStorage 自动保存（容量有限，建议定期导出 JSON）':
+      'IndexedDB unavailable: falling back to localStorage autosave (limited capacity; export JSON regularly)',
+    '已删除楼层':'Floor deleted',
+    '楼层已重命名':'Floor renamed',
+    '待保存…':'Saving…', '已保存':'Saved', '已自动保存':'Auto-saved', '请手动导出':'Export manually',
+    '底图读取失败，请重新导入底图':'Failed to read the base map; re-import it',
+    '未载入目录':'No catalog loaded',
+    '报价表已导出':'Quote table exported',
+    '报价表已导出（沿用上次单价快照）':'Quote table exported (reused previous price snapshot)',
+    '删除目录？BOM 降级为名称/数量。':'Delete the catalog? BOMs fall back to name/quantity.',
+    '检测到 DWG 文件版本：':'DWG file version detected: ',
+    'JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）':
+      'Invalid JSON project (expected a v1 project exported by PlotPin)',
+    '该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入':
+      'This DXF is binary (AutoCAD Binary DXF) and cannot be parsed in the browser; save it as ASCII DXF in CAD first',
+    'PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）':
+      'No usable graphics found in this PDF (it may be a scan without an embedded image, or use unsupported compression)',
+    '目录已导出':'Catalog exported',
+    '目录已删除':'Catalog deleted',
+    '本机频道消息解析失败':'Failed to parse the local channel message',
+    '无可汇总型号：先绑定型号并填数量':'Nothing to summarize: bind a model and enter quantities first',
+    '标注总长：':'Total measured length: ', '区域总面积：':'Total area: '
   };
   Object.assign(PHRASES, MORE);
 
@@ -607,14 +731,14 @@
     if (d[key] !== undefined) return d[key];
     return DICT.zh[key] !== undefined ? DICT.zh[key] : key;
   }
-  /** 动态中文文案 → 当前语言；英文未收录时回退中文，保证不出现空白 */
-  function p(text) {
-    if (lang !== 'en') return text;
-    if (PHRASES[text] !== undefined) return PHRASES[text];
-    for (const [re, out] of PATTERNS) {
-      if (re.test(text)) return text.replace(re, out);
+  /** 动态中文文案 → 当前语言；插值模板优先，其次整句短语；未收录时回退中文，保证不出现空白 */
+  function p(text, params) {
+    let out = text;
+    if (lang === 'en') {
+      if (TEMPLATES[text] !== undefined) out = TEMPLATES[text];
+      else if (PHRASES[text] !== undefined) out = PHRASES[text];
     }
-    return text;
+    return fillTemplate(out, params);
   }
   function setLang(l) {
     lang = l === 'en' ? 'en' : 'zh';
@@ -634,6 +758,6 @@
     return n;
   }
 
-  global.I18N = { t, p, setLang, apply, dict: DICT, phrases: PHRASES, get lang() { return lang; } };
-  global.L = p;   /* 动态模板简写：${L('宽度')} */
+  global.I18N = { t, p, fmt: fillTemplate, setLang, apply, dict: DICT, phrases: PHRASES, templates: TEMPLATES, get lang() { return lang; } };
+  global.L = p;   /* 动态模板简写：L('宽度') / L('已粘贴 {n} 个对象', {n:3}) */
 })(typeof window !== 'undefined' ? window : globalThis);

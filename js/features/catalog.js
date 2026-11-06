@@ -39,6 +39,6 @@ function exportCatalogJSON(){
 }
 async function deleteCatalog(){
   if(!currentCatalog)return toast('未载入目录','warn');
-  if(!confirm('删除目录？BOM 降级为名称/数量。'))return;
-  try{await idbDeleteKey(CATALOG_KEY);currentCatalog=null;toast('目录已删除','success');renderProps()}catch(e){toast('删除失败：'+e.message,'error')}
+  if(!confirm(L('删除目录？BOM 降级为名称/数量。')))return;
+  try{await idbDeleteKey(CATALOG_KEY);currentCatalog=null;toast('目录已删除','success');renderProps()}catch(e){toast(L('删除失败：{msg}',{msg:e.message}),'error')}
 }

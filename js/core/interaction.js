@@ -102,7 +102,7 @@ function cycleOsnapMode(back){
   const i=OSNAP_CYCLE.indexOf(osnapMode);
   osnapMode=OSNAP_CYCLE[(i+(back?-1:1)+OSNAP_CYCLE.length)%OSNAP_CYCLE.length];
   updateOsnapChip();
-  toast(osnapMode?(L('捕捉已锁定：')+L(OSNAP_LABELS[osnapMode])+L('（Tab 切换，循环回自动）')):L('捕捉：自动（全部类型）'));
+  toast(osnapMode?L('捕捉已锁定：{label}（Tab 切换，循环回自动）',{label:L(OSNAP_LABELS[osnapMode])}):L('捕捉：自动（全部类型）'));
   requestRender();
 }
 function updateOsnapChip(){
@@ -110,7 +110,7 @@ function updateOsnapChip(){
   if(!chip) return;
   if(!state.settings.osnap){ chip.hidden=true; return; }
   chip.hidden=false;
-  chip.textContent=osnapMode?(L('◈ 捕捉：')+L(OSNAP_LABELS[osnapMode])+' ✕'):L('◈ 捕捉：自动');
+  chip.textContent=osnapMode?L('◈ 捕捉：{label} ✕',{label:L(OSNAP_LABELS[osnapMode])}):L('◈ 捕捉：自动');
   chip.classList.toggle('locked',!!osnapMode);
 }
 $('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast(L('捕捉：自动（全部类型）')); requestRender(); } });
@@ -361,7 +361,7 @@ canvas.addEventListener('pointermove',e=>{
   const wp=resolveWorldPoint(e);
   setCursorScreen(sp,true,wp,activeOsnap);
   if(currentTool==='guide'&&guideDraft){ guideDraft[1]=wp; }
-  $('coordText').textContent=L('鼠标：')+fmt(wp[0])+', '+fmt(wp[1])+' '+state.settings.unit+(activeOsnap?'  ◈ '+OSNAP_LABELS[activeOsnap.type]:'');
+  $('coordText').textContent=L('鼠标：{x}, {y} {unit}{osnap}',{x:fmt(wp[0]),y:fmt(wp[1]),unit:state.settings.unit,osnap:activeOsnap?'  ◈ '+L(OSNAP_LABELS[activeOsnap.type]):''});
   /* 空闲移动（无拖拽/草稿）也必须重绘：十字准星、世界坐标、捕捉标记随鼠标实时显示，
      不必等到点击；requestRender 内部按帧合并，重复调用无额外开销 */
   requestRender();
@@ -554,7 +554,7 @@ function editLineNodeByDoubleClick(e){
   let ni=-1;
   o.points.forEach((p,i)=>{ if(dist(p,wp)<=tol) ni=i; });
   if(ni>=0){
-    if(o.points.length<=lineMinNodes(o)){ toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn'); return; }
+    if(o.points.length<=lineMinNodes(o)){ toast(L('至少保留 {n} 个节点',{n:lineMinNodes(o)}),'warn'); return; }
     pushHistory(); removeLineNode(o,ni); commitChange('已删除节点');
     return;
   }
@@ -871,7 +871,7 @@ function calibHitAt(sp){
 }
 async function finishCalibration(){
   if(!isImageBackground(state.background)){ calibPoints=[]; setTool('select'); toast('比例尺校准仅适用于图片底图','warn'); return; }
-  if(calibPoints.length<2){ toast('比例尺校准需要 2 个控制点（当前 '+calibPoints.length+' 个）','warn'); return; }
+  if(calibPoints.length<2){ toast(L('比例尺校准需要 2 个控制点（当前 {n} 个）',{n:calibPoints.length}),'warn'); return; }
   const old=dist(calibPoints[0],calibPoints[1]);
   if(old<EPS){ calibPoints=[]; return; }
   const value=await showPrompt({title:L('比例尺校准'),label:L('两点之间的实际距离（米）'),value:fmt(old)});
@@ -899,15 +899,15 @@ async function pickAffinePoint(e){
   if(bg.kind!=='image'){ toast('仿射校准仅适用于图片底图','warn'); return; }
   const wp=pointerWorld(e);
   const px=bgWorldToPixel(bg,wp);
-  const v=await showPrompt({title:L('仿射校准 · 第 ')+(affinePairs.length+1)+L(' 点'),
-    label:L('该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ')+`(${px[0].toFixed(1)}, ${px[1].toFixed(1)})`,
+  const v=await showPrompt({title:L('仿射校准 · 第 {n} 点',{n:affinePairs.length+1}),
+    label:L('该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ({x}, {y})',{x:px[0].toFixed(1),y:px[1].toFixed(1)}),
     value:fmt(wp[0])+','+fmt(wp[1])});
   if(v===null) return;
   const m=String(v).split(/[,，\s]+/).map(Number);
   if(!Number.isFinite(m[0])||!Number.isFinite(m[1])){ toast(L('坐标无效，请输入 X,Y'),'error'); return; }
   affinePairs.push({u:px[0],v:px[1],x:m[0],y:m[1]});
   requestRender();
-  toast(affinePairs.length>=2?(L('已记录')+' '+affinePairs.length+' '+L('个点，Enter/✓ 求解')):L('已记录 1 个点，继续点击下一已知点'));
+  toast(affinePairs.length>=2?L('已记录 {n} 个点，Enter/✓ 求解',{n:affinePairs.length}):L('已记录 1 个点，继续点击下一已知点'));
 }
 /** 求解仿射并把「旧世界→新世界」映射迁移到所有既有对象，再落地新的 bg.transform */
 async function finishAffine(){
@@ -954,7 +954,7 @@ function duplicateSelected(){
 }
 function copySelected(){
   clipboard=state.objects.filter(o=>selectedIds.has(o.id)).map(o=>deepClone(o));
-  if(clipboard.length) toast(`已复制 ${clipboard.length} 个对象到剪贴板`);
+  if(clipboard.length) toast(L('已复制 {n} 个对象到剪贴板',{n:clipboard.length}));
 }
 function pasteClipboard(){
   if(!clipboard.length) return;
@@ -967,7 +967,7 @@ function pasteClipboard(){
     n.createdAt=nowISO(); n.updatedAt=nowISO();
     state.objects.push(n); fresh.push(n.id);
   }));
-  selectedIds=new Set(fresh); commitChange(`已粘贴 ${fresh.length} 个对象`);
+  selectedIds=new Set(fresh); commitChange(L('已粘贴 {n} 个对象',{n:fresh.length}));
 }
 function openShortcutsHelp(){
   const rows=[

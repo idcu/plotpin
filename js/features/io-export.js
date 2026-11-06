@@ -84,7 +84,7 @@ function exportLabelSheet(){
 <p style="font-size:12px;color:#475569">${esc(L('扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。'))}</p>
 <div class="sheet">${cards}</div></body></html>`;
   downloadBlob(new Blob([html],{type:'text/html;charset=utf-8'}),safeName()+'-'+L('设备标签')+'.html');
-  toast('已导出 '+pts.length+' 张设备二维码标签（可打印）','success');
+  toast(L('已导出 {n} 张设备二维码标签（可打印）',{n:pts.length}),'success');
 }
 /** 导出覆盖率盲区多边形（逐行合并的矩形面，GeoJSON FeatureCollection） */
 function exportBlindSpotsGeoJson(){
@@ -94,7 +94,8 @@ function exportBlindSpotsGeoJson(){
   const fc=buildBlindSpotGeoJson(coverageResult);
   if(!fc) return toast('当前没有盲区可导出','warn');
   downloadBlob(new Blob([JSON.stringify(fc,null,2)],{type:'application/geo+json'}),safeName()+'-盲区.geojson');
-  toast('盲区多边形已导出：'+fc.features.length+' 个面（合计 '+fmt(blindSpotArea(coverageResult))+' ㎡，口径 v'+fc.coverageSpec.version+'）','success');
+  toast(L('盲区多边形已导出：{n} 个面（合计 {area} ㎡，口径 v{version}）',
+    {n:fc.features.length,area:fmt(blindSpotArea(coverageResult)),version:fc.coverageSpec.version}),'success');
 }
 async function exportJSON(){
   state.meta.updatedAt=nowISO();
@@ -176,9 +177,9 @@ async function exportQuote(kind){
       {type:csv?'text/csv;charset=utf-8':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
       safeName()+'-产品报价.'+(csv?'csv':'xlsx'));
     const n=agg.ambiguous.length;
-    toast(reused?'报价表已导出（沿用上次单价快照）':n?'报价表已导出；'+n+' 个型号跨厂商重名未计价（请填厂商）':'报价表已导出',
+    toast(reused?L('报价表已导出（沿用上次单价快照）'):n?L('报价表已导出；{n} 个型号跨厂商重名未计价（请填厂商）',{n}):L('报价表已导出'),
       reused||!n?'success':'warn');
-  }catch(e){toast('报价导出失败：'+e.message,'error')}
+  }catch(e){toast(L('报价导出失败：{msg}',{msg:e.message}),'error')}
 }
 /** 分隔文本导出（CSV/TSV） */
 function exportDelimited(delim,ext,mime){
@@ -646,7 +647,7 @@ async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
   drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
   drawTitleBlockOnCanvas(cc,W,H,titleBlockSpec(W,H,z,'pdf'));
   cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
-  const pageTag=pageNo?' · '+L('第')+' '+pageNo+' / '+pageTotal+' '+L('页'):'';
+  const pageTag=pageNo?L(' · 第 {n} / {total} 页',{n:pageNo,total:pageTotal}):'';
   cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()+pageTag,margin,H-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
@@ -663,7 +664,7 @@ async function renderPdfListPages(floorName,pageNos,pageTotal){
     g.fillText(state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单'),margin,margin+8);
     g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
     const pageNo=(pageNos&&pageNos[pi])||pi+1, pageAll=pageTotal||total;
-    g.fillText(L('共')+' '+rows.length+' '+L('个对象')+' · '+L('第')+' '+pageNo+' / '+pageAll+' '+L('页')+' · '+new Date().toLocaleString(),margin,margin+34);
+    g.fillText(L('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',{n:rows.length,page:pageNo,total:pageAll,time:new Date().toLocaleString()}),margin,margin+34);
     let y=margin+70;
     g.fillStyle='#f1f5f9'; g.fillRect(margin,y,W-margin*2,headH);
     g.strokeStyle='#cbd5e1'; g.lineWidth=1; g.strokeRect(margin,y,W-margin*2,headH);
@@ -711,10 +712,10 @@ async function exportPDF(){
     const buf=ensureVendor('Pdf').buildImagePdf(pages);
     downloadBlob(new Blob([buf],{type:'application/pdf'}),safeName()+'.pdf');
     const msg=fs.rows.length>1
-      ? '多楼层 PDF 已导出：'+fs.rows.length+' 层 / '+pages.length+' 页'
-      : 'PDF 已导出：图纸 1 页 + 清单 '+ (pages.length-1) +' 页';
+      ? L('多楼层 PDF 已导出：{floors} 层 / {pages} 页',{floors:fs.rows.length,pages:pages.length})
+      : L('PDF 已导出：图纸 1 页 + 清单 {n} 页',{n:pages.length-1});
     toast(msg,'success');
-  }catch(e){ toast('PDF 生成失败：'+e.message,'error'); }
+  }catch(e){ toast(L('PDF 生成失败：{msg}',{msg:e.message}),'error'); }
 }
 
 /* -------------------- 打印 / PDF 报告 -------------------- */
@@ -799,7 +800,7 @@ $('printBtn').onclick=async()=>{
     }
     window.print();
   }catch(e){
-    toast(L('报告生成失败：')+e.message,'error');
+    toast(L('报告生成失败：{msg}',{msg:e.message}),'error');
   }finally{
     window.__printingReport=false;
   }

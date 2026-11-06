@@ -204,9 +204,9 @@ $('symFileInput').addEventListener('change',async e=>{
     pushHistory();
     state.objectTypes.push({id:uid('sym'),kind:'point',name,color:'#7c3aed',icon:'symbol',
       scaleShape:'none',builtin:false,symbol:parsed.paths,symbolViewBox:parsed.vb});
-    commitChange('已导入 SVG 图元：'+name);
+    commitChange(L('已导入 SVG 图元：{name}',{name}));
     populateSelects(); renderTypes();
-  }catch(err){ toast('SVG 导入失败：'+err.message,'error'); }
+  }catch(err){ toast(L('SVG 导入失败：{msg}',{msg:err.message}),'error'); }
 });
 
 /* -------------------- 统计 / 校验 -------------------- */
@@ -292,8 +292,8 @@ function renderStats(){
     tr.onclick=async()=>{
       const id=tr.dataset.floorSum;
       if(!id||id===state.activeFloorId) return;
-      try{ if(await switchFloor(id)) toast(L('已切换到楼层：')+currentFloorName(),'success'); }
-      catch(e){ toast(L('楼层操作失败：')+e.message,'error'); }
+      try{ if(await switchFloor(id)) toast(L('已切换到楼层：{name}',{name:currentFloorName()}),'success'); }
+      catch(e){ toast(L('楼层操作失败：{msg}',{msg:e.message}),'error'); }
     };
   });
   refreshStorageUsage();
@@ -387,7 +387,7 @@ async function runPlacementOptimization(){
       :`<p class="hint-text">${esc(L('当前已达标，无需新增点位。'))}</p>`}`;
   const buttons=[{text:L('关闭'),class:'',click:closeModal}];
   if(res.suggestions.length){
-    buttons.unshift({text:L('应用建议（新增')+` ${res.suggestions.length} ${L('台）')}`,class:'primary',click:()=>{
+    buttons.unshift({text:L('应用建议（新增 {n} 台）',{n:res.suggestions.length}),class:'primary',click:()=>{
       pushHistory();
       const typeId=defaultTypeId('point')==='point.marker'?'point.camera':defaultTypeId('point');
       withObjectNameScope(allObjectNames(), () => res.suggestions.forEach(s=>{
@@ -395,7 +395,7 @@ async function runPlacementOptimization(){
           {x:Math.round(s.x*100)/100,y:Math.round(s.y*100)/100,angle:s.angle,phys:s.phys});
         state.objects.push(o);
       }));
-      closeModal(); commitChange(L('已按建议新增')+' '+res.suggestions.length+' '+L('台摄像头'));
+      closeModal(); commitChange(L('已按建议新增 {n} 台摄像头',{n:res.suggestions.length}));
       runCoverageAnalysis();
     }});
   }

@@ -3814,8 +3814,9 @@ asyncSuites.push((async()=>{
   eq('i18n-动态词组宽度', I.p('宽度'), 'Width');
   eq('i18n-动态词组关闭', I.p('关闭'), 'Close');
   eq('i18n-动态词组未收录回退原文', I.p('__未收录词组__'), '__未收录词组__');
-  eq('i18n-动态模板粘贴', I.p('已粘贴 3 个对象'), 'Pasted 3 objects');
-  eq('i18n-动态模板表格导入', I.p('表格导入完成：更新 2 项，新增 1 项'), 'Table import complete: 2 updated, 1 created');
+  eq('i18n-动态模板粘贴', I.p('已粘贴 {n} 个对象', { n: 3 }), 'Pasted 3 objects');
+  eq('i18n-动态模板表格导入', I.p('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
+    { updated: 2, replaced: 0, created: 1 }), 'Table import complete: 2 updated, 0 replaced, 1 created');
   eq('i18n-捕捉类型英文', I.p('端点') + ' / ' + I.p('切点'), 'endpoint / tangent');
   eq('i18n-捕捉提示英文', I.p('捕捉：自动（全部类型）'), 'Snap: Auto (all types)');
   api.resetState();
@@ -5499,6 +5500,33 @@ asyncSuites.push((async()=>{
   const svgOn = api.buildSceneSvg();
   ok('B-07 启用后 SVG 叠加标题栏', svgOn.includes('>图例<') && svgOn.includes('工程名'));
   api.resetState();
+}
+
+/* 75.11 B-14 i18n 插值模板：中文语义不变、英文整句命中、缺参回退、转义边界 --- */
+{
+  const I = api.I18N;
+  const orig = I.lang;
+  I.setLang('zh');
+  eq('B-14 中文模板插值', I.p('已粘贴 {n} 个对象', { n: 3 }), '已粘贴 3 个对象');
+  eq('B-14 中文模板多参数', I.p('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
+    { updated: 3, replaced: 2, created: 5 }), '表格导入完成：更新 3 项，替换 2 个对象，新增 5 项');
+  eq('B-14 中文报告页脚', I.p('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',
+    { n: 10, page: 2, total: 5, time: 'T' }), '共 10 个对象 · 第 2 / 5 页 · T');
+  eq('B-14 中文无占位短语', I.p('已保存'), '已保存');
+  I.setLang('en');
+  eq('B-14 英文模板插值', I.p('已粘贴 {n} 个对象', { n: 3 }), 'Pasted 3 objects');
+  eq('B-14 英文 DXF 整句', I.p('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
+    { line: 2, rect: 1, point: 3, text: 4, extra: '' }), 'DXF imported: 2 lines / 1 circles / 3 points / 4 texts');
+  eq('B-14 英文表格导入整句', I.p('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
+    { updated: 3, replaced: 2, created: 5 }), 'Table import complete: 3 updated, 2 replaced, 5 created');
+  eq('B-14 英文导出页脚', I.p('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',
+    { n: 10, page: 2, total: 5, time: 'T' }), 'Objects: 10 · Page 2 / 5 · T');
+  eq('B-14 未知中文回退', I.p('未收录的中文'), '未收录的中文');
+  eq('B-14 缺参数保留占位', I.p('已粘贴 {n} 个对象', {}), 'Pasted {n} objects');
+  eq('B-14 模板不走 HTML 转义', I.fmt('{x}', { x: '<img>' }), '<img>');
+  eq('B-14 DOM 边界统一转义', api.esc(I.p('已导入 SVG 图元：{name}', { name: '<img>' })), 'SVG symbol imported: &lt;img&gt;');
+  ok('B-14 模板键不进短语表', Object.keys(I.templates).every(k => I.phrases[k] === undefined));
+  I.setLang(orig);
 }
 
 /* ---------------- 结果汇总 ---------------- */

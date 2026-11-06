@@ -366,38 +366,38 @@ function rowsToObjectsPlan(rows){
 function showTableImportPreview(fileName,plan){
   /* 严格模式（含「操作」列）出现非法行时整批不生效，预览不提供「合并导入」 */
   if(plan.errors&&plan.errors.length){
-    openModal(L('无法导入（整批未生效）：')+fileName,
+    openModal(L('无法导入（整批未生效）：{name}',{name:fileName}),
       '<div style="max-height:240px;overflow:auto;margin:10px 0">'.concat(
         plan.errors.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join(''),
-        plan.errors.length>50?'<p class="hint-text">'+esc(L('其余错误略'))+' '+(plan.errors.length-50)+'</p>':'',
+        plan.errors.length>50?'<p class="hint-text">'+esc(L('其余错误略 {n}',{n:plan.errors.length-50}))+'</p>':'',
         '</div><p class="hint-text">'+esc(L('存在非法行，整批取消导入；修正后重新导入即可，现有对象未被修改。'))+'</p>'),
       [{text:L('知道了'),class:'primary',click:closeModal}]);
     return;
   }
   const replaceCount=(plan.replaces||[]).reduce((n,r)=>n+r.objs.length,0);
   if(!plan.updates.length&&!plan.creates.length&&!replaceCount&&plan.warnings.length){
-    openModal(L('无法导入：')+fileName,'<div class="issue">'+plan.warnings.slice(0,10).map(esc).join('</div><div class="issue">')+'</div>',
+    openModal(L('无法导入：{name}',{name:fileName}),'<div class="issue">'+plan.warnings.slice(0,10).map(esc).join('</div><div class="issue">')+'</div>',
       [{text:L('知道了'),class:'primary',click:closeModal}]);
     return;
   }
   const warnHtml=plan.warnings.length
     ? '<div style="max-height:190px;overflow:auto;margin:10px 0">'+plan.warnings.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join('')+
-      (plan.warnings.length>50?'<p class="hint-text">'+esc(L('其余提示略'))+' '+(plan.warnings.length-50)+'</p>':'')+'</div>'
+      (plan.warnings.length>50?'<p class="hint-text">'+esc(L('其余提示略 {n}',{n:plan.warnings.length-50}))+'</p>':'')+'</div>'
     : `<div class="ok-banner">${esc(L('全部行均可导入。'))}</div>`;
   const countLine='<p style="line-height:1.7">'+esc(L('按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：'))+
     '<b>'+plan.updates.length+'</b> '+esc(L('项更新、'))+
     '<b>'+replaceCount+'</b> '+esc(L('个对象替换（'))+'<b>'+(plan.replaces||[]).length+'</b> '+esc(L('行条件）、'))+
     '<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>';
-  openModal(L('表格导入预览：')+fileName,
+  openModal(L('表格导入预览：{name}',{name:fileName}),
     countLine+
     '<p class="hint-text">'+esc(L('可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。'))+'<b>'+esc(L('长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。'))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
     [{text:L('取消'),click:closeModal},
      {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }
 function applyTableImport(plan){
-  if(plan.errors&&plan.errors.length){ toast('表格导入失败：存在非法行，已整批取消','error'); return; }
+  if(plan.errors&&plan.errors.length){ toast(L('表格导入失败：存在非法行，已整批取消'),'error'); return; }
   const limitErrs=importLimitErrors({objects:countProjectObjects(state)+(plan.creates||[]).length});
-  if(limitErrs.length){ toast('表格导入失败：'+importLimitMessage(limitErrs),'error'); return; }
+  if(limitErrs.length){ toast(L('表格导入失败：{msg}',{msg:importLimitMessage(limitErrs)}),'error'); return; }
   /* 事务化：先留快照；任何意外异常都回到导入前现场，不留半批对象/属性 */
   const backup=snapshotHistoryState(state), prevFuture=history.future;
   pushHistory();
@@ -492,7 +492,8 @@ function applyTableImport(plan){
       list.push(o); created++;
     }));
     selectedIds.clear();
-    commitChange('表格导入完成：更新 '+updated+' 项，替换 '+replaced+' 个对象，新增 '+created+' 项');
+    commitChange(L('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
+      {updated,replaced,created}));
   }catch(err){
     state=materializeHistoryState(backup);
     if(history.past.length) history.past.pop();

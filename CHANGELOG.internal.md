@@ -2,6 +2,34 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-14：i18n 插值模板与集中字典（消除拼接句）
+
+- **Commit Hash**：本条提交（`feat(i18n): 插值模板与集中字典，动态整句英文可译`）。复盘用 `git log --grep="插值模板与集中字典" -1 --format=%H`。
+- **核心改动点**
+  - `js/common/i18n.js`：删除 `PATTERNS` 正则数组，新增 `TEMPLATES`（中文整句 → 英文整句，**98 条**，占位写作 `{n}` / `{name}`）与 `fillTemplate`（`/\{(\w+)\}/g` 替换，缺参保留原占位）；`p(text, params)` 在英文下**先查 `TEMPLATES`、再查 `PHRASES`**，未收录回退中文，最后统一插值；中文模式直接填充原文模板（语义不变）。导出新增 `I18N.fmt`（只替换、不转义）与 `I18N.templates`；`L(text, params)` 仍是 `p` 的别名。`PHRASES` 增补 31 条（总计 **766** 条）覆盖静态错误/状态短句。
+  - 文案迁移（消除 `L('前缀：') + 值` 拼接）：`js/core/interaction.js`（捕捉锁定/坐标栏/剪贴板/折线最少节点/仿射校准/比例尺控制点）、`js/features/props.js`（节点下限、照片保存失败、对齐/分布/重新编号）、`js/features/ui-panels.js`（SVG 导入/楼层切换/布点建议）、`js/features/io-import.js`（目录/工程/表格/XLSX/DXF/PDF/底图导入与预检）、`js/features/io-table.js`、`js/features/io-export.js`（PDF 页码/页脚、报价表、报告）、`js/features/collab.js`（连接/同步/邀请/二维码/合并详情）、`js/features/snapshot-ui.js`、`js/features/io.js`、`js/features/catalog.js`。
+  - 新增可复跑统计 `scripts/i18n-scan.mjs`（不进 dist）：逐字符状态机跳过注释与 `i18n.js`，收集单/双/反引号字面量并去重；识别翻译入口；输出硬编码/缺口/已字典化/覆盖率及样例。口径写在文件头。
+  - `scripts/selftest.mjs`：修正两条旧 §i18n 断言（旧的「前缀+数字」整串已不存在），新增 §75.11 **13 项**（中文模板插值、多参数、报告页脚、无占位短语、英文粘贴/DXF/表格/页脚、未知中文回退、缺参保留占位、`fmt` 不转义、`esc(L(...))` 边界转义、模板键不误进短语表、语言恢复）。
+  - `tests/e2e/i18n-template.spec.mjs`（新增）：英文界面下顶栏 `Export`、toast 输出 `Pasted 3 objects`、表格导入整句英文；注入 `<img src=x onerror=...>` 作为参数后 toast `childTags=0` 且 `window.__xss` 未触发。
+  - 文档：`docs/features.md`（B-14 子条）、`docs/modules.md`（`L(text,params) / TEMPLATES / I18N.fmt` 与 `scripts/i18n-scan.mjs`）、`docs/engineering.md`（B-14 技术段 + e2e 表行 + 体积/SHA/断言表）、`README.md`（路线图 + badge）、本文件。
+- **实测验证数据**
+  - **覆盖率（同一 `scripts/i18n-scan.mjs` 口径，改造前后各跑一次）**：基线 `covered=269 / missing=125 / hardcoded=655 / phrases=735 / templates=0` → **25.64%**；改造后 `covered=347 / missing=49 / hardcoded=631 / wrapped=396 / phrases=766 / templates=98` → **33.79%**。已字典化 **+78 条**，缺口 **−76 条**，硬编码 **−24 条**。口径：去重后的含 CJK 字符串字面量（注释与字典文件不计）；覆盖率 ＝ 已字典化 ÷（已字典化 + 缺口 + 硬编码）。基线通过 `git worktree` 检出旧版本并复制扫描器运行，保证同一脚本/同一文件集。
+  - **中英文案对比（selftest 断言）**：中文 `L('已粘贴 {n} 个对象',{n:3})` → `已粘贴 3 个对象`；英文 → `Pasted 3 objects`。中文 `L('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',{updated:2,replaced:0,created:1})` → `表格导入完成：更新 2 项，替换 0 个对象，新增 1 项`；英文 → `Table import complete: 2 updated, 0 replaced, 1 created`。缺参时保留 `{n}` 原样；未知中文在英文下回退原文。
+  - selftest **2171 → 2184 通过 / 0 失败（+13）**。
+  - e2e 全量 **48 passed / 1 skipped（49.8s）**（B-07 时 47 passed，新增 `i18n-template` 1 条）；`check --selftest` 2184 通过；`npm run ci` 全绿：重建 25.18ms、缓存帧 avg 0.37ms（P50 0.35 / P95 0.52 / P99 0.81）、直接全量 23.96ms、heapUsed 20.65MB、裁剪 99.4%（13/2000）、覆盖率 10.7ms / 大场地 15.9ms / 缩放差异 0pp；门禁牙齿 5/5。
+  - 体积 **820,168 → 831,533 B（+11,365 B / +1.39%）**；gzip（`build.mjs` 默认级别）**269,196 → 272,480 B（+3,284 B）**；820 KB 门禁余量 **8,147 B**，未上调上限；SHA256 `70c1d092812be2bdf144581b292af26467cca6f2c97fb4e45077b242976ba722`；`build --check` 二次构建确定性一致。
+- **未迁移项**
+  - `js/common` 适配层内部错误串（如 `@idcu/*` 未加载、`不是 data URL`、`dataURL 转换失败`）与 DXF 单位名（`无单位/英寸/英尺/英里/毫米/厘米`）仍为硬编码中文——属底层诊断，未做 UI 文案化。
+  - DWG 兼容入口的整段 HTML 指引、DXF 预检模态的大段说明、多行组合提示（如「确定删除选中的 N 个对象吗？」「协作覆盖：…」）仍是中文拼接；本轮只覆盖能整句模板化的动态句。
+  - 文件名后缀、内部枚举值、`camera-*` 相关文案未扫描/未改动。
+- **遗留 TODO / 风险**
+  - `TEMPLATES` 是**整句精确匹配**：调用方改一个字（空格、标点）即回退中文，英文覆盖率会静默下降；新增动态句必须同时登记模板，并以 `i18n-scan.mjs` 回归。
+  - 覆盖率 33.79% 的分母含大量底层/内部字符串，**不等于「用户可见英文覆盖率」**；对外表述只引用同一脚本的前后对比，不作跨口径比较。
+  - `fillTemplate` 不做转义，安全性依赖调用方在 DOM/SVG 边界使用 `textContent` / `esc()` / `xmlEscape`；新增调用点若直接拼进 `innerHTML` 会引入注入面（A-02 防线不由模板层兜底）。
+- **受影响调用方 / 公共抽象**
+  - 新增公共抽象：`TEMPLATES`、`I18N.fmt`（原 `fillTemplate`）、`I18N.templates`、`L(text, params)` 参数化签名（与 `I18N.p` 同义）；`scripts/i18n-scan.mjs` 为覆盖率统计唯一入口。
+  - 调用方：上列 10 个业务脚本的 toast/commitChange/openModal/showConfirm 文案；`selftest` §i18n 与 §75.11；`e2e i18n-template`。未新增运行时依赖；未读取/修改 `camera-*`；未 push。
+
 ## 2026-11-06 · B-07：图框 / 标题栏 / 比例尺 / 图例模板（默认关闭，golden 不变）
 
 - **Commit Hash**：本条提交（`feat(export): 图框/标题栏/比例尺/图例模板（默认关闭，golden 不变）`）。复盘用 `git log --grep="图框/标题栏/比例尺/图例模板" -1 --format=%H`。

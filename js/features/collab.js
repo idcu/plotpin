@@ -180,7 +180,7 @@ function collabTransportReady(){
 function collabSendRaw(data,to='*'){
   if(collabBC){
     try{ collabBC.postMessage(data); return true; }
-    catch(e){ collabRecordError(L('发送失败：')+(e.message||e)); collabNotifyThrottled(L('发送失败：')+(e.message||e),'error'); return false; }
+    catch(e){ collabRecordError(L('发送失败：{msg}',{msg:(e.message||e)})); collabNotifyThrottled(L('发送失败：{msg}',{msg:(e.message||e)}),'error'); return false; }
   }
   if(collabDC&&collabDC.readyState==='open'){
     if(typeof collabDC.bufferedAmount==='number'&&collabDC.bufferedAmount>COLLAB_DC_BUFFER_LIMIT){
@@ -189,7 +189,7 @@ function collabSendRaw(data,to='*'){
       return false;
     }
     try{ collabDC.send(data); return true; }
-    catch(e){ collabRecordError(L('发送失败：')+(e.message||e)); collabNotifyThrottled(L('发送失败：')+(e.message||e),'error'); return false; }
+    catch(e){ collabRecordError(L('发送失败：{msg}',{msg:(e.message||e)})); collabNotifyThrottled(L('发送失败：{msg}',{msg:(e.message||e)}),'error'); return false; }
   }
   return false;
 }
@@ -264,7 +264,7 @@ function collabHandleMessage(msg,from){
       collabSendObject({t:'hello-ack',name:collabPeerId},from);
       collabSendObject({t:'snapshot',project:persistableState()},from);
     }
-    collabSetState('connected',L('已连接对端')+'：'+(msg.name||from),'ok');
+    collabSetState('connected',L('已连接对端：{name}',{name:(msg.name||from)}),'ok');
     collabRefreshUI();
     return;
   }
@@ -272,7 +272,7 @@ function collabHandleMessage(msg,from){
     const name=String(msg.name||from).slice(0,80);
     collabHelloDup('ack:'+from,name);
     collabPeers.set(from,msg.name||from);
-    collabSetState('connected',L('已连接对端')+'：'+(msg.name||from),'ok');
+    collabSetState('connected',L('已连接对端：{name}',{name:(msg.name||from)}),'ok');
     collabRefreshUI();
     return;
   }
@@ -304,19 +304,19 @@ function collabQueueApply(raw,from){
       }
       const overwritten=(stats.updated||0)+(stats.deleted||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0);
       const detail=`+${stats.added||0} ~${stats.updated||0} -${stats.deleted||0}`+
-        (stats.floorMetaUpdated?` · ${L('楼层元数据覆盖')} ${stats.floorMetaUpdated}`:'')+
-        (stats.conflicts?` · ${L('冲突')} ${stats.conflicts}`:'');
+        (stats.floorMetaUpdated?` · ${L('楼层元数据覆盖 {n}',{n:stats.floorMetaUpdated})}`:'')+
+        (stats.conflicts?` · ${L('冲突 {n}',{n:stats.conflicts})}`:'');
       if(overwritten){
-        collabSetStatus(`${L('已同步')}：${detail} · ${L('可按 Ctrl+Z 回滚')}`,'warn');
+        collabSetStatus(L('已同步：{detail} · 可按 Ctrl+Z 回滚',{detail}),'warn');
         collabNotifyOverwrite(stats);
       }else{
-        collabSetStatus(`${L('已同步')}：${detail}`,'ok');
+        collabSetStatus(L('已同步：{detail}',{detail}),'ok');
       }
       collabRefreshConflictInfo();
     }catch(e){
-      collabRecordError(L('同步失败：')+e.message);
-      collabSetStatus(L('同步失败：')+e.message,'error');
-      toast(L('同步失败：')+e.message,'error');
+      collabRecordError(L('同步失败：{msg}',{msg:e.message}));
+      collabSetStatus(L('同步失败：{msg}',{msg:e.message}),'error');
+      toast(L('同步失败：{msg}',{msg:e.message}),'error');
     }
   });
 }
@@ -366,7 +366,7 @@ function collabStartLocal(name){
   collabStopAll();
   const channel=COLLAB_PREFIX+String(name||'draft').trim().slice(0,60);
   try{ collabBC=new BroadcastChannel(channel); }
-  catch(e){ toast(L('启用本机同步失败：')+e.message,'error'); collabStopAll(); return false; }
+  catch(e){ toast(L('启用本机同步失败：{msg}',{msg:e.message}),'error'); collabStopAll(); return false; }
   collabBC.onmessage=e=>collabReceiveRaw(e.data);
   collabBC.onmessageerror=()=>{
     collabRecordError(L('本机频道消息解析失败'));
@@ -430,9 +430,9 @@ function collabWireDC(dc){
   };
   dc.onerror=e=>{
     const detail=(e&&(e.message||(e.error&&e.error.message)))||L('未知错误');
-    collabRecordError(L('连接异常：')+detail);
+    collabRecordError(L('连接异常：{detail}',{detail}));
     collabSetState('error',`${L('连接异常')}：${detail}`,'error');
-    toast(L('连接异常：')+detail,'error');
+    toast(L('连接异常：{detail}',{detail}),'error');
     collabRefreshUI();
   };
 }
@@ -457,9 +457,9 @@ async function collabCreateOffer(){
     collabSetState('waiting',L('邀请已生成，等待对方粘贴应答'),'ok');
     collabRefreshUI();
   }catch(e){
-    collabRecordError(L('生成邀请失败：')+e.message);
-    collabSetState('error',L('生成邀请失败：')+e.message,'error');
-    toast(L('生成邀请失败：')+e.message,'error');
+    collabRecordError(L('生成邀请失败：{msg}',{msg:e.message}));
+    collabSetState('error',L('生成邀请失败：{msg}',{msg:e.message}),'error');
+    toast(L('生成邀请失败：{msg}',{msg:e.message}),'error');
     collabStopAll();
   }
 }
@@ -469,9 +469,9 @@ async function collabAcceptSignal(){
   let parsed;
   try{ parsed=collabInviteDecode(raw); }
   catch(e){
-    collabRecordError(L('邀请串无效：')+e.message);
-    collabSetState('error',L('邀请串无效：')+e.message,'error');
-    toast(L('邀请串无效：')+e.message,'error');
+    collabRecordError(L('邀请串无效：{msg}',{msg:e.message}));
+    collabSetState('error',L('邀请串无效：{msg}',{msg:e.message}),'error');
+    toast(L('邀请串无效：{msg}',{msg:e.message}),'error');
     return;
   }
   try{
@@ -504,9 +504,9 @@ async function collabAcceptSignal(){
     collabSetState('waiting',L('应答已生成，请复制给主机'),'ok');
     collabRefreshUI();
   }catch(e){
-    collabRecordError(L('应用信令失败：')+e.message);
-    collabSetState('error',L('应用信令失败：')+e.message,'error');
-    toast(L('应用信令失败：')+e.message,'error');
+    collabRecordError(L('应用信令失败：{msg}',{msg:e.message}));
+    collabSetState('error',L('应用信令失败：{msg}',{msg:e.message}),'error');
+    toast(L('应用信令失败：{msg}',{msg:e.message}),'error');
   }
 }
 async function collabCopySignal(){
@@ -531,7 +531,7 @@ function collabRenderInviteQR(text){
     return;
   }
   try{ box.innerHTML=qrSvg(s,140); }
-  catch(e){ box.innerHTML=`<div class="hint-text error">${esc(L('二维码生成失败：')+e.message)}</div>`; }
+  catch(e){ box.innerHTML=`<div class="hint-text error">${esc(L('二维码生成失败：{msg}',{msg:e.message}))}</div>`; }
 }
 
 function openCollabPanel(){

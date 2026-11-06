@@ -11,13 +11,13 @@ function snapTimeText(iso){
 }
 function snapLabel(meta){ return (meta&&meta.label)||'自动快照'; }
 function snapDiffFieldText(it){
-  if(it.category==='added') return L('新增于')+' '+it.bFloorId;
-  if(it.category==='removed') return L('删除于')+' '+it.aFloorId;
+  if(it.category==='added') return L('新增于 {floor}',{floor:it.bFloorId});
+  if(it.category==='removed') return L('删除于 {floor}',{floor:it.aFloorId});
   const parts=it.fields.filter(k=>k!=='floorId').map(k=>{
     const label=diffFieldLabel(k);
     return label+'：'+diffValueText(it.a?it.a[k]:undefined)+' → '+diffValueText(it.b?it.b[k]:undefined);
   });
-  if(it.category==='floorChanged') parts.unshift(L('楼层')+'：'+it.aFloorId+' → '+it.bFloorId);
+  if(it.category==='floorChanged') parts.unshift(L('楼层：{a} → {b}',{a:it.aFloorId,b:it.bFloorId}));
   return parts.join('；')||'—';
 }
 /** 快照下拉选项：A 默认最旧、B 默认最新，便于从旧到新看演进 */
@@ -27,7 +27,7 @@ function snapSelectOptions(metas,olderFirst){
 }
 async function openSnapshotManager(pid,pname){
   let metas=[];
-  try{ metas=await listSnapshots(pid); }catch(e){ toast(L('读取快照失败：')+e.message,'error'); return; }
+  try{ metas=await listSnapshots(pid); }catch(e){ toast(L('读取快照失败：{msg}',{msg:e.message}),'error'); return; }
   const bound=state.meta.projectId===pid;
   const rows=metas.map(m=>`<div class="proj-row" data-snap="${esc(m.snapshotId)}">
       <div class="proj-info"><b>${esc(snapLabel(m))}</b>
@@ -42,8 +42,8 @@ async function openSnapshotManager(pid,pname){
       <label>${esc(L('对比 B'))} <select id="snapB">${snapSelectOptions(metas,false)}</select></label>
       <button id="snapCompare" class="primary">${esc(L('对比 A→B'))}</button>
     </div>`:'';
-  const limitText=L('上限')+' '+APP_LIMITS.SNAPSHOT_MAX_PER_PROJECT+' '+L('个 / ')+
-    (APP_LIMITS.SNAPSHOT_MAX_BYTES_PER_PROJECT/1048576)+' MB'+L('，超出自动淘汰最旧');
+  const limitText=L('上限 {n} 个 / {mb} MB，超出自动淘汰最旧',
+    {n:APP_LIMITS.SNAPSHOT_MAX_PER_PROJECT,mb:APP_LIMITS.SNAPSHOT_MAX_BYTES_PER_PROJECT/1048576});
   openModal(L('版本快照与对比'),
     `<div class="proj-current">${esc(pname||state.meta.name||'')}　${metas.length} ${esc(L('个快照'))}${bound?' · '+esc(L('当前工程')):''}</div>
      <div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap">
@@ -60,9 +60,9 @@ async function openSnapshotManager(pid,pname){
     if(v===null) return;
     try{
       const meta=await createSnapshot({projectId:pid,label:v});
-      toast(`${L('快照已生成')}：${meta.objectCount} ${L('个对象')} · ${snapSizeText(meta.bytes)} · ${meta.elapsedMs}ms`,'success');
+      toast(L('快照已生成：{n} 个对象 · {size} · {ms}ms',{n:meta.objectCount,size:snapSizeText(meta.bytes),ms:meta.elapsedMs}),'success');
       await openSnapshotManager(pid,meta.projectName||pname);
-    }catch(e){ toast(L('生成快照失败：')+e.message,'error'); }
+    }catch(e){ toast(L('生成快照失败：{msg}',{msg:e.message}),'error'); }
   };
   if(metas.length>=2){
     $('snapCompare').onclick=()=>{
@@ -77,21 +77,21 @@ async function openSnapshotManager(pid,pname){
       const meta=metas.find(x=>x.snapshotId===sid);
       try{
         if(op==='del'){
-          const ok=await showConfirm(L('删除快照「')+snapLabel(meta)+L('」？只删除该版本记录，不影响当前工程与其它快照。'));
+          const ok=await showConfirm(L('删除快照「{name}」？只删除该版本记录，不影响当前工程与其它快照。',{name:snapLabel(meta)}));
           if(!ok) return;
           await deleteSnapshot(pid,sid);
           toast(L('快照已删除'));
           await openSnapshotManager(pid,pname);
         }else if(op==='restore'){
           if(state.meta.projectId!==pid){ toast(L('请先打开该工程再回滚'),'warn'); return; }
-          const ok=await showConfirm(L('回滚到快照「')+snapLabel(meta)+L('」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。'));
+          const ok=await showConfirm(L('回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。',{name:snapLabel(meta)}));
           if(!ok) return;
           clearDiffOverlay();
           await restoreSnapshotById(pid,sid);
           closeModal();
-          toast(L('已回滚到快照：')+snapTimeText(meta&&meta.createdAt),'success');
+          toast(L('已回滚到快照：{time}',{time:snapTimeText(meta&&meta.createdAt)}),'success');
         }
-      }catch(e){ toast(L('快照操作失败：')+e.message,'error'); }
+      }catch(e){ toast(L('快照操作失败：{msg}',{msg:e.message}),'error'); }
     });
   });
 }

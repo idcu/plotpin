@@ -444,7 +444,7 @@ function renderMultiProps(box,objs){
       if(items.length<2) return toast(L('至少选择两个对象'),'warn');
       pushHistory();
       const n=alignObjects(items,b.dataset.align);
-      commitChange(L('已对齐')+' '+n+' '+L('个对象'));
+      commitChange(L('已对齐 {n} 个对象',{n}));
     };
   });
   box.querySelectorAll('[data-distribute]').forEach(b=>{
@@ -453,7 +453,7 @@ function renderMultiProps(box,objs){
       if(items.length<3) return toast(L('至少选择三个对象'),'warn');
       pushHistory();
       const n=distributeObjects(items,b.dataset.distribute);
-      commitChange(L('已分布')+' '+n+' '+L('个对象'));
+      commitChange(L('已分布 {n} 个对象',{n}));
     };
   });
   if($('multiRenumberBtn')) $('multiRenumberBtn').onclick=()=>{
@@ -466,7 +466,7 @@ function renderMultiProps(box,objs){
     const used=allObjectNames(); items.forEach(o=>used.delete(o.name));
     pushHistory();
     const n=renumberObjects(items,prefix,start,step,used);
-    commitChange(L('已重新编号')+' '+n+' '+L('个对象'));
+    commitChange(L('已重新编号 {n} 个对象',{n}));
   };
   const restack=mode=>{
     const items=objs.filter(isEditable);
@@ -508,7 +508,7 @@ function bindPropEvents(box,o){
       pushHistory(); insertLineNode(o,i,p); commitChange('已插入节点');
     },
     remove:i=>{
-      if(o.points.length<=lineMinNodes(o)) return toast(`至少保留 ${lineMinNodes(o)} 个节点`,'warn');
+      if(o.points.length<=lineMinNodes(o)) return toast(L('至少保留 {n} 个节点',{n:lineMinNodes(o)}),'warn');
       pushHistory(); removeLineNode(o,i); commitChange('已删除节点');
     },
     move:(i,dir)=>{ if(moveNodeStep(o,i,dir)){ pushHistory(); commitChange(dir<0?'节点已上移':'节点已下移'); } },
@@ -539,7 +539,7 @@ function bindPropEvents(box,o){
       await assetPut(id,{bytes,mime:f.type||'image/jpeg'});
       pushHistory(); o.props=o.props||{}; o.props.photoId=id; commitObjectEdit(); renderProps();
       toast('照片已附加','success');
-    }catch(e){ toast('照片保存失败：'+e.message,'error'); }
+    }catch(e){ toast(L('照片保存失败：{msg}',{msg:e.message}),'error'); }
   }));
   box.querySelectorAll('[data-photo-clear]').forEach(btn=>btn.onclick=()=>{
     if(!isEditable(o)) return toast('对象或图层已锁定','warn');

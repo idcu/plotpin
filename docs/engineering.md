@@ -126,11 +126,11 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 | 大场地覆盖率分析 | ≤ 300 ms | 14.6–15.2 ms | 5000×5000m + 30 摄像头，173889 格 |
 | 覆盖率缩放差异 | ≤ 1 个百分点 | 0 pp | 同一图纸 zoom 0.25 / 1 / 4 / 16，均 44.42% |
 | 视口裁剪率 | ≥ 60% | 99.4% | 高倍缩放下 |
-| 单文件体积 | ≤ 820 KB（839,680 B） | 801.4 KB（820,168 B） | 余量 19,512 B（B-07 后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 B 系列功能留空间） |
-| 产物体积（gzip） | 只打印，不阻断 | 262.9 KB（269,196 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
-| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `f61c18b58e11…` | 从源重建、二次构建确定性一致 |
+| 单文件体积 | ≤ 820 KB（839,680 B） | 812.0 KB（831,533 B） | 余量 8,147 B（B-14 后；门禁口径 2026-11-06 由 750 KB 提到 820 KB，为后续 B 系列功能留空间） |
+| 产物体积（gzip） | 只打印，不阻断 | 266.1 KB（272,480 B） | 对外发布/下载指标；不同 zlib 版本字节可能不同，故不作为门禁 |
+| 产物 SHA256 | 必须等于 `scripts/dist-manifest.json` | `70c1d092812b…` | 从源重建、二次构建确定性一致 |
 | CSP 内联脚本哈希 | 哈希数 = 内联脚本数（剔除 HTML 注释） | 40 = 40 | 单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'` |
-| 断言数 | ≥ 1870 且 0 失败 | 2171 | 只增不减 |
+| 断言数 | ≥ 1870 且 0 失败 | 2184 | 只增不减 |
 
 **覆盖率统计口径 v2（B-09，2026-11）**：栅格改为**固定目标 18000 格**，按可见区域面积分配
 （`js/core/config.js` 的 `APP_LIMITS.COVERAGE_TARGET_CELLS`），格边 = √(面积/分得格数) 并夹在
@@ -350,6 +350,7 @@ P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺
 | `perf-render.spec.mjs` | B-11：真实 Chromium 1600×900 离屏渲染基线（A 基础场景 / B 标注+图元，均 2000 对象）。输出重建 / 缓存命中 / 直接全量的 avg·P50·P95·P99、`staticKey`、`filter+sort`、`measureText` 与 `Path2D` 单帧调用、heapDelta、zoom=6 裁剪率；断言为宽松上限（重建 P95 <160ms、缓存帧 P50 <8ms / P95 <12ms、直接 P95 <160ms、裁剪 >60%）只作防回归，不作为性能承诺 |
 | `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
 | `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
+| `i18n-template.spec.mjs` | B-14：切换英文后顶栏导出按钮为 `Export`；`L('已粘贴 {n} 个对象',{n:3})` 经 `toast` 输出 `Pasted 3 objects`、表格导入整句输出英文；把 `<img src=x onerror=...>` 作为文件名参数注入，toast 内 `childTags=0` 且 `window.__xss` 未触发（`textContent` 边界不引入注入面） |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
@@ -374,6 +375,19 @@ PNG/SVG 按 96dpi、PDF 按 150dpi 图纸页换算（同一缩放导出 PNG 与 
 不改语义）；协作/合并走 `mergeProjectData` 的 `meta` **整体本地优先**（`Object.assign(B.meta, A.meta)`），
 不做字段级 LWW，也不单独统计标题栏冲突；旧工程缺 `meta.titleBlock` 时 `normalizeTitleBlock`
 整体降级为「关闭 + 默认字段」，不阻塞载入。
+
+**i18n 插值模板（B-14，2026-11）**：动态整句不再用 `L('前缀：') + 值` 拼接。`js/common/i18n.js`
+新增 `TEMPLATES`（中文整句 → 英文整句，含 `{name}` 占位）与 `fillTemplate`：`p(text, params)`
+在英文下先查 `TEMPLATES`、再查 `PHRASES`，未收录回退中文；最后统一按 `/\{(\w+)\}/g` 替换占位，
+**中文模式直接填充原文模板**，语义不变。对外暴露 `I18N.templates` / `I18N.fmt`（只做占位替换、
+**不转义**），调用方在 DOM/SVG 边界仍走 `textContent` / `esc()` / `xmlEscape`，A-02 注入面不扩大。
+新增可复跑统计 `scripts/i18n-scan.mjs`：逐字符状态机跳过注释与字典文件，收集单/双/反引号字符串字面量
+并去重；识别 `L / I18N.p / I18N.t / I18N.fmt / I18N.tpl / toast / commitChange / openModal /
+showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK 且未走入口，「缺口」＝走了入口
+但字典无对应英文，「覆盖率」＝ 已字典化 ÷（已字典化 + 缺口 + 硬编码）。同一脚本对 `HEAD` 基线
+（`git worktree` 旧版本）与改造后各跑一次，**25.64% → 33.79%**（已字典化 269 → 347，缺口 125 → 49，
+硬编码 655 → 631）。未迁移项集中在 `js/common` 适配层内部错误串、DXF 单位名、DWG 入口整段 HTML
+指引与多行组合提示（见 `CHANGELOG.internal.md` 的 B-14 条目）。
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 §5.4。
