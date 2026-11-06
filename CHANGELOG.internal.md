@@ -2,6 +2,35 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-02：DXF 预检 / 单位确认 / 双落点 + DWG 兼容入口
+
+- **Commit Hash**：本条提交（`feat(dxf): 导入预检、单位确认与只读参考层；DWG 入口识别`）。复盘用 `git log --grep="导入预检、单位确认与只读参考层" -1 --format=%H`。
+- **核心改动点**
+  - `js/features/io-import.js`：`importDxfFile` 改为「读取 → `Dxf.inspect` 预检（二进制直接拒绝）→ `parseDxf(strictUnits)` 校验实体/上限 → 预检模态」；模态含版本、单位、实体数、块定义、补充解析、不支持类型，外加**单位确认**下拉（按文件 / 毫米 / 厘米 / 米 / 英寸 / 英尺）与**落点**下拉（可编辑对象 / 只读参考层）。只有点「导入」才调用 `applyDxfImport`。
+  - `applyDxfImport`：再次 `parseDxf({forceUnit})` 后事务化提交；`reference` 落点新建 `DXF参考 · 文件名 · 版本` 图层并 `locked:true`，实体全部落到该层；`editable` 保留原图层（缺层自动补开放层）。异常时 `snapshotHistoryState` / `materializeHistoryState` 回滚并弹出本次历史帧，不留半导入。
+  - 新增 `dwgVersionInfo(head)`：读取文件头 `AC10xx` 映射 R12/R13/R14/2000/2004/2007/2010/2013/2018，未知码与「非 AC10xx」如实标注；`importDwgFile` 弹「转 DXF / 转 PDF / 取消」指引，`pickConvertedFile` 用临时 `<input type=file>` 选择转换产物后回到主入口；不内置 DWG 内核、不新增依赖、不修改原文件。
+  - `index.html`：`#fileInput accept` 增加 `.dwg`；`handleImportFile` 增加 `.dwg` 路由，按版本识别而不是报「不支持的文件类型」。
+  - 保真度报告抽为纯函数 `dxfFidelityLines(meta,parsed)`，预检模态与导入 toast 共用同一数据源；`dxfUnitText` / `dxfRefLayerName` 同样纯函数化，便于 selftest 直接断言。
+  - 文档：`docs/features.md`、`docs/engineering.md`（B-02 段 + e2e 表 + 体积/断言数表）、`README.md`、本文件。
+- **实测验证数据**
+  - selftest **2086 → 2105 通过 / 0 失败**（+19：DWG 版本识别 4 项、非 DWG 头、参考层命名 3 项、保真度 5 项、单位改判/auto/无单位 4 项 + 行类型断言）。
+  - e2e `dxf-version.spec.mjs` **4 passed（3.9s 单独运行）**；全量 e2e **41 passed / 1 skipped（46.7s）**。
+  - 单位改判：`$INSUNITS=4`（毫米）的 10,000 单位线，改判「按米」后端点 x = 10,000（×1000）；`auto` 保持 1 m 与原 `unit=0.001`。
+  - 参考层：对象 `layerId` 指向 `DXF参考 · site-10000mm · AC1032` 且 `locked=true`，toast 含「只读参考层」。
+  - 体积 **787,499 → 796,031 B（+8,532 B / +1.08%）**；gzip **258,127 → 260,906 B（+2,779 B）**；820 KB 门禁余量 **43,649 B**；SHA256 `6174843d59c8476f720e1633b3096351aa9512c125a8789ce6ab0b75d6ec0b4a`。
+- **未验证项**
+  - 真实 DWG 文件（除文件头外）与真实 DWG→DXF 转换产物仓库内无样本，仅按文件头规范合成用例验证。
+  - 动态块 / 外部参照 / 代理对象 / 标注样式在真实转换中的丢失程度未验证；文档已写明限制。
+  - 参考层在图层管理器中的解锁交互未新增 e2e，沿用既有图层 e2e 覆盖。
+- **遗留 TODO / 风险**
+  - 预检模态目前同步解析整份 DXF；超大文件（接近 20MB 文本上限）在打开模态前会有一次全量解析耗时，后续可考虑改为「先 inspect 再懒解析」。
+  - DXF 样式（线宽/颜色/填充/标注样式）仍不映射，以几何与图层为准。
+- **受影响调用方 / 公共抽象**
+  - `js/features/io-import.js` 新增全局函数：`dwgVersionInfo`、`importDwgFile`、`pickConvertedFile`、`dxfUnitText`、`dxfFidelityLines`、`dxfRefLayerName`、`applyDxfImport`；`importDxfFile` 行为由「直接导入」改为「预检确认后导入」。
+  - `Dxf.parseDxf` 新增 `opt.forceUnit`（单位改判）；原有调用不传该参数时行为不变。
+  - `handleImportFile` 新增 `.dwg` 分支；`#fileInput accept` 增加 `.dwg`。
+  - 未新增运行时依赖，`ngm.vendor` 未修改。
+
 ## 2026-11-06 · B-03：DXF 实体与版本兼容
 
 - **Commit Hash**：本条提交（`feat(dxf): 版本审计与 SOLID/3DFACE/LEADER/ATTRIB 补充解析`）。复盘用 `git log --grep="版本审计与 SOLID" -1 --format=%H`。

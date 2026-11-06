@@ -12,6 +12,25 @@
     AC1009:'R12', AC1012:'R13', AC1014:'R14', AC1015:'2000', AC1018:'2004',
     AC1021:'2007', AC1024:'2010', AC1027:'2013', AC1032:'2018'
   };
+  /* AutoCAD $INSUNITS → 中文名与米换算（与公共模块 strictUnits 的完整表一致；0=无单位按米） */
+  const UNITS=[
+    {code:0,label:'无单位',meter:1},
+    {code:1,label:'英寸',meter:0.0254},
+    {code:2,label:'英尺',meter:0.3048},
+    {code:3,label:'英里',meter:1609.344},
+    {code:4,label:'毫米',meter:0.001},
+    {code:5,label:'厘米',meter:0.01},
+    {code:6,label:'米',meter:1},
+    {code:7,label:'公里',meter:1000},
+    {code:8,label:'微英寸',meter:2.54e-8},
+    {code:9,label:'密尔',meter:2.54e-5},
+    {code:10,label:'码',meter:0.9144},
+    {code:11,label:'埃',meter:1e-10},
+    {code:12,label:'纳米',meter:1e-9},
+    {code:13,label:'微米',meter:1e-6},
+    {code:14,label:'分米',meter:0.1}
+  ];
+  const UNIT_MAP=Object.fromEntries(UNITS.map(u=>[u.code,u]));
   /* 公共模块能直接落地的实体（含块定义结构） */
   const CORE_TYPES=new Set(['LINE','LWPOLYLINE','POLYLINE','VERTEX','SEQEND','CIRCLE','ARC','POINT',
     'TEXT','MTEXT','ELLIPSE','SPLINE','INSERT','BLOCK','ENDBLK','SECTION','ENDSEC','EOF']);
@@ -143,13 +162,30 @@
     return e;
   }
 
+  function scaleParsedEntities(entities,f){
+    if(f===1) return entities;
+    for(const e of entities||[]){
+      if(Array.isArray(e.points)) e.points=e.points.map(q=>[q[0]*f,q[1]*f]);
+      if(Number.isFinite(e.x)) e.x*=f;
+      if(Number.isFinite(e.y)) e.y*=f;
+      if(Number.isFinite(e.r)) e.r*=f;
+      if(Number.isFinite(e.height)) e.height*=f;
+    }
+    return entities;
+  }
   const baseParse=D.parseDxf;
   function parseDxf(text,opt){
     const src=String(text||'');
     const meta=inspectDxf(src);
     if(meta.binary) return {entities:[],unit:1,insUnits:meta.insUnits??0,blockCount:0,inspect:meta,supplemental:0};
     const parsed=baseParse(src,opt);
-    const extra=collectSupplemental(src).map(e=>scaleRaw(e,parsed.unit||1));
+    const detected=parsed.unit||1;
+    /* 单位确认：forceUnit 用 $INSUNITS 的完整米换算表把公共模块结果整体缩放到目标单位 */
+    const target=opt&&opt.forceUnit!=null?(UNIT_MAP[opt.forceUnit]?UNIT_MAP[opt.forceUnit].meter:detected):detected;
+    const f=target/detected;
+    if(f!==1) scaleParsedEntities(parsed.entities,f);
+    parsed.unit=target;
+    const extra=collectSupplemental(src).map(e=>scaleRaw(e,target));
     if(extra.length) parsed.entities=extra.concat(parsed.entities);
     parsed.inspect=meta;
     parsed.supplemental=extra.length;
@@ -158,7 +194,9 @@
 
   global.Dxf=Object.assign({},D,{
     parseDxf, parse:parseDxf,
-    inspect:inspectDxf, supplementalEntities:collectSupplemental,
-    VERSION_NAMES, CORE_TYPES, SUPPLEMENT_TYPES
+    inspect:inspectDxf, supplementalEntities:collectSupplemental, scaleParsedEntities,
+    unitLabel:code=>(UNIT_MAP[code]||{}).label||('未知单位 '+code),
+    unitFactor:code=>(UNIT_MAP[code]||{}).meter||1,
+    VERSION_NAMES, CORE_TYPES, SUPPLEMENT_TYPES, UNITS
   });
 })(typeof window !== 'undefined' ? window : globalThis);

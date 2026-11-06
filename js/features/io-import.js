@@ -73,6 +73,7 @@ async function handleImportFile(f){
     }catch(e){ toast('XLSX 解析失败：'+e.message,'error'); }
     return;
   }
+  if(ext==='dwg') return importDwgFile(f);
   if(ext==='dxf') return importDxfFile(f);
   if(ext==='pdf') return importPdfFile(f);
   if(/^image\//.test(f.type||'')||['png','jpg','jpeg','gif','webp','bmp','svg'].includes(ext)) return importBackgroundFile(f);
@@ -84,7 +85,69 @@ async function handleImportFile(f){
   toast('不支持的文件类型：.'+(ext||'未知')+'（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）','error');
 }
 
-/* -------------------- DXF 导入（CAD 互通） -------------------- */
+/* -------------------- DWG 兼容入口（不内置 DWG 内核，只做识别与转换指引） -------------------- */
+function dwgVersionInfo(head){
+  const m=String(head||'').match(/AC10\d{2}/);
+  const code=m?m[0]:'';
+  const names={AC1009:'R12',AC1012:'R13',AC1014:'R14',AC1015:'2000',AC1018:'2004',AC1021:'2007',AC1024:'2010',AC1027:'2013',AC1032:'2018'};
+  return {code,name:names[code]||'',label:code?(code+(names[code]?'（'+names[code]+'）':'（未知版本）')):'无法识别（文件头不是 AC10xx）'};
+}
+async function importDwgFile(f){
+  let head='';
+  try{
+    const buf=new Uint8Array(await f.arrayBuffer()).slice(0,32);
+    for(const b of buf) head+=String.fromCharCode(b);
+  }catch(e){ /* 读取失败按无法识别处理，仍给出转换指引 */ }
+  const info=dwgVersionInfo(head);
+  openModal(L('DWG 文件兼容入口：')+f.name,
+    '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('检测到 DWG 文件版本：'))+'<b>'+esc(info.label)+'</b></p>'+
+    '<p class="hint-text">'+esc(L('PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：'))+'</p>'+
+    '<ul class="hint-text" style="margin:8px 0 0;padding-left:20px;line-height:1.7">'+
+      '<li><b>'+esc(L('转 DXF'))+'</b>：'+esc(L('AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；'))+'</li>'+
+      '<li><b>'+esc(L('转 PDF'))+'</b>：'+esc(L('AutoCAD「打印/导出 → PDF」，可作矢量图纸或底图导入；'))+'</li>'+
+      '<li>'+esc(L('动态块 / 外部参照 / 代理对象 / 标注样式在转换时可能丢失，导入后请核对保真度提示。'))+'</li>'+
+    '</ul>'+
+    '<p class="hint-text">'+esc(L('转换在你的本机完成，PlotPin 只读取 DXF/PDF，单文件承诺不变。'))+'</p>',
+    [{text:L('转 DXF 后选择文件'),class:'primary',click:()=>{closeModal();pickConvertedFile('.dxf');}},
+     {text:L('转 PDF 后选择文件'),click:()=>{closeModal();pickConvertedFile('.pdf');}},
+     {text:L('取消'),click:closeModal}]);
+}
+/** 从 DWG 指引里选转换产物：临时创建 file input，选完即移除，不污染主入口的 accept */
+function pickConvertedFile(accept){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept=accept; inp.style.display='none';
+  inp.addEventListener('change',()=>{
+    const f=inp.files&&inp.files[0];
+    inp.remove();
+    if(f) handleImportFile(f);
+  });
+  document.body.appendChild(inp);
+  inp.click();
+}
+
+/* -------------------- DXF 导入（预检 → 单位确认/落点 → 事务化提交） -------------------- */
+function dxfUnitText(meta,dft){
+  if(!meta||meta.insUnits==null) return '未声明（按米处理）';
+  return dft.unitLabel(meta.insUnits)+'（$INSUNITS='+meta.insUnits+'）';
+}
+/** 保真度报告的唯一渲染源；返回纯文本行，模态与自测共用 */
+function dxfFidelityLines(meta,parsed){
+  if(!meta) return [];
+  const lines=[];
+  lines.push('版本：'+(meta.version||'未声明')+(meta.versionName?'（'+meta.versionName+'）':'')+(meta.knownVersion?'':' · 未知版本，按通用规则解析'));
+  lines.push('单位：'+dxfUnitText(meta,ensureVendor('Dxf')));
+  lines.push('可导入实体：'+(parsed?parsed.entities.length:meta.supportedCount)+' 个'+(parsed&&parsed.supplemental?'（含补充解析 '+parsed.supplemental+' 个）':''));
+  lines.push('块定义：'+(meta.blocks||0)+' 个');
+  if(Object.keys(meta.supplementalTypes||{}).length) lines.push('补充解析：'+Object.keys(meta.supplementalTypes).join(' / '));
+  const uns=Object.keys(meta.unsupportedTypes||{});
+  if(uns.length) lines.push('暂不支持（已跳过）：'+uns.join(' / ')+'（'+Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0)+' 条）');
+  if(meta.r12Bulge) lines.push('R12 凸度：'+meta.r12Bulge+' 段 VERTEX 42 会被拉直');
+  return lines;
+}
+function dxfRefLayerName(fileName,version){
+  const stem=String(fileName||'未命名').replace(/\.[a-z0-9]+$/i,'').slice(0,40);
+  return 'DXF参考 · '+stem+(version?' · '+version:'');
+}
 async function importDxfFile(f){
   let text;
   try{ text=await f.text(); }
@@ -95,74 +158,118 @@ async function importDxfFile(f){
     return toast('该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入','error');
   }
   let parsed;
-  try{ parsed=Dxf.parseDxf(text); }
+  try{ parsed=Dxf.parseDxf(text,{strictUnits:true}); }
   catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
   const ents=parsed.entities;
-  const suppression=[],unsupported=meta?Object.keys(meta.unsupportedTypes):[];
+  const uns=meta?Object.keys(meta.unsupportedTypes):[];
   if(!ents.length){
-    if(unsupported.length){
+    if(uns.length){
       const n=Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0);
-      return toast('DXF 中暂未找到可导入实体；文件含暂不支持的类型：'+unsupported.join(' / ')+'（'+n+' 条），已无法保真转换','error');
+      return toast('DXF 中暂未找到可导入实体；文件含暂不支持的类型：'+uns.join(' / ')+'（'+n+' 条），已无法保真转换','error');
     }
     return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
   }
   const entErrs=importLimitErrors({entities:ents.length});
   if(entErrs.length) return toast('DXF 导入失败：'+importLimitMessage(entErrs),'error');
+  /* 预检：单位确认 + 落点选择，确认后才提交 */
+  const detected=meta&&meta.insUnits!=null?meta.insUnits:null;
+  const unitOpts=[];
+  if(detected!=null) unitOpts.push(['auto',L('按文件单位：')+Dxf.unitLabel(detected)+'（$INSUNITS='+detected+'）']);
+  else unitOpts.push(['auto',L('按文件（未声明，按米处理）')]);
+  [4,5,6,1,2].forEach(c=>{ if(c!==detected) unitOpts.push([String(c),L('按')+Dxf.unitLabel(c)]); });
+  const lines=dxfFidelityLines(meta,parsed);
+  openModal(L('DXF 导入预检：')+f.name,
+    '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('先核对版本、单位与保真度，再决定落点；导入失败会整批回滚。'))+'</p>'+
+    '<div style="margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;line-height:1.7">'+
+      lines.map(l=>'<div class="hint-text">'+esc(l)+'</div>').join('')+'</div>'+
+    '<label style="display:block;margin:8px 0">'+esc(L('单位确认'))+
+      ' <select id="dxfUnitSelect">'+unitOpts.map(([v,t])=>'<option value="'+v+'">'+esc(t)+'</option>').join('')+'</select></label>'+
+    '<label style="display:block;margin:8px 0">'+esc(L('落点'))+
+      ' <select id="dxfLanding"><option value="editable">'+esc(L('可编辑对象（按原图层）'))+'</option><option value="reference">'+esc(L('只读参考层（新建层并锁定）'))+'</option></select></label>'+
+    '<p class="hint-text">'+esc(L('参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。'))+'</p>',
+    [{text:L('取消'),click:closeModal},
+     {text:L('导入'),class:'primary',click:()=>{
+       const unit=$('dxfUnitSelect').value, landing=$('dxfLanding').value;
+       closeModal();
+       applyDxfImport(f.name,text,meta,{unit,reference:landing==='reference'});
+     }}]);
+}
+function applyDxfImport(fileName,text,meta,opts){
+  const Dxf=ensureVendor('Dxf');
+  let parsed;
+  try{ parsed=Dxf.parseDxf(text,{strictUnits:true,forceUnit:opts.unit==='auto'?null:Number(opts.unit)}); }
+  catch(e){ return toast('DXF 解析失败：'+e.message,'error'); }
+  const ents=parsed.entities;
+  if(!ents.length) return toast('DXF 中没有可导入实体','error');
+  const entErrs=importLimitErrors({entities:ents.length});
+  if(entErrs.length) return toast('DXF 导入失败：'+importLimitMessage(entErrs),'error');
+  const backup=snapshotHistoryState(state), prevFuture=history.future;
   pushHistory();
-  /* DXF 图层：缺失的自动创建（锁定/可见默认） */
-  ents.map(e=>e.layer).forEach(n=>{
-    if(n&&!state.layers.some(l=>l.name===n)) state.layers.push({id:safeId('layer_'+n,'LAYER'),name:n,visible:true,locked:false});
-  });
-  const layerIdFor=n=>{ const l=state.layers.find(x=>x.name===n); return l?l.id:'layer.default'; };
-  const counts={line:0,rect:0,point:0,text:0};
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  const bounds=p=>p.forEach(([x,y])=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);});
-  /* 批量实体一次建立编号作用域：避免逐个 baseObject → nextObjectId 扫描全量 state（O(E²)） */
-  withObjectNameScope(allObjectNames(), () => {
-  ents.forEach(e=>{
-    if(e.type==='LWPOLYLINE'){
-      const pts=e.points.map(p=>[p[0],p[1]]);
-      if(pts.length<2) return;
-      bounds(pts);
-      const o=baseObject('line','line.custom',{points:pts,closed:!!e.closed,x:pts[0][0],y:pts[0][1],layerId:layerIdFor(e.layer)});
-      state.objects.push(o); counts.line++;
-    }else if(e.type==='CIRCLE'){
-      if(!(e.r>0)) return;
-      const x=e.x,y=e.y,r=e.r; bounds([[x-r,y-r],[x+r,y+r]]);
-      const o=baseObject('rect','rect.area',{x,y,shape:{type:'circle',r},width:0,height:0,layerId:layerIdFor(e.layer)});
-      state.objects.push(o); counts.rect++;
-    }else if(e.type==='POINT'){
-      const x=e.x,y=e.y; bounds([[x,y]]);
-      const o=baseObject('point','point.marker',{x,y,layerId:layerIdFor(e.layer)});
-      state.objects.push(o); counts.point++;
-    }else if(e.type==='TEXT'){
-      const x=e.x,y=e.y,h=e.height||1; bounds([[x,y],[x+h*4,y+h]]);
-      const o=baseObject('text',null,{x,y,text:e.text||'文字',height:h>0?h:1,layerId:layerIdFor(e.layer)});
-      o.typeId='text.builtin';
-      state.objects.push(o); counts.text++;
+  try{
+    let refLayer=null;
+    if(opts.reference){
+      const name=dxfRefLayerName(fileName,meta&&meta.version);
+      refLayer=state.layers.find(l=>l.name===name);
+      if(!refLayer){ refLayer={id:safeId('layer_'+name,'LAYER'),name,visible:true,locked:true}; state.layers.push(refLayer); }
+      else refLayer.locked=true;
+    }else{
+      ents.map(e=>e.layer).forEach(n=>{
+        if(n&&!state.layers.some(l=>l.name===n)) state.layers.push({id:safeId('layer_'+n,'LAYER'),name:n,visible:true,locked:false});
+      });
     }
-  });
-  });
-  /* 默认矩形场地时，扩到能容纳导入几何（坐标允许负值，只扩不挪）；图片槽不受影响 */
-  if(state.site&&state.site.kind==='rect'&&state.site.shape?.type==='rect'&&Number.isFinite(maxX)){
-    state.site.shape.w=Math.max(state.site.shape.w,maxX+10);
-    state.site.shape.h=Math.max(state.site.shape.h,maxY+10);
+    const layerIdFor=n=>{
+      if(refLayer) return refLayer.id;
+      const l=state.layers.find(x=>x.name===n); return l?l.id:'layer.default';
+    };
+    const counts={line:0,rect:0,point:0,text:0};
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    const bounds=p=>p.forEach(([x,y])=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);});
+    /* 批量实体一次建立编号作用域：避免逐个 baseObject → nextObjectId 扫描全量 state（O(E²)） */
+    withObjectNameScope(allObjectNames(), () => {
+      ents.forEach(e=>{
+        if(e.type==='LWPOLYLINE'){
+          const pts=e.points.map(p=>[p[0],p[1]]);
+          if(pts.length<2) return;
+          bounds(pts);
+          const o=baseObject('line','line.custom',{points:pts,closed:!!e.closed,x:pts[0][0],y:pts[0][1],layerId:layerIdFor(e.layer)});
+          state.objects.push(o); counts.line++;
+        }else if(e.type==='CIRCLE'){
+          if(!(e.r>0)) return;
+          const x=e.x,y=e.y,r=e.r; bounds([[x-r,y-r],[x+r,y+r]]);
+          const o=baseObject('rect','rect.area',{x,y,shape:{type:'circle',r},width:0,height:0,layerId:layerIdFor(e.layer)});
+          state.objects.push(o); counts.rect++;
+        }else if(e.type==='POINT'){
+          const x=e.x,y=e.y; bounds([[x,y]]);
+          const o=baseObject('point','point.marker',{x,y,layerId:layerIdFor(e.layer)});
+          state.objects.push(o); counts.point++;
+        }else if(e.type==='TEXT'){
+          const x=e.x,y=e.y,h=e.height||1; bounds([[x,y],[x+h*4,y+h]]);
+          const o=baseObject('text',null,{x,y,text:e.text||'文字',height:h>0?h:1,layerId:layerIdFor(e.layer)});
+          o.typeId='text.builtin';
+          state.objects.push(o); counts.text++;
+        }
+      });
+    });
+    if(state.site&&state.site.kind==='rect'&&state.site.shape?.type==='rect'&&Number.isFinite(maxX)){
+      state.site.shape.w=Math.max(state.site.shape.w,maxX+10);
+      state.site.shape.h=Math.max(state.site.shape.h,maxY+10);
+    }
+    selectedIds.clear();
+    const unitCode=opts.unit==='auto'?(meta&&meta.insUnits!=null?meta.insUnits:0):Number(opts.unit);
+    const lines=dxfFidelityLines(meta,parsed).filter(l=>!l.startsWith('单位：'));
+    commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字'+
+      ' · 单位 '+Dxf.unitLabel(unitCode)+(opts.reference?' · 落点 只读参考层（已锁定）':'')+
+      (lines.length?' · '+lines.join(' · '):''));
+    if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
+    fitView();
+  }catch(e){
+    state=materializeHistoryState(backup);
+    if(history.past.length) history.past.pop();
+    history.future=prevFuture;
+    selectedIds.clear();
+    requestRender(); updateHistoryButtons();
+    toast('DXF 导入失败（已回滚）：'+(e&&e.message||e),'error');
   }
-  selectedIds.clear();
-  /* 保真度如实上报：版本 / 补充解析 / 跳过类型 / R12 凸度丢失，全部写进导入结果提示 */
-  if(meta&&meta.version){
-    suppression.push('版本 '+meta.version+(meta.versionName?'（'+meta.versionName+'）':'')+(meta.knownVersion?'':'（未知版本，按通用规则解析）'));
-  }
-  if(meta&&meta.supplementalTypes&&Object.keys(meta.supplementalTypes).length){
-    suppression.push('补充解析 '+Object.keys(meta.supplementalTypes).join('/'));
-  }
-  if(unsupported.length){
-    suppression.push('跳过暂不支持 '+unsupported.join('/')+'（'+Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0)+' 条）');
-  }
-  commitChange('DXF 已导入：'+counts.line+' 线 / '+counts.rect+' 圆 / '+counts.point+' 点 / '+counts.text+' 文字'+
-    (suppression.length?' · '+suppression.join(' · '):''));
-  if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
-  fitView();
 }
 
 /* -------------------- PDF 底图导入（矢量优先，扫描件取最大内嵌图） -------------------- */

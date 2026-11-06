@@ -140,6 +140,7 @@ code += `\n;globalThis.__api = {
   buildSceneSvg, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
   outlineOf, objectIndexById, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
+  dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
@@ -1919,6 +1920,48 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('B-03-仅不支持实体不产出对象', onlyDim.entities.length, 0);
   eq('B-03-不支持类型如实记录', Object.keys(onlyDim.inspect.unsupportedTypes).sort().join(','), 'DIMENSION,HATCH');
 }
+
+/* 36.2 B-02：DWG 版本识别 + DXF 预检保真度/单位确认/参考层命名 ---------------------- */
+{
+  const P=(c,v)=>c+'\n'+v+'\n';
+  const head=ver=>P(0,'SECTION')+P(2,'HEADER')+P(9,'$ACADVER')+P(1,ver)+P(9,'$INSUNITS')+P(70,4)+P(0,'ENDSEC');
+  const mk=head('AC1032')+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'LINE')+P(8,'WALL')+P(10,0)+P(20,0)+P(11,1000)+P(21,0)
+    +P(0,'DIMENSION')+P(8,'0')+P(10,0)+P(20,0)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  /* DWG 文件头：AC10xx 版本码 */
+  eq('B-02-DWG-2018 版本码', api.dwgVersionInfo('AC1032xxxx').code, 'AC1032');
+  eq('B-02-DWG-2018 别名', api.dwgVersionInfo('AC1032xxxx').name, '2018');
+  eq('B-02-DWG-R12 别名', api.dwgVersionInfo('AC1009abcd').name, 'R12');
+  eq('B-02-DWG-未知版本保留码', api.dwgVersionInfo('AC1099abcd').name, '');
+  ok('B-02-DWG-未知版本显式提示', api.dwgVersionInfo('AC1099abcd').label.includes('未知版本'));
+  ok('B-02-DWG-非 DWG 头如实提示', api.dwgVersionInfo('PK\u0003\u0004zipfile').label.includes('无法识别'));
+  /* 参考层命名：去扩展名、限长、带版本 */
+  eq('B-02-参考层去扩展名', api.dxfRefLayerName('floor-1.dxf','AC1024'), 'DXF参考 · floor-1 · AC1024');
+  eq('B-02-参考层缺省名', api.dxfRefLayerName('', ''), 'DXF参考 · 未命名');
+  ok('B-02-参考层名截断 40 字', api.dxfRefLayerName('x'.repeat(80)+'.dxf','').length <= 'DXF参考 · '.length+40);
+  /* 保真度报告：版本 / 单位 / 实体 / 不支持类型全部可读 */
+  const meta=api.Dxf.inspect(mk), parsed=api.Dxf.parseDxf(mk,{strictUnits:true});
+  const lines=api.dxfFidelityLines(meta,parsed);
+  ok('B-02-保真度含版本行', lines.some(l=>l.startsWith('版本：AC1032')));
+  ok('B-02-保真度含单位行', lines.some(l=>l.includes('毫米')&&l.includes('$INSUNITS=4')));
+  ok('B-02-保真度含实体数', lines.some(l=>l.startsWith('可导入实体：')));
+  ok('B-02-保真度如实列出 DIMENSION', lines.some(l=>l.includes('DIMENSION')));
+  eq('B-02-保真度为纯文本行数组', Array.isArray(lines)&&lines.every(l=>typeof l==='string'), true);
+  /* 单位确认：文件声明毫米，用户改按米 → 几何整体 ×1000 */
+  const asMeter=api.Dxf.parseDxf(mk,{strictUnits:true,forceUnit:6});
+  approx('B-02-单位确认毫米改米', asMeter.entities.find(e=>e.type==='LWPOLYLINE').points[1][0], 1000, 1e-6);
+  eq('B-02-单位确认写回 unit', asMeter.unit, 1);
+  /* auto 保持文件单位，不改几何 */
+  const auto=api.Dxf.parseDxf(mk,{strictUnits:true,forceUnit:null});
+  approx('B-02-单位 auto 保持原值', auto.entities.find(e=>e.type==='LWPOLYLINE').points[1][0], 1, 1e-9);
+  approx('B-02-单位 auto 写回 unit', auto.unit, 0.001, 1e-12);
+  /* 无 $INSUNITS 时按米处理，不因 forceUnit 缺失而漂移 */
+  const noUnit=api.Dxf.parseDxf(P(0,'SECTION')+P(2,'ENTITIES')+P(0,'LINE')+P(8,'0')
+    +P(10,0)+P(20,0)+P(11,5)+P(21,0)+P(0,'ENDSEC')+P(0,'EOF'),{strictUnits:true});
+  approx('B-02-未声明单位按米', noUnit.entities[0].points[1][0], 5, 1e-9);
+}
+
 
 /* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
 asyncSuites.push((async()=>{
