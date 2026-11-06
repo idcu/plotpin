@@ -2,6 +2,33 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · A-15 公共抽象第一批（outlineOf / objectIndexById / siteBounds / ensureVendor）
+
+- **Commit Hash**：`4a11133`（refactor(core): 收敛对象轮廓/对象索引/场地包围盒/第三方模块守卫四个公共抽象）。
+- **核心改动点**
+  - `js/core/geometry.js`：新增 `outlineOf(o)`（rect 形状族 → `shapeWorldPoints` 采样多边形；line/dimension → 节点副本；point/text → `[]`，每次返回新数组）；`siteDomainOf` 宽高改为直接取自 `siteBounds`，删除按形状各写一套 min/max 的分支。
+  - `js/features/io-export.js`：SVG 区域/折线/标注与 DXF `LWPOLYLINE` 统一走 `outlineOf`；抽出纯函数 `dxfEntitiesForExport()`，`exportDXF` 仅负责下载与提示。
+  - `js/core/model.js` + `js/core/interaction.js`：新增 `objectIndexById(list?)`；拖拽起点、批量移动、位移判定、Esc 回滚 4 处由 N 次 `find` 改为一次建索引。
+  - `js/core/config.js`：新增 `ensureVendor(name)`；`io-export.js`（Dxf/Xlsx/Pdf/Qr）与 `io-import.js`（Xlsx/Dxf/PdfRead）调用前统一守卫。
+  - `scripts/selftest.mjs` §72：21 条断言，含替换前捕获的 golden 基线。
+- **golden 基线（先锁后换）**
+  - rect 4 顶点坐标 `[[3,3],[11,3],[11,8],[3,8]]`；圆 72 采样点；折线 3、标注 2、点/文字 0。
+  - SVG `polygon` 4 个坐标对、`polyline` 3/2；既有场景哈希 `e6ba5542…` 仍通过。
+  - DXF 实体序列 `LWPOLYLINE×5 + CIRCLE + TEXT + POINT + TEXT`，LWPOLYLINE 顶点数 `4,4,4,3,2`（首位为默认 100×70 场地）。
+  - 替换后同一断言全部通过 → **导出顶点数与坐标零变化**（提交前先跑基线、替换后再跑，两次均绿）。
+- **实测验证数据（本机 Windows / 2026-11-06）**
+  - `node scripts/check.mjs --selftest`：**1799 通过 / 0 失败**（加载 36 脚本）。
+  - `node scripts/e2e.mjs`：**18 passed / 0 failed（24.5s）**。
+  - `node scripts/bench.mjs`：缓存帧 avg **0.39 ms** / P95 **0.54 ms** / P99 0.89 ms；重建 **27.01 ms**；直接全量帧 26.38 ms；heapUsed **18.85 MB**；覆盖率 **10.1 ms**；裁剪 **99.4%**。
+  - `node scripts/build.mjs --check`：**687.1 KB**，SHA256 `31d8d69f51f8acd5ce35675a2cdc2c4dbd3d5f7610e08b9eee4f1416d216ed59`。
+- **公共抽象 / 影响面**
+  - 新增 `outlineOf`、`dxfEntitiesForExport`、`objectIndexById`、`ensureVendor`；`siteDomainOf` 收敛到 `siteBounds`（均登记在 `docs/modules.md`）。
+  - 唯一可见行为变化：**旋转椭圆场地**的域尺寸从固定 `2rx×2ry` 改为真实轴对齐包围盒；其余形状逐值等价，导出顶点零变化。
+  - `ensureVendor` 仅改变“模块缺失”失败路径的报错文案；无新增脚本/依赖，无 schema 变更。
+- **遗留 TODO / 风险**
+  - `instanceof`/引用相等未受保护：`ensureVendor` 只判存在，不校验版本与 API 面（版本一致性仍由 `check-ngm.mjs` 负责）。
+  - `objectIndexById` 每次调用重建索引（O(N)），仅在单次操作内多次查找时划算；单次查找仍直接用 `find`。
+
 ## 2026-11-06 · A-11 墓碑按对象 id 保留 + 增量淘汰
 
 - **Commit Hash**：`5e47a03`（fix(collab): 墓碑按对象 id 长期保留并改为增量淘汰）。
