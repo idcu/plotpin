@@ -2,6 +2,34 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-06 协作易用性（消息层加固 / 邀请 / 状态 / 冲突）
+
+- **Commit Hash**：本条提交（`feat(collab): 邀请串/连接状态/冲突回滚与消息层加固`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="B-06" -1 --format=%H`。
+- **核心改动点（先消息层，后易用性）**
+  - **消息层加固（审计 P2-23 / P3-12）**：`js/features/collab.js` 入站分块缓冲新增 `collabSweepInbound` —— **30s TTL / 64 key / 16MB 总字节**，按 `lastAt` 最旧优先淘汰；`collabInboundBytes()` 供总字节判定。重复 `hello` 用 `collabHelloDup`（同 sender + 同 name，**1.5s 窗口**）去重，避免双向 hello 回环放大。`collabSendRaw` 对 `BroadcastChannel.postMessage` 与 `dc.send` 全部 `try/catch`，失败返回 `false` 且写入 `window.__collabLastError`；`collabSendObject` 任一分块失败即整体返回 `false`，快照失败 2s 后重试；DataChannel `bufferedAmount > 2MB` 跳过并提示。入站校验 sender/id 长度 ≤96、`total * 48KB` 不超单消息预算、重复 `seq` 丢弃。原异常断开静默路径改为 `error` 状态 + 中文原因。
+  - **邀请**：新增 `collabInviteEncode / collabInviteDecode`（`PLOTPIN-COLLAB:1:O|A:<base64(cleanSDP)>`，兼容裸 SDP）；面板一键生成/复制/应用，三步建连。`collabQrFit` 读 `Qr.MAX_BYTES` 判定容量；**超限只显示字节数提示、不渲染二维码**。`qrSvg` 从 `io-export.js` 上移到 `js/common/qr.js`，两处共用一份实现。
+  - **状态**：`collabSetState` 状态机 `idle/waiting/connecting/connected/disconnected/error`；常驻 `#collabPeers`（已连接对端 / 等待对方接入 / 已断开）与 `#collabStatus`（最近事件）。断开先发 `bye` 再关闭，对端可见「对端已断开」。
+  - **冲突**：`collabQueueApply` 用 `mergeProjectJSON(raw,{history:'overwrite'})`；`#collabConflictInfo` 常驻显示 `+a ~u -d · 冲突 N`，存在覆盖时提示「已写入撤销栈，可 Ctrl+Z 回滚」。`merge.js` stats 新增 `floorMetaUpdated / floorsDeleted`；`persistence.js` 新增纯函数 `mergeHistoryNeeded(stats)` 作为唯一判据——纯新增合并不再挤占 20 条撤销栈。
+  - **重连**：`collabStartLocal` 从「只发 hello」改为 **hello + snapshot**，修复离线修改重连后传不出去的单向缺陷。
+- **实测数据**
+  - selftest：1886 → **1914 通过 / 0 失败**（+28 条），新增覆盖：邀请串往返（tagged/裸 SDP/非法拒绝）、QR 容量判定、入站 TTL、key 上限 64、字节上限、hello 去重、`mergeHistoryNeeded`、楼层元数据统计。
+  - e2e：**33 passed / 1 skipped（41.5s）**；新增 `tests/e2e/collab.spec.mjs` **5 个用例**（双标签建连/状态、消息层护栏、冲突回滚、离线短间隔重连、邀请串 + QR 容量）。
+  - 同机双标签 WebRTC（同源两个 page，非双设备）：`open=true`，建连耗时 **73ms / 82ms / 95ms**（3 次运行），`state=connected`。
+  - 邀请串：**767 字节**，`Qr.MAX_BYTES=42`，`fits=false`，面板显示提示且 `#collabInviteQr svg` 数量为 **0**。
+  - 冲突：远端覆盖后 `updated=1, conflicts=1`，`history.past` **2 → 3**，`Ctrl+Z` 后本地 `x` 从 200 恢复为 100；面板冲突行含「冲突」「回滚」。
+  - 离线 5 分钟真实浸泡（`COLLAB_SOAK=1`，同机双标签 BroadcastChannel）：**1 passed（5.0m / 总 5.1m）**；重连后本地新增 `OBJ_SOAK` 在对端可见。
+  - 产物：单文件 **741.3 KB（759,056 B）**，SHA256 `bcd743d4…`，`build.mjs --check` 通过。
+- **受影响调用方**
+  - `mergeProjectJSON(raw, opts)` 新增 `opts.history:'overwrite'`；不传时行为不变。`mergeProjectData` stats 新增两个字段，既有字段不变。
+  - `qrSvg` 唯一实现迁到 `js/common/qr.js`，`io-export.js` 与 `collab.js` 共用；签名兼容（新增可选像素宽度）。
+  - 新增 i18n 键全部补齐中英文（`check-contracts` 的 i18n 键对齐通过）。
+- **文档同步**：`docs/engineering.md`（§5.1 体积 741.3KB / SHA / 断言 1914、B-06 段、§5.2 e2e 表）、`docs/features.md`（实时协作）、`docs/modules.md`（公共抽象与影响面）、`README.md`（徽章 1914 + 路线图）、本文件。
+- **未验证 / 遗留风险**
+  - **双设备 WebRTC 未验证**：本轮只有同机双标签；`iceServers:[]` 下无 STUN/TURN，跨 NAT/公网能否直连**未测**，不得用同机结果冒充。
+  - **二维码承载邀请未达成**：内置编码器固定 Version 3-M、42 字节，SDP 邀请串实测 767 字节；未引入新依赖去扩展 QR 版本，验收项标注未达。
+  - 5 分钟浸泡只覆盖同机 BroadcastChannel，未模拟真实网络丢包/重连抖动；DataChannel 长连接稳定性未做 5 分钟浸泡。
+  - 冲突计数来自 LWW 合并统计，不是逐字段 diff 清单；用户只能看到条数与回滚，不能逐项挑拣。
+
 ## 2026-11-06 · B-10 历史栈结构共享/增量
 
 - **Commit Hash**：本条提交（`perf(history): 撤销栈改为结构共享快照`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="历史栈结构共享" -1 --format=%H`。

@@ -143,6 +143,11 @@ code += `\n;globalThis.__api = {
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
   parkingLayout, parkingWarningText, applyParkingLayout,
   collabChunkText, collabCleanSDP,
+  collabInviteEncode, collabInviteDecode, collabQrFit, collabSweepInbound,
+  collabInboundBytes, collabHelloDup, mergeHistoryNeeded,
+  get collabInbound(){ return collabInbound; },
+  get collabHelloSeen(){ return collabHelloSeen; },
+  get collabState(){ return collabState; },
   undo, redo, pushHistory, get history(){ return history; },
   snapshotHistoryState, materializeHistoryState, isHistorySnapshot, historyValueEqual,
   applyLedgerCells, LEDGER_FIELDS,
@@ -3563,7 +3568,7 @@ asyncSuites.push((async()=>{
   });
   const M = (a, b) => api.mergeProjectData(a, b);
   const ids = p => (p.objects || []).map(o => o.id).join(',');
-  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0 };
+  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0 };
 
   const m1 = M(P([]), P([O('A', T1)]));
   eq('合并-新增对象数量', m1.project.objects.length, 1);
@@ -3592,6 +3597,13 @@ asyncSuites.push((async()=>{
   const m5z = M(P([O('A', T1, 1)]), P([Object.assign(O('A', T1, 1), { z: 5 })]));
   eq('合并-仅叠放顺序不同不算冲突', m5z.stats.conflicts, 0);
   eq('合并-仅叠放顺序不同保留本地', m5z.project.objects[0].z, 0);
+
+  const floorMetaA=P([],{floors:[{id:'floor.default',name:'1F',updatedAt:T1}],background:{kind:'rect',shape:{type:'rect',w:10,h:10}}});
+  const floorMetaB=P([],{floors:[{id:'floor.default',name:'2F',updatedAt:T2}],background:{kind:'rect',shape:{type:'rect',w:20,h:10}}});
+  const floorMetaM=M(floorMetaA,floorMetaB);
+  eq('合并-楼层元数据覆盖统计', floorMetaM.stats.floorMetaUpdated, 1);
+  eq('合并-楼层名较新胜出', floorMetaM.project.floors[0].name, '2F');
+  eq('合并-楼层元数据无覆盖为零', M(floorMetaA,floorMetaA).stats.floorMetaUpdated, 0);
 
   const m6 = M(P([O('A', T1, 1)]), P([O('A', T1, 2)]));
   const m6r = M(P([O('A', T1, 2)]), P([O('A', T1, 1)]));
@@ -4005,6 +4017,60 @@ asyncSuites.push((async()=>{
   let threw=false;
   try{ api.collabOnLocalChange(); }catch(_){ threw=true; }
   ok('协作-未连接时本地提交不抛错', !threw);
+
+  /* B-06：邀请串编解码、二维码容量、入站缓冲护栏、hello 去重、条件写历史 */
+  const inviteSdp='v=0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\na=mid:0\r\na=sctp-port:5000\r\n';
+  const invite=api.collabInviteEncode('offer',inviteSdp);
+  ok('邀请串-前缀与类型标记', invite.startsWith('PLOTPIN-COLLAB:1:O:'));
+  const inviteDec=api.collabInviteDecode(invite);
+  eq('邀请串-解码类型 offer', inviteDec.kind, 'offer');
+  ok('邀请串-还原 SDP', inviteDec.sdp.startsWith('v=0') && inviteDec.sdp.includes('m=application'));
+  ok('邀请串-tagged 标记', inviteDec.tagged === true);
+  const answerDec=api.collabInviteDecode(api.collabInviteEncode('answer',inviteSdp));
+  eq('邀请串-解码类型 answer', answerDec.kind, 'answer');
+  const rawDec=api.collabInviteDecode(inviteSdp);
+  eq('邀请串-裸 SDP 兼容', rawDec.kind, 'offer');
+  ok('邀请串-裸 SDP 未标记', rawDec.tagged === false);
+  let inviteBad=false;
+  try{ api.collabInviteDecode('PLOTPIN-COLLAB:1:X:abc'); }catch(_){ inviteBad=true; }
+  ok('邀请串-非法类型拒绝', inviteBad);
+  let inviteEmpty=false;
+  try{ api.collabInviteEncode('offer',''); }catch(_){ inviteEmpty=true; }
+  ok('邀请串-空内容拒绝', inviteEmpty);
+  const qrSmall=api.collabQrFit('PLOTPIN:DEV-1');
+  ok('二维码-短标签可放', qrSmall.fits === true && qrSmall.limit === 42);
+  const qrInvite=api.collabQrFit(invite);
+  ok('二维码-邀请串超限（不伪造）', qrInvite.fits === false && qrInvite.bytes > 42);
+
+  api.collabInbound.clear();
+  const tn=1000000;
+  api.collabInbound.set('old',{total:2,parts:['a'],size:1,lastAt:tn-31000});
+  api.collabInbound.set('fresh',{total:2,parts:['a'],size:1,lastAt:tn-1000});
+  eq('入站缓冲-TTL 清理过期', api.collabSweepInbound(tn), 1);
+  api.collabInbound.clear();
+  for(let i=0;i<70;i++) api.collabInbound.set('k'+i,{total:1,parts:['x'],size:1,lastAt:tn+i});
+  eq('入站缓冲-key 上限', api.collabSweepInbound(tn+100), 64);
+  ok('入站缓冲-淘汰最旧 key', !api.collabInbound.has('k0') && api.collabInbound.has('k69'));
+  api.collabInbound.clear();
+  for(let i=0;i<18;i++) api.collabInbound.set('b'+i,{total:1,parts:['x'],size:1024*1024,lastAt:tn+i});
+  api.collabSweepInbound(tn+100);
+  ok('入站缓冲-总字节上限', api.collabInboundBytes() <= 16*1024*1024);
+  ok('入站缓冲-字节超限淘汰最旧', !api.collabInbound.has('b0'));
+  api.collabInbound.clear();
+
+  api.collabHelloSeen.clear();
+  const ht=5000;
+  ok('hello 去重-首见处理', api.collabHelloDup('P-TEST','N',ht) === false);
+  ok('hello 去重-窗口内忽略', api.collabHelloDup('P-TEST','N',ht+100) === true);
+  ok('hello 去重-窗口外重处理', api.collabHelloDup('P-TEST','N',ht+2000) === false);
+  ok('hello 去重-换名重处理', api.collabHelloDup('P-TEST','M',ht+2100) === false);
+  api.collabHelloSeen.clear();
+
+  ok('合并历史-纯新增不写栈', api.mergeHistoryNeeded({added:5,floorsAdded:1}) === false);
+  ok('合并历史-对象覆盖写栈', api.mergeHistoryNeeded({updated:1}) === true);
+  ok('合并历史-删除写栈', api.mergeHistoryNeeded({deleted:1}) === true);
+  ok('合并历史-楼层元数据覆盖写栈', api.mergeHistoryNeeded({floorMetaUpdated:1}) === true);
+  ok('合并历史-整层删除写栈', api.mergeHistoryNeeded({floorsDeleted:1}) === true);
 }
 
 /* 63. 多楼层汇总：逐层对象数/分类/面积/长度与合计 ---------------------------- */

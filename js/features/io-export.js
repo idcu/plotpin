@@ -17,15 +17,7 @@ function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800);
 }
 function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
-/** 二维码 SVG：一个 path 画全部暗模块（29×29 版式，crispEdges 保证打印锐利） */
-function qrSvg(text,px=96){
-  const qr=ensureVendor('Qr').encodeText(text);
-  let d='';
-  for(let r=0;r<qr.size;r++) for(let c=0;c<qr.size;c++){
-    if(qr.modules[r][c]) d+=`M${c} ${r}h1v1h-1z`;
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${qr.size} ${qr.size}" width="${px}" height="${px}" shape-rendering="crispEdges"><rect width="${qr.size}" height="${qr.size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
-}
+/** 二维码 SVG 的唯一实现在 js/common/qr.js（qrSvg）；此处直接复用。 */
 /**
  * 设备二维码标签：每个可见点设备一张，扫码得到 `PLOTPIN:编号`，可在工程内搜索编号定位。
  * 离线生成可打印 HTML（A4 三列），不依赖任何外部资源。

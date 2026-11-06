@@ -712,6 +712,11 @@ function markTombstone(id,kind='object'){
   }
   return at;
 }
+/** 合并是否发生了「远端覆盖本地」：协作条件写历史的唯一判据（纯函数）。 */
+function mergeHistoryNeeded(stats){
+  const s=stats||{};
+  return ((s.updated||0)+(s.deleted||0)+(s.floorMetaUpdated||0)+(s.floorsDeleted||0))>0;
+}
 /** 合并他人工程 JSON（离线 LWW）：读取→清洗→按 id/更新时间合并→替换现场。
  *  schema 不符或结构损坏时抛错，由调用方提示；合并无变化时不写历史栈。 */
 async function mergeProjectJSON(raw,opts={}){
@@ -727,7 +732,9 @@ async function mergeProjectJSON(raw,opts={}){
   const {project,stats}=mergeProjectData(currentRaw,deepClone(incoming));
   /* 对象/楼层之外（图层、类型、墓碑）也可能有变化：用规范化序列化判断是否需要落盘 */
   if(mergeStable(project)===mergeStable(currentRaw)) return stats;
-  if(opts.history!==false) pushHistory();
+  /* history:'overwrite' 供实时协作：只有远端覆盖本地内容时才入撤销栈，
+   * 纯新增/纯同步不挤占 20 条历史上限；默认行为仍是「有变化就写历史」。 */
+  if(opts.history==='overwrite' ? mergeHistoryNeeded(stats) : opts.history!==false) pushHistory();
   state=migrateProject(project);
   /* 合并不接管对方的工程库绑定：只有本地已绑定才继续绑定 */
   state.meta.projectId=(currentRaw.meta&&currentRaw.meta.projectId)||'';

@@ -9,7 +9,7 @@
 function mergeProjectData(currentRaw, incomingRaw){
   const A = mergeNormalizeSide(currentRaw);
   const B = mergeNormalizeSide(incomingRaw);
-  const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0 };
+  const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0, floorMetaUpdated:0, floorsDeleted:0 };
   const tombs = mergeTombstoneMaps(A.tombstones, B.tombstones);
   const floors = new Map();
   const order = [];
@@ -22,12 +22,12 @@ function mergeProjectData(currentRaw, incomingRaw){
     const lastWrite = mergeFloorWrite(fa, fb);
     if (tomb && tomb.deletedAt >= lastWrite) {
       /* 整层删除胜过该层所有较早的编辑；只统计当前工程里确实存在的对象 */
-      if (fa) stats.deleted += fa.objects.size;
+      if (fa) { stats.deleted += fa.objects.size; stats.floorsDeleted++; }
       return;
     }
     if (tomb) tombs.floor.delete(id);
     if (!fa) stats.floorsAdded++;
-    const meta = mergeFloorMeta(fa, fb);
+    const meta = mergeFloorMeta(fa, fb, stats);
     const set = mergeFloorObjects(fa, fb, tombs, stats);
     floors.set(id, {
       id, name:meta.name, updatedAt:meta.updatedAt,
@@ -231,13 +231,18 @@ function mergeSiteTime(f){
   const t = f.site && f.site.updatedAt;
   return typeof t === 'string' && t ? t : f.updatedAt;
 }
-/** 同名楼层元数据：名称/底图/场地按最后写入较新的一方，视口保持本地 */
-function mergeFloorMeta(fa, fb){
+/** 同名楼层元数据：名称/底图/场地按最后写入较新的一方，视口保持本地。
+ *  stats.floorMetaUpdated 只在远端确实覆盖了本地不同的元数据时 +1（供协作撤销栈判定）。 */
+function mergeFloorMeta(fa, fb, stats){
   if (!fa) return fb;
   if (!fb) return fa;
   const newer = mergeTime(fb) > mergeTime(fa);
   const ta = mergeSiteTime(fa), tb = mergeSiteTime(fb);
   const siteNewer = tb > ta || (tb === ta && fb.site && !fa.site);
+  const nameWon = newer && !!fb.name && fb.name !== fa.name;
+  const bgWon = newer && !!fb.background && mergeStable(fb.background) !== mergeStable(fa.background);
+  const siteWon = siteNewer && !!fb.site && mergeStable(fb.site) !== mergeStable(fa.site);
+  if (stats && (nameWon || bgWon || siteWon)) stats.floorMetaUpdated++;
   return {
     id: fa.id,
     name: newer ? fb.name : (fa.name || fb.name),
