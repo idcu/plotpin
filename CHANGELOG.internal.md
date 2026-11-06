@@ -2,6 +2,35 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-01 真实浏览器性能基线 + 大图纸护栏评估
+
+- **Commit Hash**：`9148dce`（test(perf): 新增真实 Chromium 性能基线并给出可选门禁）。
+- **核心改动点**
+  - 新增 `tests/perf/browser-baseline.perf.mjs`：真实 Chromium + 真实 Canvas2D，覆盖 2000 / 5000 / 10000 对象 @DPR1，外加 5000 对象 @DPR2；视口 1920×1080、实际画布 1472×1028、世界域 2000×1500m 且全部对象在视野内（最坏重建）；对象构成 1/3 `point.marker` + 1/3 `rect.area` + 1/3 `line.custom`（3 节点）。
+  - 指标口径：每帧 = `drawScene` + `getImageData(0,0,1,1)` **强制同步光栅**；帧 P50/P95/P99、静态层重建 P50/P95/max、`performance.memory.usedJSHeapSize` 逐帧抽样峰值、`JSON.stringify(persistableState())`、`importJsonFile`（空工程内导入 + 已有工程内导入）、导入后首帧、静态层位图字节。
+  - 新增独立入口：`scripts/perf-browser.mjs` + `playwright.perf.config.mjs`（独立端口 4174、testDir `tests/perf`、`worker=1`、`--enable-precise-memory-info`）；不进 `npm run ci`，缺依赖/浏览器退 2 而非 0，报告写 `test-results/perf-browser-baseline.json`。
+  - 阻断阈值（实测约 2 倍余量）：DPR1 帧 P95 ≤ 16.7ms；重建 P95 2000/5000/10000 分别 ≤ 100/250/450ms；heap 峰值 ≤ 64/128/200MB；空工程导入 ≤ 300/500/900ms；静态层 ≤ 8MB（DPR2 ≤ 32MB）。
+  - 门禁牙齿：临时把 `2000@DPR1` 的 `frameP95` 改为 0.1ms，用例失败并以退出码 1 结束，随后还原为 16.7ms。
+- **实测验证数据（本机 Windows / 2026-11-06，4 轮区间；ANGLE/SwiftShader 软件光栅）**
+  - 缓存帧 P95：2000 → **1.3–4.2ms**；5000 → **2.1–4.7ms**；10000 → **3.5–6.4ms**；5000@DPR2 → **11.8–15.4ms**（P99 最高 17.9ms）。
+  - 静态层重建 P95：**40.6–55.2 / 100–122.7 / 198.6–230ms**（2000/5000/10000 DPR1）；DPR2 5000 → **192.9–221.8ms**。
+  - heapUsed 峰值：**15.9–17.1 / 36.5–36.7 / 59.3–72.1MB**；DPR2 5000 → **36.1–66.2MB**（抽样峰值随 GC 时机波动）。
+  - 导入：空工程 **53–62 / 127–155 / 272–298ms**；已有工程内同规模导入 **158–200 / 946–1215 / 4068–4848ms**；导入后首帧 **37–48 / 92–118 / 190–222ms**。
+  - 静态层位图：DPR1 **5.77MB**、DPR2 **23.09MB**。
+  - 回归：`node scripts/check.mjs --selftest` **1799/0**；`node scripts/e2e.mjs` **18/18（20.6s）**；`node scripts/build.mjs --check` **687.1KB**，SHA256 `31d8d69f…` 一致；`check-discipline` **13/13 → L4**。
+- **分块渲染 / LRU / Worker 结论（依据实测，未改架构）**
+  - 分块渲染：**后续再做（B-09 优先）**。缓存帧 P95 6.4ms 已满足 60fps，瓶颈只在重建（10k 一帧阻塞 198.6–230ms > 3 帧预算）；分块需 generation token 处理中途失效，属架构改动。
+  - 静态层 LRU：**不做**。缓存键含 zoom/pan，平移/缩放必然重建；每层 5.77MB（DPR2 23.09MB），无命中率数据支撑。
+  - Worker + OffscreenCanvas：**后续再做（前置条件未满足）**。主线程帧成本仅 1–6ms，没有“渲染占满主线程”证据；Worker 化需整体迁移 state/类型/标签几何，并危及同步命中测试与导出一致性。
+- **公共抽象 / 影响面**
+  - 仅新增测试与开发期脚本，无运行时改动、无新依赖、无 schema 变更；单文件产物与 `scripts/dist-manifest.json` 未变。
+  - 文档：`docs/engineering.md` §1/§5.1/§5.2/新增 §5.4；`docs/features.md` 性能条；`README.md` 可选命令。
+- **发现的问题 / 遗留 TODO 与风险**
+  - **O(N²) 导入**：10k 空工程导入 272–298ms，而当前工程已有 10k 对象时导入 4068–4848ms。来源是 `buildProject → sanitizeObjects → baseObject → nextObjectId()` 每创建一个对象都扫全量 `state.objects`；已作为 B-09 前置项记录，本轮不修。
+  - **大图纸首屏**：10k 全视野静态层重建 199–230ms、导入后首帧 190–222ms，用户可感知停顿；分块渲染需 B-09 决策后再做。
+  - **方法学边界**：headless SwiftShader，无真机 GPU 上屏；帧耗时含强制 `getImageData` 同步开销（draw 本身 P50 0.1–0.7ms）；仅一台 Windows 机器、一种分辨率、两种 DPR，不代表移动端/其他浏览器。
+  - 同机轮次差异最高约 2 倍（尤其 10k 帧/重建），阈值已按偏高值留余量；后续调阈值必须写明旧值→新值、理由与连续实测。
+
 ## 2026-11-06 · A-16 文档一致性（6 处硬矛盾 + APP_LIMITS 限值表）
 
 - **Commit Hash**：`ef62039`（docs(arch): 修正 6 处文档硬矛盾，并把 APP_LIMITS 限值表文档化）。
