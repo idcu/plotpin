@@ -162,7 +162,7 @@ code += `\n;globalThis.__api = {
   invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
-  snapshotKey, snapshotIdOfKey, snapshotProjectData, utf8Length, snapshotObjectIndex,
+  snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
@@ -4765,6 +4765,17 @@ asyncSuites.push(async()=>{
   eq('B-04 快照保留 photoId 引用', snapData.objects[0].props.photoId, 'as_photo_1');
   eq('B-04 快照深拷贝不回写当前状态', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
   eq('B-04 快照对象总数', api.countProjectObjects(snapData), 1);
+
+  /* 资产保活：快照记录是 {meta,data} 外壳，必须解包 data 才能收集资产引用 */
+  const snapRec={meta:{snapshotId:'S1'},data:{
+    background:{assetId:'bg_top'},
+    objects:[{props:{photoId:'as_top_photo'}},{props:{}}],
+    floors:[{id:'f2',background:{assetId:'bg_floor'},objects:[{props:{photoId:'as_floor_photo'}}]}]
+  }};
+  eq('B-04 快照记录资产引用解包', api.snapshotAssetRefs(snapRec).slice().sort(), ['as_floor_photo','as_top_photo','bg_floor','bg_top'].sort());
+  eq('B-04 裸 collectAssetRefs 不识别外壳（必须解包）', api.ContentAssets.collectAssetRefs(snapRec), []);
+  const keepSet=api.unionAssetRefs(new Map([['snapshot:P:S1',api.snapshotAssetRefs(snapRec)]]));
+  ok('B-04 快照命名空间纳入可达并集', ['bg_top','as_top_photo','bg_floor','as_floor_photo'].every(id=>keepSet.includes(id)));
 
   /* 构造样本：20 个未变对象 + 新增/删除/属性修改/移动/换楼层/类型变更各 1 条 */
   const NOW='2026-01-01T00:00:00.000Z';

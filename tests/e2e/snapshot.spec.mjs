@@ -192,3 +192,117 @@ test('对比：构造样本六类分类正确、未变对象零误报、叠加�
   expect(await page.evaluate(() => diffOverlay.on)).toBe(false);
   expect(await page.evaluate(() => diffOverlay.items.length)).toBe(0);
 });
+
+test('资产保活：快照引用阻止 prune 回收；回滚底图/照片可读；删除快照后可回收', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(async () => {
+    const PNG_BG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    const PNG_PHOTO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const bgBin = ContentAssets.dataUrlToBytes(PNG_BG);
+    const photoBin = ContentAssets.dataUrlToBytes(PNG_PHOTO);
+    const bgId = assetIdFor(bgBin.bytes);
+    const photoId = assetIdFor(photoBin.bytes);
+    await assetPut(bgId, { bytes: bgBin.bytes, mime: 'image/png' });
+    await assetPut(photoId, { bytes: photoBin.bytes, mime: 'image/png' });
+
+    state = createInitialState();
+    state.background = Object.assign(createEmptyBackground(), {
+      kind: 'image', fileName: 'keepalive-bg.png', assetId: bgId, width: 1, height: 1, metersPerPixel: 1
+    });
+    state.objects = [baseObject('point', 'point.camera', { id: 'P1', name: 'P1', x: 1, y: 1 })];
+    state.objects[0].props = { photoId };
+    await saveProjectAs('E2E 资产保活');
+    const pid = state.meta.projectId;
+    const snap = await createSnapshot({ label: '含底图+照片' });
+
+    /* 当前工程移除底图/照片引用，并确保草稿与工程主记录都不再引用；历史清空 */
+    history = { past: [], future: [] };
+    state.background = createEmptyBackground();
+    state.objects[0].props = {};
+    await saveProjectAs('E2E 资产保活');
+    await idbPut(persistableState());
+    const reach = await reachableAssetIds();
+    const prunedBefore = await pruneBgAssets();
+    const keptBySnapshot = !!(await assetGet(bgId)) && !!(await assetGet(photoId));
+    const snapshotNs = Array.from((await assetRefsByNamespace()).keys()).filter(k => k.startsWith('snapshot:')).length;
+
+    /* 回滚：底图与照片必须仍可读 */
+    await restoreSnapshotById(pid, snap.snapshotId);
+    const restoredBgRef = state.background.assetId === bgId;
+    const restoredPhotoRef = state.objects[0].props.photoId === photoId;
+    const bgReadable = !!(await assetGet(bgId));
+    const photoReadable = !!(await assetGet(photoId));
+    const bgLoaded = !!bgDataUrl;
+
+    /* 再次移除引用 → 删除快照 → prune：资产应可回收 */
+    history = { past: [], future: [] };
+    state.background = createEmptyBackground();
+    state.objects[0].props = {};
+    await new Promise(res => setTimeout(res, 600));   /* 等 restore 触发的自动保存落盘 */
+    await saveProjectAs('E2E 资产保活');
+    await idbPut(persistableState());
+    history = { past: [], future: [] };
+    await deleteSnapshot(pid, snap.snapshotId);
+    const prunedAfterDelete = await pruneBgAssets();
+    const prunedSet = Array.isArray(prunedAfterDelete) ? prunedAfterDelete : [];
+    const bgGone = !(await assetGet(bgId));
+    const photoGone = !(await assetGet(photoId));
+    return {
+      bgId, photoId, keptBySnapshot, prunedBefore, snapshotNs, restoredBgRef, restoredPhotoRef,
+      bgReadable, photoReadable, bgLoaded, bgGone, photoGone, prunedSet, reachHasBoth:
+        reach.includes(bgId) && reach.includes(photoId)
+    };
+  });
+  console.log(`[B-04] 资产保活 snapshotNs=${r.snapshotNs} prunedBefore=${JSON.stringify(r.prunedBefore)} prunedAfterDelete=${JSON.stringify(r.prunedSet)}`);
+  expect(r.reachHasBoth).toBe(true);         /* 可达集已包含快照引用 */
+  expect(r.snapshotNs).toBe(1);               /* 快照命名空间参与扫描 */
+  expect(r.prunedBefore).toEqual([]);         /* 快照引用保活：prune 不删 */
+  expect(r.keptBySnapshot).toBe(true);
+  expect(r.restoredBgRef).toBe(true);
+  expect(r.restoredPhotoRef).toBe(true);
+  expect(r.bgReadable).toBe(true);
+  expect(r.photoReadable).toBe(true);
+  expect(r.bgLoaded).toBe(true);               /* 底图 assetId 能真正解码回 dataURL */
+  expect(r.bgGone).toBe(true);                 /* 删除快照后资产可回收 */
+  expect(r.photoGone).toBe(true);
+  expect(r.prunedSet.slice().sort()).toEqual([r.bgId, r.photoId].sort());
+});
+
+test('资产可达集性能：快照 1 条 vs 20 条（各 1000 对象）的全库扫描耗时', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(async () => {
+    state = createInitialState();
+    const objs = [];
+    for (let i = 0; i < 1000; i++) {
+      objs.push(baseObject('point', 'point.camera', { id: 'OBJ' + i, name: 'O' + i, x: i * 2, y: i }));
+    }
+    state.objects = objs;
+    /* 最坏情况：每条快照都带底图 + 照片引用，命名空间条目完整参与扫描 */
+    state.objects[0].props = { photoId: 'as_perf_photo' };
+    state.background = Object.assign(createEmptyBackground(), { kind: 'image', assetId: 'bg_perf_bg', width: 1, height: 1 });
+    await saveProjectAs('E2E 快照扫描性能');
+    const pid = state.meta.projectId;
+    const t1 = performance.now();
+    await createSnapshot({ label: 'S1' });
+    const create1 = performance.now() - t1;
+    const t2 = performance.now();
+    const refs1 = await assetRefsByNamespace();
+    const scan1 = performance.now() - t2;
+    const snapNs1 = Array.from(refs1.keys()).filter(k => k.startsWith('snapshot:')).length;
+    const t3 = performance.now();
+    for (let i = 2; i <= APP_LIMITS.SNAPSHOT_MAX_PER_PROJECT; i++) await createSnapshot({ label: 'S' + i });
+    const createAll = performance.now() - t3;
+    const t4 = performance.now();
+    const refs20 = await assetRefsByNamespace();
+    const scan20 = performance.now() - t4;
+    const metas = await listSnapshots(pid);
+    const snapNs = Array.from(refs20.keys()).filter(k => k.startsWith('snapshot:')).length;
+    const totalBytes = metas.reduce((s, m) => s + (Number(m.bytes) || 0), 0);
+    return { create1, createAll, scan1, scan20, snapNs1, snapCount: metas.length, snapNs, totalBytes };
+  });
+  console.log(`[B-04] 可达集扫描 1条=${r.scan1.toFixed(1)}ms(${r.snapNs1} ns) / 20条=${r.scan20.toFixed(1)}ms(${r.snapNs} ns); 快照 ${r.snapCount} 条 ${(r.totalBytes / 1048576).toFixed(2)}MB; 生成首条=${r.create1.toFixed(1)}ms 其余19条=${r.createAll.toFixed(1)}ms`);
+  expect(r.snapCount).toBe(20);
+  expect(r.snapNs).toBe(20);
+  expect(r.snapNs1).toBe(1);
+  expect(r.scan20).toBeLessThan(1000);   /* 记录实测；超过 1s 才需要索引优化 */
+});

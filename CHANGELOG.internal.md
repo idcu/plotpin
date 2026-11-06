@@ -2,6 +2,33 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · B-04 补丁：快照资产保活口子
+
+- **Commit Hash**：本条提交（`fix(assets): 将版本快照引用纳入资产可达集`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用；复盘用 `git log --grep="快照资产保活" -1 --format=%H`。
+- **问题 / 根因**
+  - A-01 的 `assetRefsByNamespace()` 只扫 `current` + `proj:*`；B-04 快照只存 `assetId/photoId` 引用，工程不再引用后资产被 prune 回收，旧快照回滚时底图/照片失效。
+  - 快照记录是 `{meta,data}` 外壳，`ContentAssets.collectAssetRefs(rec)` 只认工程结构，直接传外壳会返回空数组；必须解包 `data`。本轮新增 `snapshotAssetRefs(rec)` 作为唯一解包入口，避免各调用点各写一份。
+- **可达集改动**
+  - `js/core/persistence.js` 的 `assetRefsByNamespace()` 增加 `SNAPSHOT_PREFIX`（`snap:`）键扫描：快照记录用 `snapshotAssetRefs(rec)` 收集，命名空间命名为 `snapshot:<pid>:<sid>`；`current` / `proj:*` 行为不变。
+  - `js/core/snapshot.js` 新增 `snapshotAssetRefs(rec)`；快照删除、`pruneSnapshots` 淘汰、`deleteProjectById` 清理快照链后，对应 `snap:` 记录消失，下一次 prune 的可达并集不再包含这些资产 → 可正常回收。
+  - 无新增存储键、无 DB 版本变更、无运行时依赖；快照数据结构不变，旧快照记录（已存在）无需迁移即可被扫描。
+- **双向验证（真实 Chromium，`snapshot.spec.mjs`）**
+  - 快照含 1 张底图资产 + 1 张照片资产；当前工程移除引用、清空历史并写干净 `proj:` / `current` 后触发 prune：`prunedBefore=[]`（两个资产都被快照保活），`assetGet(bgId)` / `assetGet(photoId)` 均非空。
+  - 回滚该快照：`state.background.assetId`、`objects[0].props.photoId` 均恢复，两个资产仍可读，`bgDataUrl` 成功解码（底图真正可显示）。
+  - 再次移除引用、删除该快照后再 prune：`prunedAfterDelete=["bg3f639da9-68","bgcfe0340b-70"]`（底图+照片均被回收），`assetGet` 双双为空。**保活与可回收双向成立，未永久钉住。**
+- **性能实测**
+  - 1000 对象 × 20 条快照（各带底图+照片引用，总 7.64MB）：`assetRefsByNamespace()` **1 条 4.6–5.3ms / 20 条 41.5–42.6ms**（2 轮）；首条快照生成 13.1–13.9ms，其余 19 条合计 682.1–688.3ms（平均约 36ms/条）。
+  - 结论：20 条上限下全库扫描 <50ms，未达到需要额外索引/缓存的门槛；本轮**不引入索引**，避免出现「索引与快照记录不同步导致误回收」的新风险。若未来提高快照上限或单工程对象数量级显著增长，再考虑把轻量 assetRefs 索引存到独立键（需同步处理创建/删除/淘汰/工程删除四条路径）。
+  - 说明：prune 本身在既有流程中是异步后台任务（历史溢出、撤销/重做、打开/删除工程等），41.5–42.6ms 不阻塞主线程交互；扫描成本与「快照条数 × 单快照对象数」成正比，受 20 条 / 16MB 上限约束。
+- **受影响调用方**
+  - 所有 `pruneBgAssets()` 调用方（撤销栈溢出、`undo/redo`、打开工程、新建工程、删除工程、导入/合并后的清理等）现在都会额外扫描快照；行为变化仅为「多保留快照引用的资产」，不会误删。
+  - `deleteProjectById` 继续先删快照链再 prune，确保删除工程后资产可回收。
+  - `selftest.mjs` 新增 3 条断言（`snapshotAssetRefs` 解包、裸 collect 不识别外壳、快照命名空间纳入并集）。
+- **遗留风险**
+  - `assetRefsByNamespace()` 仍沿用既有容错：单个 `snap:` 记录读取失败时跳过，极端损坏记录下其资产可能被回收；与 `proj:` 记录现有行为一致，未在本次扩大改动面。
+  - 快照记录每次 prune 需完整读取（上限 20 条 / 16MB），当前实测可接受；超大工程接近上限时扫描耗时需继续观察。
+  - 未验证：更高快照上限（>20）与万级对象 × 20 快照的实际扫描耗时；本轮只覆盖验收要求的 1000 对象 × 20。
+
 ## 2026-11-06 · B-04 版本快照 + 图纸对比/叠加
 
 - **Commit Hash**：本条提交（`feat(snapshot): 版本快照与 A/B 差异对比`）。hash 由 git 在提交时生成，无法在同一 commit 内自引用写入本文件，复盘时用 `git log -1 --format=%h` 取本条唯一提交。
@@ -29,11 +56,11 @@
 - **公共抽象 / 影响面**
   - 新增公共抽象：`snapshotProjectData / createSnapshot / listSnapshots / getSnapshot / deleteSnapshot / deleteSnapshotsForProject / restoreSnapshotById`；`snapshotObjectIndex / objectDiffFields / diffCategoryOf / diffSnapshots / diffFieldLabel / diffValueText`；`setDiffOverlay / clearDiffOverlay`。均已登记 `docs/modules.md`。
   - `openModal(title, body, buttons, opts)` 新增可选第四参数（既有三参调用不变）；`render.drawScene` 新增动态层叠加（`diffOverlay.on=false` 时零开销）；`deleteProjectById` 新增快照清理（仅 `snap:<pid>:`）。
-  - 快照命名空间**不进入** A-01 资产可达集（`assetRefsByNamespace` 只扫 `current` + `proj:*`），因此资产 GC 行为不变；代价是若工程后续不再引用某资产，快照中的该引用可能失效（见风险）。
+  - 快照命名空间**不进入** A-01 资产可达集（`assetRefsByNamespace` 只扫 `current` + `proj:*`），因此资产 GC 行为不变；代价是若工程后续不再引用某资产，快照中的该引用可能失效（见风险）。**该策略已于同日 B-04 补丁修正：`snap:<pid>:*` 已纳入可达集，见上一条补丁记录。**
   - 文档同步：`docs/engineering.md`（§5.1 体积/SHA/断言数、快照口径与实测、§5.2 e2e、§5.3 上限）、`docs/features.md`、`docs/modules.md`、`README.md`（徽章/特性数/路线图）、本文件。
 - **遗留 TODO / 风险**
   - **50 条人工差异样本误报率：未验证**。本轮只有构造样本（20 未变 + 6 变更，误报 0/20），没有真实图纸上人工标注的 50 条差异清单；不得把构造样本当作人工样本指标。后续需在真实多层工程上由人工逐条核对 A/B 差异。
-  - 快照只存 `assetId/photoId` 引用；若工程之后删改引用并触发资产 GC，旧快照对应的底图/照片可能无法显示（快照记录本身仍完整）。若需要“快照永远可还原资产”，需把快照引用纳入资产可达集或单独保留资产，代价是资产无法及时回收。
+  - 快照只存 `assetId/photoId` 引用；若工程之后删改引用并触发资产 GC，旧快照对应的底图/照片可能无法显示（快照记录本身仍完整）。**该风险已由同日 B-04 补丁关闭：快照引用纳入资产可达集，删除快照/工程后资产可回收。**
   - 叠加层每次渲染遍历全部差异并在屏幕绘制轮廓；1000 对象级差异实测无卡顿，但万级差异 + 长期开启未做专门压测。
   - 快照上限按 `meta.bytes` 累加，单条超 16MB 时会保留最新一条（“至少留 1”策略），极端大工程可能超出软上限。
   - 差异字段按 `JSON.stringify` 深比较，`props` 大对象（除照片 base64）会逐条序列化；本轮 1000 对象场景未成为瓶颈，超大对象属性未压测。

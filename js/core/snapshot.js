@@ -21,6 +21,14 @@ function snapshotProjectData(){
   });
   return data;
 }
+/**
+ * 快照记录（`{meta,data}`）引用的资产 id。
+ * `ContentAssets.collectAssetRefs` 只认工程结构（background/objects/floors），
+ * 快照把工程放在 `data` 字段，必须先解包再收集，否则资产保活会漏掉整个快照链。
+ */
+function snapshotAssetRefs(rec){
+  return rec&&rec.data?ContentAssets.collectAssetRefs(rec.data):[];
+}
 function utf8Length(str){
   try{ return new TextEncoder().encode(str).length; }catch(_){ return str.length; }
 }

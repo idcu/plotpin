@@ -2,9 +2,11 @@
 /* -------------------- 历史 / 保存 -------------------- */
 /**
  * 资产可达集按**命名空间**分组：草稿、撤销/重做栈每一帧、剪贴板、拖拽原件，
- * 以及自动保存草稿（IndexedDB `current`）与工程库每个 `proj:<id>` 记录。
+ * 自动保存草稿（IndexedDB `current`）、工程库每个 `proj:<id>` 记录，
+ * 以及版本快照 `snap:<pid>:<sid>`（B-04 资产保活口子）。
  * prune 只删「并集之外」的资产：任一命名空间仍引用就绝不删。
- * 只扫当前 state + history 会永久删除其他工程的底图/照片（审计 P0-1）。
+ * 只扫当前 state + history 会永久删除其他工程的底图/照片（审计 P0-1）；
+ * 漏扫快照会在工程不再引用后回收资产，导致快照回滚时底图/照片失效（B-04 补丁）。
  * @returns {Promise<Map<string,string[]>>}
  */
 async function assetRefsByNamespace(){
@@ -12,11 +14,17 @@ async function assetRefsByNamespace(){
   /* 读不到工程库就不动资产：宁可晚回收，也不能删掉看不见的工程 */
   const keys=await idbAllKeys();
   for(const key of keys){
-    if(key!=='current'&&!String(key).startsWith(PROJECT_PREFIX)) continue;
+    const k=String(key);
+    const isSnapshot=k.startsWith(SNAPSHOT_PREFIX);
+    if(k!=='current'&&!k.startsWith(PROJECT_PREFIX)&&!isSnapshot) continue;
     let rec=null;
     try{ rec=await idbGetKey(key); }catch(_){ continue; }
-    const ids=ContentAssets.collectAssetRefs(rec);
-    if(ids.length) ns.set(key==='current'?'autosave':`project:${key.slice(PROJECT_PREFIX.length)}`,ids);
+    /* 快照记录是 {meta,data} 外壳；资产引用在 data 的工程结构里 */
+    const ids=isSnapshot?snapshotAssetRefs(rec):ContentAssets.collectAssetRefs(rec);
+    if(!ids.length) continue;
+    if(k==='current') ns.set('autosave',ids);
+    else if(isSnapshot) ns.set(`snapshot:${k.slice(SNAPSHOT_PREFIX.length)}`,ids);
+    else ns.set(`project:${k.slice(PROJECT_PREFIX.length)}`,ids);
   }
   return ns;
 }
