@@ -386,8 +386,6 @@ function siteLayerOf(site){
 function siteIsVisible(site){ return !!(site && site.visible!==false && siteLayerOf(site).visible!==false); }
 /** 场地锁定 = 自身锁定或所属图层锁定（锁定后不渲染手柄/不可编辑） */
 function siteIsLocked(site){ return !!(site && (site.locked || siteLayerOf(site).locked)); }
-/** 旧 background 场地对象兼容：非图片且带 shape/矢量 kind */
-function isSiteLike(v){ return !!(v && v.kind!=='image' && v.kind!=='empty' && (v.shape || v.kind)); }
 /** @param {ObjectKind} kind @returns {string} */
 function defaultTypeId(kind){
   if (kind === 'point') return 'point.marker';

@@ -2,6 +2,35 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-06 · 体积压缩专项：构建期无损压缩（833,855 → 664,325 B）
+
+- **Commit Hash**：本条提交（`perf(build): 构建期无损压缩产物，回收 169,530 B（行为不变）`）。复盘用 `git log --grep="构建期无损压缩产物" -1 --format=%H`。
+- **核心改动点**
+  - 新增 `scripts/minify-core.mjs`：`minifyJs` / `minifyCss` 纯函数。JS 删注释、行首缩进、空行与行尾空白，空白串折叠为单个空格；字符串 / 模板字面量 / 正则字面量逐字节保留；跨行块注释保留一个换行，避免改变自动分号插入（ASI）；`//` / `/*` 优先于正则起始判定（与 JS 词法一致）。CSS 删注释与 `{ } ; ,` 附近空白，引号字符串与 `url(...)` 原样保留。
+  - `scripts/pack-core.mjs`：内联 CSS/JS 时调用压缩；CSP `sha256` 按压缩后的脚本文本重算；每个内联脚本压缩后立即用 `vm.Script` 解析，解析失败直接让构建失败。
+  - 删除确认无引用的死代码：`js/core/persistence.js` 的 `assetRemove`、`js/core/model.js` 的 `isSiteLike`（全仓仅定义 1 次，无调用 / 导出 / 动态引用），源字节 −257 B。
+  - 新增 `scripts/size-report.mjs`：按产物 `/* path */` 标记切分，输出 Top 10、注释/缩进/空行、重复字符串、重复代码行、顶层死代码候选；口径写在脚本头。
+  - 源文件保持可读，`index.html` 仍引用原 JS/CSS；压缩只发生在发行包内联阶段，不进入运行时。
+- **实测验证数据**
+  - **压缩前组成（833,855 B，`size-report` 实测）**：Top 10 = i18n.js 75,720 B (9.08%)、geometry.js 66,934 (8.03%)、interaction.js 60,738 (7.28%)、render.js 55,656 (6.67%)、persistence.js 52,892 (6.34%)、io-export.js 51,877 (6.22%)、props.js 42,346 (5.08%)、io-import.js 32,263 (3.87%)、ui-panels.js 30,795 (3.69%)、model.js 29,104 (3.49%)。JS 合计 793,539 B；可压缩估算：注释 126,523 B、行首缩进 41,400 B、空行 273 B（模板内换行 38,128 B 不可删）。
+  - **重复量化**：重复字符串 4,969 个（唯一 3,010，重复组 711，浪费 30,328 B，Top：`parallelogram` ×54 / `dimension` ×60 / `object` ×74 / `circle` ×69）；重复代码行 347 组，浪费 22,084 B（`})(typeof window !== 'undefined' ? window : globalThis);` ×11 560 B 等）；死代码候选 2 个，已删除，复跑候选归零。
+  - **逐文件压缩（`minify-core` 干跑，全部文件 `vm.Script` 解析 ok）**：JS 793,282 → 625,140 B（−168,142 B）；CSS 15,903 → 14,772 B（−1,131 B）；合计 **−169,273 B**。Top：geometry.js −19,490（29.1%）、persistence.js −15,657（29.6%）、model.js −14,306（49.5%）、interaction.js −13,145（21.6%）、render.js −12,371（22.2%）。
+  - **压缩后产物**：**664,325 B（648.8 KB）**，833,855 → 664,325（**−169,530 B / −20.33%**；其中构建期压缩 169,273 + 死代码 257）；gzip **273,289 → 205,465 B（−67,824 B / −24.81%）**；SHA256 `d1dea4e647bde1ea4c8d8c55ab9996de58f49472da5c6bdc7e9d15e06cce8a91`；820 KB 门禁余量 **5,825 → 175,355 B**。
+  - **压缩后 Top 10（`size-report` 实测）**：i18n.js 70,399 B (10.6%)、interaction.js 47,593 (7.16%)、geometry.js 47,444 (7.14%)、render.js 43,285 (6.52%)、io-export.js 43,104 (6.49%)、persistence.js 37,158 (5.59%)、props.js 36,637 (5.51%)、ui-panels.js 28,408 (4.28%)、io-import.js 26,709 (4.02%)、HTML 其余 24,413 (3.67%)；JS 合计 625,140 B。
+  - **硬验证**：selftest 源码 **2184 通过 / 0 失败**；把 `dist` 内联脚本抽出后跑同一套 selftest，仍 **2184 通过 / 0 失败**（含 `视觉快照-SVG 场景哈希 = e6ba5542046cb68f42e8cf9639dbb3e2061914e4a3f79bebf2513fde308b97bf` 与「重复导出稳定」）；e2e **51 passed / 1 skipped（48.8s）**；`npm run ci` 全绿（最终一轮：重建 22.09 ms、缓存帧 avg 0.34 / P95 0.44 ms、heapUsed 13.15 MB、裁剪 99.4%、覆盖率 7.9 ms / 大场地 14.5 ms / 缩放差异 0 pp、门禁牙齿 5/5）；`build --check` 二次构建确定性一致、SHA/字节与 `scripts/dist-manifest.json` 一致。
+  - **8 种导出**：`js/features/io-export.js`、`js/features/io-fields.js`、`js/features/io-table.js`、`js/common/dxf.js`、`js/common/pdf*.js` 等导出路径**零改动**（本轮源码 diff 仅 `js/core/persistence.js` 1 行、`js/core/model.js` 2 行）；现有 golden 断言（SVG 场景 SHA-256）在源码与 dist 上均通过。
+- **未验证项**
+  - **8 种导出未逐格式重跑字节哈希**：B-08 的临时 Playwright 8 格式采集脚本未入库，本轮未重建；因此只以「导出源码零改动 + dist 压缩产物完整 selftest（含 SVG golden）+ e2e 导出链路」作为行为不变证据，不虚构 8 个字节哈希。
+  - 真机 / Firefox / Safari 未测（本轮不涉及运行时逻辑）。
+- **遗留 TODO / 风险**
+  - 压缩器是手写状态机：若未来新增「正则字面量内含裸 `//` 或 `/*`」的极端写法，依赖 `//` / `/*` 优先注释的词法规则；当前仓库无此写法，且有构建期 `vm.Script` 解析 + selftest / e2e 双门禁。新增此类正则须补最小用例。
+  - 模板字面量 `${...}` 内代码原样保留（不删注释 / 缩进），模板内注释不计入回收；属于保守取舍。
+  - `size-report` 的注释 / 缩进估算读**源文件**；压缩后产物已不含注释，该估算仅说明压缩空间来源，不代表产物剩余可压缩量。
+- **受影响调用方 / 公共抽象**
+  - 新增构建期公共抽象 `scripts/minify-core.mjs`（`minifyJs` / `minifyCss`），调用方仅 `scripts/pack-core.mjs`；不进入运行时，不改变 `PlotPin` API。
+  - 新增统计脚本 `scripts/size-report.mjs`，不作为构建依赖。
+  - 未新增运行时依赖；未读取 / 修改 `camera-*`；未 push。
+
 ## 2026-11-06 · B-15：移动端 / PWA 补强（Phase B 收尾）
 
 - **Commit Hash**：本条提交（`feat(pwa): SW 版本化缓存与移动端安全区，离线不白屏`）。复盘用 `git log --grep="SW 版本化缓存与移动端安全区" -1 --format=%H`。

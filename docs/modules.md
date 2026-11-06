@@ -78,6 +78,8 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：40 个 classic 
 | ``modalBody`…` / safeHTML(html)`` | `js/features/ui-shell.js`（模态正文模板：插值默认转义；`safeHTML` 仅用于内部已逐项转义的片段） | `openProjectLibrary`、`openCollabPanel`；新增模态优先用 `modalBody`，禁止拼接未转义的用户数据 |
 | `L(text, params) / I18N.p`、`TEMPLATES`、`I18N.fmt` | `js/common/i18n.js`（动态文案唯一入口：`{name}` 占位插值；英文先查 `TEMPLATES` 整句、再查 `PHRASES`，未收录回退中文；`fmt` 只做占位替换、不转义） | 剪贴板/导入/楼层/快照/协作/报价/PDF 页脚等动态句；用户输入只作参数，DOM 走 `textContent`/`esc`，SVG 走 `xmlEscape`。新增动态句必须用模板，禁止 `前缀 + 数值 + 后缀` 拼接 |
 | `scripts/i18n-scan.mjs` | i18n 覆盖率可复跑统计（扫描 `js/**/*.js` 字符串字面量；识别 `L/I18N.*` 与 `toast/commitChange/openModal/showConfirm` 等翻译 sink；输出硬编码/已字典化/缺口/覆盖率） | B-14 验收与后续回归；口径写在脚本头，禁止用估算替代 |
+| `scripts/minify-core.mjs` | 构建期无损压缩（`minifyJs` / `minifyCss`）：只删注释/缩进/空行/尾部空白，字符串、模板字面量、正则与 `url(...)` 原样保留；跨行块注释保留一个换行以不改变 ASI | `scripts/pack-core.mjs` 内联 CSS/JS 时调用；源文件与运行时 API 不变。改压缩规则必须同时跑 selftest/e2e 与体积对比 |
+| `scripts/size-report.mjs` | 单文件产物体积实测：按 `/* path */` 标记切分，输出 Top 10、注释/缩进/空行、重复字符串、重复代码行、顶层死代码候选 | 体积专项验收与后续预算评估；口径写在脚本头，禁止目测替代 |
 | `sanitizeSiteStyle(raw)` | `js/core/persistence.js`（场地样式白名单唯一实现：`fill/stroke` 颜色、`fillAlpha`、`strokeWidth`） | `sanitizeSite`（载入/导入/合并）；导出层 `xmlEscape` 为第二道防线 |
 | `buildProject(p) / countProjectObjects(p)` | `js/core/persistence.js`（JSON→工程候选对象；不写全局 `state` / 对象总数统计） | `importJsonFile`、`openProjectById`、`duplicateProjectById` 的“先校验后替换”事务；`migrateProject` 仍 = `buildProject` + 立即替换 |
 | `projectObjectLists(st)` | `js/core/persistence.js`（工程级遍历对象的唯一入口：当前楼层 + 其余楼层） | `ensureObjectPhotoAssets`（全楼层照片转存）、`countProjectObjects`、JSON 导出（全楼层照片内嵌）；禁止工程级逻辑只扫 `state.objects` |

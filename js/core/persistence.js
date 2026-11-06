@@ -316,7 +316,6 @@ async function assetPut(id, rec){
   return (await bgAssetsReady).putId(id, rec);
 }
 async function assetGet(id){ return (await bgAssetsReady).getId(id); }
-async function assetRemove(id){ return (await bgAssetsReady).removeId(id); }
 async function assetPrune(keepIds){ return (await bgAssetsReady).prune(keepIds); }
 const dataUrlToBytes = ContentAssets.dataUrlToBytes;
 const bytesToDataUrl = ContentAssets.bytesToDataUrl;

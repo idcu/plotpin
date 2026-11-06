@@ -7,19 +7,24 @@
  * 因此这里把每个内联脚本的 sha256 追加到页面 CSP（hash 由内容确定性计算，构建可复现）。
  */
 import { createHash } from 'node:crypto';
+import vm from 'node:vm';
+import { minifyCss, minifyJs } from './minify-core.mjs';
 
 export function buildStandalone(html, readFile) {
   let out = String(html);
   const cspHashes = [];
 
-  /* 样式内联 */
+  /* 样式内联（构建期无损压缩：只删注释/多余空白，源文件保持可读） */
   out = out.replace(/<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/g,
-    (_, href) => `<style>\n/* ${href} */\n${readFile(href)}\n</style>`);
+    (_, href) => `<style>\n/* ${href} */\n${minifyCss(readFile(href))}\n</style>`);
 
-  /* 脚本内联（保持原有顺序）；转义 </script> 防止提前闭合。
-     哈希必须按浏览器看到的**脚本文本内容**计算（含注释与换行）。 */
+  /* 脚本内联（保持原有顺序）；先做构建期无损压缩，再转义 </script> 防止提前闭合。
+     哈希必须按浏览器看到的**脚本文本内容**计算（含压缩后的换行）。
+     压缩后立刻做语法解析：压缩器只删注释/空白，解析失败说明压缩器有缺陷，构建必须失败。 */
   out = out.replace(/<script\s+src="([^"]+)"><\/script>/g, (_, src) => {
-    const code = String(readFile(src)).replace(/<\/script/gi, '<\\/script');
+    const code = minifyJs(String(readFile(src))).replace(/<\/script/gi, '<\\/script');
+    try { new vm.Script(code, { filename: src }); }
+    catch (e) { throw new Error(`压缩后脚本无法解析（${src}）：${e.message}`); }
     const inner = `\n/* ${src} */\n${code}\n`;
     cspHashes.push(createHash('sha256').update(inner, 'utf8').digest('base64'));
     return `<script>${inner}</script>`;
