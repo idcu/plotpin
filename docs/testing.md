@@ -27,7 +27,7 @@
 | `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
 | `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
 | `i18n-template.spec.mjs` | B-14：切换英文后顶栏导出按钮为 `Export`；`L('已粘贴 {n} 个对象',{n:3})` 经 `toast` 输出 `Pasted 3 objects`、表格导入整句输出英文；把 `<img src=x onerror=...>` 作为文件名参数注入，toast 内 `childTags=0` 且 `window.__xss` 未触发（`textContent` 边界不引入注入面） |
-| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v4` 且预缓存 50 条（实测输出 `entries:50`，旧文档的 46 为陈旧计数） → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
+| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v5` 且预缓存 50 条（实测输出 `entries:50`，旧文档的 46 为陈旧计数） → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
 | `mobile.spec.mjs` | B-15：390×844 / DPR3 / touch 移动模拟下 `viewport-fit=cover`、画布 `touch-action:none`、工具栏命中区 ≥44px、☰ 侧栏开合并可点空白关闭、点工具轻触画布落点；同一次运行输出 2000 对象的移动与桌面重建/缓存帧/首屏数据，断言仅作宽松防回归 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
 | `coverage.spec.mjs` | A-11：覆盖率 v2 固定格数口径跨 zoom 0.25/1/4/16 差异 ≤1pp、隐藏对象/图层退出分母、盲区 GeoJSON 下载、布点优化应用后重跑闭环 |
@@ -90,7 +90,19 @@ showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK
 硬编码 760 其中未字典化 613、`uiCopy` 1 / `uiInDict` 90；PHRASES 924 / TEMPLATES 112）。
 口径调整原因与「不是放宽门禁」的论证见 `CHANGELOG.internal.md` 的 D-11 条目。
 
-**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v3`），
+**模板内中文口径（D-15，2026-11-07）**：D-11 的口径把含 `${...}` 的模板壳整体排除，导致模板里的
+硬编码中文（如 `title="显隐"`、`面积 ${fmt(...)} ㎡`）既不进覆盖率分母、也不进 `uiCopy`，形成漏检。
+D-15 起：含插值的模板串按 `${...}` 拆成静态片段；无插值的 HTML 模板串只取文本节点；两者都额外提取
+`title` / `aria-label` / `placeholder` / `alt` 属性值。片段与普通字面量同权进入覆盖率分母；UI 文件里
+「模板内、未走翻译入口」的片段单列为 `templateCopy`，**门槛为 0**，并在 `check-gates.mjs` 第 7 场景
+（临时副本追加一条 `<span>门禁探针硬编码</span>`）验证会红。白名单仅 1 条：语言选项的母语自称「中文」
+（`English` 为英文 UI 的母语名，切换目标语言需使用者自识别），不是批量豁免入口。
+实测（同一脚本）：覆盖率 **42.02% → 46.16%**（字面量 1146、走入口 529 = 已字典化 529 / 缺口 0、
+硬编码 617 其中未字典化 430、`uiCopy` 1 / `uiInDict` 87、`templateCopy` 0 / 白名单 1；
+PHRASES 998 / TEMPLATES 112 / DICT.zh 200）。新增 7 条 PHRASES 与 4 处模板接入 `L()` 后，
+`ui-shell` / `ui-panels` / `render` 的模板内中文全部转为已字典化。
+
+**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v5`），
 `activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本清单从 `index.html` 解析，新增脚本无需手工维护。
 安装用 `Promise.allSettled` 逐项 `cache.add`，单个 404 不会让新版本永远装不上；安装/激活失败时旧版本继续
 服务。`fetch` 网络优先（在线始终取最新，避免旧缓存卡住升级），离线回退缓存，导航请求 `ignoreSearch` 回退

@@ -18,10 +18,10 @@ node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 →
         ├── scripts/check-contracts.mjs --selftest   契约判据 + 判据自己会红
         ├── scripts/check-plugin-api.mjs --selftest  API 面 + 解析器会红
         ├── scripts/selftest.mjs            逻辑层自测（--selftest 显式执行，退出码纳入门禁）
-        └── scripts/i18n-scan.mjs --check   i18n 覆盖率 ≥40% / 缺口 ≤10 / UI 文案硬编码 ≤20（口径见 testing.md）
+        └── scripts/i18n-scan.mjs --check   i18n 覆盖率 ≥40% / 缺口 ≤10 / UI 文案硬编码 ≤20 / 模板内 UI 文案 =0（口径见 testing.md）
 node scripts/bench.mjs              渲染基准（avg / P95 / 重建 / heapUsed / 裁剪 / 覆盖率阈值）
 node scripts/build.mjs --check      源重建 ↔ scripts/dist-manifest.json 登记哈希比对
-node scripts/check-gates.mjs        门禁牙齿：6 种人为破坏必须让对应门禁非 0
+node scripts/check-gates.mjs        门禁牙齿：7 种人为破坏必须让对应门禁非 0
 node scripts/e2e.mjs               浏览器级功能测试（可选，devDependency；**不在 ci 路径**）
 node scripts/perf-browser.mjs      真实浏览器性能基线（可选；**不在 ci 路径**，见 [performance.md](performance.md) §5.4）
 ```
@@ -249,7 +249,7 @@ Worker 是**隔离边界**而不是完整语言级沙箱——插件仍可访问
 
 | 项 | 为什么不设 | 现在的做法 |
 |---|---|---|
-| 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确；D-11 覆盖率门禁只守数量与可达性 | selftest 覆盖"全量中英文案"路径；`i18n-scan --check` 守 ≥40% / 缺口 ≤10 / UI 未字典化 ≤20；语义由评审看 |
+| 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确；D-11 覆盖率门禁只守数量与可达性 | selftest 覆盖"全量中英文案"路径；`i18n-scan --check` 守 ≥40% / 缺口 ≤10 / UI 未字典化 ≤20 / 模板内 UI 文案 =0；语义由评审看 |
 | 渲染性能的**真实设备基线** | 真机 GPU / 不同 DPI 的组合无法在离线 CI 里稳定复现；绝对阈值只能说明“这台机器上没退化”，证明不了所有用户设备流畅 | Node 桩下已有阻断门禁（§5.1）；真实浏览器基线（[performance.md](performance.md) §5.4）在 Chromium headless + SwiftShader 上可重复采集，但默认不进 `npm run ci`，数据不得与 bench 混用 |
 | 插件 API 的**向后兼容** | 版本号与能力集合已有矩阵门禁；键的**语义/行为**兼容仍无法用键集合证明，破坏性变更只能靠评审 | D-06 起：selftest/e2e 固化 1.0→1.1、1.2/2.0/畸形矩阵；`npm run api` 校验契约描述与代码同源；破坏性变更写进 README |
 

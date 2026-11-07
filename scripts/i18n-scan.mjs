@@ -12,6 +12,12 @@
  *    「缺口」= 走入口但字典未收录（英文界面会回退中文）。含 `${...}` 的复合模板串是
  *    句子拼接壳（内部片段已走 L()），不是可登记的整句 key，不计为缺口。
  * 5) 覆盖率 = 已字典化 / (已字典化 + 缺口 + 硬编码)，分母全部为去重后的中文字符串条数。
+ * 6) 模板内中文（D-15）：含 `${...}` 的模板串按静态片段拆分，HTML 标签只取文本节点
+ *    以及 title / aria-label / placeholder / alt 的属性值；这些片段与普通字面量一样
+ *    进入覆盖率分母。UI 文件里「模板内、未走翻译入口、不在显式白名单」的片段由
+ *    `templateCopy` 单独计数，门槛为 0（新增硬编码中文会被立即拦截）。
+ *    白名单 `TEMPLATE_ALLOW` 只允许语言选项的母语自称「中文」（`English` 为英文 UI 的母语名，
+ *    切换目标语言必须能被使用者自识别），不是批量豁免旧文案的入口。
  *
  * D-11「UI 文案硬编码 ≤20」的可复算定义（与体积预算互斥后的口径修正，见
  * CHANGELOG.internal.md 与 docs/testing.md）：
@@ -20,7 +26,7 @@
  *   plugins.js、rules.js 的文案属于数据标签/诊断信息，按计划风险条款单列统计并豁免；
  * - 排除 HTML/CSS 标记模板（含 `<`、`>` 或换行）与含 `${...}` 的复合模板壳（不是文案字面量）；
  * - 只统计「未字典化」的 UI 文案；已在字典但尚未接入 L() 的条目单列为 `uiInDict`。
- * 门槛（--check）：总覆盖率 ≥40%、缺口 ≤10、UI 文案硬编码 ≤20。
+ * 门槛（--check）：总覆盖率 ≥40%、缺口 ≤10、UI 文案硬编码 ≤20、模板内 UI 文案 0。
  *
  * 用法：node scripts/i18n-scan.mjs [--json|--check]
  */
@@ -80,11 +86,96 @@ function literalsOf(src) {
         value += c;
         i++;
       }
-      out.push({ value, start });
+      out.push({ value, start, template: quote === '`' });
       continue;
     }
     i++;
   }
+  return out;
+}
+
+/** 跳到字符串字面量结尾（i 指向引号之后） */
+function skipQuoted(raw, i, quote) {
+  i++;
+  while (i < raw.length) {
+    if (raw[i] === '\\') { i += 2; continue; }
+    if (raw[i] === quote) return i + 1;
+    i++;
+  }
+  return i;
+}
+
+/** 跳到嵌套模板串结尾（i 指向反引号之后） */
+function skipNestedTemplate(raw, i) {
+  i++;
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (ch === '\\') { i += 2; continue; }
+    if (ch === '`') return i + 1;
+    if (ch === '$' && raw[i + 1] === '{') { i = skipTemplateExpr(raw, i + 2); continue; }
+    i++;
+  }
+  return i;
+}
+
+/** 跳过 `${ ... }` 表达式（i 指向 `{` 之后），正确处理嵌套字符串/模板/注释/大括号 */
+function skipTemplateExpr(raw, i) {
+  let depth = 1;
+  while (i < raw.length && depth) {
+    const ch = raw[i];
+    if (ch === '\'' || ch === '"') { i = skipQuoted(raw, i, ch); continue; }
+    if (ch === '`') { i = skipNestedTemplate(raw, i); continue; }
+    if (ch === '/' && raw[i + 1] === '/') { while (i < raw.length && raw[i] !== '\n') i++; continue; }
+    if (ch === '/' && raw[i + 1] === '*') {
+      i += 2;
+      while (i < raw.length && !(raw[i] === '*' && raw[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    i++;
+  }
+  return i;
+}
+
+/** 把模板串拆成静态片段（丢弃 `${...}` 内容） */
+function templateSegments(raw) {
+  const out = [];
+  let cur = '';
+  let i = 0;
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (ch === '\\') { cur += ch + (raw[i + 1] || ''); i += 2; continue; }
+    if (ch === '$' && raw[i + 1] === '{') {
+      if (cur) out.push(cur);
+      cur = '';
+      i = skipTemplateExpr(raw, i + 2);
+      continue;
+    }
+    cur += ch;
+    i++;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/** 从静态片段取出可见文案：文本节点 + title/aria-label/placeholder/alt 属性值 */
+function templateTexts(seg) {
+  const out = [];
+  for (const m of seg.matchAll(/(?:title|aria-label|placeholder|alt)="([^"]*)"/g)) {
+    const t = m[1].trim();
+    if (HAN.test(t)) out.push(t);
+  }
+  const text = seg
+    .replace(/[a-zA-Z-]+="[^"]*"/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^>]*$/g, ' ')
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/^[<>]+|[<>]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (HAN.test(text)) out.push(text);
   return out;
 }
 
@@ -97,7 +188,29 @@ for (const f of files) {
   for (const lit of literalsOf(src)) {
     if (!HAN.test(lit.value)) continue;
     const wrapped = TRANSLATED_CALL.test(src.slice(Math.max(0, lit.start - 40), lit.start));
-    const rec = byValue.get(lit.value) || { value: lit.value, wrapped: false, files: new Set() };
+    /* 含 ${...} 的模板串：不把整个壳当作一条文案，改按其静态片段去重统计 */
+    if (lit.template && lit.value.includes('${')) {
+      for (const seg of templateSegments(lit.value)) {
+        for (const text of templateTexts(seg)) {
+          const rec = byValue.get(text) || { value: text, wrapped: false, template: false, files: new Set() };
+          rec.template = true;
+          rec.files.add(rel);
+          byValue.set(text, rec);
+        }
+      }
+      continue;
+    }
+    /* 静态 HTML 模板串（无反引号插值）：同样只取文本节点/可读属性，避免整段标记壳掩盖硬编码 */
+    if (lit.template && /[<>]/.test(lit.value)) {
+      for (const text of templateTexts(lit.value)) {
+        const rec = byValue.get(text) || { value: text, wrapped: false, template: false, files: new Set() };
+        rec.template = true;
+        rec.files.add(rel);
+        byValue.set(text, rec);
+      }
+      continue;
+    }
+    const rec = byValue.get(lit.value) || { value: lit.value, wrapped: false, template: false, files: new Set() };
     rec.wrapped = rec.wrapped || wrapped;
     rec.files.add(rel);
     byValue.set(lit.value, rec);
@@ -126,7 +239,12 @@ const hardcodedUncovered = hardcoded.filter(r => !inDict(r.value));
 const isUiFile = f => f === 'js/core/app.js' || f === 'js/core/interaction.js'
   || (f.startsWith('js/features/') && !ADAPTER_FILES.has(f));
 const uiRecord = r => Array.from(r.files).some(isUiFile);
-const uiCopy = hardcodedUncovered.filter(r => uiRecord(r) && !markup(r.value) && !composite(r.value));
+/* 语言选项按母语自称展示；这是唯一允许的模板内文案，新增条目必须走字典而不是白名单 */
+const TEMPLATE_ALLOW = new Set(['中文']);
+const uiCopyAll = hardcodedUncovered.filter(r => uiRecord(r) && !markup(r.value) && !composite(r.value));
+const templateCopy = uiCopyAll.filter(r => r.template && !TEMPLATE_ALLOW.has(r.value));
+const templateAllowed = uiCopyAll.filter(r => r.template && TEMPLATE_ALLOW.has(r.value));
+const uiCopy = uiCopyAll.filter(r => !templateAllowed.includes(r));
 const uiInDict = hardcodedCovered.filter(r => uiRecord(r) && !markup(r.value) && !composite(r.value));
 const total = covered.length + missing.length + hardcoded.length;
 const uiByFile = {};
@@ -150,6 +268,8 @@ const report = {
   covered: covered.length,
   missing: missing.length,
   uiCopy: uiCopy.length,
+  templateCopy: templateCopy.length,
+  templateAllowed: templateAllowed.map(r => r.value),
   uiInDict: uiInDict.length,
   uiByFile: Object.entries(uiByFile).sort((a, b) => b[1] - a[1]),
   phrases: phrases.length,
@@ -167,6 +287,7 @@ const fails = [];
 if (report.coveragePct < LIMITS.coverage) fails.push(`覆盖率 ${report.coveragePct}% < ${LIMITS.coverage}%`);
 if (report.missing > LIMITS.missing) fails.push(`缺口 ${report.missing} > ${LIMITS.missing}`);
 if (report.uiCopy > LIMITS.uiCopy) fails.push(`UI 文案硬编码 ${report.uiCopy} > ${LIMITS.uiCopy}`);
+if (report.templateCopy > 0) fails.push(`模板内 UI 文案 ${report.templateCopy} > 0（新增硬编码模板中文必须接入 L() 或字典）`);
 
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify({ ...report, limits: LIMITS, ok: fails.length === 0, fails }, null, 2));
@@ -176,6 +297,7 @@ if (process.argv.includes('--json')) {
   console.log(`走翻译入口：${report.wrapped}（已字典化 ${report.covered} / 缺口 ${report.missing}）`);
   console.log(`未走翻译入口的硬编码中文：${report.hardcoded}（其中未字典化 ${report.hardcodedUncovered}）`);
   console.log(`UI 文案硬编码：${report.uiCopy}（已字典待接入 ${report.uiInDict}）`);
+  console.log(`模板内 UI 文案：${report.templateCopy}（白名单 ${report.templateAllowed.length}${report.templateAllowed.length ? '：' + report.templateAllowed.join('、') : ''}）`);
   report.uiByFile.forEach(([f, n]) => console.log(`  - ${f}: ${n}`));
   console.log(`字典：PHRASES ${report.phrases} 条 / TEMPLATES ${report.templates} 条 / DICT.zh ${report.dictZh} 键`);
   console.log(`覆盖率：${report.coveragePct}%（口径见文件头）`);
@@ -184,7 +306,7 @@ if (process.argv.includes('--json')) {
       console.log(`❌ i18n 门禁未通过：${fails.join('；')}`);
       process.exitCode = 1;
     } else {
-      console.log(`✅ i18n 门禁通过：覆盖率 ${report.coveragePct}% ≥ ${LIMITS.coverage}%，缺口 ${report.missing} ≤ ${LIMITS.missing}，UI 文案硬编码 ${report.uiCopy} ≤ ${LIMITS.uiCopy}`);
+      console.log(`✅ i18n 门禁通过：覆盖率 ${report.coveragePct}% ≥ ${LIMITS.coverage}%，缺口 ${report.missing} ≤ ${LIMITS.missing}，UI 文案硬编码 ${report.uiCopy} ≤ ${LIMITS.uiCopy}，模板内 UI 文案 ${report.templateCopy} = 0`);
     }
   } else if (report.hardcodedTop.length) {
     console.log('硬编码样例：');

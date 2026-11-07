@@ -156,10 +156,10 @@ function renderLayers(){
     const count=state.objects.filter(o=>o.layerId===l.id).length;
     return `<div class="layer-row">
       <div class="meta"><div class="name">${esc(l.name)}</div><div class="sub">${count} ${esc(I18N.t('objectsUnit'))}</div></div>
-      <button class="icon-btn" data-layer-visible="${l.id}" title="显隐" aria-label="${esc(I18N.t('ariaLayerVisible')+'：'+l.name)}">${l.visible?'👁':'–'}</button>
-      <button class="icon-btn" data-layer-lock="${l.id}" title="锁定" aria-label="${esc(I18N.t('ariaLayerLock')+'：'+l.name)}">${l.locked?'🔒':'○'}</button>
-      <button class="icon-btn" data-layer-rename="${l.id}" title="重命名" aria-label="${esc(I18N.t('ariaLayerRename')+'：'+l.name)}">✎</button>
-      <button class="icon-btn danger" data-layer-delete="${l.id}" title="删除" aria-label="${esc(I18N.t('ariaLayerDelete')+'：'+l.name)}">×</button>
+      <button class="icon-btn" data-layer-visible="${l.id}" title="${esc(L('显隐'))}" aria-label="${esc(I18N.t('ariaLayerVisible')+'：'+l.name)}">${l.visible?'👁':'–'}</button>
+      <button class="icon-btn" data-layer-lock="${l.id}" title="${esc(L('锁定'))}" aria-label="${esc(I18N.t('ariaLayerLock')+'：'+l.name)}">${l.locked?'🔒':'○'}</button>
+      <button class="icon-btn" data-layer-rename="${l.id}" title="${esc(L('重命名'))}" aria-label="${esc(I18N.t('ariaLayerRename')+'：'+l.name)}">✎</button>
+      <button class="icon-btn danger" data-layer-delete="${l.id}" title="${esc(L('删除'))}" aria-label="${esc(I18N.t('ariaLayerDelete')+'：'+l.name)}">×</button>
     </div>`;
   }).join('');
   $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerVisible); pushHistory(); l.visible=!l.visible; commitChange(); });
@@ -185,7 +185,7 @@ function renderTypes(){
     <h3>${label}</h3>
     ${typesOfKind(kind).map(t=>`<div class="type-row">
       <div class="meta"><div class="name"><span class="dot" style="background:${esc(t.color)}"></span>${esc(typeDisplayName(t))}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${esc(normalizeIcon(t.icon,t.kind))}${kind==='point'?' · '+esc(L(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none))+' · '+esc(L('图标'))+' '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
-      ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="默认图标大小（屏幕倍率）" value="${Number(t.iconSize)||1}" data-type-iconsize="${esc(t.id)}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
+      ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="${esc(L('默认图标大小（屏幕倍率）'))}" value="${Number(t.iconSize)||1}" data-type-iconsize="${esc(t.id)}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
       <input type="color" value="${esc(t.color)}" data-type-color="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+typeDisplayName(t))}">
       <button class="icon-btn" data-type-rename="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+typeDisplayName(t))}">✎</button>
       <button class="icon-btn danger" data-type-delete="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+typeDisplayName(t))}">×</button>
@@ -315,10 +315,10 @@ if($('symbolJsonInput')) $('symbolJsonInput').addEventListener('change',async e=
 /** 清单/报告中区域形状的参数摘要 */
 function areaParamText(o){
   const tt=areaShapeType(o), sh=o.shape||{};
-  if(tt==='circle') return `圆形 r=${fmt(sh.r)}m`;
-  if(tt==='ellipse') return `椭圆 ${fmt(sh.rx*2)}×${fmt(sh.ry*2)}m / ${Math.round(o.angle)}°`;
-  if(tt==='sector') return `扇形 r=${fmt(sh.r)}m / ${Math.round(sectorSweep(sh))}°`;
-  if(tt==='parallelogram') return `平行四边形 ${fmt(o.width)}×${fmt(o.height)}m / 倾角 ${Math.round(parallelogramSkew(sh))}°`;
+  if(tt==='circle') return `${L('圆形')} r=${fmt(sh.r)}m`;
+  if(tt==='ellipse') return `${L('椭圆')} ${fmt(sh.rx*2)}×${fmt(sh.ry*2)}m / ${Math.round(o.angle)}°`;
+  if(tt==='sector') return `${L('扇形')} r=${fmt(sh.r)}m / ${Math.round(sectorSweep(sh))}°`;
+  if(tt==='parallelogram') return `${L('平行四边形')} ${fmt(o.width)}×${fmt(o.height)}m / ${L('倾角')} ${Math.round(parallelogramSkew(sh))}°`;
   return `${fmt(o.width)}×${fmt(o.height)} / ${Math.round(o.angle)}°`;
 }
 function objectArea(o){

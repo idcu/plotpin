@@ -773,8 +773,8 @@ function drawRect(c,o,color,toS,v,markerScale){
 /** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性）；面积与周长可分别关闭 */
 function drawAreaTag(c,cx,cy,area,perimeter,showArea=true,showPerim=true){
   const lines=[];
-  if(showArea) lines.push(`面积 ${fmt(area)} ㎡`);
-  if(showPerim) lines.push(`周长 ${fmt(perimeter)} m`);
+  if(showArea) lines.push(`${L('面积')} ${fmt(area)} ㎡`);
+  if(showPerim) lines.push(`${L('周长')} ${fmt(perimeter)} m`);
   if(!lines.length) return;
   c.save();
   c.font='12px Consolas,Menlo,monospace'; c.textAlign='center'; c.textBaseline='middle';
