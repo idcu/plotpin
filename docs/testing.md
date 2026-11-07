@@ -31,6 +31,7 @@
 | `plugin-sandbox.spec.mjs` | C-01：Worker 隔离执行、`capabilities` 未声明能力拒绝、超时 2s 由主线程 terminate、插件异常只禁用该插件；`symbol` 未声明 `icons` 被拒；带 `"><img onerror=…>` 的类型名/图标经 `esc` 后不产生 DOM 注入 |
 | `rules.spec.mjs` | C-05：规则页签配置容差与类型阈值 → 重叠/间距/越界违规清单（规则名/对象/关联对象/楼层/坐标/实测值）→ 单击行跨楼层定位并选中主/关联对象 → CSV 导出含表头与转义；恰好等于阈值不报违规 |
 | `symbols.spec.mjs` | C-04：别名搜索（烟感 / NVR）与分类筛选、放置后角度与物理尺寸写回对象、5 例恶意 SVG（script / onload / 外部 href / 超深嵌套 / 超大字节）逐条 toast 原因且类型数不变、自有符号 JSON 导出仅含当前工程符号且内存重置后导入只写入当前工程 |
+| `onboarding.spec.mjs` | D-01：首次访问展示三步引导；「空白开始」写入 `completed/blank` 后刷新不再展示且对象数 0；示例工程场地 `rect 100×70`、6 个对象（2 点设备 / 1 区域 / 1 折线 / 1 文字 / 1 标注）、背景空槽且资产库无新增、刷新后 6 对象恢复；Esc 只写 `skipped/later`，下次启动仍展示 |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
 `/Catalog → /Pages → /Kids` 递归恢复文档页序（缺失/损坏时退回扫描顺序并追加未覆盖页，不静默丢内容）。
@@ -82,6 +83,17 @@ showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK
 本轮未新增手势状态。渲染样本提取到 `tests/e2e/helpers/scenes.mjs`（B-11/B-15 共用，避免两套样本漂移）。
 覆盖率为 `viewport-fit`/安全区/触控目标/CSS 横竖屏的检查，另有 `mobile.spec.mjs` 与桌面同机输出的首屏与
 2000 对象帧数据；**真机（iOS Safari / Android 低端机）未测**。
+
+**首次启动引导（D-01，2026-11）**：`js/features/ui-shell.js` 的 `firstRunGuideState` / `markFirstRunGuide` /
+`savedProjectHasContent` 是资格与状态的唯一实现，键 `plotpin:firstRunGuide:v1`（`{v:1,status,choice,at}`），
+只有 `v===1 && status==='completed'` 永久抑制；`skipped` 下次仍展示，未知版本/损坏记录按未完成。
+`app.js` 启动时只在「无已保存工程且未完成引导」时展示，老工程判定按实际内容（项目 id / 对象 /
+图片底图 / 多楼层 / 非默认场地），纯净空白自动保存不算老工程。示例工程由
+`persistence.js` 的 `buildDemoProject()` 构造（100×70m 矩形场地 + 6 对象，背景空槽、无资产引用），
+`openDemoProject()` 替换现场后 `scheduleSave()`，因此刷新恢复且资产库不新增孤儿。
+测试隔离：`playwright.config.mjs` 默认注入 `firstRunSeenStorage(baseURL)`（completed/blank），
+既有 e2e 不因新引导改变；`mobile.spec.mjs` 手工 `browser.newContext` 同样注入；
+`onboarding.spec.mjs` 用 `test.use({ storageState: { cookies: [], origins: [] } })` 显式走首次路径。
 
 **性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
 执行，不混进上面的功能 e2e；指标与阈值见 [performance.md](performance.md) §5.4。

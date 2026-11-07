@@ -2,6 +2,34 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 易用性：首次启动引导与示例工程（D-01）
+
+- **Commit Hash**：本条提交（`feat(ux): 首次启动引导与示例工程`）；完整哈希见汇报与 `git log HEAD`。
+- **核心改动点**
+  - 新增 `js/core/persistence.js` 的 `buildDemoProject()`：100×70m 矩形场地 + 6 个对象（2 点设备 / 1 区域 / 1 折线 / 1 文字 / 1 标注），背景空槽、不引用图片或照片资产；只返回候选工程，不写全局 `state`。
+  - 新增 `js/features/ui-shell.js` 的首次引导状态机：键 `plotpin:firstRunGuide:v1`（`{v:1,status:'completed'|'skipped',choice,at}`）。仅 `v===1 && status==='completed'` 永久抑制；Esc/点遮罩 `skipped` 下次仍展示；未知版本/损坏记录按未完成。
+  - `savedProjectHasContent(saved)` 定义「老工程」：项目 id / 对象 / 图片底图 / 多楼层 / 非默认场地任一存在即抑制引导；纯净空白自动保存（含 localStorage 兜底与默认 100×70 单层状态）不算老工程。
+  - `js/core/app.js` 启动判定改为 `firstRunGuideState(savedProjectHasContent(saved)).shouldShow`，老工程不打扰；引导复用既有 `openModal`，无新脚本、无新增运行时依赖。
+  - 示例工程经 `openDemoProject()` 替换现场（清空选择与撤销栈、`afterStateLoaded()`、`fitView()`、`scheduleSave()`），刷新可恢复且资产库不新增孤儿。
+  - 新增 `tests/e2e/onboarding.spec.mjs` 3 条；`playwright.config.mjs` 默认注入 `firstRunSeenStorage(baseURL)`，既有 e2e 与 `mobile.spec.mjs` 手工 context 均隔离，onboarding 用例用空 `storageState` 显式走首次路径。
+  - 新增 13 条英文短语（引导三步、两个按钮、示例提示、示例场地/文字等）；`i18n.js` 字典结构不变。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2602 通过 / 0 失败**（41 个脚本；基线 2584，D-01 新增 18 条断言） | 0 |
+| `node scripts/e2e.mjs` | **68 passed / 1 skipped / 69 total**（1.2m；基线 65/1/66，新增 3 条 onboarding；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **740,560 B（723.2 KB）**，gzip **228,491 B（223.1 KB）**；基线 736,298 B → 增量 **+4,262 B（+0.58%）**，gzip **+1,579 B**；上限 839,680 B，余量 **99,120 B**；SHA256 `7161a52365f2e793b069b55dd368484f43542a14b4e849bd7a1dc96145a88170`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/selftest.mjs` | D-01 断言覆盖：示例 6 对象与类型分布、场地 `{type:'rect',x:0,y:0,w:100,h:70}`、空图片槽/无资产引用、引导矩阵（全新 / 老工程 / completed / skipped / 损坏 / 未知 v2）、老工程分类（纯净空白 false，对象/id/图片 true） | 0 |
+
+- **遗留 / 风险**
+  - 「老工程」以有效内容判定：用户若已自定义设置或视口但无对象/图片/项目 id，仍可能再次看到引导；可用跳过关闭，不影响工程数据。
+  - 引导状态与工程数据分离存放 localStorage；清除站点数据会重置引导（符合预期）。隐私模式/容量不足导致写入失败时，`markFirstRunGuide` 仅本次会话生效，不阻断进入工程。
+  - 示例工程刻意不含任何资产引用；后续若给示例加底图/照片，必须同步验证资产可达集与 prune，避免孤儿。
+  - 未 push；未读取/修改 `camera-*`。
+
 ## 2026-11-07 · 计划：下一阶段四方向开发计划与人工验收清单入册
 
 - **Commit Hash**：本条提交（`docs(plan): 入册下一阶段开发计划与人工验收清单`）；完整哈希见汇报与 `git log HEAD`。

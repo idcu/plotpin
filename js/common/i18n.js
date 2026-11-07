@@ -721,7 +721,20 @@
     '目录已删除':'Catalog deleted',
     '本机频道消息解析失败':'Failed to parse the local channel message',
     '无可汇总型号：先绑定型号并填数量':'Nothing to summarize: bind a model and enter quantities first',
-    '标注总长：':'Total measured length: ', '区域总面积：':'Total area: '
+    '标注总长：':'Total measured length: ', '区域总面积：':'Total area: ',
+    '欢迎使用图钉':'Welcome to PlotPin',
+    '载入图片底图，或直接使用默认矢量场地':'Import an image base map, or use the default vector site',
+    '用左侧工具放置点设备、区域、折线与标注':'Place points, areas, polylines and dimensions with the left toolbar',
+    '导出 JSON、PNG、SVG、PDF、DXF 或表格':'Export JSON, PNG, SVG, PDF, DXF or tables',
+    '打开示例工程':'Open demo project',
+    '空白开始':'Start blank',
+    '示例工程包含 100×70 m 场地与 6 个示例对象，可随意修改或删除':'The demo contains a 100×70 m site and 6 objects; edit or delete them freely',
+    '已打开示例工程':'Demo project opened',
+    '示例工程':'Demo project',
+    '示例场地':'Demo site',
+    '示例文字':'Sample text',
+    '已进入空白工程':'Started with a blank project',
+    '示例工程生成失败':'Failed to create the demo project'
   };
   Object.assign(PHRASES, MORE);
 

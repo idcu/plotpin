@@ -14,6 +14,8 @@
   resizeCanvas();
   if(state.viewport.zoom===1) fitView();
   updateOsnapChip();
+  /* 首次启动引导：仅有「无已保存工程」且当前来源从未完成引导时展示；老工程一律不打扰 */
+  if(firstRunGuideState(savedProjectHasContent(saved)).shouldShow) showFirstRunGuide();
   /* IndexedDB 不可用：首次启动即提示降级，避免自动保存静默失效 */
   if(!caps.idb) notifyIdbFallback();
   /* 仅托管（http/https）部署可注册 Service Worker；file:// 双击模式本身即离线。

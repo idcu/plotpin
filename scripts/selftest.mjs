@@ -93,7 +93,7 @@ vm.createContext(sandbox);
 code += `\n;globalThis.__api = {
   get state(){ return state; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
-  createInitialState, migrateProject, buildProject, countProjectObjects, baseObject,
+  createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, baseObject,
   importLimitErrors, importLimitMessage,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
@@ -6040,6 +6040,37 @@ asyncSuites.push((async()=>{
   eq('B-14 DOM 边界统一转义', api.esc(I.p('已导入 SVG 图元：{name}', { name: '<img>' })), 'SVG symbol imported: &lt;img&gt;');
   ok('B-14 模板键不进短语表', Object.keys(I.templates).every(k => I.phrases[k] === undefined));
   I.setLang(orig);
+}
+
+/* ---------------- D-01 首次引导与示例工程 ---------------- */
+{
+  const demo = api.buildDemoProject();
+  eq('D-01 示例对象数', demo.objects.length, 6);
+  eq('D-01 示例对象类型分布', demo.objects.map(o => o.kind).sort().join(','), 'dimension,line,point,point,rect,text');
+  eq('D-01 场地尺寸', JSON.stringify(demo.site.shape), JSON.stringify({ type: 'rect', x: 0, y: 0, w: 100, h: 70 }));
+  eq('D-01 图片槽为空', demo.background.kind, 'empty');
+  eq('D-01 不引用图片资产', demo.background.assetId, '');
+
+  const mem = v => ({ getItem: () => v, setItem: (_, x) => { v = x; } });
+  const fresh = mem(null);
+  eq('D-01 无工程且无记录时展示', api.firstRunGuideState(false, fresh).shouldShow, true);
+  eq('D-01 老工程不展示', api.firstRunGuideState(true, fresh).shouldShow, false);
+  api.markFirstRunGuide('completed', 'blank', fresh);
+  eq('D-01 完成态抑制引导', api.firstRunGuideState(false, fresh).shouldShow, false);
+  eq('D-01 记录版本', JSON.parse(fresh.getItem()).v, 1);
+  eq('D-01 记录状态', JSON.parse(fresh.getItem()).status, 'completed');
+
+  const skipped = mem(null);
+  api.markFirstRunGuide('skipped', 'later', skipped);
+  eq('D-01 跳过不抑制引导', api.firstRunGuideState(false, skipped).shouldShow, true);
+  eq('D-01 跳过仍老工程不展示', api.firstRunGuideState(true, skipped).shouldShow, false);
+  eq('D-01 损坏记录按未完成', api.firstRunGuideState(false, mem('{bad')).shouldShow, true);
+  eq('D-01 未知版本按未完成', api.firstRunGuideState(false, mem('{"v":2,"status":"completed"}')).shouldShow, true);
+
+  eq('D-01 空默认工程不算老工程', api.savedProjectHasContent(api.createInitialState()), false);
+  eq('D-01 有对象算老工程', api.savedProjectHasContent({ meta: {}, objects: [{}] }), true);
+  eq('D-01 绑定工程算老工程', api.savedProjectHasContent({ meta: { projectId: 'PRJ1' }, objects: [] }), true);
+  eq('D-01 图片底图算老工程', api.savedProjectHasContent({ meta: {}, objects: [], background: { kind: 'image' } }), true);
 }
 
 /* ---------------- 结果汇总 ---------------- */

@@ -1,6 +1,7 @@
 /* B-15：移动端（真实 Chromium 移动模拟）—— 触控目标/安全区/基本操作 + 首屏与帧实测 */
 import { test, expect } from '@playwright/test';
 import { SCENE_A } from './helpers/scenes.mjs';
+import { firstRunSeenStorage } from './helpers.mjs';
 
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
 test.describe('移动视口基本操作', () => {
@@ -41,14 +42,14 @@ test.describe('移动视口基本操作', () => {
   });
 });
 
-test('移动端首屏与 2000 对象帧实测（同机桌面/移动两份数据）', async ({ browser }) => {
+test('移动端首屏与 2000 对象帧实测（同机桌面/移动两份数据）', async ({ browser, baseURL }) => {
   const configs = [
     { name: 'desktop', viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
     { name: 'mobile', viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }
   ];
   const out = {};
   for (const cfg of configs) {
-    const ctx = await browser.newContext(cfg);
+    const ctx = await browser.newContext({ ...cfg, storageState: firstRunSeenStorage(baseURL) });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));

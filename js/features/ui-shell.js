@@ -133,6 +133,62 @@ function refreshI18nRuntimeText(){
   }
   updateToolTitle();
 }
+/* -------------------- 首次启动引导（D-01） -------------------- */
+/** v1 记录：{v:1,status:'completed'|'skipped',choice,at}。只有 completed 才永久抑制引导；
+ *  skipped 只代表本次关闭（Esc/点遮罩），下次启动仍会展示。未来 v2 记录按未完成处理。 */
+const FIRST_RUN_GUIDE_KEY='plotpin:firstRunGuide:v1';
+function firstRunGuideState(hasSavedProject,storage){
+  const store=storage||(typeof localStorage!=='undefined'?localStorage:null);
+  let rec=null;
+  try{ rec=JSON.parse((store&&store.getItem(FIRST_RUN_GUIDE_KEY))||'null'); }catch(_){ rec=null; }
+  const known=!!(rec&&rec.v===1);
+  const completed=known&&rec.status==='completed';
+  return { shouldShow:!hasSavedProject&&!completed, completed,
+    status:known?String(rec.status||''):'', choice:known?String(rec.choice||''):'' };
+}
+function markFirstRunGuide(status,choice,storage){
+  const store=storage||(typeof localStorage!=='undefined'?localStorage:null);
+  const rec={v:1,status:status==='completed'?'completed':'skipped',choice:String(choice||''),at:nowISO()};
+  try{ if(store) store.setItem(FIRST_RUN_GUIDE_KEY,JSON.stringify(rec)); }catch(_){ /* 隐私模式/容量不足时仅本次会话生效 */ }
+  return rec;
+}
+/** 「老工程」判定：只有真正有内容/绑定/多楼层/图片的工程才抑制引导。
+ *  空工程自动落盘的单楼层默认状态不算老工程，保证 Esc 跳过后下次仍能看到引导。 */
+function savedProjectHasContent(saved){
+  if(!saved) return false;
+  const m=saved.meta||{};
+  if(m.projectId) return true;
+  if(Array.isArray(saved.objects)&&saved.objects.length>0) return true;
+  if(saved.background&&saved.background.kind==='image') return true;
+  if(Array.isArray(saved.floors)&&saved.floors.length>1) return true;
+  const shape=(saved.site&&saved.site.shape)||{};
+  const x=Number.isFinite(shape.x)?shape.x:0, y=Number.isFinite(shape.y)?shape.y:0;
+  return !!(shape.type&&(shape.type!=='rect'||shape.w!==100||shape.h!==70||x!==0||y!==0));
+}
+function openDemoProject(){
+  let next;
+  try{ next=buildDemoProject(); }
+  catch(e){ toast(L('示例工程生成失败')+'：'+((e&&e.message)||e),'error'); return false; }
+  state=next; selectedIds=new Set(); history={past:[],future:[]};
+  afterStateLoaded(); fitView(); scheduleSave();
+  toast(L('已打开示例工程'),'success');
+  return true;
+}
+function showFirstRunGuide(){
+  let chosen=false;
+  const body=`<div style="line-height:1.8">
+    <ol style="margin:0 0 10px 18px;padding:0">
+      <li>${esc(L('载入图片底图，或直接使用默认矢量场地'))}</li>
+      <li>${esc(L('用左侧工具放置点设备、区域、折线与标注'))}</li>
+      <li>${esc(L('导出 JSON、PNG、SVG、PDF、DXF 或表格'))}</li>
+    </ol>
+    <p class="hint-text" style="margin:0">${esc(L('示例工程包含 100×70 m 场地与 6 个示例对象，可随意修改或删除'))}</p>
+  </div>`;
+  openModal(L('欢迎使用图钉'),body,[
+    {text:L('空白开始'),class:'',click:()=>{ chosen=true; markFirstRunGuide('completed','blank'); closeModal(); toast(L('已进入空白工程')); }},
+    {text:L('打开示例工程'),class:'primary',click:()=>{ chosen=true; closeModal(); if(openDemoProject()) markFirstRunGuide('completed','demo'); }}
+  ],{onClose:()=>{ if(!chosen) markFirstRunGuide('skipped','later'); }});
+}
 function toast(msg,type=''){
   const el=document.createElement('div'); el.className='toast '+type; el.textContent=L(msg);
   $('toastWrap').appendChild(el); setTimeout(()=>el.remove(),2600);

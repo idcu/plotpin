@@ -1,4 +1,20 @@
 /* 浏览器级测试公共工具：IndexedDB 读写与画布落点 */
+
+/** 首次启动引导的 localStorage 键（与 ui-shell.js 保持同一版本） */
+export const FIRST_RUN_GUIDE_KEY = 'plotpin:firstRunGuide:v1';
+/** 默认测试上下文预置「已完成引导」，避免首次引导弹窗遮挡既有用例；引导用例自行移除该键 */
+export function firstRunSeenStorage(origin) {
+  return {
+    cookies: [],
+    origins: [{
+      origin,
+      localStorage: [{
+        name: FIRST_RUN_GUIDE_KEY,
+        value: JSON.stringify({ v: 1, status: 'completed', choice: 'blank', at: '2026-11-07T00:00:00.000Z' })
+      }]
+    }]
+  };
+}
 export const DB = {
   name: 'offline_drawing_annotation',
   projects: 'projects',

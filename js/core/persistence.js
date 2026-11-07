@@ -673,6 +673,27 @@ function migrateProject(p){
   state=buildProject(p);
   return state;
 }
+/** 首次引导示例工程：空图片槽 + 100×70 矢量场地 + 6 个业务对象。
+ *  不引用任何图片/照片资产，因此不会向资产库写入数据，也不会产生孤儿资产。 */
+function buildDemoProject(){
+  const site=createSiteSlot({type:'rect',w:100,h:70});
+  site.name=L('示例场地');
+  const objects=[
+    baseObject('point',null,{x:20,y:20}),
+    baseObject('point',null,{x:70,y:50}),
+    baseObject('rect',null,{x:10,y:10,width:30,height:20}),
+    baseObject('line',null,{points:[[35,15],[90,55]]}),
+    baseObject('text','text.builtin',{x:32,y:38,text:L('示例文字')}),
+    baseObject('dimension',null,{points:[[10,63],[90,63]],subtype:'distance'})
+  ];
+  return buildProject({
+    meta:{name:L('示例工程')},
+    settings:deepClone(state.settings),
+    background:createEmptyBackground(),
+    site,
+    objects
+  });
+}
 /** 删除墓碑清洗：按 (kind,id) 去重取最晚删除时间；非法/无时间的条目丢弃。
  *  淘汰策略（A-11）：**按对象 id 长期保留**，不再按删除时间倒序整段截断——
  *  截断会丢掉较早的墓碑，与仍持有旧对象的离线端合并时已删对象会复活（审计 P1-4）。
