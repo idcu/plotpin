@@ -3,351 +3,308 @@
 **离线、零依赖、双击即用的通用图纸标注工具**
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
 [![test](https://img.shields.io/badge/selftest-2706%20assertions-brightgreen.svg)](scripts/selftest.mjs)
-[![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
-在同一层可叠加「图片底图 + 矢量场地」双槽（每层最多 1 图 + 1 场地），在底图上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
+PlotPin 是一个在浏览器里运行的图纸标注工具：在一张图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量尺寸，并把图纸与台账导出为常见格式。运行时不需要安装、服务器或网络，入口是仓库根目录的 `index.html`；托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-> ⚠️ **跨版本兼容限制**：旧版 App 不认识新增的 `site` 场地槽，打开新工程会忽略场地，回写保存后场地丢失；且当前存储为 **schema v2**（楼层带 `updatedAt`），旧版 App 只认 v1，会拒绝加载/导入 v2 工程。本项目不做双写兜底，跨版本协作前请统一升级。
-
-> 🌐 **在线试用（GitHub Pages）**：<https://idcu.github.io/plotpin/>
-> 在线版与本地版完全一致，数据仅保存在你自己浏览器的 IndexedDB/localStorage 中，不会上传到任何服务器。
+> 本文按仓库当前代码、配置与命令实测重写。无法从代码或命令验证的内容不写入；旧版 README 中不可核实的表述已舍弃。
 
 ---
 
-## ✨ 能做什么
+## 这是什么
 
-| 维度 | 一句话 |
-| --- | --- |
-| **画** | 图片底图（两点定距或仿射校准，另有平移/旋转/等比缩放/切变整体手柄）与矢量场地（矩形 / 圆 / 椭圆 / 扇形 / 平行四边形 / 多边形）**同层共存**，每层最多 1 图 + 1 场地，单位为米，与底图同比例 |
-| **标** | 点设备图标（屏幕固定大小、三层倍率、可选物理尺寸覆盖）、区域与折线、测距 / 距离 / 面积 / 角度 / 文字、36 个六类行业图元（搜索/别名/旋转/真实尺寸）与自定义 SVG/JSON 导入导出 |
-| **算** | 长度、周长、面积、视场覆盖率与盲区、停车位排布与通道净宽检查、多楼层汇总 |
-| **改** | 点选 / 框选 / 多选、移动缩放旋转、节点编辑、对齐分布、批量编号与层级、图层与类型、网格吸附、撤销重做 |
-| **互通** | JSON 工程、DXF 导入导出、PDF 底图、CSV/XLSX 台账、PNG/SVG/多页 PDF、二维码标签、单文件发行包 |
-| **协同** | 多工程库、离线 LWW 合并（删除墓碑可复活）、本机 BroadcastChannel 与跨设备 WebRTC（均无服务器） |
-| **可靠** | 零依赖离线运行、分层离屏渲染 + 视口裁剪、解析器输入上限、能力探测与显式降级、中英界面与无障碍 |
+- **两种对象、两套语义**：点设备表示"设备在哪里"，图标屏幕大小固定；区域/折线表示"实际占多大范围"，始终按世界坐标（米）绘制，缩放时与底图同比例。
+- **双槽底图**：每个楼层可同时保存 1 张图片底图和 1 个矢量场地，两者独立替换、互不覆盖。
+- **数据留在本机**：工程写入 IndexedDB（不可用时降级 localStorage），底图与照片按内容哈希存资产库；默认不向任何服务器上传数据。
+- **运行时零外部依赖**：不引用 npm、CDN 或后端；第三方能力以 `@idcu/*` 模块源码形式放在 `ngm.vendor/`，版本由 `ngm.lock` 与 `.ngm-version` 锁定。`node scripts/check.mjs` 会校验入口没有任何 `http(s)` 远程资源。
+- **一个 HTML 入口，44 个脚本**：34 个项目脚本（`js/common` → `js/core` → `js/features` 三层）加 10 个 vendor 脚本，按 `index.html` 中的 classic `<script>` 顺序加载，共享全局作用域，不使用 ES Module。
 
-> **29 条顶层特性**（含 43 条子项，共 72 条，逐条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
-> README 只回答"这是什么、能不能用"；能不能**依赖**它，去那里逐条对。
+---
 
-## 📚 文档导航
+## 快速开始
 
-| 想知道 | 去哪 |
-|---|---|
-| 怎么用（底图/校准/导入导出/协作/插件/故障处理） | [docs/user-guide.md](docs/user-guide.md) |
-| 代码怎么分层、唯一源在哪 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| 有哪些能力、边界在哪 | [docs/features.md](docs/features.md) |
-| 门禁守什么、什么故意不设 | [docs/engineering.md](docs/engineering.md) |
-| 浏览器级 e2e / 性能基线 | [docs/testing.md](docs/testing.md) · [docs/performance.md](docs/performance.md) |
-| 模块依赖与公共抽象 | [docs/modules.md](docs/modules.md) |
-| 已知问题 / 结构性删除记录 | [docs/known-issues.md](docs/known-issues.md) · [docs/deletions.md](docs/deletions.md) |
-| 发布前人工验收（M1–M8） | [docs/manual-acceptance.md](docs/manual-acceptance.md) |
-| 下一阶段任务与状态 | [docs/plans/README.md](docs/plans/README.md) |
+### 方式一：直接双击
 
-## 🚀 快速开始
+双击 `index.html` 即可使用，不需要构建或安装依赖。
 
-直接双击 `index.html`，或用任意静态服务器打开：
+浏览器在 `file://` 下可能禁用 IndexedDB 与 Service Worker；PlotPin 会探测能力并显式降级（IndexedDB 不可用时回退 localStorage，Service Worker 不注册），不是静默失败。
+
+### 方式二：本地静态服务器
+
+需要完整持久化能力、PWA 安装或跑浏览器测试时，用仓库自带的零依赖服务器：
 
 ```powershell
-# PowerShell，任选其一
-python -m http.server 8080
-npx serve .
+node scripts/serve.mjs
+# 默认 http://127.0.0.1:4173；可用 HOST / PORT 环境变量覆盖
 ```
 
-无需构建、无需安装依赖。推荐使用最新版 Chrome / Edge / Firefox。
+任何静态文件服务器也可以，例如 `python -m http.server 8080`。
 
 ### 三步上手
 
-1. **准备底图**：点顶部「底图/场地」上传图片（再用「比例尺」校准），和/或直接拖画矢量场地；图片与场地可同时存在，替换其中一个不会删除另一个。未导入图片前，「比例尺」「仿射校准」「图片变换」三个入口禁用并给出原因；仅画矢量场地时会提示「场地按米绘制，无需校准」。
-2. **添加对象**：左侧选择「点设备 / 区域 / 折线 / 文字 / 标注」，在画布上单击或拖拽；区域工具顶部可切换矩形 / 圆形 / 椭圆 / 扇形 / 平行四边形。
-3. **导出成果**：选择 PNG / SVG / JSON / CSV / XLSX 后点「导出」，或「打印/PDF」生成报告。
+1. **准备底图**：点顶部「底图/场地」，导入图片并用「比例尺」（两点定距）或「仿射校准」（≥3 点最小二乘）校准；也可以直接用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制以米为单位的矢量场地。没有图片时，比例尺、仿射校准、图片变换入口会禁用并说明原因。
+2. **添加对象**：左侧选择「点设备 / 区域 / 折线 / 文字 / 测距 / 标注」，在画布上单击或拖拽；区域工具可切换形状，点设备可从「符号库」页签选图元。
+3. **导出成果**：顶部「导出」可选 JSON / PNG / SVG / PDF / DXF / CSV / TSV / XLSX 等格式；「打印/PDF」生成含对象清单的报告。
 
-校准、导入导出细节、协作与插件安装见 [docs/user-guide.md](docs/user-guide.md)；快捷键也可在应用内按 `?` 查看。
-
----
-
-## ⌨️ 快捷键
-
-| 快捷键 | 功能 |
-| --- | --- |
-| `Ctrl + Z` / `Ctrl + Y` | 撤销 / 重做 |
-| `Delete` / `Backspace` | 删除选中对象 |
-| `Ctrl + D` | 原地复制 |
-| `Ctrl + C` / `Ctrl + V` | 复制 / 粘贴（偏移 1m） |
-| `Esc` / 右键（绘制中） | 取消测距等逐点录入 / 清除选择（无草稿时右键平移） |
-| `双击` / `Enter` | 完成测距、折线 / 面积标注录入（双击处不产生重复节点） |
-| `Backspace`（绘制中） | 删除上一个录入节点 |
-| `Shift`（画线/标注） | 约束水平/垂直（正交） |
-| `Shift`（拖矩形/椭圆/扇形） | 正方形 / 正圆 / 45° 方位吸附 |
-| `Tab` / `Shift+Tab` | 循环切换捕捉类型（反向）；点击底部捕捉徽标恢复自动 |
-| `空格 + 拖拽` / 右键拖拽 | 平移画布 |
-| `滚轮` | 以光标为中心缩放 |
-| `方向键`（`Shift` ×10） | 微移选中对象 |
-| `F` | 适应窗口（显示整张场地） |
-| `?` | 帮助中心（快捷键 / 概念词典 / 导出检查清单） |
+应用内按 `?` 打开帮助中心（快捷键、概念词典、导出检查清单）；完整操作说明见 [docs/user-guide.md](docs/user-guide.md)。
 
 ---
 
-## 🧭 设计原则
+## 核心能力
 
-| | 点设备 | 区域 / 折线 |
-| --- | --- | --- |
-| 表达 | **设备在哪里**（位置标记） | **实际占了多大范围**（真实几何） |
-| 坐标 | 一个锚点 | 世界坐标形状，单位米 |
-| 缩放画布 | 图标屏幕大小不变，永远清晰可点 | 跟随底图缩放，保持真实比例 |
-| 大小含义 | 显示倍率（为了醒目，无物理意义） | 实际尺寸（米，参与长度 / 面积统计） |
+### 底图、场地与校准
 
-基点即渲染、命中、拖拽移动共用的唯一锚点 `(x, y)`：矩形为第一角点（旋转中心），圆 / 椭圆 / 扇形为圆心。
+- 图片底图支持 PNG / JPG / WebP / BMP / GIF / SVG；最长边超过 3000px 自动降采样，透明图在体积允许时保留 PNG。
+- 两点定距求旋转 + 等比缩放，≥3 点求完整仿射（最小二乘），校准点可继续拖拽修改。
+- 图片整体变换只提供平移、旋转、等比缩放、切变四类手柄，不提供四角自由拖拽。
+- 矢量场地独立于对象列表，按米绘制，支持矩形、圆形、椭圆、扇形、平行四边形、多边形；场地标注可显示节点坐标、段长、半径、面积、周长。
+- 场地存在时，图片校准只迁移图片与业务对象，场地坐标不自动迁移（"场地优先校准"）。
+
+### 标注、测量与编辑
+
+- 点设备：内置通用标记、摄像头、球机、路灯、道闸、充电桩、警示点等类型；图标大小按「全局倍率 × 类型默认 × 单对象覆盖」三级调整；可填物理尺寸（米）渲染圆形覆盖、方形区域、扇形视场、杆/线段。
+- 区域与折线：参数化形状可互换（中心不动、等面积换算），节点可增删改与排序，折线可闭合；实时统计长度、周长、面积。
+- 标注：两点距离、多点测距链、面积、三点角度、文字（世界字高、可旋转）。
+- 编辑：点选 / 框选 / 多选、移动、缩放、旋转、节点编辑、图层显隐与锁定、自定义类型、网格吸附、撤销重做（20 条）、对齐与等间距分布、批量重排编号、置顶置底。
+- 绘图辅助：七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）、Tab 循环锁定捕捉类型、极轴追踪、平行/垂直/等距参考、Shift 正交与正方形/正圆约束、段长标注最小像素可调。
+
+### 分析与规划
+
+- **视场覆盖率**：按摄像头类型 `fov` 与点设备 `phys` 计算扇形/圆形/方形覆盖，栅格统计覆盖率与盲区面积；口径与视图缩放无关，隐藏对象不计入分母，盲区可导出 GeoJSON。
+- **规则检查**：内建对象重叠、最小间距、越界三条几何规则；违规清单支持跨楼层定位与 CSV 导出。页面明确提示这是几何检查，不是消防/规范审图。
+- **停车规划**：按场地范围排布双面垂直车位与通道，支持横/纵排列与实时预览，内置通道净宽和车位尺寸检查。
+- **多楼层汇总**：统计页签按楼层汇总对象数/分类/总长/总面积；PDF/打印报告逐层输出图纸页与清单页。
+- **布点优化**：基于覆盖率栅格枚举候选位置与朝向，给出新增覆盖面积与累计覆盖率。
+
+### 导入导出
+
+| 方向 | 格式 | 说明 |
+|---|---|---|
+| 工程 | JSON | 底图、照片、全部楼层内嵌，单文件可移植；导入为事务，失败保留原工程 |
+| CAD | DXF | 导入/导出 ASCII DXF（R12–2018）；支持 LINE、多段线含凸度弧、圆、弧、椭圆、样条、INSERT、点、文字、MTEXT、图层 |
+| DWG | 仅识别 | 读取 `AC10xx` 版本并给出「转 DXF / 转 PDF」指引，不内置 DWG 内核、不修改原文件 |
+| PDF | 导入/导出 | 导入矢量 PDF 可提取路径与文字，扫描件取最大内嵌图作底图；多页按页树 `/Kids` 独立排布；导出为位图页 |
+| 图纸 | PNG / SVG / 多页 PDF | SVG 为矢量；PDF 按楼层顺序生成图纸页 + 清单页，页码全局连续 |
+| 台账 | CSV / TSV / XLSX | UTF-8 BOM，真 OOXML `.xlsx`；表头、PDF 清单与 SVG/DXF 读数共用 `js/features/io-fields.js` 字段表 |
+| 其他 | 产品目录 JSON / BOM 报价 CSV·XLSX / 二维码标签 HTML / 盲区 GeoJSON | 目录存 IndexedDB，报价按厂商+型号跨楼层聚合 |
+
+CSV/TSV/XLSX 导出对 `= + - @`、Tab/CR 开头且非纯数字的单元格加前导单引号；XLSX 一律写文本，不含公式节点。
+
+### 存储、协作与可靠性
+
+- 自动保存到 IndexedDB（库名 `offline_drawing_annotation`，v2，含 `projects` / `assets`），localStorage 兜底；支持多工程库、楼层、版本快照（每工程 20 条 / 16MB）。
+- 工程 schema 为 `offline-drawing-annotation/v2`；读取 v1 旧档时自动补楼层 `updatedAt` 并回写。**旧版 App 只认 v1，遇到 v2 会拒绝加载/导入；本项目不做双写兜底。**
+- 离线协作：导入他人 JSON 按对象 `updatedAt` 做 LWW 合并，删除用墓碑传播；楼层、图层、自定义类型按 id 取并集。
+- 实时协作：同浏览器多标签用 `BroadcastChannel`，跨设备用 WebRTC DataChannel 手动三步信令，无服务器；只同步矢量对象、场地与楼层，底图与照片不走实时通道。
+- 多标签租约：`BroadcastChannel` 5s 心跳、15s 租约，同工程另一标签页会在 6s 内提示；冲突期间暂缓自动保存但不丢内存编辑。
+- 保存失败分级处理：配额耗尽直接提示导出 JSON/清理空间；瞬时错误按 1s/3s/9s 退避重试 3 次；状态栏只在真实成功时显示已保存。
+
+### 符号库与插件
+
+- **符号库**：内置 36 个 24×24 线性图元，分视频监控、门禁、消防、网络、停车、其他六类；支持名称/别名搜索、分类筛选、旋转角与真实尺寸放置。
+- 自定义 SVG 图元经安全清洗（拒绝 `script`、`on*`、外部 `href`、DOCTYPE，限 64KB / 200 元素 / 16 层嵌套 / 200 条路径 / 单条 5000 字符）后存入当前工程命名空间，可 JSON 往返。
+- 画布、SVG、PNG/PDF 共用同一 path 源；DXF 将符号降级为 `LWPOLYLINE` 折线近似并在导出报告标注。
+- **插件 API**：全局 `PlotPin` 共 23 个承诺键（见 `contracts/plugin-api.json`），`PlotPin.apiVersion = "1.1.0"`，`PlotPin.version` 为应用版本。
+- 隔离加载：`PlotPin.loadPlugin({id, apiVersion, capabilities, code})` 在独立 Worker 执行，无 DOM / `window` / `parent` / IndexedDB / 网络；能力白名单为 `state:read` / `state:write` / `annotate` / `types` / `icons` / `export` / `import` / `rules`，未声明即拒绝；初始化与单次调用 2s 超时即 terminate。
+- 清单导入：设置 → 插件面板可导入 `plotpin.plugin/v1` 清单（清单 ≤192KB、`code` ≤64KB），仅本会话有效，刷新后需重新导入。
+- 旧同源 `<script>` 路径保留为受信任兼容入口，不做能力门。可运行示例见 [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js) 与 [plugins/sample-exporter.js](plugins/sample-exporter.js)。
+
+### 界面与性能
+
+- 中英界面切换覆盖顶栏、工具栏、页签、属性面板、弹窗、清单、设置、工程库、覆盖率、帮助中心、报告与二维码标签；用户自定义类型名保持原名。
+- 无障碍：画布 `role=application`、页签方向键与 Home/End、弹窗焦点陷阱与 Esc 还原、Toast `aria-live`、图标按钮可读标签。
+- 渲染：分层离屏缓存 + 视口裁剪；拖拽时只重绘选中对象与交互层。
+- 两套性能数据不混用：`node scripts/bench.mjs` 是 Node + canvas 桩的阻断门禁；`npm run perf:browser` 是真实 Chromium 的可选基线。
 
 ---
 
-## 📁 目录结构
+## 用法要点
+
+### 校准
+
+- 无图片底图时，比例尺/仿射/图片变换入口禁用并说明原因；只有矢量场地时提示"场地按米绘制，无需校准"。
+- 校准点落点后可拖拽、`Delete` 删除、`Ctrl+Z` 撤销；按 `Enter` 或左侧 ✓ 才提交。
+- 比例尺与仿射提交统一走 `applyWorldTransform`，对象与图片仿射一次迁移；已仿射校准的底图二次改比例尺不会再与对象错位。
+
+### 导入
+
+- 顶部「导入」接受 `.json`、`.csv`、`.tsv`、`.txt`、`.xlsx`、`.dxf`、`.dwg`、`.pdf`，也可直接把文件拖到画布。
+- JSON、表格、DXF、PDF 导入前均校验限值并事务化提交；失败不覆盖当前工程。
+- 表格导入支持「操作」列（新增/更新/替换）与条件列；存在「操作」列时严格整批事务，非法行整批拒绝。
+- 表格中的长度/面积/节点数会按图形几何重算核对，不一致只告警并以图形为准。
+
+### 导出
+
+- 图框/标题栏/比例尺/图例模板默认关闭；关闭时 PNG/PDF/SVG 与旧版逐字节一致。开启后三格式共用同一布局源。
+- 报价导出记录目录版本与导出时间，并写入 `quote:last` 快照；行集合不变时重导沿用冻结单价。
+- 导出字段表是单一来源：CSV/TSV/XLSX 表头、PDF/打印清单、SVG/DXF 标注读数不再各自拼装。
+
+### 保存与兼容
+
+- 工程默认自动保存；手动可导出 JSON 或使用工程库副本。
+- 工程库、草稿、快照、资产各自使用独立命名空间；资产回收按可达集并集计算，禁止跨工程误删。
+- 从 v1 升级到 v2 后，旧版打开会拒绝；跨版本协作前请统一版本。
+
+### 插件
+
+推荐用隔离路径（`loadPlugin`）；需要完整页面权限时再用同源 `<script>` 兼容入口。版本协商、能力表、隔离边界与迁移规则见 [docs/engineering.md](docs/engineering.md) 的插件章节。
+
+---
+
+## 开发与验证
+
+需要 Node 18+。运行与自测不需要 `npm install`；浏览器级测试才需要安装 Playwright。
+
+### 直接运行脚本
+
+```powershell
+# 2706 assertions, no dependencies
+node scripts/selftest.mjs
+node scripts/selftest.mjs --list                 # 只列分区，不执行断言
+node scripts/selftest.mjs --filter="几何"         # 只跑名称匹配的分区（正则，忽略大小写）
+
+# 工程门禁：语法 / 入口资源 / 离线引用 / 断言数 / 契约 / 插件 API / 删除账本 / 分层
+node scripts/check.mjs
+node scripts/check.mjs --selftest                 # 追加执行 selftest 与 i18n 覆盖率门禁
+
+# 单项判据
+node scripts/check-contracts.mjs [--selftest]     # 版本三处一致 / i18n 键对齐 / 文件头 / 枚举
+node scripts/check-plugin-api.mjs [--selftest]    # PlotPin.* ↔ contracts/plugin-api.json 双向比对
+node scripts/check-gates.mjs                      # 在临时副本构造 5 种破坏，证明门禁会红
+node scripts/check-discipline.mjs                 # 文档纪律
+node scripts/check-deletions.mjs                  # 结构性删除账本
+node scripts/i18n-scan.mjs                        # 中英文覆盖率统计；--check 不达标退 1
+
+# 性能与构建
+node scripts/bench.mjs                            # Node 桩渲染门禁（超阈值退 1）
+node scripts/build.mjs                            # 生成 dist/plotpin-standalone.html + SHA256SUMS.txt
+node scripts/build.mjs --check                    # 从源重建并比对哈希/字节数/体积上限/二次构建确定性
+node scripts/badge.mjs                            # 按 selftest 实际断言数刷新 README；--check 只校验
+
+# 浏览器级（可选，开发期依赖）
+npm install -D @playwright/test
+npx playwright install chromium
+node scripts/e2e.mjs                              # 透传 playwright test 参数
+node scripts/perf-browser.mjs [--no-gate]         # 真实 Chromium 性能基线；--no-gate 只采数
+```
+
+当前共 **2706 项断言全部通过**。缺 Playwright 或浏览器时，`e2e.mjs` / `perf-browser.mjs` 会打印 `[SKIP]` 原因并退出码 2，不会把"没跑"当成"通过"。
+
+### npm 入口
+
+| 命令 | 实际执行 |
+|---|---|
+| `npm test` | `check-ngm.mjs` → `selftest.mjs` |
+| `npm run lint` | `check.mjs`（含 11 步静态与契约判据，不含 selftest） |
+| `npm run ci` | `check.mjs --selftest` → `bench.mjs` → `build.mjs --check` → `check-gates.mjs` |
+| `npm run gates` | `check-gates.mjs` |
+| `npm run contracts` / `contracts:selftest` | `check-contracts.mjs` / `--selftest` |
+| `npm run api` / `api:selftest` | `check-plugin-api.mjs` / `--selftest` |
+| `npm run badge` | `badge.mjs` |
+| `npm run bench` | `bench.mjs` |
+| `npm run build` | `build.mjs` |
+| `npm run discipline` | `check-discipline.mjs` |
+| `npm run test:e2e` | `e2e.mjs` |
+| `npm run perf:browser` | `perf-browser.mjs` |
+
+### 发行包
+
+`node scripts/build.mjs` 把所有 JS/CSS/图标内联为 `dist/plotpin-standalone.html`，同时写 `dist/SHA256SUMS.txt` 与 `scripts/dist-manifest.json`。
+
+- 体积门禁：**820 KB（839,680 B）**
+- 当前产物：**784,371 B（766.0 KB）**，gzip **243,809 B（238.1 KB）**
+- `--check` 同时校验：无外链、CSP 不含 `'unsafe-inline'`、每个内联脚本有 sha256 白名单、产物哈希与登记值一致、连续两次构建字节一致。
+
+---
+
+## 目录结构
 
 ```
 .
-├── index.html                # 主入口（双击即用，按层序外部加载下述脚本；单文件发行包才内联）
-├── sw.js                     # 托管模式 Service Worker（必须在根目录才能接管全站离线缓存）
-├── css/
-│   └── style.css
+├── index.html                 # 主入口；按层序加载 44 个 classic <script>
+├── sw.js                      # 托管模式的 Service Worker（必须在根目录才能接管全站）
+├── manifest.webmanifest       # PWA 清单
+├── icon.svg
+├── css/style.css
 ├── js/
-│   ├── core/                 # 内核：常量 / 模型 / 几何 / 渲染 / 交互 / 持久化 / 视口 / 启动
-│   ├── features/             # 功能域：属性面板、清单、UI 外壳、插件注册点、导入导出、停车、协作
-│   │   ├── props.js          # 属性面板、场地属性、标注开关、节点编辑、批量属性
-│   │   ├── ui-panels.js      # 侧栏页签、清单、图层/类型、统计、覆盖率、统一刷新
-│   │   ├── io*.js            # 新建/工程库/楼层、文件导入、表格导入、导出字段表、导出与打印报告
-│   │   ├── parking.js        # 停车规划：双面车位/通道自动排布与净宽检查
-│   │   ├── collab.js         # 实时协作：本机 BroadcastChannel + 跨设备 WebRTC 手动信令
-│   │   ├── ui-shell.js       # UI 外壳组装
-│   │   └── plugins.js        # 插件注册点（对外 API 面见 contracts/plugin-api.json）
-│   └── common/               # 项目专有库：i18n、LWW 合并、符号库；XML/ZIP/XLSX/DSV/DXF/PDF/PDF-image/QR/资产/几何走 ngm.vendor
+│   ├── common/                # 第 0 层：i18n、合并、符号库、DXF/PDF/QR/资产适配
+│   ├── core/                  # 第 1 层：常量、模型、几何（含 site/coverage）、持久化、快照、渲染、交互
+│   ├── features/              # 第 2 层：属性、侧栏、外壳、导入导出、表格、停车、协作、插件、规则
+│   └── core/app.js            # 第 3 层：启动入口（必须最后加载）
+├── ngm.vendor/                # 随仓库分发的 @idcu/* 第三方模块源码（不是 npm 依赖）
 ├── contracts/
-│   ├── conventions.json      # 机器可读契约：版本号 / i18n 键 / 文件头 / 枚举同源
-│   └── plugin-api.json       # PlotPin 对外承诺的 23 个键（双向比对；含沙箱 loadPlugin）
-├── scripts/                  # check（门禁总闸）/ check-contracts（契约判据）/ selftest / badge / bench / build
-├── package.json              # 仅提供 npm 入口，无任何依赖
-└── docs/
-    ├── ARCHITECTURE.md       # 架构入口：分层图、唯一源清单、改动该跑什么
-    ├── user-guide.md         # 用户手册：快速上手、校准、导入导出、协作、插件、故障处理
-    ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
-    ├── testing.md            # 浏览器级 e2e 测试体系（spec 清单、覆盖边界、可选门禁）
-    ├── performance.md        # 真实浏览器性能基线（4 档实测、阈值、方法学边界）
-    ├── features.md           # 29 条顶层特性 + 43 条子项（共 72 条，含边界与实现口径）
-    ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
-    ├── known-issues.md       # Phase A/B/C 遗留项三类归档：可自动化 / 需人工或真机 / 已知限制
-    ├── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
-    ├── manual-acceptance.md  # 发布前人工验收矩阵（M1–M8；不伪造 CI 绿）
-    └── plans/
-        └── README.md         # 开发计划索引与任务状态
+│   ├── conventions.json       # 版本 / i18n 键 / 文件头 / 枚举同源
+│   ├── plugin-api.json        # PlotPin 对外 23 个承诺键
+│   └── adapters.json          # vendor 适配层登记
+├── plugins/                   # 可运行插件示例（隔离沙箱 / 旧同源路径）
+├── scripts/                   # 自测、门禁、构建、性能、扫描等开发脚本
+├── tests/
+│   ├── e2e/                   # Playwright 用例
+│   ├── fixtures/              # 旧版符号等测试输入
+│   ├── golden/                # SVG/DXF/PDF 逐字节基线
+│   └── perf/                  # 真实浏览器性能用例
+├── docs/                      # 架构、用户手册、特性、门禁、测试、性能、已知问题
+├── dist/                      # 构建产物（build.mjs 生成）
+├── ngm.json / ngm.lock / .ngm-version / ngm.mappings.json
+├── package.json               # 仅命令入口；运行时无依赖，Playwright 为可选开发依赖
+└── LICENSE
 ```
 
 ---
 
-## 🧪 自测
+## 已知限制
 
-无需安装任何依赖，Node 18+：
+以下为代码与文档中明确记录的边界（来源：`docs/known-issues.md` K 类）。
 
-```powershell
-node scripts/selftest.mjs
-node scripts/selftest.mjs --list              # 列出全部分区（108 个，按原断言区块）
-node scripts/selftest.mjs --filter="几何"     # 只跑名称匹配的分区（正则，忽略大小写）
-# 或
-npm test
-```
+| # | 限制 |
+|---|---|
+| K1 | Service Worker 缓存版本号无自动门禁，靠发布纪律与测试守下限 |
+| K2 | 不引入通用 `measureText` LRU、通用 Path2D 缓存、图层/对象索引；仅符号路径按类型做窄缓存 |
+| K3 | PDF 导出为位图页，回读不能还原矢量坐标 |
+| K4 | 不支持 `.dwg`；DXF 二进制需另存 ASCII；R12 凸度可能丢失 |
+| K5 | 内置二维码编码器上限 42 字节；WebRTC 邀请串通常超出，只提示字节数、不渲染不可扫的二维码 |
+| K6 | 覆盖率报告 v1/v2 数值不可比；圆/椭圆/扇形按 72 段采样，栅格法估算 |
+| K7 | 规则检查是几何检查，不判断消防间距/疏散/结构/日照，不内置规范数值，不检查楼层间垂直关系 |
+| K8 | 符号 DXF 只做折线近似不还原填充；SVG 导入只识别 6 类元素；搜索无拼音/分词；`symbolPlace` 不持久化；新工程默认类型集 64→36 |
+| K9 | 插件 Worker 是隔离边界而非完整语言级沙箱，无 CPU/内存配额，只靠 2s 超时 terminate |
+| K10 | 协作仅 LWW 合并、无服务端、无冲突解决 UI；跨设备可靠同步不在承诺范围 |
+| K12 | 硬上限：导入文件 32MB、对象 10 万、撤销 20 条、墓碑 2 万、快照 20 条/16MB、底图解码 40MP；超限明确报错或淘汰 |
 
-默认执行仍是全量 2706 条断言、顺序与统计口径不变；`--filter` 只用于定位回归，未匹配分区不执行也不计入统计。
+跨版本兼容是另一条硬边界：当前 schema 为 v2，旧版 App 只认 v1，遇到 v2 工程会拒绝加载/导入；本项目不做双写兜底。
 
-门禁与依赖自检（语法 / 入口资源 / 离线承诺 / 断言数 / 契约 / 分层 / 自测）走另一条：
+仓库当前状态另有一条既有问题：`node scripts/check-ngm.mjs` 会在 `js/common/dxf.js` 适配层命名上报告 `global.Dxf =` 与登记不一致，因此 `npm test` 会在该步退出 1；`node scripts/selftest.mjs` 本身的 2706 项断言全部通过。
 
-```powershell
-npm run ci        # check --selftest → bench → build --check → gates，与 CI 的 test job 同一条
-npm run gates     # 门禁牙齿：5 种人为破坏必须让对应门禁非 0（临时副本内构造）
-```
+以下项目在当前仓库中**未验证**，不应视为已承诺能力：
 
-浏览器级测试是可选的开发期依赖（不进发行包、不在 `npm run ci` 路径）：
-
-```powershell
-npm install -D @playwright/test
-npx playwright install chromium
-npm run test:e2e
-npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象；--no-gate 只采数）
-```
-
-缺依赖或缺浏览器时脚本打印 `[SKIP]` 原因并**退 2**，不会把「没跑」冒充成「通过」。
-`perf:browser` 的数据与 `bench.mjs` 的 Node 桩数据不可互换，阈值与口径见
-[docs/performance.md](docs/performance.md) §5.4。
-
-**契约判据**（`contracts/conventions.json`）守四件看不见的事：版本号三处一致、
-中英文案键对齐、每个脚本恰好一行文件头、枚举同源。判据自己也有牙齿：
-`npm run contracts:selftest` 会用一棵必然违约的临时树证明它真的会红。
-
-**插件 API 面**（`contracts/plugin-api.json`）是另一条：`PlotPin.*` 的每个键都必须在清单里登记，
-清单里的每个键也必须真的存在——`npm run api` 双向比对，`npm run api:selftest` 验证解析器。
-「代码有、清单没有」是 API 泄漏：插件一旦依赖，你改名就是静默破坏兼容。
-`PlotPin.apiVersion = "1.1.0"` 与 `PlotPin.version`（应用版本）分开；`PlotPin.checkPlugin` 做加载前自检，
-返回值带 `major/minor`（1.0 插件回传 1/0），兼容矩阵固定为：1.0/1.0.0/1.1 通过、1.2 次版本与 2.0 主版本拒绝、缺失/畸形拒绝并给中文原因；
-未知能力按封闭白名单拒绝（不降级）。矩阵由 selftest 6 条 + `e2e plugin-compat` 3 条固化，`npm run api` 另校验契约描述里的版本与能力列表和代码同源。
-`PlotPin.loadPlugin({id, apiVersion, capabilities, code})` 在独立 Worker 执行并按能力白名单通信（2 s 超时硬终止）。
-1.1 新增规则公共面 `registerRule / unregisterRule / listRules`（规则在主线程，沙箱不能注册，须经受信任同源路径并传 `owner` 标来源）。
-`PlotPin.validatePluginManifest(raw)` 校验 `plotpin.plugin/v1` 清单（清单 ≤192 KB、`code` ≤64 KB），设置 → 插件面板可导入清单并卸载；插件仅本会话有效，刷新需重新导入。
-能力表、版本规则、隔离机制与明确限制见 [docs/engineering.md](docs/engineering.md) §4.1；
-可运行示例见 [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js)。
-刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、真实浏览器渲染基线）逐一写在
-[docs/engineering.md](docs/engineering.md) 与 [docs/performance.md](docs/performance.md) 里——不设不是忘了，是明说不保证。
-
-覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
-CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希与全库命名空间可达性回收（草稿/撤销重做/剪贴板/拖拽原件/全部工程库记录，禁止跨工程误删）、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、**全量中英文案（动态短语/插值模板/内置类型名/载入工程兼容）**、**弹窗焦点管理、页签方向键与画布键盘策略**、**SVG 视觉快照与真实 DOM 焦点桩**、**停车规划布局（车位数/通道数/旋转排列/边界与净宽检查）**、**实时协作传输辅助（48KB 分块、SDP 清洗、本地提交防抖）、协作消息层护栏（TTL/key/字节上限、重复 hello 去重、发送异常不冒泡）与邀请串编解码/二维码容量判定**、**多楼层汇总（逐层分类/面积/长度与合计）**、**资源上限与底图降采样策略（长边限制/透明保留/HTML 转义）**、**对象对齐与分布（包围盒边界/中线/等间距）**、**批量编号与层级（跨层避让/置顶置底）**、**多楼层台账导出与按楼层导入路由**、**版本快照与差异分类（独立命名空间/照片引用化/六类差异/回滚撤销关系）**、**导出字段表单一来源（CSV/TSV/XLSX/PDF/报告与 SVG/DXF 同源；8 种产物改造前后逐字节一致）**、静态资源引用完整性等纯逻辑模块，当前共 **2706 项断言全部通过**。
+- 真机移动端（iOS/Android）PWA 安装、离线与手势（仅同机 Chromium 390×844/DPR3 模拟）。
+- Firefox / Safari 下的 SVG 导入、下载、Worker 沙箱、PDF 打印（自动化仅覆盖 Chromium）。
+- 真实双设备 WebRTC 协作（现有 e2e 为同机双标签）。
+- 英文译文语义质量（判据只证明键存在、非空、整句模板可用）。
+- 真实 GPU / 低端设备的渲染绝对性能。
+- 低端设备上的插件 2s 超时体验。
+- 大尺寸符号在 AutoCAD / LibreCAD 等查看器中的观感。
+- 50 条真实图纸快照的差异分类误报/漏报率。
 
 ---
 
-## 🗺️ 路线图（方向草案）
+## 文档
 
-- ✅ 多楼层多底图、设备台账二维码、照片附件（已交付）。
-- ✅ 顶栏「清空」：一键清空当前楼层双槽/对象/标注/校准/选中态并恢复默认取景框，二次确认且可 `Ctrl+Z` 整体撤销（已交付）。
-- ✅ PWA/Service Worker 离线缓存（缓存名版本化 + 激活清理旧缓存 + 新版本可用提示，离线打开不白屏）、36 个六类行业符号库与自定义 SVG/JSON 图元（C-04，已交付）。
-- ✅ 单文件发行包（构建期无损压缩，当前 **758.5 KB / 776,704 B**、gzip 235.8 KB / 241,484 B；体积门禁 ≤820 KB / 839,680 B，余量 62,976 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
-- ✅ 停车场规划模式：双面垂直车位 + 通道净距检查、横/纵排列、实时预览与独立图层（已交付）。
-- ✅ 离线协作（CRDT 家族 LWW）：对象/楼层级 Last-Writer-Wins + 删除墓碑 + 工程 JSON 合并；存储 v2 为每个楼层补 `updatedAt`，v1 旧档读取即迁移（已交付，工程库「合并他人工程」）。
-- ✅ 实时协作：本机 BroadcastChannel 多标签 + 跨设备 WebRTC 手动信令（无服务器、零依赖）；邀请串三步建连、连接状态常驻可见、LWW 覆盖提示并可 `Ctrl+Z` 回滚，消息层设 TTL / key / 字节上限与发送异常保护（已交付；内置二维码编码器 42 字节上限装不下 SDP 邀请串，面板只提示不渲染假码）。
-- ✅ 多标签编辑保护（D-09）：同工程双标签经 5s 心跳 / 15s 租约在 6s 内提示「另一标签页正在编辑（最后心跳 HH:MM:SS）」，冲突期间暂停自动保存但不丢内存编辑；可「重新载入」或确认「仍以本页为准」；`BroadcastChannel` 不可用降级 `storage` 事件，均不可用仅提示不阻塞（已交付，不做实时互斥）。
-- ✅ 多楼层汇总：统计页签按层统计对象数/分类/总长/总面积并支持点击切换，打印报告附楼层汇总表（已交付）。
-- ✅ 多楼层导出：打印报告与 PDF 逐层输出图纸页与对象清单，导出后恢复原楼层/视口/选择（已交付）。
-- ✅ 多楼层台账：CSV/XLSX 覆盖全部楼层并带楼层列，导入按楼层列路由并防跨层重号（已交付）。
-- ✅ 版本快照与图纸对比：按工程版本链生成/列表/删除/回滚（独立 `snap:` 命名空间，20 条/16MB 上限），A/B 差异六类分类与可开关叠加高亮；快照底图/照片引用纳入资产可达集保活，删除快照后资产可回收（已交付）。
-- ✅ 资源上限收口：缩放/图标/段长阈值集中为 `APP_LIMITS`、段长标注阈值可在设置调整、底图解码尺寸硬上限（已交付）。
-- ✅ 对象对齐与分布：多选按包围盒六向对齐，水平/垂直等间距分布且首末不动（已交付）。
-- ✅ 安全硬化：类型 `icon` 白名单 + 类型名/颜色/id 全量转义 + CSP（`script-src` 无 `'unsafe-inline'`，单文件包按脚本文本签 sha256 白名单；`worker-src 'self' blob:` 仅用于插件 Worker），封堵导入 JSON / 旧存档 / 插件注册 / 类型列表 4 条注入路径（已交付）。
-- ✅ 导出安全：CSV/TSV 公式注入防护（`= + - @`/Tab/CR 开头且非纯数字加前导单引号，纯数字豁免），XLSX 单元格一律 `inlineStr` 文本、无公式节点（已交付）。
-- ✅ 导出字段表单一来源：CSV/TSV/XLSX 表头、PDF/打印报告清单与 SVG/DXF 标注读数共用 `js/features/io-fields.js` 的同一字段描述表；8 种导出产物改造前后 SHA-256 全部一致，表头与字段语义不漂移（已交付）。
-- ✅ 设备产品库与 BOM 报价：厂商目录 JSON 导入/导出/删除（IndexedDB `catalog:current`，校验→落盘→替换内存的事务化导入），属性面板厂商/型号选型与数量，跨厂商重名不静默错绑，跨楼层 BOM 聚合与 CSV/XLSX 报价导出（共用统一字段表与公式防护）；导出携带目录版本/导出时间并写 `quote:last` 快照，替换目录后重导沿用冻结单价；无目录降级为名称/数量（已交付）。
-- ✅ 可用性快赢：椭圆数值输入不再把半径当圆心；类型面板图标尺寸编辑生效（`data-type-iconsize`）；统计面板场地类型读 `state.site.kind`；文件选择支持 `.dxf/.pdf`（已交付）。
-- ✅ 表格驱动布点与条件批量替换（B-08 原义）：表头可加「操作」（新增 / 更新 / 替换）与「匹配编号 / 名称 / 名称包含 / 对象类型 / 业务类型 / 图层」条件列；替换行批量改写属性但不动几何；存在「操作」列时严格事务化，非法行整批拒绝、现有对象不被修改；公式防护引号在导入侧自动还原（已交付）。
-- ✅ DXF 实体与版本兼容（B-03）：识别 `$ACADVER` / `$INSUNITS`，覆盖 R12–2018 ASCII DXF；补充解析 SOLID / 3DFACE / LEADER / ATTRIB(ATTDEF)，导入提示如实列出补充实体、跳过类型与 R12 凸度丢失；二进制 DXF 明确提示另存 ASCII（已交付）。
-- ✅ DXF 预检与双落点（B-02）：导入前预检版本/单位/实体/保真度，可改判单位（整体换算），可选「可编辑对象」或「只读参考层」（新建 `DXF参考` 图层并默认锁定）；确认后才事务化提交，失败整批回滚。`.dwg` 入口识别 `AC10xx` 版本并给出「转 DXF / 转 PDF / 取消」指引，不内置 DWG 内核、不引入依赖、不修改原文件（已交付）。
-- ✅ 世界变换统一入口（B-12）：比例尺/仿射校准统一走 `applyWorldTransform`，对象（坐标、设备物理尺寸、文字字高、线宽、圆/椭圆/扇形参数）与图片仿射一次迁移——已仿射校准的底图二次改比例尺不再与对象错位；矢量场地按「场地优先校准」保持真值参考不自动迁移，需要整体换坐标系时可显式 opt-in。旧签名 `scaleWorldAround` 保留（已交付）。
-- ✅ 多页 PDF / 图纸集（B-13）：多页矢量 PDF 按文档页树 `/Kids` 还原页序（不按对象编号），每页归零到自身 MediaBox 后沿水平方向独立落位、页间留最大页宽 8% 间隙——**不再同原点叠加**；导入提示页数，场地按整套总宽/最大页高扩展。PDF 导出按「楼层顺序 → 图纸页 + 清单页」生成，页码全局连续写入页脚；往返校验页数/页序/页宽页高一致（`selftest` §37b + `e2e pdf-multipage`）。限制：PDF 导出为位图页，回读时不还原矢量坐标（已交付）。
-- ✅ 渲染性能基线（B-11）：新增真实 Chromium 渲染基线 `tests/e2e/perf-render.spec.mjs`（2000 对象 / 1600×900，A 基础场景 + B 标注图元，输出重建/缓存命中/直接全量的 avg·P50·P95·P99、单帧 `measureText`/`Path2D` 调用、`staticKey`、`filter+sort`、heap 与裁剪率）。实测缓存帧 P95 0.2ms、重建 P95 6.0–8.6ms，均在本帧预算内；通用 `measureText` LRU、通用 Path2D 缓存、图层/对象索引、`staticKey` 精确化四项经 A/B 实测无稳定帧级收益，按「无数据支撑不引入」不做（C-04 只对符号路径做按类型的 `WeakMap` 窄缓存，不改变该结论），分块/Worker 亦无「主线程占满」证据（已交付）。
-- ✅ 图框 / 标题栏 / 比例尺 / 图例模板（B-07）：导出下拉「图框模板…」配置工程名/图号/比例/日期/版本与设计/审核/单位 8 字段，可分别开关图框边框、标题栏、比例尺、图例；**默认关闭**，关闭时 PNG/PDF/SVG 产物与旧版逐字节一致。启用后三格式共用同一布局源：右下 4×2 标题栏（空比例自动 `1:N`、空日期取导出当天、空图号显示 `—`）、左下整齐长度比例尺、右上按可见对象类型/图层生成的图例；文字统一 `esc()` 转义。字段随 `meta.titleBlock` 持久化并进入撤销快照，旧工程缺字段按默认模板降级（已交付）。
-- ✅ i18n 插值模板（B-14）：动态整句改用 `{name}` 占位 + 集中字典 `TEMPLATES`，消除 `前缀 + 数值 + 后缀` 拼接；覆盖剪贴板、表格/DXF/PDF/底图导入、楼层与工程库、快照、协作合并、报价与 PDF 页脚等 UI 与报告文案。中文模式原样填充（语义不变），英文整句命中字典；用户输入只作参数，DOM 仍走 `textContent` / `esc()`，不扩大注入面。可复跑统计 `node scripts/i18n-scan.mjs`：英文覆盖率 **25.64% → 33.79%**（已字典化 269 → 347 条，缺口 125 → 49 条），体积 **820,168 → 831,533 B（+11,365 B）**，仍低于 820 KB 门禁（已交付）。
-- ✅ 移动端 / PWA 补强（B-15）：SW 缓存名 `plotpin-v3` 版本化，`activate` 清理所有旧缓存；安装逐项 `allSettled`，单个资源 404 不阻断升级；`fetch` 网络优先、离线回退缓存，导航兜底 `index.html`，无缓存时返回内置离线提示页（不白屏）；`updatefound → installed` 且已有控制器时提示「新版本可用：刷新页面后生效」。移动端加 `viewport-fit=cover` 与 `env(safe-area-inset-*)`（桌面为 0，旧布局不变），触屏目标 ≥44px，横屏压缩顶栏、侧栏收窄且可纵向滚动工具栏；窄屏侧栏遮罩降到顶栏之下并支持点空白关闭。实测（同机 Chromium 移动模拟 390×844 / DPR3 vs 桌面 1600×900，单轮）：首屏 FCP 84 vs 96ms，2000 对象重建 P95 7.2 vs 5.9ms、缓存帧 P95 0.2 vs 0.2ms、rAF 间隔 P95 17.8 vs 18.2ms；**真机未测**（已交付）。
-- ✅ 体积压缩专项（2026-11）：构建期无损压缩（只删注释 / 缩进 / 空白，字符串、模板与正则字面量原样保留；CSP 哈希按压缩后文本重算，压缩后逐脚本 `vm.Script` 解析），产物 **833,855 → 664,325 B（−20.33%）**、gzip **273,289 → 205,465 B（−24.81%）**；820 KB 门禁余量 5,825 → 175,355 B。selftest 2184/0、e2e 51/1，dist 压缩产物同套断言全过（已交付）。
-- ✅ 插件沙箱 / 版本兼容 / 示例（C-01，2026-11）：新增 `PlotPin.apiVersion="1.0.0"` 与 `checkPlugin` 版本协商（1.x；不兼容返回可读 `reason` 而非崩溃）；`loadPlugin` 用独立 Worker 执行插件，能力白名单 7 项（`state:read` / `state:write` / `annotate` / `types` / `icons` / `export` / `import`）未声明一律不可用；Worker 全局与原型链硬化（无 DOM / `window` / `parent`，删 `fetch` / `indexedDB` / `XHR` / `WebSocket` / `importScripts` 等），初始化与单次调用 **>2 s 超时 terminate** 并禁用插件、toast 写原因；异常/原型污染不触达主工程；图标仍走 A-02 `normalizeIcon` 白名单与 `esc`。旧同源 `<script>` 路径保留为受信任兼容入口，迁移说明与能力表见 `docs/engineering.md` §4.1；示例 `plugins/sample-sandboxed.js`。实测体积 **664,325 → 685,350 B（+21,025 B，+3.16%）**、gzip **205,465 → 211,396 B（+5,931 B）**；selftest **2194/0**、e2e **61 passed / 1 skipped**（新增 10 条恶意/兼容用例）；dist file:// 双击实测 Worker 沙箱可用（已交付）。
-- ✅ 几何规则检查（C-05，2026-11）：规则页签提供可注册规则框架、随工程保存的 `state.rules` 配置、单次检查与违规清单（规则名/对象/关联对象/楼层/X·Y/说明/实测值），支持点击跨楼层定位与 CSV 导出（BOM、引号与公式注入防护）。三条内建规则：**对象重叠**（同楼层包围盒穿透 > 容差才做多边形交面积判定，贴边与容差内浅穿透不报；凹多边形三角化）、**最小间距**（按类型阈值两两比较，取 max，净距 `<` 阈值才报，恰好达标不报）、**越界**（以矢量场地边界为准，区分部分/完全越出，文字/尺寸/点设备同样参与）。页面明确提示「这是几何检查，不是消防/规范审图」，不内置任何规范数值。2000 对象 / 30 类型阈值实测 **14.3–15.2 ms**（5 次中位数 14.3ms，CI 复跑 15.2ms；minX 扫描线候选对 7 / 理论 2,221,111，全量对照 15,666.4 ms，加速约 **1096×**）；体积 **685,350 → 716,473 B（+31,123 B，+4.54%）**、gzip **211,396 → 220,917 B（+9,521 B）**；selftest **2288/0**、e2e 新增 `rules` 用例覆盖「改配置→重查→违规数变化」。口径、已知限制与不承诺范围见 `docs/engineering.md` §4.2（已交付）。
-- ✅ 行业符号库（C-04，2026-11）：36 个 24×24 线性图元分六类（视频监控 / 门禁 / 消防 / 网络 / 停车 / 其他，每类 6 个），名称/别名搜索与分类筛选、预览、放置、旋转角与真实尺寸；自定义 SVG 经与 A-02 同源的清洗（64 KB / 200 元素 / 16 层嵌套 / 200 条路径 / 单条 5000 字符，拒绝 script、`on*`、外部 href、DOCTYPE）后存入当前工程命名空间，可 JSON 往返且 id 冲突改名；画布/SVG/PNG/PDF 共用 `symbolPathsFor` 单一 path 源，DXF 保留 POINT 并追加 LWPOLYLINE 近似、导出报告标注降级。实测 500 符号图元重建 **3.33–4.01 ms** / 缓存帧 **0.08–0.10 ms** / 直接帧 **2.83–3.23 ms**、索引加载 **0.012–0.014 ms**；golden `symbol-scene.svg` 5,012 B / `.dxf` 4,753 B；体积 **716,473 → 736,298 B（+19,825 B，+2.77%）**、gzip **220,917 → 226,912 B（+5,995 B）**；selftest **2327/0**、e2e **65 passed / 1 skipped**（已交付）。
-- ✅ 首次启动引导与示例工程（D-01，2026-11）：全新用户首次打开显示三步上手引导，可「空白开始」或「打开示例工程」；记录存 localStorage `plotpin:firstRunGuide:v1`，仅 `completed` 永久抑制（`skipped` 下次仍展示），未知版本/损坏记录按未完成；项目 id/对象/图片底图/多楼层/非默认场地任一存在即视为老工程、不触发引导。示例工程为 100×70m 矩形场地 + 6 个对象（2 点设备/1 区域/1 折线/1 文字/1 标注），背景空槽、无图片或照片资产，打开即落盘且不产生孤儿资产。实测 selftest **2602/0**、e2e **68 passed / 1 skipped**（新增 `onboarding.spec.mjs` 3 条）、产物 **740,560 B（+4,262 B，+0.58%）**、gzip **228,491 B（+1,579 B）**（已交付）。
-
-> 触屏已支持：Pointer Events 单指绘制/移动，**双指捏合缩放、双指平移**（缩放锚定双指中点）；≤860px 窄屏侧栏自动变覆盖层（☰ 面板开关，点画布/遮罩空白关闭）；安全区与触控目标见 B-15。
+| 想知道 | 去哪 |
+|---|---|
+| 怎么用：底图、校准、导入导出、协作、插件、故障处理 | [docs/user-guide.md](docs/user-guide.md) |
+| 代码怎么分层、唯一源在哪 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| 完整特性清单与实现边界 | [docs/features.md](docs/features.md) |
+| 模块依赖与公共抽象 | [docs/modules.md](docs/modules.md) |
+| 门禁、契约、构建与插件隔离的权威说明 | [docs/engineering.md](docs/engineering.md) |
+| 浏览器级 e2e 体系 | [docs/testing.md](docs/testing.md) |
+| 真实浏览器性能基线与口径 | [docs/performance.md](docs/performance.md) |
+| 已知问题与结构性删除记录 | [docs/known-issues.md](docs/known-issues.md) · [docs/deletions.md](docs/deletions.md) |
+| 发布前人工验收矩阵与报告 | [docs/manual-acceptance.md](docs/manual-acceptance.md) · [docs/manual-acceptance-report-2026-11-07.md](docs/manual-acceptance-report-2026-11-07.md) |
+| 开发计划索引 | [docs/plans/README.md](docs/plans/README.md) |
 
 ---
 
-## 📄 许可证
-
-[MIT](LICENSE)
-
----
----
-
-# PlotPin — Offline Drawing Annotation Tool
-
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
-[![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-
-**A general-purpose drawing annotation tool that runs fully offline, with zero dependencies — just double-click and use.**
-
-Place device markers on any base map (image or vector site), draw true-to-scale areas and polylines, take measurements, and export drawings and asset spreadsheets — all locally in the browser. No install, no server, no network, no runtime dependency.
-
-### Features
-
-- **Offline & zero-dependency**: no npm, no CDN, no backend; works from `file://` on intranets, air-gapped and field environments.
-- **Base maps**: image files with two-point scale calibration (meters/pixel), or vector sites in meters — rectangle, circle, ellipse, sector, parallelogram and polygon.
-- **Point devices (position semantics)**: screen-fixed icons that stay crisp at any zoom; icon size is adjustable on three levels (global × type default × per-object). Optional physical-size overlays render at real scale (coverage circle, square, camera FOV sector, barrier-gate bar). A built-in **36-symbol library** in six categories (CCTV / access control / fire / network / parking / other) supports alias search, rotation and true-size placement; custom SVG symbols are sanitized before being saved into the current project namespace (JSON round-trip).
-- **Areas & polylines (geometry semantics)**: always in world coordinates (meters), true-to-scale. Areas support rectangle / circle / ellipse / sector / parallelogram with parameter handles and on-the-fly shape conversion (center-preserving, equal-area); triangles and arbitrary polygons come from closed polylines.
-- **Dimensions & text**: distance, area and angle annotations; scalable/rotatable world-size text.
-- **Editing**: single/rubber/multi select, move, resize, rotate, node editing, layers, custom types, grid snapping, undo/redo.
-- **Persistence**: auto-save to IndexedDB with content-addressed map assets, localStorage fallback with explicit capability detection; versioned network-first Service Worker (cache `plotpin-v3`, old-cache cleanup, update prompt) with offline cache for hosted deployments.
-- **Engineering**: layered offscreen rendering cache + viewport culling, parser input limits for ZIP/XLSX/DXF/PDF, zero-dependency CI gate and render benchmark.
-- **Distribution**: `npm run build` produces a fully inlined single-file HTML with SHA256 checksum; plugin registration API for custom object types, importers and exporters, plus a versioned Worker sandbox (`PlotPin.loadPlugin`) with a capability whitelist and 2 s per-call timeout.
-- **Internationalization & a11y**: Chinese/English switch covering chrome, property panels, dialogs, notifications, built-in type names, reports and QR labels (custom type names preserved); ARIA roles/states, modal focus trap, live region for toasts and visible keyboard focus rings.
-- **Import / export**: JSON project (embedded map + device photos across all floors), hi-res PNG, vector SVG, CSV/TSV and real `.xlsx` (OOXML via vendored `@idcu/format-*` modules, no npm/CDN at runtime), print-to-PDF report; drag-and-drop import supported.
-
-### Quick start
-
-Double-click `index.html` — or serve the folder with any static file server. Modern Chrome/Edge/Firefox recommended.
-
-### Build (single-file distribution)
-
-```bash
-npm run build
-# dist/plotpin-standalone.html  +  dist/SHA256SUMS.txt
-# 门禁：≤820 KB（839,680 B）；构建同时打印 gzip 体积（发布指标，不阻断）
-```
-
-### Plugins
-
-**Recommended: isolated sandbox** (`PlotPin.loadPlugin`) — code runs in a dedicated Worker with no
-DOM / `window` / `parent` / IndexedDB / network; only declared capabilities are available:
-
-```js
-PlotPin.loadPlugin({
-  id: 'sandbox-markdown',
-  apiVersion: '1.0',                    // host API is 1.1.0; 1.0 plugins still load; incompatible versions get a readable reason
-  capabilities: ['state:read', 'export'],
-  code: `
-    PlotPin.registerExporter({
-      id: 'md', label: 'Markdown', ext: '.md',
-      run(ctx) { ctx.download('# ' + (ctx.projectName || 'PlotPin'), 'out.md'); }
-    });
-  `
-}).then(r => { if (!r.ok) console.warn(r.reason); });   // r.ok=false: plugin disabled, app unaffected
-
-/* Capability table: state:read | state:write | annotate | types | icons | export | import
- * Limits: 2 s per call/init (hard terminate), one Worker per plugin, code must be a string,
- *         ≤500 objects per addObjects call, icons still go through the A-02 whitelist. */
-```
-
-A complete runnable example lives in [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js);
-details and migration rules are in [docs/engineering.md](docs/engineering.md) §4.1.
-
-**Legacy (trusted, compatibility entry)** — a same-origin `<script>` may still call `register*`
-directly. It has full page permissions and is **not** sandboxed or capability-gated:
-
-```html
-<script src="js/features/plugins.js"></script>
-<script>
-/* 自定义设备类型：进入类型下拉，新建/载入工程都会带上；被对象使用时注销会被拒绝 */
-PlotPin.registerObjectType({
-  id: 'plugin.ptz', kind: 'point', name: '全景相机', color: '#0ea5e9', icon: 'custom',
-  scaleShape: 'sector', fov: 360,
-  symbol: [{ d: 'M0 0h24v24H0z' }], symbolViewBox: { x: 0, y: 0, w: 24, h: 24 }
-});
-
-PlotPin.registerExporter({
-  id: 'my.csv', label: '我的导出', ext: 'csv',
-  run(ctx) { ctx.download(new Blob(['a,b']), 'out.csv'); }   /* ctx.state 为可持久化快照 */
-});
-
-PlotPin.registerImporter({
-  ext: 'mydata',
-  run(ctx) { /* ctx.file / ctx.state（实时） / ctx.commitChange */ }
-});
-
-/* 诊断：PlotPin.state、PlotPin.listPluginTypes() */
-</script>
-```
-
-### Test
-
-```bash
-node scripts/selftest.mjs   # 2706 assertions, no dependencies
-node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁（CI 用 --selftest）
-node scripts/bench.mjs      # 渲染基准（avg/P95/重建/heapUsed 超阈值则退出码 1）
-node scripts/build.mjs --check   # 单文件发行包：源重建 ↔ dist-manifest 哈希比对 + 无外链 + 体积上限
-node scripts/check-gates.mjs     # 门禁牙齿：5 种人为破坏必须非 0
-```
-
-### License
+## 许可证
 
 [MIT](LICENSE)
