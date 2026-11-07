@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · N-03 修复 PDF 底图落盘丢失与解压炸弹前置拦截
 
-- **Commit Hash**：本条提交（`fix(io): PDF 内嵌底图改走资产入库，解压上限前移到累计阶段`）；完整哈希见回填提交与本次汇报。
+- **Commit Hash**：`91fdb24`（`fix(io): PDF 内嵌底图改走资产入库，解压上限前移到累计阶段`）。
 - **核心改动**
   - `js/features/io-import.js`：PDF 导入的最大内嵌图不再只写运行时 `dataUrl`，改为与图片导入同一路径——`assetIdFor` + `assetPut` 入库并写 `state.background.assetId`；IndexedDB 不可用时才退回 `dataUrl` 兜底并提示「仅本次会话有效」。旧实现 `assetId=''` + 内联 `dataUrl`，`persistableState` 剥掉 `dataUrl` 后自动保存即永久丢图。
   - `js/core/persistence.js`：新增 `scrubBackgroundForSave`（有 assetId → 剥离 dataUrl；无 assetId 但有 dataUrl → **保留**，不删最后一份数据；两者都无 → 不再落必然读不出的 `image` 槽）；`runSave` 前置 `ensureProjectBackgroundAssets(state)`（当前楼层 + 非当前楼层统一资产化），覆盖 JSON 导入/旧草稿等历史 `dataUrl` 路径。
