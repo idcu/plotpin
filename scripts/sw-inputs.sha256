@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=9
+version=12
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -23,14 +23,14 @@ b5b28c68455cf734869aae7126f691163b3626067f86d1e6e8a7d6034296605e  js/common/pdf-
 1a716950c8b13aa2423fb0edbc564930208f2f3ccd13ac5467bc69c628962543  js/core/interaction.js
 ea9a013c45194d3a8946d77daca2c8c25a18bf57d4a41d7d80eb875e26a59f27  js/core/model.js
 807dc3ff3e020ee57893f1ec8e70e718b62469394f099083ee8b7360a09eb70d  js/core/persistence.js
-edef38204b392928ff19c99f231090e63deae5daa1cd27d0966268736b51cc4b  js/core/render.js
+4bf89e7136a541530d9d6986f63a0ae9fd2b082c768cf1dd32e443bcd28df13a  js/core/render.js
 e98cbef1afc8b1de258beb4775d0d1ec6f67f6a13e83d130d25653160659015e  js/core/snapshot.js
 7d993922b0b0f81a7a668c3c6ea7dbc9c4f02bf2725cdc8165d60116f6c72e73  js/core/tab-lease.js
 6cdcb4eb2acc55866dc22ad0d4e40a0178f4245aa6f7c76426bd9f93deca3518  js/core/viewport.js
 2c8807de25dc960165b8dc7123c408f83f2927ea9294c924a863875c3bce9717  js/features/catalog.js
 96d38476772eabc577d9548579e3d9d5723ded596b26275f8eb21d6378ed3e77  js/features/collab.js
-a2c2ffca47a096bc829663f8377578a7cc5adc5cbc8189123895cee93be2d9e0  js/features/io-export.js
-fd562176eb43f0dff50c0f8eddf6aec834d5de5a886c6dc2388bee9dcedce06c  js/features/io-fields.js
+2bacde17772ca42bc5e69c6120a0e68ed86e455641d4e354620a9dc16abfb088  js/features/io-export.js
+c15a33387f12004084f19bdd9b04ccf9fde78633033926c8fb5f0f572803e872  js/features/io-fields.js
 7ab6ba5afa3c72216c8b8e1dda6dcff5db6c2fa4da7d1bd8f4ecf3f9e69a051c  js/features/io-import.js
 6b20732067dcd3a3382bebb3d45adef06f5f731c5f922982b5a516ee029b7f39  js/features/io-table.js
 83e8e12277360d0ba4950cf4a99d14f66784da546de48baadddfff3d70c62908  js/features/io.js

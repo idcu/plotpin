@@ -6,7 +6,10 @@ function setCursorScreen(p,inside,wp,snap){ cursorScreen=p?{x:p[0],y:p[1],inside
 let focusNode=null;
 function setFocusNode(v){ focusNode=v; requestRender(); }
 /* -------------------- 命中测试 / 选择 -------------------- */
-function isVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
+/** 有效可见：对象自身 visible 且所属图层 visible。画布与所有图纸类导出共用此唯一判断源。 */
+function effectiveVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
+/** 兼容旧调用名：等价于 effectiveVisible（保留签名，避免改动既有调用方） */
+function isVisible(o){ return effectiveVisible(o); }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
 function hitObject(p,screenP){
   const tol=8/state.viewport.zoom;
@@ -196,8 +199,9 @@ function drawScene(c,v,cssW,cssH,opt={}){
   const view=visibleWorldRect(v,d,cssW,cssH);
   visible.forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
   if(opt.interactive) drawDiffOverlay(c,v,toS);   /* 差异叠加仅屏幕预览，不进入 PNG/SVG/PDF 导出 */
-  drawDraft(c,v,d,toS);
-  drawCalibration(c,toS);
+  /* 草稿与校准属于交互瞬态：导出/打印路径默认不绘制，必须显式 includeDraft/includeCalibration 才叠加 */
+  if(opt.includeDraft) drawDraft(c,v,d,toS);
+  if(opt.includeCalibration) drawCalibration(c,toS);
   if(opt.interactive){
     drawGuideLines(c,v,d,cssW,cssH,toS);
     drawSelection(c,v,toS);

@@ -97,9 +97,9 @@
 
 > 脚本层没有"20 个 .mjs"；实际是 19 个 `.mjs` + `dist-manifest.json` 共 20 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
 
-## tests（44 个）
+## tests（45 个）
 
-### e2e 用例（33 个 spec）
+### e2e 用例（34 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -111,6 +111,7 @@
 | `coverage.spec.mjs` | 覆盖率 v2：4 个缩放级别一致、隐藏图层不计入、报告标注口径 |
 | `csp.spec.mjs` | 注入路径 1/4：恶意 `type.name/icon` 不执行 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合实体导入、版本与补充实体可见 |
+| `export-scope.spec.mjs` | N-05：台账全量+「显示」列=有效可见，图纸类只含可见对象；草稿/校准不进 PNG/PDF |
 | `help-center.spec.mjs` | D-03：帮助中心三页签与焦点回归 |
 | `history-increment.spec.mjs` | B-10：20 条含照片历史相对整份深拷贝 heap 下降 ≥50%（真实 Chromium） |
 | `history.spec.mjs` | 撤销/重做后刷新仍保持正确状态（落盘语义） |

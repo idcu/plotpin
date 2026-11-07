@@ -54,7 +54,7 @@ function openTitleBlockDialog(){
  * 离线生成可打印 HTML（A4 三列），不依赖任何外部资源。
  */
 function exportLabelSheet(){
-  const pts=state.objects.filter(o=>o.kind==='point'&&isVisible(o));
+  const pts=state.objects.filter(o=>o.kind==='point'&&exportScope(o,'draw'));
   if(!pts.length) return toast('当前没有可见的点设备','warn');
   const cards=pts.map(o=>{
     const t=getType(o.typeId);
@@ -131,16 +131,21 @@ async function exportJSON(){
   downloadBlob(new Blob([JSON.stringify(copy,null,2)],{type:'application/json'}),safeName()+'.json');
   toast('JSON 工程已导出（含底图与设备照片）','success');
 }
+/** 导出口径唯一源（N-05）：
+ *  - 'table'：台账类（CSV/TSV/XLSX）保留全量对象，隐藏状态由「显示」列反映有效可见；
+ *  - 'draw' ：图纸类（PNG/SVG/DXF/PDF 图纸页与清单/二维码标签/图例）只输出有效可见对象。
+ *  有效可见统一定义在 render.js 的 effectiveVisible（对象 visible 且所属图层 visible）。 */
+function exportScope(o, mode){ return mode==='draw' ? effectiveVisible(o) : true; }
 /** 行渲染器与列定义在 io-fields.js（字段描述表唯一源）；此包装保留既有签名 */
 function objectRows(objs=state.objects,floorName){
   const fname=floorName===undefined?currentFloorName():floorName;
   return objs.map(o=>buildExportRow(o,fname));
 }
-/** 全楼层行（当前层对象取 state.objects，其余层取楼层条目） */
+/** 全楼层行（当前层对象取 state.objects，其余层取楼层条目）；台账口径=全量 */
 function objectRowsAll(){
   syncActiveFloor();
   return (state.floors||[]).flatMap(f=>objectRows(
-    f.id===state.activeFloorId?state.objects:(f.objects||[]),
+    (f.id===state.activeFloorId?state.objects:(f.objects||[])).filter(o=>exportScope(o,'table')),
     f.name
   ));
 }
@@ -224,7 +229,7 @@ function titleBlockRatio(ppu,format){
 /** 图例：按当前可见对象的类型聚合（名称/颜色/数量），并列出涉及图层；上限 8 类/6 层，多余显示 +N */
 function titleBlockLegendData(){
   const map=new Map(), layerSet=new Set();
-  state.objects.filter(isVisible).forEach(o=>{
+  state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
     const t=getType(o.typeId)||{};
     const id=t.id||o.typeId||'?';
     const e=map.get(id)||{name:t.name||id,color:(o.style&&o.style.color)||t.color||'#64748b',count:0};
@@ -469,7 +474,7 @@ function buildSceneSvg(){
     }
     return body;
   };
-  state.objects.filter(isVisible).forEach(o=>{
+  state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
     const t=getType(o.typeId), color=o.style.color||t.color;
     if(o.kind==='rect'){
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
@@ -590,7 +595,7 @@ function dxfEntitiesForExport(){
   const siteEnts=siteDxfEntities();
   if(siteEnts.length&&!layers.some(l=>l.name==='SITE')) layers.push({name:'SITE',color:'#16a34a'});
   entities.push(...siteEnts);
-  state.objects.filter(isVisible).forEach(o=>{
+  state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
     const t=getType(o.typeId);
     const color=o.style.color||t.color||'#111827';
     const layer=layerOf(o).name;
@@ -648,6 +653,13 @@ function canvasToJpegBase64(canvas,quality=.92){
 /* 清单页版式常量：分页数与渲染共用一份（避免两处各写一套导致页码/总页数不一致） */
 const PDF_LIST_PAGE={W:1240,H:1748,margin:48,rowH:30,headH:40};
 function pdfListRowsPerPage(){ return Math.max(1,Math.floor((PDF_LIST_PAGE.H-PDF_LIST_PAGE.margin*2-150)/PDF_LIST_PAGE.rowH)); }
+/** PDF 图纸口径对象（N-05）：图纸页与清单页共用，只看有效可见对象，避免清单含隐藏项而图纸不画 */
+function pdfDrawObjectsFor(row){
+  const objs=row&&row.id!==undefined
+    ? (row.id===state.activeFloorId?state.objects:((state.floors||[]).find(f=>f.id===row.id)||{}).objects||[])
+    : state.objects;
+  return (objs||[]).filter(o=>exportScope(o,'draw'));
+}
 /** 整套 PDF 的页序/页码计划：楼层顺序 → 每层「图纸页 + 清单页」，页码全局连续 */
 function pdfPagePlan(){
   const fs=floorSummaries();
@@ -656,11 +668,11 @@ function pdfPagePlan(){
   const out=[];
   if(fs.rows.length<=1){
     out.push({kind:'drawing',floorName:null});
-    for(let i=0;i<listCount(fs.rows[0]?fs.rows[0].count:0);i++) out.push({kind:'list',floorName:null,pageIndex:i});
+    for(let i=0;i<listCount(pdfDrawObjectsFor(fs.rows[0]).length);i++) out.push({kind:'list',floorName:null,pageIndex:i});
   }else{
     for(const row of fs.rows){
       out.push({kind:'drawing',floorId:row.id,floorName:row.name});
-      for(let i=0;i<listCount(row.count);i++) out.push({kind:'list',floorId:row.id,floorName:row.name,pageIndex:i});
+      for(let i=0;i<listCount(pdfDrawObjectsFor(row).length);i++) out.push({kind:'list',floorId:row.id,floorName:row.name,pageIndex:i});
     }
   }
   out.forEach((p,i)=>{ p.pageNo=i+1; p.total=out.length; });
@@ -681,7 +693,7 @@ async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
 }
 async function renderPdfListPages(floorName,pageNos,pageTotal){
   const {W,H,margin,rowH,headH}=PDF_LIST_PAGE;
-  const rows=objectRows(), pages=[];
+  const rows=objectRows(pdfDrawObjectsFor(null)), pages=[];
   const per=pdfListRowsPerPage();
   const chunks=[]; for(let i=0;i<rows.length;i+=per) chunks.push(rows.slice(i,i+per));
   const total=Math.max(1,chunks.length);

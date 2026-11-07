@@ -32,7 +32,8 @@ const EXPORT_FIELD_DEFS=[
   {key:'节点数',table:true,get:c=>c.o.points?.length||0},
   {key:'长度',table:true,get:c=>objectLength(c.o)?fmt(objectLength(c.o)):''},
   {key:'面积',table:true,get:c=>objectArea(c.o)?fmt(objectArea(c.o)):''},
-  {key:'显示',table:true,get:c=>c.o.visible?'是':'否'},
+  /* 有效可见（对象 visible 且图层 visible）：与画布/图纸导出共用 effectiveVisible，口径单一 */
+  {key:'显示',table:true,get:c=>effectiveVisible(c.o)?'是':'否'},
   {key:'锁定',table:true,get:c=>c.o.locked?'是':'否'},
   {key:'备注',table:true,get:c=>c.o.props.note||''},
   {key:'更新时间',table:true,get:c=>c.o.updatedAt},

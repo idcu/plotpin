@@ -140,6 +140,7 @@ code += `\n;globalThis.__api = {
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, buildExportRow, exportShapeSummary, exportParamText, xlsxExportTable,
+  effectiveVisible, isVisible, exportScope, pdfDrawObjectsFor, pdfPagePlan,
   EXPORT_FIELD_DEFS, PDF_COLS, REPORT_LIST_COLS,
   formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
@@ -1507,6 +1508,43 @@ await section("28.3 导出字段表 + 行渲染器单一来源（B-08）：列/�
   eq('盲区GeoJSON-序号从1开始', fc.features[0].properties.index, 1);
   ok('盲区GeoJSON-多边形闭合', fc.features[0].geometry.coordinates[0].length===5);
   eq('盲区GeoJSON-口径版本', fc.coverageSpec.version, 2);
+}
+
+});
+
+/* 28.4 N-05 导出口径统一：全量台账「显示」列=有效可见，图纸类导出只含可见对象 ---- */
+await section("28.4 N-05 导出口径统一：全量台账「显示」列=有效可见，图纸类导出只含可见对象", async () => {
+{
+  api.resetState();
+  api.state.layers.push({id:'layer.n05',name:'隐藏层',visible:false,locked:false});
+  const ho=api.baseObject('point','point.marker',{name:'N05H',layerId:'layer.n05',x:123.45,y:67.89});
+  const vo=api.baseObject('point','point.marker',{name:'N05V',x:5,y:5});
+  api.state.objects.push(ho,vo);
+
+  ok('N05-有效可见-隐藏图层对象不可见', api.effectiveVisible(ho)===false);
+  ok('N05-有效可见-普通对象可见', api.effectiveVisible(vo)===true);
+  ok('N05-旧名 isVisible 与 effectiveVisible 同源', api.isVisible(ho)===api.effectiveVisible(ho));
+  ok('N05-台账口径含隐藏对象', api.exportScope(ho,'table')===true);
+  ok('N05-图纸口径排除隐藏对象', api.exportScope(ho,'draw')===false);
+
+  const all=api.objectRowsAll();
+  const rowH=all.find(r=>r['编号']==='N05H');
+  ok('N05-台账保留全量隐藏对象', !!rowH);
+  eq('N05-台账显示列反映有效可见', rowH&&rowH['显示'], '否');
+  eq('N05-台账可见对象显示是', api.objectRows().find(r=>r['编号']==='N05V')['显示'], '是');
+  ok('N05-CSV 全量含隐藏编号', api.delimitedText(',').includes('N05H'));
+  ok('N05-XLSX 全量含隐藏编号', api.xlsxExportTable().flat().includes('N05H'));
+
+  const svg=api.buildSceneSvg();
+  ok('N05-SVG 排除隐藏对象', !svg.includes('N05H')&&svg.includes('N05V'));
+  const dxf=api.dxfEntitiesForExport();
+  ok('N05-DXF 排除隐藏对象坐标', !dxf.entities.some(e=>e.type==='POINT'&&e.x===123.45));
+  ok('N05-PDF 清单页按有效可见计数', api.pdfPagePlan().filter(p=>p.kind==='list').length===1);
+
+  vo.visible=false;
+  ok('N05-对象自身隐藏时图纸排除', api.exportScope(vo,'draw')===false);
+  eq('N05-对象自身隐藏时台账显示否', api.objectRows().find(r=>r['编号']==='N05V')['显示'], '否');
+  api.resetState();
 }
 
 });

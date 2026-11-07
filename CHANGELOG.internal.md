@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-05 统一导出可见性口径并隔离草稿/校准
+
+- **Commit Hash**：N-05 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/core/render.js`：新增 `effectiveVisible(o)` 作为有效可见（对象 `visible` 且所属图层 `visible`）的唯一判断源，`isVisible` 改为同义委托，既有调用方签名不变。`drawScene` 的导出路径不再无条件绘制 `drawDraft` / `drawCalibration`，改为显式 `opt.includeDraft` / `opt.includeCalibration` 才叠加（默认 false）；交互缓存路径行为不变。
+  - `js/features/io-export.js`：新增 `exportScope(o, mode)` 统一口径——`'table'` 保留全量（台账），`'draw'` 只用有效可见（图纸）。SVG/DXF/二维码标签/图例改用 `exportScope(o,'draw')`；`objectRowsAll()` 显式使用 `'table'`。新增 `pdfDrawObjectsFor(row)`，PDF 图纸页与清单页共用该口径；`pdfPagePlan()` 的清单页数按可见对象数计算，避免“计划页数与实际清单行数不一致”。
+  - `js/features/io-fields.js`：「显示」列由 `o.visible` 改为 `effectiveVisible(c.o)`，表头与字段集不变；隐藏图层中的对象在台账标「否」。
+  - `scripts/selftest.mjs`：新增 28.4 节 15 项断言（有效可见、`exportScope` 两口径、CSV/XLSX 全量、显示列、SVG/DXF 排除隐藏、PDF 清单分页、对象自身隐藏）。
+  - `tests/e2e/export-scope.spec.mjs`：新增 2 条真实 Chromium 用例——①台账全量与显示列、SVG/DXF/PDF 排除隐藏；②设置矩形草稿与两点校准后，PNG dataURL 与 PDF 图纸页 base64 与无瞬态时逐字节一致。
+  - `sw.js`：`VERSION` 9 → 12（期间修正一次 BOM 引入的输入哈希漂移）；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 随之刷新。
+  - 文档：`docs/features.md` §3、`docs/user-guide.md` §11/§12/§18（含 N-03 遗留的 PDF 底图旧告警）、`docs/testing.md`、`docs/modules.md`、`README.md` 数字口径同步。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：① 仅回退 `render.js` 的草稿/校准门控 → 新增 e2e 第 2 条 **失败**（PNG 字节不一致）；② 仅把「显示」列还原为 `o.visible` → 新增 e2e 第 1 条 **失败**（隐藏图层对象被标「是」）。恢复后全绿。
+  - `node scripts/check.mjs --selftest`：**2746 通过 / 0 失败**，110 个分区（较 N-04 +15）；契约 7 项 0 违约；插件 API 23 键 0 泄漏；i18n 46.01%；SW `VERSION=12`（清单 version=12，49 个输入一致）。
+  - `node scripts/e2e.mjs`：**97 tests → 96 passed / 1 skipped（浸泡）/ 0 failed**（2.0m）；`export-scope` 2/2。
+  - `node scripts/build.mjs --check`：**785,939 B（767.5 KB）/ gzip 244,413 B**，SHA256 `a6c11534…`，较 N-04 **+588 B**，余量 **53,741 B**。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9/9；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未对 8 种导出 golden 逐项做字节回归（本轮 e2e 只覆盖 title-block 的 SVG/PNG/PDF 链路与新增口径用例）；非隐藏/非草稿场景的输出路径未改绘制逻辑，理论上不变，但未逐格式重跑 golden。
+  - PDF 清单改为只含可见对象后，真实大型工程（多层 + 大量隐藏对象）的页数/页码连续性未做浏览器端人工核对。
+- **遗留风险**
+  - 台账「显示」列改为有效可见后，CSV 再导入时隐藏图层中的对象会被写成 `visible=false`（层级可见性无法在单列中往返），属口径取舍。
+  - `drawScene` 的非缓存路径若未来新增其他瞬态绘制，必须同样用显式开关，否则会重新被烘进导出产物。
+
 ## 2026-11-08 · N-04 修复场地静默删除与本地清空失效
 
 - **Commit Hash**：`973c83c`（`fix(collab): 场地编辑/清空进入提交与广播，合并按较新 null 获胜`）。
