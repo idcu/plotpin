@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · N-02 封堵插件沙箱逃逸（BC/MC/MP + onmessage/onerror）
 
-- **Commit Hash**：本条提交（`fix(plugin): 封堵沙箱 BroadcastChannel/MessageChannel/MessagePort 与 onmessage/onerror 旁路`）；完整哈希见回填提交与本次汇报。
+- **Commit Hash**：`7db1782`（`fix(plugin): 封堵沙箱 BroadcastChannel/MessageChannel/MessagePort 与 onmessage/onerror 旁路`）。
 - **核心改动**
   - `js/features/plugins.js`：Worker 硬化清单新增 `BroadcastChannel` / `MessageChannel` / `MessagePort` / `onmessage` / `onerror` / `onmessageerror`，仍是「全局自有属性置 `undefined`（不可写不可配置）+ 沿原型链删除」双保险。此前插件可在 Worker 内 `new BroadcastChannel('plotpin-collab-<pid>')` 直接加入协作频道收发消息，或覆写 `onerror` 返回 `true` 吞掉异常、阻止主线程收到 error 事件。主线程 `worker.onmessage` 增加 `event.source` 校验作为 token 之外的第二道闸。
   - `tests/e2e/plugin-sandbox.spec.mjs`：新增 3 条恶意用例（探针断言五者为 `undefined` 且赋值不生效；`plotpin-collab-*` 频道对端收到 0 条；覆写 `onerror` 后异常仍走禁用路径），现有 10 条不回退。
