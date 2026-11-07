@@ -505,6 +505,7 @@ async function importBackgroundFile(f){
   const seq=++bgLoadSeq;
   bgImage=image;
   if(seq===bgLoadSeq) requestRender();
+  refreshCalibStatus();   /* 图片解码完成：三个校准/变换入口从「未就绪」恢复可用 */
   fitView(); pruneBgAssets(); commitChange('底图已导入');
   if(!stored) toast('浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存','warn');
   else if(prepared.note) toast(prepared.note,'warn');
@@ -512,10 +513,7 @@ async function importBackgroundFile(f){
 
 /* -------------------- 文件输入绑定 -------------------- */
 $('bgBtn').onclick=openSitePicker;
-$('calibBtn').onclick=()=>{
-  if(!isImageBackground(state.background)) return toast('当前没有图片底图；矢量场地直接以米为坐标，无需比例尺校准','warn');
-  setTool('calibrate');
-};
+$('calibBtn').onclick=()=>startCalibTool('calibrate');
 $('fileInput').addEventListener('change',e=>{
   const f=e.target.files[0]; e.target.value='';
   if(f) handleImportFile(f);

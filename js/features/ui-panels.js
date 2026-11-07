@@ -37,18 +37,23 @@ document.addEventListener('pointerdown',e=>{
   document.body.classList.remove('sidebar-open');
 },true);
 wrap.addEventListener('pointerdown',()=>{ if(document.body.classList.contains('sidebar-open')&&window.matchMedia('(max-width:860px)').matches) document.body.classList.remove('sidebar-open'); });
-document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.addEventListener('click',()=>{
+  const tool=b.dataset.tool;
+  if(isCalibTool(tool)) startCalibTool(tool); else setTool(tool);
+}));
 /* 顶部下拉在 测距/其他标注 间切换时，同步左侧「测距」「标注」按钮互斥高亮 */
 $('dimensionType').addEventListener('change',()=>{ if(currentTool==='dimension') syncToolButtons('dimension'); });
 $('finishDraftBtn').addEventListener('click',finishDraft);
 $('undoBtn').addEventListener('click',undo);
 $('redoBtn').addEventListener('click',redo);
-/* 仿射校准：仅图片底图可用（矢量场地本就以米绘制，无需校准） */
-$('affineBtn').addEventListener('click',()=>{
-  if(state.background.kind!=='image'){ toast('仿射校准仅适用于图片底图；矢量场地已按米绘制无需校准','warn'); return; }
-  if(!bgImage){ toast('请先导入图片底图','warn'); return; }
-  setTool('affine');
-});
+/* 依赖图片底图的工具统一走状态机：不可用时不切换工具，原因由 #calibStatus 与 toast 同步给出 */
+function startCalibTool(tool){
+  const pre=calibPrecheck(tool);
+  if(!pre.ok){ if(pre.reason) toast(pre.reason,'warn'); refreshCalibStatus(); return false; }
+  setTool(tool);
+  return true;
+}
+$('affineBtn').addEventListener('click',()=>startCalibTool('affine'));
 $('coverageBtn').addEventListener('click',runCoverageAnalysis);
 $('zoomInBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.2));
 $('zoomOutBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1/1.2));
@@ -493,4 +498,5 @@ function refreshUI(){
   if(msLbl) msLbl.textContent=(Number(state.settings.markerScale)||1).toFixed(1)+'×';
   renderProps(); renderList(); renderLayers(); renderTypes(); renderSymbolPanel(); renderStats(); updateZoomLabel();
   updateHistoryButtons();
+  refreshCalibStatus();
 }

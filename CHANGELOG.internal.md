@@ -2,6 +2,37 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 易用性：校准/底图工具前置状态机（D-02）
+
+- **Commit Hash**：本条提交（`feat(calib): 校准/底图工具前置状态机`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - 新增 `js/core/interaction.js` 的 `calibPrecheck(tool, ctx?)`：三入口（比例尺 / 仿射 / 图片变换）的唯一判断源，按 `background.kind`、`bgImage` 解码态、场地存在性生成 `{ok, reason, step}`；状态为 S0a 空槽无场地 / S0b 仅矢量场地 / S1 图片未就绪 / S2 图片就绪。`ctx` 仅自测注入，UI 调用签名不变。
+  - 新增 `isCalibTool()` / `CALIB_TOOL_KEYS` 与 `refreshCalibStatus()`：统一同步 `#calibBtn`、`#affineBtn`、`[data-tool="image-transform"]` 的 `disabled`、`aria-describedby="calibStatus"`、原因与步骤文案。
+  - 新增 `js/features/ui-panels.js` 的 `startCalibTool(tool)`：失败 toast 原因且不切换工具；顶栏、左侧工具栏、画布 pointerdown 三处统一走该判断，删除原先三套分散条件与文案。
+  - `props.js` 图片属性面板的「比例尺校准 / 仿射校准」按 `calibPrecheck` 写入 `disabled` 与原因；`io-import.js` 图片解码完成、`persistence.js` 工程载入/切层解码完成时刷新状态，修复老工程「已导入却提示未导入」的窗口期。
+  - 可用时顶栏 `#calibStatus` 显示步骤：比例尺 `1/2 → 2/2 → 可应用`，仿射 `1/2 → 2/2 → ≥3`；不可用时显示原因（仅场地为「场地按米绘制，无需校准」，图片变换为「仅适用于图片底图」）。
+  - 场地优先约束不变：`applyWorldTransform` 默认 `site:false`，比例尺/仿射提交仍不迁移场地；未新增任何 `{site:true}` 分支，无场地时对象+底图迁移保持原行为。
+  - 新增 27 条英文短语/模板（三入口原因、步骤指示）；新增 `tests/e2e/calibration-precheck.spec.mjs` 3 条；`docs/features.md`、`docs/testing.md`、`docs/modules.md`、`docs/engineering.md`、`docs/manual-acceptance.md`、`README.md` 同步。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2635 通过 / 0 失败**（41 个脚本；基线 2602，D-02 新增 33 条状态矩阵断言） | 0 |
+| `node scripts/e2e.mjs` | **71 passed / 1 skipped / 72 total**（基线 68/1/69，新增 3 条 calibration-precheck；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **744,752 B（727.3 KB）**，gzip **229,888 B（224.5 KB）**；基线 740,560 B → 增量 **+4,192 B（+0.57%）**，gzip **+1,397 B**；上限 839,680 B，余量 **94,928 B**；SHA256 `153c00859dd72dad3bdb10bbba232d5d48cba2069d85bd2960fb413e834a2912`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| 8 种导出 golden（基线产物 vs 新产物，同一 demo 状态与固定时钟） | **8/8 字节一致**：JSON 35,847 B / CSV 990 / TSV 990 / XLSX 15,402 / DXF 1,119 / SVG 5,142 / PDF 285,720 / PNG 957,742；SHA256 依次 `3f7c8f2e…`、`f35191b3…`、`09848974…`、`b48afb3a…`、`c3bd3fb0…`、`10d49d2c…`、`7baafc1d…`、`c03c9094…` | 0 |
+
+- **新增/调整公共抽象**
+  - 新增 `calibPrecheck(tool, ctx?)`、`isCalibTool(tool)`、`CALIB_TOOL_KEYS`、`refreshCalibStatus()`（`js/core/interaction.js`）与 `startCalibTool(tool)`（`js/features/ui-panels.js`）；均为新增，未改动既有签名，调用方仅在 `ui-panels.js`、`io-import.js`、`props.js`、`persistence.js` 内部接入。
+  - 未新增运行时依赖；`imageWorldFrame / siteDomainOf / siteBounds / siteHandleList / siteAreaPerimeter / applyWorldTransform` 签名与行为不变。
+- **遗留 / 风险**
+  - 无图片时三个入口由「可点击后 toast」改为「禁用 + 常驻原因」，用户必须先导入底图；旧习惯「先点校准再导入」被取消，按验收要求不提供旁路。
+  - 工程载入后的图片解码窗口期统一显示「尚未就绪」；若资产缺失导致长期无法解码，入口保持禁用并提示重新导入，需后续在 D-07 加载审计中区分「缺失资产」与「解码中」。
+  - golden 对比使用临时脚本与基线产物副本（均在系统临时目录，未入仓库）；8 格式本次全部一致，但该脚本未固化为 CI 夹具。
+  - 未 push；未读取/修改 `camera-*`。
+
 ## 2026-11-07 · 易用性：首次启动引导与示例工程（D-01）
 
 - **Commit Hash**：本条提交（`feat(ux): 首次启动引导与示例工程`）；完整哈希见汇报与 `git log HEAD`。

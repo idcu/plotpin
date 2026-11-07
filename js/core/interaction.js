@@ -222,8 +222,8 @@ canvas.addEventListener('pointerdown',e=>{
   const wp=resolveWorldPoint(e);
   /* 逐点录入中（测距/折线/标注/多边形场地）右键=取消当前草稿（百度地图式），已完成的测量不受影响；无草稿时右键仍平移 */
   if(e.button===2 && (draft?.points?.length || (currentTool==='affine'&&affinePairs.length) || (currentTool==='calibrate'&&calibPoints.length))){
-    if(currentTool==='affine'&&affinePairs.length){ affinePairs=[]; calibSelection=null; calibUndoStack=[]; e.preventDefault(); requestRender(); toast('已取消仿射校准'); return; }
-    if(currentTool==='calibrate'&&calibPoints.length){ calibPoints=[]; calibSelection=null; calibUndoStack=[]; e.preventDefault(); requestRender(); toast('已取消比例尺校准'); return; }
+    if(currentTool==='affine'&&affinePairs.length){ affinePairs=[]; calibSelection=null; calibUndoStack=[]; e.preventDefault(); refreshCalibStatus(); requestRender(); toast('已取消仿射校准'); return; }
+    if(currentTool==='calibrate'&&calibPoints.length){ calibPoints=[]; calibSelection=null; calibUndoStack=[]; e.preventDefault(); refreshCalibStatus(); requestRender(); toast('已取消比例尺校准'); return; }
     const wasRuler=draft.kind==='dimension'&&draft.subtype==='ruler';
     draft=null; e.preventDefault(); requestRender();
     toast(wasRuler?'已取消测距':'已取消当前绘制');
@@ -233,20 +233,23 @@ canvas.addEventListener('pointerdown',e=>{
     drag={type:'pan',start:sp,pan:deepClone(state.viewport)}; document.body.classList.add('panning'); e.preventDefault(); return;
   }
   if(currentTool==='calibrate'){
-    if(!isImageBackground(state.background)){ toast('比例尺校准需要先载入图片底图','warn'); return; }
+    const pre=calibPrecheck('calibrate');
+    if(!pre.ok){ toast(pre.reason,'warn'); return; }
     const hit=calibHitAt(sp);
     if(hit){ calibPushUndo(); calibSelection=hit; drag={type:'calibPoint',hit,moved:false}; requestRender(); return; }
     if(calibPoints.length>=2){ toast('已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点','warn'); return; }
-    calibPushUndo(); calibPoints.push(pointerWorld(e)); calibSelection=null; requestRender(); return;
+    calibPushUndo(); calibPoints.push(pointerWorld(e)); calibSelection=null; refreshCalibStatus(); requestRender(); return;
   }
   if(currentTool==='affine'){
-    if(!isImageBackground(state.background)){ toast('仿射校准需要先载入图片底图','warn'); return; }
+    const pre=calibPrecheck('affine');
+    if(!pre.ok){ toast(pre.reason,'warn'); return; }
     const hit=calibHitAt(sp);
     if(hit){ calibPushUndo(); calibSelection=hit; drag={type:'calibPoint',hit,moved:false}; requestRender(); return; }
     pickAffinePoint(e); return;
   }
   if(currentTool==='image-transform'){
-    if(!isImageBackground(state.background)){ toast('图片变换需要先载入图片底图','warn'); return; }
+    const pre=calibPrecheck('image-transform');
+    if(!pre.ok){ toast(pre.reason,'warn'); return; }
     const h=imageHandleAt(sp);
     if(h) drag={type:'imageHandle',mode:h.mode,start:wp,moved:false,snap:null,
       origin:imageTransformOf(state.background).slice(),originCorners:imageCornerWorld(state.background)};
@@ -849,7 +852,81 @@ function calibPushUndo(){
 function calibUndo(){
   const s=calibUndoStack.pop();
   if(!s) return false;
-  calibPoints=s.calib; affinePairs=s.affine; calibSelection=null; requestRender(); return true;
+  calibPoints=s.calib; affinePairs=s.affine; calibSelection=null; refreshCalibStatus(); requestRender(); return true;
+}
+/* -------------------- 校准前置状态机 -------------------- */
+/* 三个依赖图片底图的入口共用一份判断：UI 禁用/原因/步骤与自测、e2e 都读这里，避免再次出现
+   「比例尺只看 kind、仿射还看 bgImage、图片变换直到画布才拦」的三套口径。 */
+const CALIB_TOOL_KEYS=['calibrate','affine','image-transform'];
+/** 工具是否需要图片底图；用于通用工具栏绑定与自测过滤 */
+function isCalibTool(tool){ return CALIB_TOOL_KEYS.includes(tool); }
+/**
+ * 校准前置状态机（唯一判断源）。状态：
+ *  S0a 无图片槽无场地 / S0b 仅矢量场地 / S1 图片槽存在但未解码 / S2 图片就绪。
+ * 场地优先：矢量场地以米绘制，任何情况都不提供「以影像为基准迁移场地」的入口。
+ * @param {'calibrate'|'affine'|'image-transform'} tool
+ * @param {{background?:Object,site?:Object,imageReady?:boolean,calibPoints?:Array,affinePairs?:Array}} [ctx]
+ *        仅自测注入用；缺省读取真实 state/bgImage/草稿。
+ * @returns {{ok:boolean,reason:string,step:(null|{n:number,total?:number,min?:number,full?:number,label:string})}}
+ */
+function calibPrecheck(tool,ctx){
+  const c=ctx||{};
+  const bg=c.background!==undefined?c.background:state.background;
+  const site=c.site!==undefined?c.site:state.site;
+  const imageReady=c.imageReady!==undefined?!!c.imageReady:!!bgImage;
+  const calibratePts=c.calibPoints||calibPoints;
+  const affinePts=c.affinePairs||affinePairs;
+  const hasImage=isImageBackground(bg), hasSite=!!site;
+  if(!isCalibTool(tool)) return {ok:false,reason:L('未知的校准工具'),step:null};
+  if(!hasImage){
+    if(tool==='image-transform')
+      return {ok:false,reason:hasSite?L('图片变换仅适用于图片底图'):L('请先导入图片底图'),step:null};
+    return {ok:false,reason:hasSite?L('场地按米绘制，无需校准'):L('请先导入图片底图'),step:null};
+  }
+  if(!imageReady) return {ok:false,reason:L('图片底图尚未就绪，请稍后重试或重新导入'),step:null};
+  if(tool==='calibrate'){
+    const n=Math.min(2,Math.max(0,(calibratePts||[]).length));
+    const label=n>=2
+      ?L('比例尺 2/2：拖动调整控制点，Enter/✓ 应用')
+      :L('比例尺 {n}/2：点击第 {k} 个已知点',{n:n+1,k:n+1});
+    return {ok:true,reason:'',step:{n,total:2,label}};
+  }
+  if(tool==='affine'){
+    const n=Math.max(0,(affinePts||[]).length);
+    const label=n>=3
+      ?L('仿射 ≥3：已记录 {n} 点，Enter/✓ 求解（≥3 点为完整仿射）',{n})
+      :n===2
+        ?L('仿射 2/2：再记录 1 点即完整仿射；当前 2 点可按相似求解')
+        :L('仿射 {n}/2：点击第 {k} 个已知点并输入实地坐标',{n:n+1,k:n+1});
+    return {ok:true,reason:'',step:{n,min:2,full:3,label}};
+  }
+  return {ok:true,reason:'',step:null};
+}
+/** 顶栏/工具栏按钮与步骤 chip 的唯一刷新入口（载入、导入、切层、撤销、点增删后调用） */
+function refreshCalibStatus(){
+  const status=$('calibStatus');
+  const xformBtn=(typeof document!=='undefined'&&typeof document.querySelector==='function')
+    ?document.querySelector('.tool-btn[data-tool="image-transform"]'):null;
+  const items=[[$('calibBtn'),'calibrate'],[$('affineBtn'),'affine'],
+    [xformBtn,'image-transform']];
+  const reasons=[];
+  items.forEach(([btn,tool])=>{
+    if(!btn) return;
+    const p=calibPrecheck(tool);
+    if(!btn.dataset.baseTitle) btn.dataset.baseTitle=btn.title||'';
+    btn.disabled=!p.ok;
+    btn.setAttribute('aria-describedby','calibStatus');
+    btn.title=p.ok?(btn.dataset.baseTitle||''):p.reason;
+    if(!p.ok&&p.reason&&!reasons.includes(p.reason)) reasons.push(p.reason);
+  });
+  if(!status) return;
+  let text=reasons.join('；');
+  if(!text&&isCalibTool(currentTool)){
+    const p=calibPrecheck(currentTool);
+    if(p.ok&&p.step) text=p.step.label;
+  }
+  status.textContent=text;
+  status.hidden=!text;
 }
 /** 命中校准控制点（屏幕 9px，与对象/场地手柄同阈值）：比例尺点；仿射的红点(源)与绿点(目标) */
 function calibHitAt(sp){
@@ -908,6 +985,7 @@ async function pickAffinePoint(e){
   const m=String(v).split(/[,，\s]+/).map(Number);
   if(!Number.isFinite(m[0])||!Number.isFinite(m[1])){ toast(L('坐标无效，请输入 X,Y'),'error'); return; }
   affinePairs.push({u:px[0],v:px[1],x:m[0],y:m[1]});
+  refreshCalibStatus();
   requestRender();
   toast(affinePairs.length>=2?L('已记录 {n} 个点，Enter/✓ 求解',{n:affinePairs.length}):L('已记录 1 个点，继续点击下一已知点'));
 }
@@ -1044,7 +1122,7 @@ window.addEventListener('keydown',e=>{
     calibPushUndo();
     if(calibSelection.kind==='calibrate') calibPoints.splice(calibSelection.index,1);
     else affinePairs.splice(calibSelection.index,1);
-    calibSelection=null; requestRender(); return;
+    calibSelection=null; refreshCalibStatus(); requestRender(); return;
   }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }

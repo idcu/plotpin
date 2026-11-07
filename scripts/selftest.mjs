@@ -194,6 +194,7 @@ code += `\n;globalThis.__api = {
   get affinePairs(){ return affinePairs; }, set affinePairs(v){ affinePairs=v; },
   get calibSelection(){ return calibSelection; }, set calibSelection(v){ calibSelection=v; },
   get calibUndoStack(){ return calibUndoStack; }, set calibUndoStack(v){ calibUndoStack=v; },
+  calibPrecheck, isCalibTool, CALIB_TOOL_KEYS,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
@@ -2304,6 +2305,50 @@ asyncSuites.push((async()=>{
     api.migrateObjectsByAffine([a2],[2,0,-5,0,2,-5]);
     approx('B-12-旧签名等价于统一仿射', a2.x, 7, 1e-9);
   }
+}
+
+/* D-02：校准前置状态机（S0a 空槽无场地 / S0b 仅场地 / S1 图片未就绪 / S2 图片就绪） */
+{
+  const emptyBg={kind:'empty'};
+  const imageBg={kind:'image',width:100,height:80,metersPerPixel:0.1};
+  const site={kind:'rect',shape:{type:'rect',w:100,h:70}};
+  /* S0a：无图无场地 → 三个入口禁用，比例尺/仿射提示导入 */
+  eq('校准前置-S0a 比例尺禁用', api.calibPrecheck('calibrate',{background:emptyBg,site:null,imageReady:false,calibPoints:[]}).ok, false);
+  eq('校准前置-S0a 仿射禁用', api.calibPrecheck('affine',{background:emptyBg,site:null,imageReady:false,affinePairs:[]}).ok, false);
+  eq('校准前置-S0a 图片变换禁用', api.calibPrecheck('image-transform',{background:emptyBg,site:null,imageReady:false}).ok, false);
+  ok('校准前置-S0a 比例尺原因提示导入', api.calibPrecheck('calibrate',{background:emptyBg,site:null,imageReady:false}).reason.includes('导入'));
+  eq('校准前置-S0a 步骤为空', api.calibPrecheck('calibrate',{background:emptyBg,site:null,imageReady:false}).step, null);
+  /* S0b：仅矢量场地 → 提示场地按米绘制，无需校准；图片变换文案单独 */
+  eq('校准前置-S0b 比例尺原因', api.calibPrecheck('calibrate',{background:emptyBg,site,imageReady:false}).reason, '场地按米绘制，无需校准');
+  eq('校准前置-S0b 仿射原因', api.calibPrecheck('affine',{background:emptyBg,site,imageReady:false}).reason, '场地按米绘制，无需校准');
+  eq('校准前置-S0b 图片变换原因', api.calibPrecheck('image-transform',{background:emptyBg,site,imageReady:false}).reason, '图片变换仅适用于图片底图');
+  /* S1：图片槽存在但尚未解码 → 统一禁用且原因可区分 */
+  eq('校准前置-S1 比例尺禁用', api.calibPrecheck('calibrate',{background:imageBg,site,imageReady:false}).ok, false);
+  ok('校准前置-S1 原因提示未就绪', api.calibPrecheck('calibrate',{background:imageBg,site,imageReady:false}).reason.includes('尚未就绪'));
+  eq('校准前置-S1 仿射禁用', api.calibPrecheck('affine',{background:imageBg,imageReady:false}).ok, false);
+  eq('校准前置-S1 图片变换禁用', api.calibPrecheck('image-transform',{background:imageBg,imageReady:false}).ok, false);
+  /* S2：图片就绪 → 比例尺 1/2 → 2/2，仿射 1/2 → ≥3 */
+  eq('校准前置-S2 比例尺可用', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[]}).ok, true);
+  eq('校准前置-S2 比例尺 0 点步骤 n', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[]}).step.n, 0);
+  eq('校准前置-S2 比例尺 0 点总数', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[]}).step.total, 2);
+  ok('校准前置-S2 比例尺 0 点文案 1/2', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[]}).step.label.includes('比例尺 1/2'));
+  eq('校准前置-S2 比例尺 1 点步骤 n', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[[0,0]]}).step.n, 1);
+  ok('校准前置-S2 比例尺 1 点文案 2/2', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[[0,0]]}).step.label.includes('比例尺 2/2'));
+  eq('校准前置-S2 比例尺 2 点步骤 n', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[[0,0],[1,0]]}).step.n, 2);
+  ok('校准前置-S2 比例尺 2 点提示应用', api.calibPrecheck('calibrate',{background:imageBg,imageReady:true,calibPoints:[[0,0],[1,0]]}).step.label.includes('应用'));
+  eq('校准前置-S2 仿射可用', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[]}).ok, true);
+  eq('校准前置-S2 仿射 0 点步骤 n', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[]}).step.n, 0);
+  ok('校准前置-S2 仿射 0 点文案 1/2', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[]}).step.label.includes('仿射 1/2'));
+  ok('校准前置-S2 仿射 1 点文案 2/2', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[{}]}).step.label.includes('仿射 2/2'));
+  eq('校准前置-S2 仿射 1 点步骤 n', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[{}]}).step.n, 1);
+  ok('校准前置-S2 仿射 2 点提示完整仿射', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[{},{}]}).step.label.includes('完整仿射'));
+  eq('校准前置-S2 仿射 3 点步骤 n', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[{}, {}, {}]}).step.n, 3);
+  ok('校准前置-S2 仿射 3 点文案 ≥3', api.calibPrecheck('affine',{background:imageBg,imageReady:true,affinePairs:[{}, {}, {}]}).step.label.includes('≥3'));
+  eq('校准前置-S2 图片变换可用且无步骤', api.calibPrecheck('image-transform',{background:imageBg,imageReady:true}).step, null);
+  eq('校准前置-S2 图片变换可用', api.calibPrecheck('image-transform',{background:imageBg,imageReady:true}).ok, true);
+  eq('校准前置-未知工具拒绝', api.calibPrecheck('other',{}).ok, false);
+  eq('校准前置-工具清单', api.CALIB_TOOL_KEYS, ['calibrate','affine','image-transform']);
+  ok('校准前置-isCalibTool', api.isCalibTool('affine')&&!api.isCalibTool('select'));
 }
 
 /* 40. 矢量场地标注：边界折点 / 几何中心 / 面积周长（三开关默认值与旧档迁移） -------- */

@@ -45,8 +45,9 @@
   </div>
   <div class="tb-group">
     <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制矢量场地" data-i18n="baseSite">底图/场地</button>
-    <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素" data-i18n="scaleBtn">比例尺</button>
-    <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）" data-i18n="affineBtn">仿射校准</button>
+    <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素" aria-describedby="calibStatus" data-i18n="scaleBtn">比例尺</button>
+    <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）" aria-describedby="calibStatus" data-i18n="affineBtn">仿射校准</button>
+    <span id="calibStatus" class="hint-text" role="status" aria-live="polite" hidden></span>
     <button id="coverageBtn" title="统计摄像头/球机等点设备的视场对区域与闭合折线的覆盖率，并高亮盲区" data-i18n="coverageBtn">覆盖率分析</button>
     <button id="parkingBtn" title="按当前场地范围自动排布双面停车位与通道，并检查通道净宽" data-i18n="parkingBtn">停车规划</button>
     <button id="collabBtn" title="本机多标签页或跨设备 WebRTC 实时协作，无需服务器" data-i18n="collabBtn">协作</button>
@@ -79,7 +80,7 @@
     <button class="tool-btn" data-tool="ruler" title="测距：沿路径逐点单击，双击结束（右键/Esc 取消）；实时显示每段长度与累计总长" aria-pressed="false"><span class="ico">📏</span><span data-i18n="ruler">测距</span></button>
     <button class="tool-btn" data-tool="dimension" aria-pressed="false"><span class="ico">⌁</span><span data-i18n="dimension">标注</span></button>
     <button class="tool-btn" data-tool="site-node" title="场地节点：拖拽画布上的控制点调整矢量场地形状，或在属性面板精确输入坐标/参数" aria-pressed="false"><span class="ico">⊗</span><span data-i18n="siteNode">场地节点</span></button>
-    <button class="tool-btn" data-tool="image-transform" title="图片变换：拖拽手柄平移/旋转/等比缩放/切变图片（只改图片，不移动任何标注对象；图片角点可吸附场地边角）" aria-pressed="false"><span class="ico">🖼</span><span data-i18n="imageXform">图片变换</span></button>
+    <button class="tool-btn" data-tool="image-transform" title="图片变换：拖拽手柄平移/旋转/等比缩放/切变图片（只改图片，不移动任何标注对象；图片角点可吸附场地边角）" aria-describedby="calibStatus" aria-pressed="false"><span class="ico">🖼</span><span data-i18n="imageXform">图片变换</span></button>
     <button class="tool-btn" data-tool="guide" title="参考线：两次点击定义无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部" aria-pressed="false"><span class="ico">╱</span><span data-i18n="guide">参考线</span></button>
     <div class="rail-sep"></div>
     <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注" data-i18n="finish">完成</button>

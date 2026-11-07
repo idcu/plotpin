@@ -1061,7 +1061,7 @@ async function afterStateLoaded(fit=true){
     if(!url) return;
     bgDataUrl=url;
     const img=await loadImageSrc(url);
-    if(seq===bgLoadSeq){ bgImage=img; requestRender(); }
+    if(seq===bgLoadSeq){ bgImage=img; refreshCalibStatus(); requestRender(); }
   }catch(e){
     if(seq===bgLoadSeq) toast('底图读取失败，请重新导入底图','warn');
   }

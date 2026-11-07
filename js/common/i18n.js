@@ -530,7 +530,12 @@
     '当前：{desc}': 'Current: {desc}',
     '图片底图：{file}；{site}': 'Image base: {file}; {site}',
     ' / {n} 页（独立原点）': ' / {n} pages (independent origins)',
-    '底图 {w}×{h}': 'Base image {w}×{h}'
+    '底图 {w}×{h}': 'Base image {w}×{h}',
+    '比例尺 {n}/2：点击第 {k} 个已知点': 'Scale {n}/2: click known point {k}',
+    '比例尺 2/2：拖动调整控制点，Enter/✓ 应用': 'Scale 2/2: drag to adjust control points, then Enter/✓ to apply',
+    '仿射 ≥3：已记录 {n} 点，Enter/✓ 求解（≥3 点为完整仿射）': 'Affine ≥3: {n} points recorded, Enter/✓ to solve (≥3 points for full affine)',
+    '仿射 2/2：再记录 1 点即完整仿射；当前 2 点可按相似求解': 'Affine 2/2: record 1 more point for full affine; 2 points can be solved as similarity',
+    '仿射 {n}/2：点击第 {k} 个已知点并输入实地坐标': 'Affine {n}/2: click known point {k} and enter its ground coordinates'
   };
   /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
   function fillTemplate(text, params) {
@@ -540,6 +545,11 @@
 
   /** 动态短语补充（整句精确匹配即可翻译的常用提示） */
   const MORE = {
+    '请先导入图片底图':'Import a base image first',
+    '场地按米绘制，无需校准':'The site is drawn in metres; calibration is not required',
+    '图片变换仅适用于图片底图':'Image transform only applies to image base maps',
+    '图片底图尚未就绪，请稍后重试或重新导入':'Base image is not ready yet; wait or import it again',
+    '未知的校准工具':'Unknown calibration tool',
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '已取消仿射校准':'Affine calibration cancelled',
     '已取消测距':'Measure cancelled', '已取消当前绘制':'Drawing cancelled',
     '已记录参考线起点，再点一次确定方向':'Guide start recorded; click again to set direction',

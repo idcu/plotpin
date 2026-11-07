@@ -194,6 +194,10 @@ function imagePropsHTML(bg, heading){
   const d=siteDomainOf(bg);
   const cal=L(bg.calibrated?'已校准':'未校准');
   const rot=L(bg.transform?'已校正倾斜':'轴对齐');
+  /* 校准入口与顶栏共用 calibPrecheck：图片未解码时先禁用，原因通过 aria-describedby 指向 #calibStatus */
+  const calibPre=calibPrecheck('calibrate',{background:bg});
+  const affPre=calibPrecheck('affine',{background:bg});
+  const dis=(pre)=>pre.ok?'':'disabled aria-describedby="calibStatus"';
   return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L('图片底图'))}</span></h3>
     <div class="form-grid">
       <label>${esc(L('名称'))}</label><div>${esc(bg.fileName||L('未命名'))}</div>
@@ -204,8 +208,8 @@ function imagePropsHTML(bg, heading){
     </div>
     <div class="form-grid">
       <button class="primary" id="siteOpenBtn" title="${esc(L('上传图片底图，或改画矢量场地'))}">${esc(L('底图/场地…'))}</button>
-      <button id="siteCalibBtn" title="${esc(L('仅图片底图需要：指定两点实际距离校准米/像素'))}">${esc(L('比例尺校准'))}</button>
-      <button id="siteAffineBtn" title="${esc(L('在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放'))}">${esc(L('仿射校准'))}</button>
+      <button id="siteCalibBtn" ${dis(calibPre)} title="${esc(calibPre.ok?L('仅图片底图需要：指定两点实际距离校准米/像素'):calibPre.reason)}">${esc(L('比例尺校准'))}</button>
+      <button id="siteAffineBtn" ${dis(affPre)} title="${esc(affPre.ok?L('在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放'):affPre.reason)}">${esc(L('仿射校准'))}</button>
     </div>
     <div class="hint-text">${esc(L('图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。'))}</div>
   </div>`;
