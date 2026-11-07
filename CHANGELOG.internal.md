@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · N-11 JSON 导入事务顺序与资产回收
 
-- **Commit Hash**：N-11 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`627471a`（N-11 JSON 导入事务顺序与资产回收）。
 - **核心改动**
   - `js/features/io-import.js`：`importJsonFile` 的提交顺序由「替换 state → `pruneBgAssets()` → `afterStateLoaded()`」改为「替换 state → `afterStateLoaded()` → `pruneBgAssets()`」。此前若资产转换阶段抛错，catch 只还原 state/history，但旧工程资产已被按新 state 的可达集删除，回滚后旧 `assetId` 指向已删资产。
   - 失败路径保持零副作用：`assetPrune` 未被调用；state/history/选中集/草稿完整还原；错误 toast 不变。
@@ -27,7 +27,7 @@
 
 ## 2026-11-08 · N-10 导出层转义与结构注入加固
 
-- **Commit Hash**：N-10 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`ad8f552`（N-10 导出层转义与结构注入加固）。
 - **核心改动**
   - `js/features/io-export.js`：新增 `normalizeExportColor(v, fb)` 白名单（`#hex` / `rgb()/rgba()` / 纯字母 CSS 关键字），拒绝含引号、空白、分号、等号的取值并回退默认色；SVG 对象 `fill/stroke`、文字 `fill`、图例色块统一走该函数。此前 `o.style.color` 直接拼进属性，可经非沙箱插件路径逃逸属性。
   - `js/features/io-export.js`：新增 `dxfSanitizeName(name)`，将 CR/LF/制表等控制字符折叠为空格，并按 vendor 的保留字符集替换为 `_`、截断 60 字符、空名回退 `LAYER`；`dxfEntitiesForExport` 预生成 `nameMap`（`SITE` 保留，清洗后重名追加 `_2`），图层表与实体 `layer` 共用同一映射，避免组码被换行截断。
@@ -50,7 +50,7 @@
 
 ## 2026-11-08 · N-09 修正 PDF 导入 CTM
 
-- **Commit Hash**：N-09 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`e0659fa`（N-09 修正 PDF 导入 CTM）。
 - **核心改动**
   - `js/common/pdf-read.js`：贝塞尔 `c/v/y` 的三个控制点先经 `tx()` 变换到设备空间，再与已变换的 `cur` 一起插值，采样点不再二次变换；`cur` 直接取变换后的终点。此前 `cur` 是设备坐标、控制点是用户坐标，混算后再整体 `tx`，含 `/cm` 的曲线被放大两次。
   - `js/common/pdf-read.js`：`interpretContent` 在主循环记录每个 `BT` 时刻的 CTM（`textCTMs`，与 `collectTJ` 的块序一一对应）；`collectTJ(content, ctms)` 把文本原点 `Tm[4]+dx, Tm[5]+dy` 再乘 CTM 后输出。此前只取 `Tm/Td`，`/cm` 文本不随图面缩放。
@@ -73,7 +73,7 @@
 
 ## 2026-11-08 · N-08 楼层名唯一化与跨楼层引用检查
 
-- **Commit Hash**：N-08 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`81c2039`（N-08 楼层名唯一化与跨楼层引用检查）。
 - **核心改动**
   - `js/core/persistence.js`：新增公共助手 `normalizeFloorName(name)`（去首尾空白 + 截断 40）、`floorNameTaken(name, exceptId)`（精确比较，重命名自身豁免）、`floorRefs(pred)`（`syncActiveFloor()` 后统计全部楼层引用，返回 `[{id,name,count}]`）。`addFloor` 先去重再 `pushHistory()`，重名返回 `null` 且不污染撤销栈；`renameFloor` 重名返回 `false` 且不改名。`buildProject` 清洗楼层时检测重名，只 `console.warn('[sanitize] 楼层重名 …')`，保留原名不阻断加载。
   - `js/features/io.js`：楼层新增/重命名入口在数据层拒绝时 toast「楼层名称「{name}」已存在」；重命名输入与原值相同时不误报。
@@ -98,7 +98,7 @@
 
 ## 2026-11-08 · N-07 导入对象唯一性
 
-- **Commit Hash**：N-07 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`a24e0c7`（N-07 导入对象唯一性）。
 - **核心改动**
   - `js/core/persistence.js`：`sanitizeObjects` 新增跨楼层共享的 `seenIds` / `seenNames` 与审计 `report`。重复 id（含 `safeId` 把 `a:b`、`a?b` 归并成 `a_b` 的冲突）追加稳定后缀 `_2`、`_3`；重名对象走 `nextObjectId()` 编号作用域重新编号；唯一性校验放在对象通过合法性检查之后，被丢弃的非法对象不占用标识。`buildProject` 把同一份待读工程的对象与各楼层对象共享这两个集合，并新增 `sanitizeReport()` 读取最近一次修正计数（未修正时为 0）。
   - `js/core/persistence.js`：修正 `buildDemoProject` 连续 `baseObject` 时编号重复的问题——示范对象改在 `withObjectNameScope` 内创建，避免每次启动都触发 5 次重名修正并刷 `console.warn`。
@@ -120,7 +120,7 @@
 
 ## 2026-11-08 · N-06 统一对象变更时间戳
 
-- **Commit Hash**：N-06 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`fb2056d`（N-06 统一对象变更时间戳）。
 - **核心改动**
   - `js/core/persistence.js`：新增 `stampObjects(ids)` 单一打点助手（支持数组/Set/Map；不存在 id 忽略；同一毫秒内按 +1ms 单调递增，保证后一次编辑不被 LWW 判旧）。`commitChange(message, ids)` / `commitObjectEdit(ids)` 新增可选 ids，只对实际变化对象打点；无 id 或空列表不遍历对象，保持幂等。
   - `js/core/interaction.js`：新增 `dragChangedIds(d)` 作为拖拽变更对象清单源，`dragChanged` 复用它；move/node/rotate/rect/shapeHandle 在 pointerup/cancel 时把变化 id 传给 `commitChange`。方向键平移、复制、双击插节点同样传入变化 id。
@@ -145,7 +145,7 @@
 
 ## 2026-11-08 · N-05 统一导出可见性口径并隔离草稿/校准
 
-- **Commit Hash**：N-05 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **Commit Hash**：`872f10d`（N-05 统一导出可见性口径）。
 - **核心改动**
   - `js/core/render.js`：新增 `effectiveVisible(o)` 作为有效可见（对象 `visible` 且所属图层 `visible`）的唯一判断源，`isVisible` 改为同义委托，既有调用方签名不变。`drawScene` 的导出路径不再无条件绘制 `drawDraft` / `drawCalibration`，改为显式 `opt.includeDraft` / `opt.includeCalibration` 才叠加（默认 false）；交互缓存路径行为不变。
   - `js/features/io-export.js`：新增 `exportScope(o, mode)` 统一口径——`'table'` 保留全量（台账），`'draw'` 只用有效可见（图纸）。SVG/DXF/二维码标签/图例改用 `exportScope(o,'draw')`；`objectRowsAll()` 显式使用 `'table'`。新增 `pdfDrawObjectsFor(row)`，PDF 图纸页与清单页共用该口径；`pdfPagePlan()` 的清单页数按可见对象数计算，避免“计划页数与实际清单行数不一致”。
