@@ -92,10 +92,13 @@ npm run ci  =  node scripts/check.mjs --selftest
 | 命令 | 作用 | 在 `npm run ci` | 在 CI 工作流 |
 |---|---|---|---|
 | `npm run lint` / `node scripts/check.mjs` | 不带 `--selftest` 的快速自检 | 否 | 否 |
-| `node scripts/check.mjs --selftest` | 12 步总闸（见 3.2） | 是 | `test` job |
+| `node scripts/check.mjs --selftest` | 12 步总闸（见 3.2），契约与插件 API 面总是真实核对 | 是 | `test` job |
+| `node scripts/check-contracts.mjs` | 契约四条真实核对（`--selftest` 只额外验证判据自己会红） | 经总闸 | `test` job（独立步骤） |
+| `node scripts/check-plugin-api.mjs` | `PlotPin` 顶层键 ↔ `contracts/plugin-api.json` 双向真实比对 | 经总闸 | `test` job（独立步骤） |
+| `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
 | `node scripts/bench.mjs` | Node 桩渲染/覆盖率/规则/符号阈值 | 是 | `test` job |
 | `node scripts/build.mjs --check` | 单文件产物重建与登记比对 | 是 | `test` job |
-| `node scripts/check-gates.mjs` | 7 种人为破坏必须让对应门禁非 0 | 是 | `test` job |
+| `node scripts/check-gates.mjs` | 正面基线 + 9 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
 | `node scripts/e2e.mjs` | Chromium 功能 e2e | 否 | **不跑** |
@@ -111,13 +114,13 @@ npm run ci  =  node scripts/check.mjs --selftest
 | 3 | 入口引用完整 | 总是 | `js/**` 每个脚本都必须被 `index.html` 引用 |
 | 4 | 离线承诺 | 总是 | 入口不得出现 `http(s)://` 远程脚本/样式/资源 |
 | 5 | 断言数一致 | 总是 | `scripts/badge.mjs --check`：README 三处锚点必须存在且等于 selftest 实际断言数 |
-| 6 | 契约 | 总是 | `check-contracts.mjs`；`--selftest` 时额外验证判据自己能红 |
-| 7 | 插件 API 面 | 总是 | `check-plugin-api.mjs`：`PlotPin` 顶层键 ↔ `contracts/plugin-api.json` 双向一致 |
+| 6 | 契约 | 总是 | `check-contracts.mjs` 真实核对四类约定；`--selftest` 额外跑判据自检（证明判据会红），不替代真实核对 |
+| 7 | 插件 API 面 | 总是 | `check-plugin-api.mjs`：`PlotPin` 顶层键 ↔ `contracts/plugin-api.json` 双向一致；`--selftest` 额外验证解析器 |
 | 8 | 删除账本 | 总是 | `check-deletions.mjs`：`docs/deletions.md` 字段齐全、能抓假删除 |
 | 9 | 模块分层 | 总是 | 目录白名单 + 加载顺序按层非递减 |
 | 10 | 逻辑层自测 | 仅 `--selftest` | 执行 `scripts/selftest.mjs`，退出码纳入门禁 |
 | 11 | i18n | 仅 `--selftest` | `i18n-scan.mjs --check`：覆盖率 ≥40%、缺口 ≤10、UI 硬编码 ≤20、模板内 UI 文案 =0 |
-| 12 | SW 缓存版本 | 总是 | `check-sw.mjs`（见 3.5 的边界） |
+| 12 | SW 缓存版本 | 总是 | `check-sw.mjs`：预缓存输入内容指纹必须与提交入库的 `scripts/sw-inputs.sha256` 一致，且清单 `version` 等于 `sw.js` 的 `VERSION` |
 
 注意：第 5 步 `badge.mjs --check` 内部会先跑一次 selftest，第 10 步再跑一次；`--selftest` 下 selftest 实际执行两次，
 这是刻意保留的「README 断言数必须与真实断言数同源」判据，不是重复浪费。
@@ -149,10 +152,12 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 ### 3.4 门禁牙齿（`check-gates.mjs`）
 
-在系统临时目录整仓副本里构造 **7 种**破坏，断言对应门禁非 0 退出；仓库本身一个字节不改：
+在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **9 种**破坏，断言对应门禁非 0 退出
+且输出命中目标错误关键字；仓库本身一个字节不改：
 
 | # | 破坏 | 期望变红的门禁 |
 |---|---|---|
+| 0 | （正面基线）未破坏副本 | `check.mjs --selftest`、`check-sw.mjs`、`check-plugin-api.mjs`、`check-ngm.mjs`、`badge.mjs --check`、`i18n-scan.mjs --check` 必须全 0 |
 | 1 | 渲染入口注入 4 ms 忙等（平均帧仍达标） | `bench.mjs`（P95） |
 | 2 | `dist` 产物追加一行 | `build.mjs --check` |
 | 3 | 删除 `ngm.json` | `check-ngm.mjs` |
@@ -160,21 +165,22 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 5 | selftest 注入必然失败的断言 | `check.mjs --selftest` |
 | 6 | 预缓存输入变更但不递增 `sw.js` 的 `VERSION` | `check-sw.mjs` |
 | 7 | UI 模板内新增硬编码中文 | `i18n-scan.mjs --check` |
+| 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（插件 API 面真实判据） |
+| 9 | `sw.js` 的 `VERSION` 回退 | `check-sw.mjs` |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 
-### 3.5 CI 下不会真正校验 / 依赖 git diff 的部分（必须知情）
+### 3.5 CI 下不会真正校验的部分（必须知情）
 
 | 判据 | 真实边界 |
 |---|---|
-| `check-sw.mjs` | 用 **git HEAD** 作为上一版基线执行 `git diff HEAD`。干净检出（CI 每次 checkout 都是干净树）时 diff 恒为空，**已提交但漏 bump 的版本在 CI 不可能被发现**；它只对本地未提交改动有效。`check-gates` 第 6 场景通过临时 `git init + commit` 构造基线才有牙齿 |
+| `check-sw.mjs` | 基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹 + 清单 `version`），不依赖 git 工作区或 `git diff HEAD`，干净检出同样生效。清单需在 bump `VERSION` 后执行 `node scripts/check-sw.mjs --update` 重新生成；合并冲突时不得手工合并哈希行，取合并后的工作树重新 `--update` |
 | `bench.mjs` | 绝对阈值在共享 CI 机器与开发机上会漂移；机器负载/Node 版本不同结果不可直接比较，只能看是否越过阈值 |
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |
 | `i18n-scan.mjs` | 只按静态字面量扫描，不证明译文语义正确；JSON/HTML 内的动态拼接可能漏扫 |
 | `e2e` / `perf:browser` | **不在任何 CI job 中**；缺 Playwright 或缺 Chromium 时脚本打印 `[SKIP]` 并**退 2**（不是 0），不得把跳过当通过 |
-| `.github/workflows/ci.yml` | `test` job 中 `check-gates` 的步骤名仍写着「5 种人为破坏」，实际脚本为 7 种；`discipline` job 的步骤名仍写着「十问看板」，实际为 **13 问**。均为文案滞后，不影响执行 |
-| `contracts/conventions.json` | `notGated` 仍写着「Service Worker CACHE 版本无门禁」，与现存 `check-sw.mjs` 冲突；以代码为准，契约文本待修正 |
+| `.github/workflows/ci.yml` | `discipline` job 的步骤名仍写着「十问看板」，实际为 **13 问**；为文案滞后，不影响执行 |
 | `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用「本地 ci 绿」代替全部门禁 |
 
 ---

@@ -7,13 +7,14 @@
  * 4) 离线承诺：入口不得引用任何远程脚本/样式/资源
  * 5) 断言数一致：README 徽章/正文/命令注释与 selftest 实际断言数一致
  * 6) 契约判据：contracts/conventions.json 里列出的约定（版本三处一致 / i18n 键对齐 /
- *    文件头唯一 / 枚举同源）由 scripts/check-contracts.mjs 逐条核对
- * 7) 对外 API 面：PlotPin.* 的顶层键 ↔ contracts/plugin-api.json 双向比对
+ *    文件头唯一 / 枚举同源）由 scripts/check-contracts.mjs 逐条核对（总是真实核对）
+ * 7) 对外 API 面：PlotPin.* 的顶层键 ↔ contracts/plugin-api.json 双向比对（总是真实核对）
  * 8) 删除记录：docs/deletions.md 字段齐全、无假删除
  * 9) 模块分层：js/ 下只允许 common/core/features，且加载顺序按层非递减（docs/modules.md）
  * 10) --selftest：显式执行逻辑层自测并把退出码纳入本门禁（CI 必须传）
  * 11) --selftest：i18n 覆盖率门禁（scripts/i18n-scan.mjs --check，D-11）
- * 12) Service Worker 缓存版本：预缓存输入相对 HEAD 变更时 VERSION 必须递增（K1）
+ * 12) Service Worker 缓存版本：预缓存输入指纹与 scripts/sw-inputs.sha256 不一致时 VERSION 必须递增（K1）
+ *     6/7 在 --selftest 下额外跑判据自检（证明判据会红），自检不会替代真实核对。
  *
  * 用法：node scripts/check.mjs [--selftest]
  */
@@ -71,17 +72,31 @@ for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
 const badge = spawnSync(process.execPath, [join(root, 'scripts', 'badge.mjs'), '--check'], { encoding: 'utf8' });
 if (badge.status !== 0) errors.push((badge.stdout || badge.stderr || '断言数校验失败').trim());
 
-/* 6. 契约判据（版本 / i18n / 文件头 / 枚举）；--selftest 同时验证判据自己会红 */
+/* 6. 契约判据（版本 / i18n / 文件头 / 枚举）：真实核对总是执行。
+   --selftest 只额外加跑「判据自己会红」的解析器自检，绝不替代真实核对
+   （旧实现把 --selftest 透传过去，脚本只跑自检就退出，汇总行却写「契约守约」——典型假绿）。 */
 const withSelftest = process.argv.includes('--selftest');
-const contracts = spawnSync(process.execPath, [join(root, 'scripts', 'check-contracts.mjs'), ...(withSelftest ? ['--selftest'] : [])], { encoding: 'utf8' });
+const contracts = spawnSync(process.execPath, [join(root, 'scripts', 'check-contracts.mjs')], { encoding: 'utf8' });
 if (contracts.status !== 0) {
   errors.push('契约判据未通过：\n' + (contracts.stdout || '').trim() + '\n' + (contracts.stderr || '').trim());
+} else {
+  console.log('  [门禁] 契约判据已执行：' + (contracts.stdout || '').trim().split('\n').pop());
+}
+if (withSelftest) {
+  const teeth = spawnSync(process.execPath, [join(root, 'scripts', 'check-contracts.mjs'), '--selftest'], { encoding: 'utf8' });
+  if (teeth.status !== 0) errors.push('契约判据自检未通过：\n' + (teeth.stdout || '').trim() + '\n' + (teeth.stderr || '').trim());
 }
 
-/* 7. 对外 API 承诺面（PlotPin.* 的键 ↔ contracts/plugin-api.json） */
-const api = spawnSync(process.execPath, [join(root, 'scripts', 'check-plugin-api.mjs'), ...(withSelftest ? ['--selftest'] : [])], { encoding: 'utf8' });
+/* 7. 对外 API 承诺面（PlotPin.* 的键 ↔ contracts/plugin-api.json）：同样是真实核对总是执行 */
+const api = spawnSync(process.execPath, [join(root, 'scripts', 'check-plugin-api.mjs')], { encoding: 'utf8' });
 if (api.status !== 0) {
   errors.push('对外 API 面未守约：\n' + (api.stdout || '').trim() + '\n' + (api.stderr || '').trim());
+} else {
+  console.log('  [门禁] 插件 API 面已执行：' + (api.stdout || '').trim().split('\n').pop());
+}
+if (withSelftest) {
+  const teeth = spawnSync(process.execPath, [join(root, 'scripts', 'check-plugin-api.mjs'), '--selftest'], { encoding: 'utf8' });
+  if (teeth.status !== 0) errors.push('插件 API 判据自检未通过：\n' + (teeth.stdout || '').trim() + '\n' + (teeth.stderr || '').trim());
 }
 
 /* 8. 结构性删除的账本（docs/deletions.md：字段齐全、无假删除） */

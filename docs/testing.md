@@ -15,7 +15,7 @@
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **108 个分区 / 2,706 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **33 个 spec / 90 个用例**（默认 89 跑 + 1 条件跳过） | **否** |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 7 种人为破坏 | 是 |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 9 种人为破坏 | 是 |
 
 三层职责不同，**数据不可互换**：
 
@@ -128,10 +128,12 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，构造 7 种「应当失败」的改动并断言对应门禁非 0 退出：
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 9 种「应当失败」的改动，
+断言对应门禁非 0 退出且输出命中目标错误关键字：
 
 | # | 破坏 | 期望变红 |
 |---|---|---|
+| 0 | （正面基线）未破坏副本 | `check.mjs --selftest` / `check-sw.mjs` / `check-plugin-api.mjs` / `check-ngm.mjs` / `badge.mjs --check` / `i18n-scan.mjs --check` 全 0 |
 | 1 | 渲染入口注入 4 ms 忙等（平均帧仍达标） | `bench.mjs` P95 |
 | 2 | 向 `dist` 产物追加一行 | `build.mjs --check` |
 | 3 | 删除 `ngm.json` | `check-ngm.mjs` |
@@ -139,8 +141,12 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 5 | selftest 注入必然失败断言 | `check.mjs --selftest` |
 | 6 | 预缓存输入变更但不递增 `sw.js` VERSION | `check-sw.mjs` |
 | 7 | UI 模板新增硬编码中文 | `i18n-scan.mjs --check` |
+| 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（API 面真实判据） |
+| 9 | `sw.js` VERSION 回退 | `check-sw.mjs` |
 
-场景 6 依赖临时 `git init + commit` 制造基线；这也说明 `check-sw.mjs` **只对未提交的工作区改动有效**，干净检出时恒绿（详见 [engineering.md](engineering.md) §3.5）。
+场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，
+干净检出同样生效；bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单
+（详见 [engineering.md](engineering.md) §3.4 / §3.5）。
 
 ---
 

@@ -27,7 +27,5 @@
       "为什么": "插件注册时校验 scaleShape 的合法集合，渲染则按 POINT_SCALE_SHAPES 解释；两个集合必须相等"
     }
   ],
-  "notGated": [
-    "Service Worker 的 CACHE 版本号：它是**换代纪律**，没有可读的判据能证明「改了 js 就必须 bump」——只在 docs/engineering.md 里写明，不假装有门禁。"
-  ]
+  "notGated": []
 }

@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-01 修复假绿门禁（契约/插件 API 真实判据 + SW 指纹基线）
+
+- **Commit Hash**：本条提交（`fix(gate): 契约与插件 API 改为真实判据，SW 版本改用指纹清单基线`）；完整哈希见回填提交与本次汇报。
+- **核心改动**
+  - `scripts/check.mjs`：第 6/7 步不再把 `--selftest` 透传给 `check-contracts` / `check-plugin-api`（旧行为会让脚本只跑解析器自检后退出，汇总行却打印「契约守约、插件 API 面守约」）。现在真实核对**总是**执行，`--selftest` 只额外加跑判据自检；两处都打印读数。
+  - `scripts/check-sw.mjs`：基线由 `git diff HEAD`（干净检出一律为空）改为**提交入库的 `scripts/sw-inputs.sha256`**——预缓存输入的文件内容指纹 + 清单 `version=`。非 git 环境不再直接 `exit 0`；缺清单即红。新增 `--update` 生成器；指纹按 UTF-8 读取、CRLF→LF 归一，路径字典序，Windows/CI 结果一致。合并冲突处理写进文件头与文档：不手工合并哈希行，取合并后工作树重新 `--update`。
+  - `scripts/check-gates.mjs`：新增**正面基线**（同一份未破坏副本上 `check.mjs --selftest` / `check-sw` / `check-plugin-api` / `check-ngm` / `badge --check` / `i18n-scan --check` 必须全 0）与 2 个新负向场景（`PlotPin` 加私有键必红、`sw.js VERSION` 回退必红），7 → **9** 场景；每个场景额外断言输出命中目标错误关键字。临时副本改为 `git init + git add -A`（不 commit）以满足删除账本判据的 `git ls-files`。
+  - `.github/workflows/ci.yml`：显式拆出 `check-contracts.mjs`、`check-plugin-api.mjs`、`check-sw.mjs` 三步，契约与 API 面不再只靠总闸透传。
+  - `contracts/conventions.json`：删除与 `check-sw.mjs` 冲突的 `notGated`「SW 版本无门禁」表述（置为空数组）。
+  - 文档：`docs/engineering.md` §3.1/§3.2/§3.4/§3.5、`docs/testing.md` §1/§5 同步；`docs/plans/README.md` 状态表 N-01 → 已交付。
+- **实测验证（2026-11-08 本机，五道门禁全绿）**
+  - `node scripts/check.mjs --selftest`：**2706 通过 / 0 失败**（45 个脚本）；契约 **7 项核对 / 0 违约**；插件 API **23 键 / 清单 23 条 / 0 泄漏 / 0 落空**（API 1.1.0 / 8 项能力）；i18n 覆盖率 **46.16%**；SW `VERSION=6`（清单 version=6，49 个预缓存输入一致）。
+  - `node scripts/e2e.mjs`：**90 tests → 89 passed / 1 skipped（soak）/ 0 failed**（1.9m）。
+  - `node scripts/build.mjs --check`：**783,226 B（764.9 KB）/ gzip 243,688 B**，SHA256 `57dc7d91…` 与 `dist-manifest.json` 一致；体积与基线相同（scripts 不进产物），余量 56,454 B。
+  - `node scripts/check-gates.mjs`：**正面基线 6/6 全绿 + 9/9 破坏被拦截且关键字命中**；关键读数：第 1 场景 P95 实测 4.56 ms > 3 ms 被拦，第 6 场景「预缓存输入已变更但 VERSION 未递增（清单=6，当前=6）」被拦，第 8 场景私有键被 API 面判据拦下，第 9 场景「VERSION 回退：清单=6 → 当前=5」被拦。
+  - `node scripts/check-discipline.mjs --strict`：**13/13 → L4**；53 条文档命令全部可解析。
+  - `node scripts/bench.mjs`：重建 25.8 ms ≤ 60、缓存帧 P95 0.69 ms ≤ 3、heapUsed 15.69 MB ≤ 64、覆盖率 18.4/16.4 ms ≤ 300、SVG 导入 1.314 ms ≤ 50。
+- **未执行 / 未验证**
+  - CI 真实运行未验证（本轮只本地执行；workflow 语法与步骤为静态核对）。
+  - 未构造「CI 干净检出 + 已提交但漏 bump」的远端流水线实证，仅有本地 `git init + add` 副本的等价验证。
+- **遗留风险**
+  - `sw-inputs.sha256` 需在每次改预缓存输入并 bump `VERSION` 后执行 `--update`；忘记刷新时门禁会红（这是预期行为，不是假绿）。
+  - 清单是整文件哈希，多人同时改不同预缓存输入会在同一清单行附近产生合并冲突；已要求「重新生成而非手工合并」，但冲突解决方必须遵守。
+
 ## 2026-11-08 · 文档全量重写收口与事实对齐
 
 - **Commit Hash**：本条提交（`docs(arch): 全量重写文档体系并对齐代码事实`）；完整哈希见 `git log HEAD` 与本次汇报。
