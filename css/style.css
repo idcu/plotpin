@@ -114,8 +114,14 @@
   .mini{padding:4px 7px;font-size:12px}
   .hint-text{font-size:11px;color:var(--muted);line-height:1.5}
   .filter-row{display:grid;grid-template-columns:1fr 96px 96px;gap:6px;margin-bottom:8px}
-  .batch-row{display:flex;gap:5px;flex-wrap:align;align-items:center;margin-bottom:8px}
-  .batch-row input{width:64px}
+  .batch-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  .batch-row select{min-width:0;max-width:100%}
+  .batch-row input[type="number"]{width:92px;min-width:92px}
+  .annot-batch-row .hint-text{white-space:nowrap}
+  /* 触控视口：批次控件至少 44px 高，数值框仍保留 92px 可读宽度 */
+  @media(pointer:coarse){
+    .batch-row input,.batch-row select,.batch-row button{min-height:44px}
+  }
   .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 260px)}
   table{border-collapse:collapse;width:100%;font-size:12px}
   th,td{border-bottom:1px solid #edf1f6;padding:5px 6px;text-align:left;white-space:nowrap}

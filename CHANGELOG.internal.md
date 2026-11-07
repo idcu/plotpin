@@ -2,6 +2,24 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 清单页平移/旋转输入框布局
+
+- **Commit Hash**：本条提交（`fix(list): 加宽清单页平移/旋转输入框并适配触控`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `css/style.css`：`.batch-row` 非法值 `flex-wrap:align` 修正为 `wrap`；`.batch-row input[type="number"]` 宽度 64px → **92px** 且加 `min-width`，步进控件不再被挤压；`.batch-row select` 增加 `min-width:0;max-width:100%` 允许收缩，避免窄视口撑破行。
+  - `@media(pointer:coarse)` 下 `.batch-row input/select/button` 统一 `min-height:44px`，数值框仍保留 92px 可读宽度。
+  - 未改字段名（`batchDx`/`batchDy`/`batchAngle`）、提交逻辑与校验规则；未新增依赖、未改公共 API。
+  - 文档同步：`docs/testing.md` 新增 `batch-layout.spec.mjs` 行；`docs/user-guide.md` §5.2 补可读宽度与触控高度说明。
+- **验证数据（真实 Chromium，非 mock/截图）**
+  - `node scripts/e2e.mjs tests/e2e/batch-layout.spec.mjs`：**2 passed**（2.8s）。
+  - `node scripts/e2e.mjs`：**90 tests → 89 passed / 1 skipped / 0 failed**（2.0m，跳过为既有 soak 用例；新增 4 条 = batch-annot 2 + batch-layout 2）。
+  - `node scripts/selftest.mjs`：**2706 通过 / 0 失败**。
+  - `node scripts/build.mjs --check`：**786,029 B（767.6 KB）/ gzip 244,204 B**，SHA256 `178927cf…` 与登记一致；本项较批量标注提交的 785,815 B **+214 B**，距 839,680 B 上限余 **53,651 B**。
+  - 断言口径：桌面 1280×800 数值框宽 ≥92px、行/侧栏无横向溢出；切英文后 `Show labels / Hide labels` 不截断；390×844 触控视口输入框与按钮高 ≥44px。
+- **遗留 / 风险**
+  - 92px 为当前中英文与 1280 宽侧栏下的实测可读值；后续若新增批量字段需检查 `.batch-row` 总宽，必要时再调换行策略。
+  - 未 push；未触碰 `camera-*`。
+
 ## 2026-11-07 · 清单页批量标注显隐
 
 - **Commit Hash**：本条提交（`feat(list): 清单页批量显示/隐藏图上标注`）；完整哈希见 `git log HEAD` 与本次汇报。
