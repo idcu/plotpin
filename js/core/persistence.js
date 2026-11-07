@@ -717,6 +717,9 @@ async function ensureProjectBackgroundAssets(st){
   await ensureBackgroundAsset(st);
   await ensureFloorBackgroundAssets(st);
 }
+/** 最近一次 buildProject 的对象唯一性修正计数（审计用；不写入工程状态） */
+let lastSanitizeReport={duplicateIds:0,normalizedIds:0,duplicateNames:0};
+function sanitizeReport(){ return lastSanitizeReport; }
 /** 由原始 JSON 构建清洗后的工程对象；不写全局 state，供导入/打开工程做“先校验后替换”的事务 */
 function buildProject(p){
   const base=createInitialState();
@@ -764,8 +767,14 @@ function buildProject(p){
   addRawNames(p.objects);
   (Array.isArray(p.floors)?p.floors:[]).forEach(f=>addRawNames(f&&f.objects));
   const restoreNames=beginObjectNameScope(nameSeed);
+  /* 导入唯一性（N-07）：同一份待读工程内跨楼层共享 seenIds/seenNames，
+     重复 id 或 safeId 归并冲突时追加稳定后缀，重名对象走编号作用域重编号。
+     不把当前工程 id 灌入 seenIds——合并他人工程时同 id 代表同一对象，不能改名换姓。 */
+  const seenIds=new Set(), seenNames=new Set();
+  const report={duplicateIds:0,normalizedIds:0,duplicateNames:0};
+  lastSanitizeReport=report;
   try{
-    const objects=sanitizeObjects(p.objects,layers,objectTypes);
+    const objects=sanitizeObjects(p.objects,layers,objectTypes,seenIds,seenNames,report);
     const tombstones=sanitizeTombstones(p.tombstones);
     /* 楼层：当前楼层数据取顶层 background/site/objects；其余楼层各自清洗并保留 */
     const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
@@ -782,7 +791,7 @@ function buildProject(p){
         const fslots=migrateBackgroundAndSite(f,layers);
         entry.background=fslots.background;
         entry.site=fslots.site;
-        entry.objects=sanitizeObjects(f.objects||[],layers,objectTypes);
+        entry.objects=sanitizeObjects(f.objects||[],layers,objectTypes,seenIds,seenNames,report);
         entry.viewport=sanitizeViewport(f.viewport);
       }
       floors.push(entry);
@@ -790,6 +799,9 @@ function buildProject(p){
     if(!floors.length) floors.push({id:'floor.default',name:'1F',updatedAt:''});
     let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
     if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
+    if(report.duplicateIds||report.normalizedIds||report.duplicateNames){
+      if(typeof console!=='undefined'&&console.warn) console.warn('[sanitize] 对象唯一性修正',report);
+    }
     /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
     return Object.assign(base,p,{schema:SCHEMA,meta,settings,rules:normalizeRuleConfig(p.rules),background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
   }finally{ restoreNames(); }
@@ -804,14 +816,15 @@ function migrateProject(p){
 function buildDemoProject(){
   const site=createSiteSlot({type:'rect',w:100,h:70});
   site.name=L('示例场地');
-  const objects=[
+  /* 示范对象在数组里连续创建，若不建立编号作用域，baseObject 每次都扫描未写入 state 的编号而重名 */
+  const objects=withObjectNameScope(allObjectNames(),()=>[
     baseObject('point',null,{x:20,y:20}),
     baseObject('point',null,{x:70,y:50}),
     baseObject('rect',null,{x:10,y:10,width:30,height:20}),
     baseObject('line',null,{points:[[35,15],[90,55]]}),
     baseObject('text','text.builtin',{x:32,y:38,text:L('示例文字')}),
     baseObject('dimension',null,{points:[[10,63],[90,63]],subtype:'distance'})
-  ];
+  ]);
   return buildProject({
     meta:{name:L('示例工程')},
     settings:deepClone(state.settings),
@@ -1086,8 +1099,10 @@ function sanitizeAreaShape(raw){
   }
   return null;
 }
-function sanitizeObjects(arr,layers,types){
+function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
   const out=[]; if(!Array.isArray(arr)) return out;
+  seenIds=seenIds||new Set(); seenNames=seenNames||new Set();
+  const audit=report||{duplicateIds:0,normalizedIds:0,duplicateNames:0};
   arr.forEach(raw=>{
     if(!raw||typeof raw!=='object'||!['point','rect','line','text','dimension'].includes(raw.kind)) return;
     const kind=raw.kind, layerId=layers.some(l=>l.id===String(raw.layerId))?String(raw.layerId):'layer.default';
@@ -1096,9 +1111,12 @@ function sanitizeObjects(arr,layers,types){
     const points=pointArray(raw.points);
     const x=finiteNumber(raw.x,0), y=finiteNumber(raw.y,0);
     const angle=normalizeAngle(finiteNumber(raw.angle,0));
-    const name=String(raw.name??'').slice(0,80)||nextObjectId();
+    const rawId=String(raw.id??'');
+    const baseId=safeId(raw.id,'OBJ');
+    const rawName=String(raw.name??'').slice(0,80);
+    const name=rawName||nextObjectId();
     const o=Object.assign(baseObject(kind,typeId,{name}),{
-      id:safeId(raw.id,'OBJ'), name,
+      id:baseId, name,
       layerId, x, y, angle,
       text:String(raw.text??'').slice(0,500), closed:!!raw.closed,
       subtype:['ruler','distance','area','angle'].includes(raw.subtype)?raw.subtype:'distance',
@@ -1144,6 +1162,18 @@ function sanitizeObjects(arr,layers,types){
       keys.forEach(k=>{ if(typeof raw.annot[k]==='boolean') clean[k]=raw.annot[k]; });
       o.annot=clean;
     }
+    /* 唯一性放在确认对象有效之后：丢弃的非法对象不占用 id/名称。
+       重复 id 追加稳定后缀（同输入同结果），safeId 归一冲突也在此解决；重名走编号作用域。 */
+    let id=o.id;
+    if(seenIds.has(id)){
+      let n=2;
+      while(seenIds.has(id+'_'+n)) n++;
+      id=id+'_'+n; audit.duplicateIds++;
+    }
+    if(rawId&&baseId!==rawId) audit.normalizedIds++;
+    o.id=id; seenIds.add(id);
+    if(seenNames.has(o.name)){ o.name=nextObjectId(); audit.duplicateNames++; }
+    seenNames.add(o.name);
     out.push(o);
   });
   return out;

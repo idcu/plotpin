@@ -2,6 +2,28 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-07 导入对象唯一性
+
+- **Commit Hash**：N-07 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/core/persistence.js`：`sanitizeObjects` 新增跨楼层共享的 `seenIds` / `seenNames` 与审计 `report`。重复 id（含 `safeId` 把 `a:b`、`a?b` 归并成 `a_b` 的冲突）追加稳定后缀 `_2`、`_3`；重名对象走 `nextObjectId()` 编号作用域重新编号；唯一性校验放在对象通过合法性检查之后，被丢弃的非法对象不占用标识。`buildProject` 把同一份待读工程的对象与各楼层对象共享这两个集合，并新增 `sanitizeReport()` 读取最近一次修正计数（未修正时为 0）。
+  - `js/core/persistence.js`：修正 `buildDemoProject` 连续 `baseObject` 时编号重复的问题——示范对象改在 `withObjectNameScope` 内创建，避免每次启动都触发 5 次重名修正并刷 `console.warn`。
+  - `scripts/selftest.mjs`：新增 28.6 节 15 项断言（数量不变、id 唯一、稳定后缀、safeId 归并后唯一、重名重编号、首项保留原名、字段不变、审计计数、两项可独立索引）。
+  - `sw.js`：`VERSION` 14 → 16（N-06 收尾 + 本轮）；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步。
+  - 文档：`docs/features.md` §3、`docs/user-guide.md` §7.1/§11、`docs/known-issues.md`（N-05/N-06/N-07 一并关闭 IO-P1-1、CORE-P1-1/2/3，已修复 11 → 15，P1 24 → 20）、`docs/modules.md`、`docs/testing.md`、`README.md` 数字口径。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：临时关闭重复 id 重分配 → selftest **2767 通过 / 5 失败**（批次唯一、稳定后缀、safeId 唯一、重复计数、独立索引）；恢复后全绿。
+  - `node scripts/check.mjs --selftest`：**2772 通过 / 0 失败**（112 分区，较 N-06 +15）；契约 7/0；插件 API 23/0；i18n 46.01%；SW `VERSION=16`。
+  - `node scripts/e2e.mjs`：**98 tests → 97 passed / 1 skipped / 0 failed**（2.1m，示范对象编号修正未影响既有用例）。
+  - `node scripts/build.mjs --check`：**788,113 B（769.6 KB）/ gzip 245,034 B**，SHA256 `90a16292…`，较 N-06 **+1,055 B**，余量 **51,567 B**。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9/9；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未用真实含重复 id 的 DXF/PDF 样本跑端到端导入；selftest 直接以构造原始数组覆盖清洗逻辑。
+  - 合并他人工程时，若两份工程各自内部有重复 id，仅保证“本批次内”唯一；与当前工程同 id 的对象仍按同一对象合并（有意保留）。
+- **遗留风险**
+  - `sanitizeReport` 为全局“最近一次”结果，不是按工程隔离；多标签/并发导入只保留最后一次。
+  - 重名改编号会改变用户可见名称（如两个「同名」→ 第二个变 `O0007`），协作双方若基于不同版本导入可能得到不同编号，需下一次合并收敛。
+
 ## 2026-11-08 · N-06 统一对象变更时间戳
 
 - **Commit Hash**：N-06 提交（哈希由 N-05~N-11 阶段末统一回填）。

@@ -130,6 +130,7 @@ code += `\n;globalThis.__api = {
   SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
   markDirty, MARK_DIRTY_PROFILES,
   dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects,
+  sanitizeObjects, sanitizeReport, safeId,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
@@ -1584,6 +1585,44 @@ await section("28.5 N-06 对象变更时间戳：只对实际变化 id 打点，
 
   api.commitObjectEdit([b.id]);
   ok('N06-commitObjectEdit 走同一打点助手', b.updatedAt>b0);
+  api.resetState();
+}
+
+});
+
+/* 28.6 N-07 导入对象唯一性：重复 id / safeId 归并 / 重名 ---- */
+await section("28.6 N-07 导入对象唯一性：重复 id / safeId 归并 / 重名", async () => {
+{
+  api.resetState();
+  const layers=[{id:'layer.default',name:'默认图层',visible:true,locked:false}];
+  const report={duplicateIds:0,normalizedIds:0,duplicateNames:0};
+  const seenIds=new Set(), seenNames=new Set();
+  const raw=[
+    {kind:'point',id:'OBJ1',name:'同名',x:1,y:1},
+    {kind:'point',id:'OBJ1',name:'同名',x:2,y:2},
+    {kind:'point',id:'a:b',name:'B',x:3,y:3},
+    {kind:'point',id:'a?b',name:'C',x:4,y:4}
+  ];
+  const out=api.sanitizeObjects(raw,layers,api.BUILTIN_TYPES,seenIds,seenNames,report);
+
+  eq('N07-对象数量不变', out.length, 4);
+  eq('N07-id 批次内唯一', new Set(out.map(o=>o.id)).size, 4);
+  eq('N07-重复 id 追加稳定后缀', out[1].id, 'OBJ1_2');
+  eq('N07-首个对象 id 不变', out[0].id, 'OBJ1');
+  eq('N07-safeId 归并项仍唯一', new Set([out[2].id,out[3].id]).size, 2);
+  ok('N07-safeId 归并项基于 a_b', out[2].id.startsWith('a_b')&&out[3].id.startsWith('a_b'));
+  eq('N07-重名对象走编号重命名', /^O\d{4,}$/.test(out[1].name), true);
+  eq('N07-首个重名保留原名', out[0].name, '同名');
+  eq('N07-去重不改变既有字段', out[1].x, 2);
+  eq('N07-重复 id 审计计数', report.duplicateIds, 2);
+  ok('N07-safeId 归一审计计数', report.normalizedIds>=2);
+  eq('N07-重名审计计数', report.duplicateNames, 1);
+
+  api.state.objects.push(out[0],out[1]);
+  const idx=api.objectIndexById();
+  ok('N07-重复 id 两项可独立索引', idx.get('OBJ1')===out[0]&&idx.get('OBJ1_2')===out[1]);
+  eq('N07-缺省 id 也能生成唯一值', api.safeId('', 'OBJ').startsWith('OBJ'), true);
+  ok('N07-审计报告可读取', typeof api.sanitizeReport()==='object');
   api.resetState();
 }
 
