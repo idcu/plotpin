@@ -19,10 +19,11 @@
 | perf 视口 / DPR | 1472×1028，DPR1 与 DPR2 两组 | `npm run perf:browser` 输出 |
 | 渲染器（perf） | ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver) | perf 输出 |
 
-证据目录：`test-results/manual-acceptance/`（M2、M4、M6），该目录不进 Git。
+证据目录：`acceptance-evidence/`（M2、M4、M6），已加入 `.gitignore`，不进 Git。
 
 > 说明：`npm run perf:browser` 使用 Playwright Test runner，启动时会清空 `test-results/`。
-> 本次因此丢失过一次早期 M2/M4 证据，已在 perf 之后**重新生成**；最终证据以本报告引用的文件为准。
+> 本次因此丢失过一次早期 M2/M4 证据；已把人工验收证据迁到 `acceptance-evidence/`（outputDir 之外），
+> 并用真实浏览器重新生成最终证据，后续 `perf:browser` / `test:e2e` 不再影响该目录。
 
 ## 2. 条目盘点与可执行性判定
 
@@ -64,34 +65,36 @@
 
 - 结论：Firefox 子项通过；WebKit 作为 Safari 引擎的替代覆盖通过。
 - **Safari 原生未验证**：本机无 macOS，不能用 WebKit 结果替代 Safari 17+ 的最终结论。
-- 证据：`test-results/manual-acceptance/M2/firefox/`、`.../M2/webkit/`（result.json、截图、SVG/DXF/PDF、sandbox-markdown.md）。
+- 证据：`acceptance-evidence/M2/firefox/`、`.../M2/webkit/`（result.json、截图、SVG/DXF/PDF、sandbox-markdown.md）。
 
-### M4 英文界面 —— 不通过（未翻译项）+ 语义未验证
+### M4 英文界面 —— 自动化未翻译项通过（D-14 修复后）；语义未验证
 
-按真实用户路径切换：设置 → 界面语言 English → 保存（保存后 `I18N.lang=en`、`state.settings.lang=en`）。随后扫描 7 个区域，统计可见文本中的 CJK 与 `{占位符}`。
+D-14 修复前后，均按真实用户路径切换：设置 → 界面语言 English → 保存（保存后 `I18N.lang=en`、`state.settings.lang=en`）。随后扫描 7 个区域，统计可见文本中的 CJK 与 `{占位符}`。
 
-| 区域 | 可见文本条数 | 含中文条数 | 占位符条数 |
-|---|---|---|---|
-| 主界面 | — | 见下 | 0 |
-| 符号库页签 | 46 | 42 | 0 |
-| 图层/类型页签 | 233 | 77 | 0 |
-| 统计页签 | 32 | 1 | 0 |
-| 规则页签 | 123 | 66 | 0 |
-| 快捷键帮助 | 45 | 0 | 0 |
-| 设置弹窗 | 23 | 6 | 0 |
-| 图框/标题栏弹窗 | 16 | 1 | 0 |
+| 区域 | 修复前中文条数 | 修复后中文条数 |
+|---|---|---|
+| 符号库页签 | 42 | 0 |
+| 图层/类型页签 | 77 | 1 |
+| 统计页签 | 1 | 1 |
+| 规则页签 | 66 | 0 |
+| 快捷键帮助 | 0 | 0 |
+| 设置弹窗 | 6 | 1 |
+| 图框/标题栏弹窗 | 1 | 0 |
+| **合计** | **6 个区域 / 193 实例 / 89 去重** | **3 个区域 / 3 实例 / 3 去重** |
 
-- 汇总：7 个区域中 6 个含中文；中文实例 **193** 条、去重 **89** 条；残留占位符 **0** 条；控制台错误 0。
-- 结论：按矩阵判据「0 条未翻译」→ **不通过**。语义可理解性、术语一致性需双语评审人 → **未验证**。
-- 主要位置（均为实测可见文案，不是推测）：
-  - `index.html:135`：`#tabBtn-symbols` 没有 `data-i18n`，页签仍是「符号库」。
-  - `index.html:216-238`：符号库面板标题、`旋转角 (°)`、`真实尺寸 (m)`、提示语、`导入 SVG… / 导出 JSON / 导入 JSON` 等为硬编码中文。
-  - `index.html:247-258`：规则面板 `几何规则检查`、`违规清单`、`运行检查 / 导出 CSV / 清空结果` 等为硬编码中文。
-  - `js/features/ui-shell.js:18/20`：设置弹窗「插件（仅本会话）」「底图/场地」提示为硬编码中文。
-  - `js/features/io-export.js` 的图框弹窗用 `L('保存')`，但 `js/common/i18n.js` 的 `PHRASES` 未收录「保存」（只有 `DICT.save`），实测按钮仍是「保存」。
-  - 36 个内置类型名：`typeDisplayName()` 会走 `L(name)`，但 `PHRASES` 未收录这些中文名，符号库与图层页签仍显示中文名；图层副标题 `仅位置图标 / 扇形视场 / 圆形覆盖 / 杆/线段` 同样未收录。
-- 处理：按任务要求「发现缺陷先停止该条并报告，等确认后再处理」，本轮**未修改任何业务代码**。
-- 证据：`test-results/manual-acceptance/M4/result.json` 与 8 张英文界面截图（main / symbols / layers / stats / rules / help / settings / titleblock）。
+- 残留占位符：修复前后均为 **0**；控制台错误 0。
+- 修复后剩余 3 条：默认图层名「默认图层」、默认工程名「未命名图纸工程」、运行环境摘要「IndexedDB 可用（…）」。
+  前两项是持久化数据值（不是界面标签），第三项不在 D-14 四项修复范围内；均未用英文顶替。
+- 结论：自动化「未翻译项」判据已达成（193→3）；**英文语义质量仍需人工审校，记「未验证」**，本报告不判定语义通过。
+- D-14 修复位置：
+  - `index.html`：符号库页签、符号库面板、规则面板静态文案接入 `data-i18n` / `data-i18n-title` / `data-i18n-placeholder` / `data-i18n-aria-label`。
+  - `js/common/i18n.js`：`DICT.zh/en` 补键；`PHRASES` 补 36 个内置类型名、符号分类、图层副标题与规则动态文案。
+  - `js/features/ui-shell.js`：设置弹窗插件区与底图提示改为字典驱动。
+  - `js/features/rules.js`：规则配置/结果动态文案走 `L()`，类型名改用 `typeDisplayName()`。
+  - `js/features/ui-panels.js`：符号分类选项走 `L()`，空结果提示走 `L()`。
+  - `js/features/io-export.js`：图框「保存」改用 `I18N.t('save')`，与 `DICT.save` 对齐。
+- 中文界面回归：真实 Chromium 抽查页签、符号库、规则、设置、图框按钮文案，与修复前一致（`acceptance-evidence/M4/zh-check.json`）。
+- 证据：`acceptance-evidence/M4/result.json` 与 8 张英文界面截图。
 
 ### M5 真实 GPU 渲染性能 —— 未验证
 
@@ -120,7 +123,7 @@
 
 - 解读：6× 节流下主线程定时器被延后，插件忙循环先结束并返回 `ok:true`；这是**节流代理的计时偏差**，不能据此判定真机缺陷。无节流结果与自动化 e2e 的 ≤2.5 s 判据一致。
 - 结论：**未验证**。低端真机上的超时触发时间、主线程是否冻结、UI 是否可继续操作仍需实机复核。
-- 证据：`test-results/manual-acceptance/M6/result.json`（节流）、`.../result-unthrottled.json`（对照）、`plugin-timeout.png`。
+- 证据：`acceptance-evidence/M6/result.json`（节流）、`.../result-unthrottled.json`（对照）、`plugin-timeout.png`。
 
 ### M7 真实 CAD 查看器 DXF 观感 —— 未验证
 
@@ -167,8 +170,8 @@
 
 ## 5. 缺陷与过程风险
 
-1. **M4 英文界面未翻译（缺陷，已停止该条）**：193 条中文实例 / 89 条去重；静态页签、符号库面板、规则面板、设置插件提示、内置类型名等未接入 i18n。证据见 §3 M4。未修改代码，等待确认后再处理。
-2. **证据目录被 Playwright runner 清空（过程风险）**：`npm run perf:browser` 会清空 `test-results/`，导致早期 M2/M4 截图与 JSON 被删除。本轮已在 perf 之后重新生成；后续建议把人工验收证据放到 Playwright `outputDir` 之外，或在跑 runner 前先归档。
+1. **M4 英文界面未翻译（已修复，D-14）**：修复前 193 条中文实例 / 89 条去重；修复后 3 条 / 3 条去重（默认图层名、默认工程名、运行环境摘要，原因见 §3 M4）。英文语义质量仍记「未验证」。
+2. **证据目录被 Playwright runner 清空（已处置）**：人工验收证据已迁至 `acceptance-evidence/`（`test-results/` 之外）并加入 `.gitignore`；后续 `perf:browser` / `test:e2e` 不再删除该目录。
 3. 其余已执行项未发现阻断性异常；M2/M6 控制台错误均为 0。
 
 ## 6. 命令来源
@@ -196,7 +199,7 @@ node scripts/selftest.mjs --filter "中英界面|符号库"
 # 环境探测
 Get-Command adb
 Get-ChildItem 'C:\Program Files','C:\Program Files (x86)' -Directory | Where-Object Name -match 'AutoCAD|LibreCAD|DraftSight'
-Test-Path 'test-results/manual-acceptance/M8/corpus'
+Test-Path 'acceptance-evidence/M8/corpus'
 Get-ChildItem 'C:\Program Files\...\EXCEL.EXE', 'C:\Program Files\WPS Office\*\office6\et.exe'
 ```
 
@@ -209,7 +212,7 @@ Get-ChildItem 'C:\Program Files\...\EXCEL.EXE', 'C:\Program Files\WPS Office\*\o
 | M1 | 未验证 | 无真机、无 HTTPS；`adb` 不存在 |
 | M2 | 部分通过 | Firefox 159.0 / WebKit 27.2 全流程通过；Safari 原生未验证 |
 | M3 | 未验证 | 无双设备；未用双标签替代 |
-| M4 | **不通过** + 语义未验证 | 6/7 区域含中文，193 实例 / 89 去重；占位符 0；语义需人工 |
+| M4 | 自动化修复 / 语义未验证 | 中文实例 193→3、去重 89→3；占位符 0；语义需人工 |
 | M5 | 未验证 | 无真实 GPU；SwiftShader 数据仅代理（P95 3.0 ms @2000 对象） |
 | M6 | 未验证 | 无低端真机；6× 节流出现 `ok:true` 计时偏差，无节流 2,006 ms `ok:false` |
 | M7 | 未验证 | 未安装 AutoCAD / LibreCAD |
@@ -217,4 +220,20 @@ Get-ChildItem 'C:\Program Files\...\EXCEL.EXE', 'C:\Program Files\WPS Office\*\o
 | 补充-01 | 未验证 | 未找到 Excel / WPS 可执行文件 |
 | A1 | 通过（自动化） | `selftest` 327/0；人工部分 `N/A` |
 
-**总判定：本次 M 类验收不能判定为「全部通过」。** 可执行的跨浏览器与英文界面客观检查已完成，其中英文界面存在未翻译缺陷；真机、真实 GPU、双设备、真实语料、CAD 观感与表格软件项均因环境不满足而未验证。
+**总判定：本次 M 类验收不能判定为「全部通过」。** 可执行的跨浏览器与英文界面客观检查已完成；英文界面自动化未翻译项已修复（193→3），但语义质量仍需人工审校；真机、真实 GPU、双设备、真实语料、CAD 观感与表格软件项均因环境不满足而未验证。
+
+## 8. D-14 修复记录（英文侧）
+
+| 项 | 数据 |
+|---|---|
+| 修复前 M4 扫描 | 6 个区域含中文 / 193 实例 / 89 去重 / 0 占位符 |
+| 修复后 M4 扫描 | 3 个区域含中文 / 3 实例 / 3 去重 / 0 占位符 |
+| 中文界面回归 | 抽查页签、符号库、规则、设置、图框按钮，文案不变（`acceptance-evidence/M4/zh-check.json`） |
+| 体积（源文件） | 7,854 B（预算 8,000 B，余量 146 B） |
+| 体积（构建产物） | 7,453 B（`dist/plotpin-standalone.html`，余量 547 B） |
+| selftest | 2,706 通过 / 0 失败 |
+| e2e | 85 passed / 1 skipped（既有 soak 用例） |
+| i18n 覆盖率门禁 | 41.99% ≥ 基线 40%，缺口 0 |
+| 证据目录 | `acceptance-evidence/`（已加入 `.gitignore`，位于 `test-results/` 之外） |
+
+残留风险：`check-ngm` 在 HEAD 基线即报 `js/common/dxf.js` 未保留 `global.Dxf =` 承诺名（实际为 `global.Dxf=`），属既有问题，未在本次 i18n 任务中修改。

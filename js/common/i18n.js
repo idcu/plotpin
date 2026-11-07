@@ -14,7 +14,7 @@
       clearAllTitle: '清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销',
       select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', text: '文字',
       ruler: '测距', dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
-      tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabStats: '统计', tabRules: '规则',
+      tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabSymbols: '符号库', tabStats: '统计', tabRules: '规则',
       exportJson: 'JSON 工程', exportPng: 'PNG 高清图', exportSvg: 'SVG 矢量图',
       exportPdf: 'PDF 矢量（图纸+清单）', exportDxf: 'DXF（CAD 互通）',
       exportCsv: 'CSV 表格', exportTsv: 'TSV 表格', exportXlsx: 'Excel (.xlsx)',
@@ -67,7 +67,26 @@
       crosshair: '十字准星/坐标', segLabelMinPxSetting: '段长标注最小像素',
       osnapSetting: '对象捕捉', polarSetting: '极轴追踪',
       polarStepSetting: '极轴角', precisionSetting: '坐标精度', runtimeSetting: '运行环境',
-      siteBgSetting: '场地/底图', languageLabel: '界面语言'
+      siteBgSetting: '场地/底图', languageLabel: '界面语言',
+      /* D-14 */
+      symbolSearchPlaceholder: '搜索名称或别名，如 烟感 / NVR / 道闸',
+      symbolSearchAria: '搜索符号名称或别名', symbolCategoryAria: '按符号分类筛选', symbolAllCategories: '全部分类',
+      symbolAngleLabel: '旋转角 (°)', symbolAngleTitle: '放置时的初始旋转角（可在属性面板继续调整）', symbolAngleAria: '符号放置旋转角',
+      symbolPhysLabel: '真实尺寸 (m)', symbolPhysTitle: '0=屏幕固定图标；填图元外接宽度（米）后按真实比例渲染', symbolPhysAria: '符号真实尺寸（米）',
+      symbolPlaceHint: '点击符号即切换到「点设备」工具，再点击画布放置；旋转角与真实尺寸可在属性面板继续调整。',
+      symbolCustomHeading: '自有符号', symbolImportSvg: '导入 SVG…',
+      symbolImportSvgTitle: '导入 SVG：经安全清洗（禁脚本/事件/外链，限元素与字节）',
+      symbolExportJson: '导出 JSON', symbolExportJsonTitle: '仅导出当前工程的自定义符号',
+      symbolImportJson: '导入 JSON', symbolImportJsonTitle: '导入自定义符号 JSON，仅写入当前工程',
+      symbolCustomHint: '自定义符号保存在当前工程命名空间；导入只影响当前工程，不影响其他工程。',
+      rulesHeading: '几何规则检查', rulesViolationsHeading: '违规清单',
+      rulesRun: '运行检查', rulesExport: '导出 CSV', rulesClear: '清空结果',
+      pluginSessionOnly: '插件（仅本会话）',
+      siteBgHint: '可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/平行四边形/多边形',
+      pluginStatusActive: '可用', pluginStatusLoading: '加载中', pluginStatusDisabled: '已禁用', pluginStatusUnloaded: '已卸载',
+      pluginNoCapabilities: '无能力', pluginUnload: '卸载', pluginNoneImported: '尚未导入插件',
+      pluginImportManifest: '导入清单（.json）',
+      pluginManifestHint: '格式 plotpin.plugin/v1；code ≤64 KB、清单 ≤192 KB；刷新后需重新导入。'
     },
     en: {
       brand: 'PlotPin',
@@ -76,7 +95,7 @@
       clearAllTitle: 'Clear the image base, vector site, all objects and annotations on this floor; undo with Ctrl+Z',
       select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', text: 'Text',
       ruler: 'Measure', dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
-      tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabStats: 'Statistics', tabRules: 'Rules',
+      tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabSymbols: 'Symbols', tabStats: 'Statistics', tabRules: 'Rules',
       exportJson: 'JSON project', exportPng: 'PNG (high-res)', exportSvg: 'SVG (vector)',
       exportPdf: 'PDF (drawing + list)', exportDxf: 'DXF (CAD)',
       exportCsv: 'CSV table', exportTsv: 'TSV table', exportXlsx: 'Excel (.xlsx)',
@@ -125,7 +144,25 @@
       crosshair: 'Crosshair / coordinates', segLabelMinPxSetting: 'Min segment label (px)',
       osnapSetting: 'Object snap', polarSetting: 'Polar tracking',
       polarStepSetting: 'Polar angle', precisionSetting: 'Coordinate precision', runtimeSetting: 'Runtime',
-      siteBgSetting: 'Site / base map', languageLabel: 'Interface language'
+      siteBgSetting: 'Site / base map', languageLabel: 'Interface language',
+      symbolSearchPlaceholder: 'Search name or alias (smoke / NVR / barrier)',
+      symbolSearchAria: 'Search symbol name or alias', symbolCategoryAria: 'Filter by symbol category', symbolAllCategories: 'All categories',
+      symbolAngleLabel: 'Rotation (°)', symbolAngleTitle: 'Initial rotation on placement (adjust in Properties)', symbolAngleAria: 'Symbol rotation when placing',
+      symbolPhysLabel: 'Real size (m)', symbolPhysTitle: '0 = fixed icon; enter width (m) for true scale', symbolPhysAria: 'Real symbol width (m)',
+      symbolPlaceHint: 'Click a symbol, then click the canvas to place; adjust rotation/size in Properties.',
+      symbolCustomHeading: 'Custom symbols', symbolImportSvg: 'Import SVG…',
+      symbolImportSvgTitle: 'Import SVG with sanitization (no scripts/events/external links; size limits)',
+      symbolExportJson: 'Export JSON', symbolExportJsonTitle: "Export this project's custom symbols only",
+      symbolImportJson: 'Import JSON', symbolImportJsonTitle: 'Import custom symbols into this project only',
+      symbolCustomHint: 'Custom symbols apply to this project only.',
+      rulesHeading: 'Geometry rules', rulesViolationsHeading: 'Violations',
+      rulesRun: 'Run check', rulesExport: 'Export CSV', rulesClear: 'Clear results',
+      pluginSessionOnly: 'Plugins (this session only)',
+      siteBgHint: 'Use Base/Site in the top bar to upload an image or redraw the site shape',
+      pluginStatusActive: 'Active', pluginStatusLoading: 'Loading', pluginStatusDisabled: 'Disabled', pluginStatusUnloaded: 'Unloaded',
+      pluginNoCapabilities: 'no capabilities', pluginUnload: 'Unload', pluginNoneImported: 'No plugin imported',
+      pluginImportManifest: 'Import manifest (.json)',
+      pluginManifestHint: 'plotpin.plugin/v1; code ≤64 KB, manifest ≤192 KB; re-import after refresh.'
     }
   };
   /* 动态业务文案以「中文原文」为键：L('宽度') 在英文模式返回 Width，未收录则原样返回中文。
@@ -897,7 +934,37 @@
     '示例场地':'Demo site',
     '示例文字':'Sample text',
     '已进入空白工程':'Started with a blank project',
-    '示例工程生成失败':'Failed to create the demo project'
+    '示例工程生成失败':'Failed to create the demo project',
+    /* D-14 */
+    '枪机摄像头':'Bullet camera', '半球摄像机':'Mini dome camera', '云台摄像机':'PTZ camera',
+    '红外对射':'Infrared beam', '激光对射':'Laser beam',
+    '门禁读卡器':'Card reader', '密码键盘':'Keypad', '出门按钮':'Exit button', '电控锁':'Electric lock',
+    '闸机':'Turnstile', '可视对讲门口机':'Video intercom',
+    '烟感探测器':'Smoke detector', '温感探测器':'Heat detector', '消火栓':'Fire hydrant', '喷淋头':'Sprinkler',
+    '手动报警按钮':'Manual call point', '疏散指示':'Exit sign',
+    '交换机':'Network switch', '路由器':'Router', '无线 AP':'Wireless AP', '光纤配线架':'Fiber patch panel',
+    '机柜':'Rack', '网络录像机':'NVR',
+    '地感线圈':'Induction loop', '车位':'Parking space', '诱导屏':'Guide display', '取卡机':'Ticket machine',
+    '电梯':'Elevator', '门磁':'Door sensor', '窗磁':'Window sensor', '温湿度传感器':'Temp/humidity sensor',
+    '漏水检测':'Water leak detector', '人脸识别':'Face recognition',
+    '视频监控':'Video surveillance', '门禁':'Access control', '消防':'Fire safety', '网络':'Network', '停车':'Parking',
+    '仅位置图标':'Position marker only', '圆形覆盖':'Circle coverage', '方形区域':'Square area',
+    '扇形视场':'Sector FOV', '杆/线段':'Bar/segment',
+    '没有匹配的符号':'No matching symbols',
+    '这是几何检查，不是消防/规范审图；不内置任何规范数值。':
+      'Geometry check only; no fire-code values are built in.',
+    '对象重叠，贴合容差':'Object overlap, touching tolerance',
+    '最小间距（按类型填写阈值；留空=不检查该类型）':'Minimum spacing per type (blank = skip)',
+    '越界，容差':'Bounds, tolerance',
+    '未配置':'Not set', '暂无对象类型':'No object types', '已注册规则（{n}）':'Registered rules ({n})',
+    '来源':'Source', '插件':'Plugin', '页面脚本':'Page script', '检查全部楼层':'Check all floors',
+    '尚未运行检查。配置修改后请重新运行。':'No check run yet. Re-run after changes.',
+    '未发现违规。':'No violations found.',
+    '耗时 {ms} ms｜对象 {objects}｜候选对 {pairs} / 理论 {theoretical}':
+      'Time {ms} ms | objects {objects} | pairs {pairs}/{theoretical} theoretical',
+    '已截断 {n} 条':'Truncated: {n}', '未执行：':'Not run: ', '点击定位':'Click to locate',
+    ' · {n} 条':' · {n} violations', '检查完成：{n} 条违规':'Done: {n} violations',
+    '已导出 {n} 条违规':'Exported {n} violations'
   };
   Object.assign(PHRASES, MORE);
 

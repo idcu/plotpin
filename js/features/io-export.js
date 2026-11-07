@@ -37,7 +37,7 @@ function openTitleBlockDialog(){
   openModal(L('图框 / 标题栏模板'),
     '<p class="hint-text">'+esc(L('默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。'))+'</p>'+checks+'<hr>'+inputs,
     [{text:L('取消'),click:closeModal},
-     {text:L('保存'),class:'primary',click:()=>{
+     {text:I18N.t('save'),class:'primary',click:()=>{
        const fields={};
        TITLE_BLOCK_FIELDS.forEach(def=>{ const el=$('tb_'+def.key); fields[def.key]=el?el.value:''; });
        const next=normalizeTitleBlock({enabled:$('tb_enabled')?.checked,frame:$('tb_frame')?.checked,

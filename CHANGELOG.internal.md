@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 英文界面 i18n 修复（D-14）
+
+- **Commit Hash**：本条提交（`fix(i18n): 英文界面补词并接入字典驱动`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `index.html`：符号库页签、符号库面板、规则面板静态文案接入 `data-i18n` / `data-i18n-title` / `data-i18n-placeholder` / `data-i18n-aria-label`；中文原文不变。
+  - `js/common/i18n.js`：`DICT.zh/en` 补符号库/规则/设置键；`PHRASES` 补 36 个内置类型名、6 个符号分类、图层副标题、规则动态文案；未新建第二套字典。
+  - `js/features/ui-shell.js`：设置弹窗插件区状态/按钮/提示与底图提示改为 `I18N.t`。
+  - `js/features/rules.js`：规则配置/结果文案走 `L()`，类型名改用 `typeDisplayName()`。
+  - `js/features/ui-panels.js`：符号分类选项与空结果提示走 `L()`。
+  - `js/features/io-export.js`：图框「保存」由 `L('保存')` 改为 `I18N.t('save')`，对齐 `DICT.save`。
+  - 人工验收证据迁至 `acceptance-evidence/`（加入 `.gitignore`），不再受 Playwright runner 清空 `test-results/` 影响。
+- **验证数据（真实 Chromium，1280×800 / DPR1）**
+  - M4 扫描（7 区域）：修复前 6 区域 / 193 实例 / 89 去重 / 0 占位符；修复后 3 区域 / 3 实例 / 3 去重 / 0 占位符。
+  - 中文界面回归：页签、符号库、规则、设置、图框按钮文案与修复前一致，差异 0。
+  - `node scripts/selftest.mjs`：2706 通过 / 0 失败。
+  - `npm run test:e2e`：85 passed / 1 skipped（既有 soak 用例）。
+  - `node scripts/i18n-scan.mjs --check`：覆盖率 41.99% ≥ 40%，缺口 0，UI 文案硬编码 1 ≤ 20。
+  - 体积：源文件 +7,854 B（预算 8,000 B，余量 146 B）；`dist/plotpin-standalone.html` +7,453 B（余量 547 B）。
+- **遗留 TODO / 风险**
+  - 英文语义质量仍需人工审校，验收报告记「未验证」。
+  - 剩余 3 条中文：默认图层名、默认工程名（持久化数据值）、运行环境摘要（不在本次四项范围）。
+  - `check-ngm` 在 HEAD 基线即报 `js/common/dxf.js` 未保留 `global.Dxf =` 承诺名（实际 `global.Dxf=`），属既有问题，本次未改。
+  - 未触碰任何 `camera-*` 文件。
+
 ## 2026-11-07 · geometry.js 按职责拆分（D-12）
 
 - **Commit Hash**：本条提交（`refactor(geometry): 按职责拆为三个脚本（行为不变）`）；完整哈希见 `git log HEAD` 与本次汇报。

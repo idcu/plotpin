@@ -240,7 +240,9 @@ function renderSymbolPanel(){
   if(!grid) return;
   const catSel=$('symbolCat');
   if(catSel&&catSel.options.length<=1){
-    SYMBOL_CATEGORIES.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); });
+    SYMBOL_CATEGORIES.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=L(c); catSel.appendChild(o); });
+  }else if(catSel){
+    Array.from(catSel.options).forEach(o=>{ if(o.value) o.textContent=L(o.value); });
   }
   const q=String(($('symbolSearch')&&$('symbolSearch').value)||'').trim().toLowerCase();
   const cat=(catSel&&catSel.value)||'';
@@ -255,7 +257,7 @@ function renderSymbolPanel(){
     <button type="button" class="symbol-tile" data-symbol-id="${esc(t.id)}" title="${esc(symbolAliasText(t).join(' / ')||typeDisplayName(t))}">
       ${symbolPreviewSvg(t)}
       <span>${esc(typeDisplayName(t))}</span>
-    </button>`).join(''):`<div class="hint-text">没有匹配的符号</div>`;
+    </button>`).join(''):`<div class="hint-text">${esc(L('没有匹配的符号'))}</div>`;
   grid.querySelectorAll('[data-symbol-id]').forEach(b=>b.onclick=()=>{
     const t=state.objectTypes.find(x=>x.id===b.dataset.symbolId);
     if(!t) return;

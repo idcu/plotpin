@@ -599,22 +599,22 @@ function renderRuleConfig(){
   const rows=types.map(t=>{
     const on=Object.prototype.hasOwnProperty.call(cfg.spacing.types,t.id);
     return '<div style="display:flex;gap:6px;align-items:center;margin:3px 0">'+
-      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(t.id)+'">'+esc(t.name||t.id)+'</span>'+
-      '<input type="number" min="0" max="1000" step="0.1" data-rule-type-min="'+esc(t.id)+'" value="'+(on?esc(cfg.spacing.types[t.id]):'')+'" placeholder="未配置" style="width:86px">'+
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(t.id)+'">'+esc(typeDisplayName(t))+'</span>'+
+      '<input type="number" min="0" max="1000" step="0.1" data-rule-type-min="'+esc(t.id)+'" value="'+(on?esc(cfg.spacing.types[t.id]):'')+'" placeholder="'+esc(L('未配置'))+'" style="width:86px">'+
       '<span class="hint-text">m</span></div>';
   }).join('');
   const custom=listRules().filter(r=>!r.builtin);
-  const customRows=custom.length?'<div class="hint-text" style="margin:8px 0 2px">已注册规则（'+custom.length+'）</div>'+
-    custom.map(r=>'<div class="hint-text" style="margin:2px 0">'+esc(r.name)+' · 来源 '+esc(r.owner?'插件: '+r.owner:'页面脚本')+'</div>').join(''):'';
+  const customRows=custom.length?'<div class="hint-text" style="margin:8px 0 2px">'+esc(L('已注册规则（{n}）',{n:custom.length}))+'</div>'+
+    custom.map(r=>'<div class="hint-text" style="margin:2px 0">'+esc(r.name)+' · '+esc(L('来源'))+' '+esc(r.owner?L('插件')+': '+r.owner:L('页面脚本'))+'</div>').join(''):'';
   box.innerHTML=
-    '<p class="hint-text" style="margin:0 0 8px">这是几何检查，不是消防/规范审图；不内置任何规范数值。</p>'+customRows+
-    '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleOverlapOn"'+(cfg.overlap.enabled?' checked':'')+'> 对象重叠，贴合容差 '+
+    '<p class="hint-text" style="margin:0 0 8px">'+esc(L('这是几何检查，不是消防/规范审图；不内置任何规范数值。'))+'</p>'+customRows+
+    '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleOverlapOn"'+(cfg.overlap.enabled?' checked':'')+'> '+esc(L('对象重叠，贴合容差'))+' '+
       '<input type="number" min="0" max="1000" step="0.01" id="ruleOverlapTol" value="'+esc(cfg.overlap.tolerance)+'" style="width:74px"> m</label>'+
-    '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleSpacingOn"'+(cfg.spacing.enabled?' checked':'')+'> 最小间距（按类型填写阈值；留空=不检查该类型）</label>'+
-    '<div style="max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:5px 8px">'+(rows||'<span class="hint-text">暂无对象类型</span>')+'</div>'+
-    '<label style="display:block;margin:8px 0 2px"><input type="checkbox" id="ruleBoundsOn"'+(cfg.bounds.enabled?' checked':'')+'> 越界，容差 '+
+    '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleSpacingOn"'+(cfg.spacing.enabled?' checked':'')+'> '+esc(L('最小间距（按类型填写阈值；留空=不检查该类型）'))+'</label>'+
+    '<div style="max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:5px 8px">'+(rows||'<span class="hint-text">'+esc(L('暂无对象类型'))+'</span>')+'</div>'+
+    '<label style="display:block;margin:8px 0 2px"><input type="checkbox" id="ruleBoundsOn"'+(cfg.bounds.enabled?' checked':'')+'> '+esc(L('越界，容差'))+' '+
       '<input type="number" min="0" max="1000" step="0.01" id="ruleBoundsTol" value="'+esc(cfg.bounds.tolerance)+'" style="width:74px"> m</label>'+
-    '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleScopeAll"'+(cfg.scope==='all'?' checked':'')+'> 检查全部楼层</label>';
+    '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleScopeAll"'+(cfg.scope==='all'?' checked':'')+'> '+esc(L('检查全部楼层'))+'</label>';
 }
 function readRuleConfigFromUI(){
   const out=createRuleConfig();
@@ -642,39 +642,40 @@ function readRuleConfigFromUI(){
 function renderRuleResults(){
   const box=$('ruleResults'); const count=$('ruleCount');
   if(!box) return;
-  if(count) count.textContent=ruleLastResult?(' · '+ruleLastResult.violations.length+' 条'):'';
+  if(count) count.textContent=ruleLastResult?L(' · {n} 条',{n:ruleLastResult.violations.length}):'';
   if(!ruleLastResult){
-    box.innerHTML='<p class="hint-text">尚未运行检查。配置修改后请重新运行。</p>';
+    box.innerHTML='<p class="hint-text">'+esc(L('尚未运行检查。配置修改后请重新运行。'))+'</p>';
     return;
   }
   const r=ruleLastResult;
-  const stats='耗时 '+r.ms+' ms｜对象 '+r.stats.objects+'｜候选对 '+r.stats.pairs+' / 理论 '+r.stats.theoretical+
-    (r.stats.truncated?'｜已截断 '+r.stats.truncated+' 条':'');
+  const stats=L('耗时 {ms} ms｜对象 {objects}｜候选对 {pairs} / 理论 {theoretical}',
+    {ms:r.ms,objects:r.stats.objects,pairs:r.stats.pairs,theoretical:r.stats.theoretical})+
+    (r.stats.truncated?'｜'+L('已截断 {n} 条',{n:r.stats.truncated}):'');
   if(!r.violations.length){
-    box.innerHTML='<div class="ok-banner">未发现违规。</div><p class="hint-text">'+esc(stats)+'</p>';
+    box.innerHTML='<div class="ok-banner">'+esc(L('未发现违规。'))+'</div><p class="hint-text">'+esc(stats)+'</p>';
     return;
   }
   const rows=r.violations.map((v,i)=>{
     const where=(v.floorName||'')+' ('+fmt(Number(v.x)||0)+', '+fmt(Number(v.y)||0)+')';
-    return '<div class="issue" role="button" tabindex="0" data-rule-hit="'+i+'" title="点击定位" style="cursor:pointer;margin:5px 0">'+
+    return '<div class="issue" role="button" tabindex="0" data-rule-hit="'+i+'" title="'+esc(L('点击定位'))+'" style="cursor:pointer;margin:5px 0">'+
       '<b>'+esc(v.ruleName)+'</b> · '+esc(v.objectName||v.objectId)+(v.peerName?' ⇄ '+esc(v.peerName):'')+
       ' <span class="hint-text">['+esc(where)+']</span><div class="hint-text">'+esc(v.message)+'</div></div>';
   }).join('');
-  const skipped=r.skipped&&r.skipped.length?'<p class="hint-text">未执行：'+esc(r.skipped.map(s=>s.ruleName+'@'+s.floorName+'：'+s.reason).join('；'))+'</p>':'';
+  const skipped=r.skipped&&r.skipped.length?'<p class="hint-text">'+esc(L('未执行：'))+esc(r.skipped.map(s=>s.ruleName+'@'+s.floorName+'：'+s.reason).join('；'))+'</p>':'';
   box.innerHTML='<p class="hint-text" style="margin:0 0 6px">'+esc(stats)+'</p>'+rows+skipped;
 }
 function ruleRunAndRender(){
   ruleLastResult=runRuleCheck();
   renderRuleResults();
   const n=ruleLastResult.violations.length;
-  toast(n?('检查完成：'+n+' 条违规'):L('检查完成：未发现违规'),n?'warn':'');
+  toast(n?L('检查完成：{n} 条违规',{n}):L('检查完成：未发现违规'),n?'warn':'');
 }
 function ruleExport(){
   const result=ruleLastResult||runRuleCheck();
   ruleLastResult=result;
   renderRuleResults();
   downloadBlob(new Blob([ruleViolationsCsv(result)],{type:'text/csv;charset=utf-8'}),ruleExportName());
-  toast('已导出 '+(result.violations.length)+' 条违规', '');
+  toast(L('已导出 {n} 条违规',{n:result.violations.length}), '');
 }
 function initRuleUI(){
   if(!$('ruleConfig')) return;

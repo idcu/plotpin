@@ -15,9 +15,9 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="极轴追踪的角度步长">${[15,30,45,90].map(x=>`<option value="${x}" ${Number(state.settings.polarStep)===x?'selected':''}>${x}°</option>`).join('')}</select>
       <label>${esc(T('precisionSetting'))}</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>${esc(T('languageLabel'))}</label><select id="setLang"><option value="zh" ${state.settings.lang!=='en'?'selected':''}>中文</option><option value="en" ${state.settings.lang==='en'?'selected':''}>English</option></select>
-      <label>插件（仅本会话）</label><div id="pluginPanel">${pluginPanelHTML()}</div>
+      <label>${esc(T('pluginSessionOnly'))}</label><div id="pluginPanel">${pluginPanelHTML()}</div>
       <label>${esc(T('runtimeSetting'))}</label><div class="hint-text">${esc(capabilitySummary())}</div>
-      <label>${esc(T('siteBgSetting'))}</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/平行四边形/多边形</div>
+      <label>${esc(T('siteBgSetting'))}</label><div class="hint-text">${esc(siteDescription())}<br>${esc(T('siteBgHint'))}</div>
     </div>`,[
     {text:T('cancel'),class:'',click:closeModal},{text:T('save'),class:'primary',click:()=>{
       pushHistory();
@@ -44,11 +44,12 @@ $('settingsBtn').onclick=()=>{
 
 /** D-05 插件面板：列表（id/版本/能力/状态/原因）+ 清单导入 + 卸载；仅会话内，不持久化 */
 function pluginPanelHTML(){
-  const zh={active:'可用',loading:'加载中',disabled:'已禁用',unloaded:'已卸载'};
+  const T=I18N.t;
+  const st={active:T('pluginStatusActive'),loading:T('pluginStatusLoading'),disabled:T('pluginStatusDisabled'),unloaded:T('pluginStatusUnloaded')};
   const list=PlotPin.listPlugins();
-  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(zh[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||'无能力')+(p.reason?' · '+esc(p.reason):'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">卸载</button></div>').join(''):'<div class="hint-text">尚未导入插件</div>')+
-    '<button type="button" id="pluginImportBtn">导入清单（.json）</button><input type="file" id="pluginFile" accept=".json,application/json" hidden>'+
-    '<div class="hint-text">格式 plotpin.plugin/v1；code ≤64 KB、清单 ≤192 KB；刷新后需重新导入。</div>';
+  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(st[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||T('pluginNoCapabilities'))+(p.reason?' · '+esc(p.reason):'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'<div class="hint-text">'+esc(T('pluginNoneImported'))+'</div>')+
+    '<button type="button" id="pluginImportBtn">'+esc(T('pluginImportManifest'))+'</button><input type="file" id="pluginFile" accept=".json,application/json" hidden>'+
+    '<div class="hint-text">'+esc(T('pluginManifestHint'))+'</div>';
 }
 function bindPluginPanel(){
   const panel=$('pluginPanel'); if(!panel) return;
