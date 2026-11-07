@@ -54,6 +54,7 @@
       thId: '编号', thName: '名称', thType: '类型', thLayer: '图层', thParam: '参数', thVisible: '显隐', thLock: '锁',
       searchPlaceholder: '搜索编号/名称/备注',
       batchChangeLayer: '改图层', batchMove: '平移', batchRotate: '旋转', batchDelete: '删除',
+      batchAnnotLabel: '图上标注', batchShowAnnot: '显示标注', batchHideAnnot: '隐藏标注',
       selectAll: '全选当前筛选结果',
       layersHeading: '图层', newLayerPlaceholder: '新图层名称', addLayer: '新增图层',
       typesHeading: '类型管理', addTypeHeading: '新增自定义类型',
@@ -132,6 +133,7 @@
       thId: 'ID', thName: 'Name', thType: 'Type', thLayer: 'Layer', thParam: 'Params', thVisible: 'Visible', thLock: 'Lock',
       searchPlaceholder: 'Search ID / name / note',
       batchChangeLayer: 'Set layer', batchMove: 'Move', batchRotate: 'Rotate', batchDelete: 'Delete',
+      batchAnnotLabel: 'On-plan labels', batchShowAnnot: 'Show labels', batchHideAnnot: 'Hide labels',
       selectAll: 'Select all filtered results',
       layersHeading: 'Layers', newLayerPlaceholder: 'New layer name', addLayer: 'Add layer',
       typesHeading: 'Types', addTypeHeading: 'Add custom type',
@@ -591,6 +593,10 @@
     '保存失败：存储空间不足，请导出 JSON 并清理空间':'Save failed: out of storage; export JSON and free some space',
     '保存失败：自动重试 3 次仍未成功，请导出 JSON':'Save failed: still unsuccessful after 3 automatic retries; export JSON',
     '保存失败：IndexedDB 不可用，已降级 localStorage（容量有限）':'Save failed: IndexedDB unavailable; fell back to localStorage (limited capacity)',
+    '已批量显示标注':'Labels shown for selection',
+    '已批量隐藏标注':'Labels hidden for selection',
+    '选中对象标注状态未变化':'Selected objects already have the requested label state',
+    '没有可修改标注的选中对象':'No selected objects with editable labels',
     '拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。':'Drag the control points on the canvas to adjust the site; you can also enter exact coordinates/parameters here. Coordinates are world coordinates (m) and may be negative; a site and an image base map can coexist.'
   };
 

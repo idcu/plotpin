@@ -136,6 +136,19 @@ $('batchMoveBtn').onclick=()=>{
 };
 $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0);
 $('batchDeleteBtn').onclick=deleteSelected;
+/* 批量标注显隐：复用 annotToggleKeys / annotOn / setAnnot，与属性面板单对象语义一致 */
+function setSelectedAnnot(on){
+  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+  if(!items.length) return toast('没有可修改标注的选中对象','warn');
+  const plan=[];
+  items.forEach(o=>annotToggleKeys(o).forEach(k=>{ if(annotOn(o,k)!==on) plan.push([o,k]); }));
+  if(!plan.length) return toast('选中对象标注状态未变化','warn');
+  pushHistory();
+  plan.forEach(([o,k])=>setAnnot(o,k,on));
+  commitChange(on?'已批量显示标注':'已批量隐藏标注');
+}
+$('batchShowAnnotBtn').onclick=()=>setSelectedAnnot(true);
+$('batchHideAnnotBtn').onclick=()=>setSelectedAnnot(false);
 
 /* -------------------- 图层 / 类型管理 -------------------- */
 function renderLayers(){

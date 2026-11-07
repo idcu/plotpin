@@ -2,6 +2,25 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 清单页批量标注显隐
+
+- **Commit Hash**：本条提交（`feat(list): 清单页批量显示/隐藏图上标注`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `index.html`：清单工具条新增「图上标注」行（显示标注 / 隐藏标注），与既有改图层/平移/旋转/删除不重复。
+  - `js/features/ui-panels.js`：新增 `setSelectedAnnot(on)`，只处理选中且可编辑对象，逐 `annotToggleKeys` 比较后一次性 `pushHistory` → `setAnnot` → `commitChange`；无变化或无可编辑对象只提示、不写历史。
+  - `js/common/i18n.js`：新增 `batchAnnotLabel / batchShowAnnot / batchHideAnnot` 与 4 条结果文案，中英同步。
+  - 复用 `annotOn / annotToggleKeys / setAnnot`，未新增并行字段；单对象属性面板语义不变。
+- **导出影响（勘察结论）**：`annot` 影响画布、PNG/PDF（同 `drawScene` 路径）与 SVG（`annotationItems` + `annotOn`）；DXF 不导出对象标注文字，故不受影响。批量只写显式布尔值，不改变导出默认。
+- **验证数据（真实 Chromium）**
+  - `node scripts/e2e.mjs tests/e2e/batch-annot.spec.mjs`：2 passed。
+  - `node scripts/selftest.mjs`：2706 通过 / 0 失败。
+  - `node scripts/build.mjs --check`：785,815 B（767.4 KB）/ gzip 244,167 B；较上一版 +1,444 B，距 839,680 B 上限余 53,865 B。
+  - `node scripts/check.mjs` 通过；`i18n-scan --check` 42.02% ≥ 40%、缺口 0。
+  - 布局变更前的固定 64px 输入宽度问题在下一提交处理。
+- **遗留 / 风险**
+  - 批量只处理当前清单筛选可见的选中对象语义不变（选中集合仍由 `selectedIds` 决定）。
+  - 未 push；未触碰 `camera-*`。
+
 ## 2026-11-07 · 英文界面 i18n 修复（D-14）
 
 - **Commit Hash**：本条提交（`fix(i18n): 英文界面补词并接入字典驱动`）；完整哈希见 `git log HEAD` 与本次汇报。
