@@ -285,6 +285,11 @@ function areaShapeType(o){
 }
 /** 扇形有效张角（0–360°）；a0/a1 为世界系绝对角度（Y 向上），相等时视为整圆 */
 function sectorSweep(sh){ return __geo.sectorSweep(sh&&sh.a0,sh&&sh.a1); }
+/** 扇形绘制区间（画布/SVG/控制点共用）：起角 a0 与归一后的终点角 a1=a0+sweep，跨 0° 不会反向 */
+function sectorArcRange(sh){
+  const a0=Number(sh&&sh.a0)||0, sweep=sectorSweep(sh);
+  return {a0,a1:a0+sweep,sweep};
+}
 /** 扇形弧采样（seg 等分），世界坐标，圆心由调用方给定 */
 function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){ return __geo.sectorArcPoints(cx,cy,r,a0,sweep,seg); }
 /** 区域形状 → 闭合世界多边形顶点（扇形首点为圆心）；渲染/包围盒/框选/SVG 共用 */

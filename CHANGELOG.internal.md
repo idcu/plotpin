@@ -2,6 +2,19 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-13 跨 0° 扇形画布与 SVG 外圈方向不一致
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/core/geometry.js`：新增 `sectorArcRange(shape)`，以 `sectorSweep()` 为唯一角度源，返回 `{a0, a1:a0+sweep, sweep}`。
+  - `js/core/render.js`：画布扇形弧由「原始 a1 → a0」改为「归一后 a1 → a0」，`350°→20°` 不再反向画成 330°。
+  - `js/features/io-export.js`、`js/core/geometry-site.js`：SVG 场地扇形与控制点统一调用 `sectorArcRange`，与画布同源。
+  - `scripts/selftest.mjs`：api 新增 `sectorArcRange`；39.10 节 10 项断言覆盖 350→20（30°）、20→350（330°）、0→90、起止相等（360°）、弧采样首末角、SVG 大弧标志为 0。
+  - `sw.js`：`VERSION` 21 → 22；指纹清单与 dist 清单同步。
+  - 文档：`docs/features.md` 新增「扇形跨 0°」口径并移除 CORE-P1-7 限制。
+- **验证数据**：selftest 2863 通过 / 0 失败（+10）；e2e 98 passed / 1 skipped；产物 795,116 B（gzip 247,474 B，余量 44,564 B）；`check.mjs --selftest` 通过；`check-gates` 9/9；`check-discipline --strict` 13/13。
+- **遗留风险**：无新增；PNG/PDF 走画布路径，已随本次修复一并一致。
+
 ## 2026-11-08 · N-12 一般仿射下圆/椭圆/平行四边形/扇形的系统性失真
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

@@ -119,7 +119,7 @@ code += `\n;globalThis.__api = {
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter,
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
   PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
-  sectorSweep, sectorArcPoints, pointIconScale, areaParamText,
+  sectorSweep, sectorArcPoints, sectorArcRange, pointIconScale, areaParamText,
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
@@ -2833,6 +2833,32 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     stDeg.objects.push(api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'sector',r:4,a0:10,a1:80}}));
     const sumDeg=api.applyWorldTransform([2,0,0,0,3,0]);
     eq('N-12-变换摘要暴露降级项', sumDeg.degraded.length===1?sumDeg.degraded[0].code:null, 'sector-affine');
+  }
+
+  /* 39.10 N-13：跨 0° 扇形画布/SVG/控制点共用同一归一化区间 */
+  {
+    const r1=api.sectorArcRange({a0:350,a1:20});
+    approx('N-13-跨0始角', r1.a0, 350, 1e-9);
+    approx('N-13-跨0终点角归一', r1.a1, 380, 1e-9);
+    approx('N-13-跨0扫角', r1.sweep, 30, 1e-9);
+    const r2=api.sectorArcRange({a0:20,a1:350});
+    approx('N-13-反向跨0扫角', r2.sweep, 330, 1e-9);
+    const r3=api.sectorArcRange({a0:0,a1:90});
+    eq('N-13-不跨0区间', [r3.a0,r3.a1,r3.sweep], [0,90,90]);
+    const r4=api.sectorArcRange({a0:350,a1:350});
+    eq('N-13-起止相等视为整圆', [r4.a0,r4.a1,r4.sweep], [350,710,360]);
+    /* 几何采样沿 a0→a0+sweep 递增，跨 0° 不回绕 */
+    const pts=api.sectorArcPoints(0,0,10,350,30,3);
+    approx('N-13-采样首点角', Math.atan2(pts[0][1],pts[0][0])*180/Math.PI, -10, 1e-9);
+    approx('N-13-采样末点角', Math.atan2(pts[3][1],pts[3][0])*180/Math.PI, 20, 1e-9);
+    /* SVG 同一区间：30° 弧的 large-arc 标志必须为 0，不能画成 330° */
+    const st=api.resetState();
+    st.site={kind:'sector',shape:{type:'sector',cx:0,cy:0,r:10,a0:350,a1:20},style:{},visible:true};
+    const svg=api.buildSceneSvg();
+    const m=svg.match(/A[-\d.]+,[-\d.]+ 0 (\d) 1 /);
+    ok('N-13-SVG 扇形弧存在', !!m);
+    eq('N-13-SVG 弧跨0不反向', m?m[1]:null, '0');
+    api.resetState();
   }
 }
 

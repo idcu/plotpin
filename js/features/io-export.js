@@ -412,10 +412,10 @@ function buildSceneSvg(){
     }else if(sh.type==='ellipse'){
       shapes.push(`<ellipse cx="${X(sh.cx)}" cy="${Y(sh.cy)}" rx="${sh.rx*ppu}" ry="${sh.ry*ppu}" transform="rotate(${-Number(sh.angle)||0} ${X(sh.cx)} ${Y(sh.cy)})" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
     }else if(sh.type==='sector'){
-      const R=sh.r*ppu, cx=X(sh.cx), cy=Y(sh.cy), sweep=sectorSweep(sh);
+      const R=sh.r*ppu, cx=X(sh.cx), cy=Y(sh.cy), rg=sectorArcRange(sh), sweep=rg.sweep;
       const ex=a=>[cx+R*Math.cos(a*Math.PI/180),cy-R*Math.sin(a*Math.PI/180)];
-      const a0=Number(sh.a0)||0;
-      const p0=ex(a0), p1=ex(a0+sweep), large=sweep>180?1:0;
+      const a0=rg.a0;
+      const p0=ex(a0), p1=ex(rg.a1), large=sweep>180?1:0;
       shapes.push(`<path d="M${cx},${cy} L${p1[0]},${p1[1]} A${R},${R} 0 ${large} 1 ${p0[0]},${p0[1]} Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
     }else{
       const pts=siteOutlinePoints(site).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');

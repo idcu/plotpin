@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=21
+version=22
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -17,19 +17,19 @@ bcddea9a431948fae2f237f8eeb8c6d4b897697356fe11f5ba26eb2d460edbcc  js/common/symb
 3165d3846f6c1d29bc3aab8d8412079f67a9b3f82bf19e84edeff6bd0da582ad  js/core/app.js
 2e27843c6aac91c20e4ea2e07ec1c669103d73ab682a98d368bb17e9c6c86581  js/core/config.js
 504647c8ffc10b05c68c282e5a5f9d8611cb05532cbd634c011df979aa962591  js/core/geometry-coverage.js
-5d5e908b834e502a0c86ad1f965e9eea891624e81a0ecd710ef79bdd5f3cbb6f  js/core/geometry-site.js
+23a64dfe6618ae730b3cc66408183c20570eb372689b8bc1562eadc66784ce52  js/core/geometry-site.js
 3b2e07ecaf0f738b5f09f588a565c39c0718dae5e170099dd3bd6ec34c8129f5  js/core/geometry-transform.js
-5ed31052fa11f1d11e96cabee0041c8925ce2d2de5f768be9656e60770f646f7  js/core/geometry.js
+bd95c4c922726fc7420d1949268b1dc1ba1bf53f36e91aec2307aad5f1d9c830  js/core/geometry.js
 48831da84865b1005d018dd2e563a8b13a23c3d8a11bf16422d15f49e9dce24f  js/core/interaction.js
 ea9a013c45194d3a8946d77daca2c8c25a18bf57d4a41d7d80eb875e26a59f27  js/core/model.js
 c687855938066f25d969d8e25d967e67c190fc809113a45538b43991b41d8cd0  js/core/persistence.js
-4bf89e7136a541530d9d6986f63a0ae9fd2b082c768cf1dd32e443bcd28df13a  js/core/render.js
+36ffa4dc8081e9c4d9e0094de90af75c47fbd7c34d1b5055b97f95a800435307  js/core/render.js
 e98cbef1afc8b1de258beb4775d0d1ec6f67f6a13e83d130d25653160659015e  js/core/snapshot.js
 7d993922b0b0f81a7a668c3c6ea7dbc9c4f02bf2725cdc8165d60116f6c72e73  js/core/tab-lease.js
 6cdcb4eb2acc55866dc22ad0d4e40a0178f4245aa6f7c76426bd9f93deca3518  js/core/viewport.js
 2c8807de25dc960165b8dc7123c408f83f2927ea9294c924a863875c3bce9717  js/features/catalog.js
 96d38476772eabc577d9548579e3d9d5723ded596b26275f8eb21d6378ed3e77  js/features/collab.js
-18777f08799c7ff577076235e6928de7a92d9e17c587c765b25ddeda9b402a29  js/features/io-export.js
+d5c96f8825aacba27b2ee9879ca86d6c5fa52c2d91517645cbf04b7cab6a5098  js/features/io-export.js
 c15a33387f12004084f19bdd9b04ccf9fde78633033926c8fb5f0f572803e872  js/features/io-fields.js
 69b7769c531ea2045cb1b7f8c045e237d2720561c5f654ba9cc21787431d057d  js/features/io-import.js
 ecf35b8e125e22079aff8eb9d52680df2584bd07570bf82e0c38f16d3dff91e7  js/features/io-table.js

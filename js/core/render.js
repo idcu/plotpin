@@ -408,10 +408,10 @@ function drawSite(c,v,toS){
     c.beginPath(); c.ellipse(ce[0],ce[1],sh.rx*v.zoom,sh.ry*v.zoom,screenAngle({angle:sh.angle||0}),0,Math.PI*2); c.fill();
     c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
   }else if(sh.type==='sector'){
-    const ce=toS([sh.cx,sh.cy]), R=sh.r*v.zoom;
+    const ce=toS([sh.cx,sh.cy]), R=sh.r*v.zoom, rg=sectorArcRange(sh);
     c.fillStyle=fill;
     c.beginPath(); c.moveTo(ce[0],ce[1]);
-    c.arc(ce[0],ce[1],R,-Number(sh.a1||0)*Math.PI/180,-Number(sh.a0||0)*Math.PI/180,false); c.closePath(); c.fill();
+    c.arc(ce[0],ce[1],R,-rg.a1*Math.PI/180,-rg.a0*Math.PI/180,false); c.closePath(); c.fill();
     c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
   }else if(sh.type==='parallelogram'){
     const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,Number(sh.w)||0,Number(sh.h)||0,sh.skew).map(toS);

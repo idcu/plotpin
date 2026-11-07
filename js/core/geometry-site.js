@@ -166,7 +166,7 @@ function siteHandlesOf(site){
     return out;
   }
   if(sh.type==='sector'){
-    const r=Number(sh.r)||0, a0=Number(sh.a0)||0, sw=sectorSweep(sh), a1=a0+sw;
+    const r=Number(sh.r)||0, rg=sectorArcRange(sh), a0=rg.a0, sw=rg.sweep, a1=rg.a1;
     const p=deg=>[cx+r*Math.cos(deg*Math.PI/180),cy+r*Math.sin(deg*Math.PI/180)];
     out.push({type:'siteNode',mode:'center',x:cx,y:cy});
     out.push({type:'siteNode',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
