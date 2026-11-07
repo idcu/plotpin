@@ -2,6 +2,35 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 文档入口收口：ARCHITECTURE / user-guide / plans 索引（D-10）
+
+- **Commit Hash**：本条提交（`docs(arch): 文档入口收口（ARCHITECTURE/user-guide/plans 索引）`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - 新增 `docs/ARCHITECTURE.md`（**7,706 B / 97 行**，上限 10 KB）：42 脚本运行形态、四层加载图、判据入口、**唯一源清单**（版本 / 插件契约 / 导出字段 / 几何 / 持久化 / 租约 / 符号 / 限额 / 发行包哈希 / 脚本清单 / 人工验收 / 计划索引）、IndexedDB 与 localStorage 命名空间、改动该跑什么、文档地图。只做入口与链接，细节指向 `modules.md` / `engineering.md` / `contracts/`。
+  - 新增 `docs/user-guide.md`（**17,835 B / 275 行**，上限 30 KB）：打开与首启引导、界面速览、底图/场地与校准（比例尺、2 点/≥3 点仿射、图片变换）、绘制与编辑、导入（JSON/DXF/PDF/表格/限额）、导出（8 种门禁格式 + 图框/报价/公式防护）、多楼层/工程库/快照、协作（离线 LWW / WebRTC / 多标签租约）、保存与故障处理、插件（清单/沙箱/能力/规则）、常见问题。快捷键表不复制，指回 README。
+  - 新增 `docs/plans/README.md`（**2,095 B / 38 行**）：计划索引、通用门禁、D-01 ~ D-13 状态（D-01~D-09 已交付并登记提交短哈希，D-10 进行中，D-11~D-13 待执行）。
+  - `README.md` 新增「📚 文档导航」表（10 条目标），三步上手后补 `user-guide.md` 链接，目录树补 `ARCHITECTURE.md` / `user-guide.md` / `manual-acceptance.md` / `plans/README.md`；`manual-acceptance.md` 作为 **M1–M8 发布前人工验收矩阵**入册。
+  - 事实同步：README 特性计数由「42 条子项 / 71 条」改为「43 条子项 / 72 条」，与 `docs/features.md` 对齐（D-09 新增子项未回填）；不是新功能说明。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2706 通过 / 0 失败**（断言数与 D-06 持平，加载 42 个脚本） | 0 |
+| `node scripts/e2e.mjs` | **85 passed / 1 skipped / 86 total（1.9m）**，与 D-06 持平；无新增用例（本任务不改业务代码） | 0 |
+| `node scripts/build.mjs --check` | **767,341 B（749.4 KB）**，gzip **237,854 B（232.3 KB）**，SHA256 `acd6770d4dfd…` 与登记值一致；D-06 → 本任务 **+0 B**（文档不进发行包） | 0 |
+| `node scripts/check-discipline.mjs` | **13/13 项具备 → L4**；文档入口分层读数 README + **12 篇 docs/**；文档内命令 **46 条全部可解析**；单文件最大仍 `engineering.md` 49.9 KB / 552 行 | 0 |
+| 相对链接扫描 | 13 篇文档（README、docs/*.md、docs/plans/*.md）全部相对链接 **0 断链** | 0 |
+| README 标题清单 | 真实标题 **17 → 18**（新增「📚 文档导航」），原 17 条**无删除、无改名**；代码块内伪标题已排除 | — |
+| 文档体积 | README **35,387 → 36,860 B（+1,473 B）**；新增文档 **27,636 B**；docs 总增量 **+29,109 B**（计划预算约 +35 KB） | — |
+
+- **新增/调整公共抽象**
+  - 无运行时公共 API、无新增脚本、无新增依赖；本任务只新增/重组 Markdown 并更新 README 入口。
+- **遗留 / 风险**
+  - `docs/plans/README.md` 的任务状态需随 D-11~D-13 推进手工回填，未设自动判据；状态漂移只能靠提交时检查。
+  - README 仍保留快捷键、设计原则、路线图与英文简介：它们属于「快速参考 / 交付历史 / 对外介绍」，不是用户手册的重复内容；README 当前 36.9 KB / 350 行，仍在 60 KB / 600 行上限内。
+  - 文档拆分带来双份维护风险：架构或数据命名空间变更时，`ARCHITECTURE.md` 与 `modules.md` / `engineering.md` 必须同提交更新。
+  - 未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 插件：API 兼容矩阵与契约演进门禁（D-06）
 
 - **Commit Hash**：本条提交（`feat(plugin): 插件 API 兼容矩阵与契约演进门禁`）；完整哈希见 `git log HEAD` 与本次汇报。

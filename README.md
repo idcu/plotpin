@@ -29,8 +29,22 @@
 | **协同** | 多工程库、离线 LWW 合并（删除墓碑可复活）、本机 BroadcastChannel 与跨设备 WebRTC（均无服务器） |
 | **可靠** | 零依赖离线运行、分层离屏渲染 + 视口裁剪、解析器输入上限、能力探测与显式降级、中英界面与无障碍 |
 
-> **29 条顶层特性**（含 42 条子项，共 71 条，逐条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
+> **29 条顶层特性**（含 43 条子项，共 72 条，逐条写清了边界与实现口径）见 [docs/features.md](docs/features.md)。
 > README 只回答"这是什么、能不能用"；能不能**依赖**它，去那里逐条对。
+
+## 📚 文档导航
+
+| 想知道 | 去哪 |
+|---|---|
+| 怎么用（底图/校准/导入导出/协作/插件/故障处理） | [docs/user-guide.md](docs/user-guide.md) |
+| 代码怎么分层、唯一源在哪 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| 有哪些能力、边界在哪 | [docs/features.md](docs/features.md) |
+| 门禁守什么、什么故意不设 | [docs/engineering.md](docs/engineering.md) |
+| 浏览器级 e2e / 性能基线 | [docs/testing.md](docs/testing.md) · [docs/performance.md](docs/performance.md) |
+| 模块依赖与公共抽象 | [docs/modules.md](docs/modules.md) |
+| 已知问题 / 结构性删除记录 | [docs/known-issues.md](docs/known-issues.md) · [docs/deletions.md](docs/deletions.md) |
+| 发布前人工验收（M1–M8） | [docs/manual-acceptance.md](docs/manual-acceptance.md) |
+| 下一阶段任务与状态 | [docs/plans/README.md](docs/plans/README.md) |
 
 ## 🚀 快速开始
 
@@ -49,6 +63,8 @@ npx serve .
 1. **准备底图**：点顶部「底图/场地」上传图片（再用「比例尺」校准），和/或直接拖画矢量场地；图片与场地可同时存在，替换其中一个不会删除另一个。未导入图片前，「比例尺」「仿射校准」「图片变换」三个入口禁用并给出原因；仅画矢量场地时会提示「场地按米绘制，无需校准」。
 2. **添加对象**：左侧选择「点设备 / 区域 / 折线 / 文字 / 标注」，在画布上单击或拖拽；区域工具顶部可切换矩形 / 圆形 / 椭圆 / 扇形 / 平行四边形。
 3. **导出成果**：选择 PNG / SVG / JSON / CSV / XLSX 后点「导出」，或「打印/PDF」生成报告。
+
+校准、导入导出细节、协作与插件安装见 [docs/user-guide.md](docs/user-guide.md)；快捷键也可在应用内按 `?` 查看。
 
 ---
 
@@ -112,13 +128,18 @@ npx serve .
 ├── scripts/                  # check（门禁总闸）/ check-contracts（契约判据）/ selftest / badge / bench / build
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
+    ├── ARCHITECTURE.md       # 架构入口：分层图、唯一源清单、改动该跑什么
+    ├── user-guide.md         # 用户手册：快速上手、校准、导入导出、协作、插件、故障处理
     ├── engineering.md        # 门禁与契约的权威说明（含"故意不设门禁"的清单）
     ├── testing.md            # 浏览器级 e2e 测试体系（spec 清单、覆盖边界、可选门禁）
     ├── performance.md        # 真实浏览器性能基线（4 档实测、阈值、方法学边界）
-    ├── features.md           # 29 条顶层特性 + 42 条子项（共 71 条，含边界与实现口径）
+    ├── features.md           # 29 条顶层特性 + 43 条子项（共 72 条，含边界与实现口径）
     ├── modules.md            # 模块分层：谁可以依赖谁（由 check.mjs 第 9 步守着）
     ├── known-issues.md       # Phase A/B/C 遗留项三类归档：可自动化 / 需人工或真机 / 已知限制
-    └── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
+    ├── deletions.md          # 结构性删除 / 出库的账本（判据校验：字段齐全、无假删除）
+    ├── manual-acceptance.md  # 发布前人工验收矩阵（M1–M8；不伪造 CI 绿）
+    └── plans/
+        └── README.md         # 开发计划索引与任务状态
 ```
 
 ---
