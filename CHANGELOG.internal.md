@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · N-04 修复场地静默删除与本地清空失效
 
-- **Commit Hash**：本条提交（`fix(collab): 场地编辑/清空进入提交与广播，合并按 null 获胜`）；完整哈希见回填提交与本次汇报。
+- **Commit Hash**：`973c83c`（`fix(collab): 场地编辑/清空进入提交与广播，合并按较新 null 获胜`）。
 - **核心改动**
   - `js/common/merge.js`：`mergeFloorMeta` 的场地改为严格 LWW——`siteNewer ? fb.site : fa.site`，**较新一侧为 `null` 即清空**，不再用 `fa.site || fb.site` 复活较旧场地；新增 `stats.siteDeleted`（存在→不存在）与 `stats.siteCleared`（远端显式 null 胜出）独立计数并计入 `floorMetaUpdated`。`mergeFloorWrite` 把 `site.updatedAt` 纳入楼层最后写入时间，避免较新场地编辑被较旧楼层墓碑整层删除吞掉。
   - `js/core/persistence.js`：`mergeHistoryNeeded` 纳入 `siteDeleted` / `siteCleared`，远端清空场地会压入撤销栈。
