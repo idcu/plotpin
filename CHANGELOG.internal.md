@@ -2,6 +2,24 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 计划：下一阶段四方向开发计划与人工验收清单入册
+
+- **Commit Hash**：本条提交（`docs(plan): 入册下一阶段开发计划与人工验收清单`）；完整哈希见汇报与 `git log HEAD`。
+- **核心改动点**
+  - 新增 `docs/plans/next-phase-2026-11.md`：易学易用 / 扩展性 / 持久性 / 可维护性四方向 13 个任务（D-01 ~ D-13），含现状证据、量化验收、技术方案、影响面、依赖、工作量、风险与降级。
+  - 基线数字全部来自本轮命令输出：selftest 2584/0、e2e 66 个（65 passed / 1 skipped）、产物 736,298 B、gates 5/5、discipline 13/13、i18n 29.82%。
+  - `docs/manual-acceptance.md`（21,192 B）入册，作为 M1–M8 发布前人工验收清单；不改其判据与 M/K 编号。
+- **实测验证（本机）**
+
+| 命令 | 结果 |
+|---|---|
+| `node scripts/check-discipline.mjs` | 13/13（L4）；新增 plan 文档 33.9 KB / 319 行，未超 60 KB / 600 行单篇上限 |
+| `node scripts/check.mjs --selftest` | 2584 通过 / 0 失败（未改业务代码，断言数不变） |
+
+- **遗留 / 风险**
+  - 计划中的目标值均为预算；`perf:browser` 本轮未复跑，M1–M8 均标注未验证，完成后必须用真实输出回填。
+  - 未 push；未读取/修改 `camera-*`。
+
 ## 2026-11-07 · 文档拆分：engineering.md → engineering / testing / performance
 
 - **Commit Hash**：本条提交（`docs(engineering): 按测试/性能主题拆分…`）；完整哈希见汇报与 `git log HEAD`。
