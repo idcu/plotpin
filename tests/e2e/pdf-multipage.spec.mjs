@@ -1,6 +1,30 @@
 import { test, expect } from '@playwright/test';
+import { deflateSync } from 'node:zlib';
 
 const PT_M = 0.0254 / 72;
+
+/* 带 FlateDecode 内嵌图的单页 PDF：2×2 RGB 像素。用于验证底图走资产库，
+   而不是只写运行时 dataUrl（旧实现自动保存后刷新即永久丢图）。 */
+function pdfWithFlateImage() {
+  const raw = Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
+  const flate = deflateSync(raw);
+  const content = 'q 2 0 0 2 0 0 cm /Im0 Do Q\n';
+  const obj = (n, body) => n + ' 0 obj\n' + body + '\nendobj\n';
+  let s = '%PDF-1.4\n';
+  s += obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  s += obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  s += obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 5 0 R /Resources << /XObject << /Im0 4 0 R >> >> >>');
+  /* 图像对象含二进制流，不能走 obj()（它会在流数据前追加 endobj） */
+  s += '4 0 obj\n<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ' + flate.length + ' >>\nstream\n';
+  return Buffer.concat([
+    Buffer.from(s, 'latin1'),
+    flate,
+    /* 紧贴 endstream：容器按 /Length 精确切片，多一个换行会被算进二进制流导致解压失败 */
+    Buffer.from('endstream\nendobj\n', 'latin1'),
+    Buffer.from(obj(5, '<< /Length ' + content.length + ' >>\nstream\n' + content + 'endstream'), 'latin1'),
+    Buffer.from('%%EOF', 'latin1')
+  ]);
+}
 
 /* 两页矢量 PDF：/Kids 顺序与对象编号相反（对象 5 是第一页 200×100，对象 3 是第二页 300×200）。
    每页一条 190/160 点的横线（>0.05m 去噪阈值）+ 一段文本，用于验证页序与各页独立原点。 */
@@ -76,4 +100,27 @@ test('B-13：单页 PDF 保持旧行为（原点归零、无多页提示）', as
   });
   expect(r.min).toBeCloseTo(0, 6);
   expect(r.text).toBeCloseTo(50 * PT_M, 6);
+});
+
+test('N-03：PDF 内嵌底图走资产入库，自动保存 + 刷新后仍在', async ({ page }) => {
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+
+  await page.setInputFiles('#fileInput', {
+    name: 'scan.pdf', mimeType: 'application/pdf', buffer: pdfWithFlateImage()
+  });
+  await expect(page.locator('#toastWrap')).toContainText(/底图 2×2/);
+  /* 导入当场就必须是资产引用：等自动保存兜底会掩盖「导入只写运行时 dataUrl」的缺陷 */
+  const imported = await page.evaluate(() => ({ id: state.background.assetId, dataUrl: !!state.background.dataUrl }));
+  expect(imported.id).toMatch(/^bg/);
+  expect(imported.dataUrl).toBe(false);
+  const id = imported.id;
+  expect(await page.evaluate(async () => !!(await assetGet(state.background.assetId)))).toBe(true);
+
+  await expect.poll(() => page.locator('#saveState').innerText(), { timeout: 15000 }).toContain('已自动保存');
+  await page.reload();
+  await expect(page.locator('#canvas')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => state.background.assetId), { timeout: 15000 }).toBe(id);
+  await expect.poll(() => page.evaluate(() => bgImageState), { timeout: 15000 }).toBe('ready');
+  expect(await page.evaluate(() => !!bgImage)).toBe(true);
 });

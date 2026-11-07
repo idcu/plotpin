@@ -4,7 +4,7 @@
 > 分类口径：**已修复**=有可复跑判据；**仍存在**=代码路径确证但未修；**已降级为限制**=产品边界或质量取舍，不是缺陷。
 > 新问题的编号与审计报告一一对应，便于后续计划映射：`IO-*`、`CORE-*`、`RT-*` 分别见本地过程材料 `audit-out/audit-io.md`、`audit-out/audit-core.md`、`audit-out/audit-runtime.md`（该目录不入库，不随仓库分发）。
 
-## 1. 已修复（8 条）
+## 1. 已修复（9 条）
 
 | 编号 | 原问题 | 修复依据（仓库内可复跑 / 可核对） | 复核结论 |
 |---|---|---|---|
@@ -14,16 +14,16 @@
 | A5 | 规则检查的圆/椭圆/凹多边形采样误差没有 golden 对照 | `scripts/selftest.mjs` 固定期望与容差：圆面积 <2%（40 段）、旋转方形 =100（1e-6）、扇形 <1%、净距 0.01、凹多边形三角化 2500（1e-6） | 已关闭（仅规则页判定；统计页口径另见 RT-P2-14） |
 | A6 | DXF 折线近似与 SVG 图形缺少几何一致性断言 | `symbol-scene` 三符号 DXF 折线逐点/顶点数/闭合与同一轮廓源一致；`scripts/selftest.mjs` | 已关闭；DXF 近似限制见 K4 |
 | P0-4 | 插件沙箱可绕过：Worker 内 `BroadcastChannel` 可加入协作频道、`MessageChannel`/`MessagePort` 可自建端口、`onmessage`/`onerror` 可旁路 token 校验 | `tests/e2e/plugin-sandbox.spec.mjs`：插件内 `BroadcastChannel`/`MessageChannel`/`MessagePort`/`onmessage`/`onerror` 均为 `undefined`，向 `plotpin-collab-*` 发送 0 条，覆写 `onerror` 后异常仍走禁用路径 | 已关闭（N-02）；合法插件契约未承诺端口通道，一律封堵 |
+| P0-1 | PDF 导入的内嵌底图在自动保存后刷新/重开即丢失 | `tests/e2e/pdf-multipage.spec.mjs`「PDF 内嵌底图走资产入库，自动保存 + 刷新后仍在」：导入当场 `assetId=bg…`、无 dataUrl，重开后 `bgImageState=ready`；`scripts/selftest.mjs` 7.1 覆盖 dataUrl 兜底与非当前楼层；解压炸弹用例断言累计阶段即取消 | 已关闭（N-03） |
 | K1 | 离线缓存版本无门禁，旧缓存可能残留 | `scripts/check-sw.mjs` 以提交入库的 `scripts/sw-inputs.sha256`（预缓存输入指纹 + 清单 version）为基线，`scripts/check.mjs` 第 12 步纳入；`check-gates` 场景 6/9 证明会红 | 已关闭（N-01）；不再依赖 `git diff HEAD`，干净检出同样有效 |
 | K11 | 文档超出团队自设篇幅 | `scripts/check-discipline.mjs` 13/13 通过；工程文档已拆分 | 已关闭；余量偏小，新增内容需控制 |
 
 ## 2. 仍存在
 
-### 2.1 P0：数据丢失 / 越权（3 条）
+### 2.1 P0：数据丢失 / 越权（2 条）
 
 | 编号 | 问题与影响面 | 证据 | 状态 |
 |---|---|---|---|
-| P0-1 | **PDF 导入的内嵌底图在自动保存后刷新/重开即丢失**；用户以为已保存，实际底图不可恢复。PDF 导入转出的对象仍在。 | IO-P0-1、CORE-P0-1；导入写入底图，保存白名单未回写 | 代码路径确证，未实测复现 |
 | P0-2 | **协作方“清空场地”被静默应用**：不计入变更、不进撤销栈、无提示，本地场地直接消失。 | RT-P0-01 | 代码路径确证，未双端复现 |
 | P0-3 | **场地编辑不进提交/不广播**：本地改场地不标脏、不同步；远端随后清空会“复活”旧场地，双方看到不同结果。 | RT-P0-03、RT-P1-10 | 代码路径确证，未双端复现 |
 

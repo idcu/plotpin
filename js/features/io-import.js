@@ -287,6 +287,7 @@ async function importPdfFile(f){
   if(pdfErrs.length) return toast(L('PDF 导入失败：{msg}',{msg:importLimitMessage(pdfErrs)}),'error');
   /* 扫描件/带底图的 PDF：最大内嵌图作为图片底图 */
   let bgNote='';
+  let bgStored=true;
   if(pdf.images.length){
     const img=pdf.images[0];
     const mime=img.mime;
@@ -296,12 +297,16 @@ async function importPdfFile(f){
     for(let i=0;i<bin.length;i+=CH) s+=String.fromCharCode.apply(null,bin.subarray(i,i+CH));
     dataUrl+=btoa(s);
     const mpp=pdf.pageWidth*k/img.width;   /* PDF 页宽(米)/图像像素宽 */
-    const wM=pdf.pageWidth*k, hM=pdf.pageHeight*k;
+    /* 与普通图片导入同一路径：内容寻址资产入库（N-03）。只写 dataUrl 会被
+       persistableState 剥离，自动保存后重开即永久丢图。 */
+    const id=assetIdFor(bin);
+    try{ await assetPut(id,{bytes:bin,mime}); }
+    catch(e){ bgStored=false; }   /* IndexedDB 不可用时降级：保留 dataUrl，避免静默丢图 */
     pushHistory();
     state.background.kind='image';
     state.background.fileName=f.name.replace(/\.pdf$/i,'')+'（PDF内嵌图）';
-    state.background.assetId='';          /* 不进 IDB 资产库，直接 dataUrl 内联运行时 */
-    state.background.dataUrl=dataUrl;
+    state.background.assetId=bgStored?id:'';
+    state.background.dataUrl=bgStored?'':dataUrl;   /* 无资产时保留最后一份数据 */
     state.background.width=img.width; state.background.height=img.height;
     state.background.metersPerPixel=mpp; state.background.calibrated=true;
     state.background.transform=null;   /* 新图像素坐标改变，清除旧仿射校准 */
@@ -356,6 +361,7 @@ async function importPdfFile(f){
   const pageNote=pageList&&pageList.length>1?L(' / {n} 页（独立原点）',{n:pageList.length}):'';
   commitChange(L('PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}',
     {line:counts.line,area:counts.area,text:counts.text,notes:pageNote+(bgNote?' / '+bgNote:'')}));
+  if(!bgStored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');
   fitView();
 }
 

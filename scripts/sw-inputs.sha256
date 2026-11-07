@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=7
+version=8
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -10,7 +10,7 @@ version=7
 25d8b28152c77215404f5b66ef3c06e0d2c72aec5f424b24f5aa5eeaf62019c1  js/common/dxf.js
 eb866e2a437752e4e4312a0edfe68d4ed542c38cdadacfdc3736a443fe7b691e  js/common/i18n.js
 4b82c9c54ea891c56fb94c8e65ee0922a2c953655b91632845df69fe5aa7d1c7  js/common/merge.js
-673f627ecf887dad80e23bbdd9426c94555017fcfed948546b869eaea2719762  js/common/pdf-read.js
+b5b28c68455cf734869aae7126f691163b3626067f86d1e6e8a7d6034296605e  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
 2b64520f255a3e712eec295380877150b9193988ad29b35914cf75480685fc7c  js/common/qr.js
 50b982851a3813c40aa4cd5293330d645a3d4c95af6ef9120e57041da532d46c  js/common/symbols.js
@@ -22,7 +22,7 @@ eb866e2a437752e4e4312a0edfe68d4ed542c38cdadacfdc3736a443fe7b691e  js/common/i18n
 5ed31052fa11f1d11e96cabee0041c8925ce2d2de5f768be9656e60770f646f7  js/core/geometry.js
 1a716950c8b13aa2423fb0edbc564930208f2f3ccd13ac5467bc69c628962543  js/core/interaction.js
 ea9a013c45194d3a8946d77daca2c8c25a18bf57d4a41d7d80eb875e26a59f27  js/core/model.js
-4d02a655925c5e3c841edfd21a03c017abb66c307937342f13fcbc752075e6e7  js/core/persistence.js
+15d4284744dd90c7544ad2d14933c81cda4dc236617ae7d3ddb28ef816e2180c  js/core/persistence.js
 edef38204b392928ff19c99f231090e63deae5daa1cd27d0966268736b51cc4b  js/core/render.js
 e98cbef1afc8b1de258beb4775d0d1ec6f67f6a13e83d130d25653160659015e  js/core/snapshot.js
 7d993922b0b0f81a7a668c3c6ea7dbc9c4f02bf2725cdc8165d60116f6c72e73  js/core/tab-lease.js
@@ -31,7 +31,7 @@ e98cbef1afc8b1de258beb4775d0d1ec6f67f6a13e83d130d25653160659015e  js/core/snapsh
 2f0520355f56f8e335ffe112b5588151c464419a5cd67d0a36f16106c4dff333  js/features/collab.js
 a2c2ffca47a096bc829663f8377578a7cc5adc5cbc8189123895cee93be2d9e0  js/features/io-export.js
 fd562176eb43f0dff50c0f8eddf6aec834d5de5a886c6dc2388bee9dcedce06c  js/features/io-fields.js
-ce1a4256a1fad738c09985f00b6394e9934b845e395e8a1833240a9eaf05f1cd  js/features/io-import.js
+7ab6ba5afa3c72216c8b8e1dda6dcff5db6c2fa4da7d1bd8f4ecf3f9e69a051c  js/features/io-import.js
 6b20732067dcd3a3382bebb3d45adef06f5f731c5f922982b5a516ee029b7f39  js/features/io-table.js
 83e8e12277360d0ba4950cf4a99d14f66784da546de48baadddfff3d70c62908  js/features/io.js
 3da86cdc124ac48306f6207d5c0b643fcf5911fcb7b3dd102ad774af7e07448d  js/features/parking.js

@@ -320,15 +320,25 @@ async function assetPrune(keepIds){ return (await bgAssetsReady).prune(keepIds);
 const dataUrlToBytes = ContentAssets.dataUrlToBytes;
 const bytesToDataUrl = ContentAssets.bytesToDataUrl;
 
+/** 底图落盘清洗（N-03）：
+ *  - 有 assetId：剥离 dataUrl（字节已在 assets 库，重开按 assetId 取回）；
+ *  - 无 assetId 但有 dataUrl：保留 dataUrl —— 这是最后一份数据，静默删除等于永久丢图；
+ *  - 两者都没有：不再落一份必然读不出的 image 槽（避免每次打开都报「底图缺失」）。 */
+function scrubBackgroundForSave(bg){
+  if(!bg||bg.kind!=='image') return;
+  if(bg.assetId){ delete bg.dataUrl; return; }
+  if(bg.dataUrl) return;
+  bg.kind='none'; bg.fileName=''; bg.width=0; bg.height=0; bg.metersPerPixel=0;
+}
 /** 工程落盘副本：底图字节在 assets 库，dataUrl 仅运行时存在，绝不写回工程记录；
  *  当前楼层数据保留在顶层，其余楼层携带各自 background/objects（均为已清洗的可序列化结构）。 */
 function persistableState(){
   syncActiveFloor();
   const copy=deepClone(state);
-  if(copy.background && copy.background.dataUrl) delete copy.background.dataUrl;
+  scrubBackgroundForSave(copy.background);
   (copy.floors||[]).forEach(f=>{
     if(f.id===copy.activeFloorId){ delete f.background; delete f.site; delete f.objects; delete f.viewport; return; }
-    if(f.background&&f.background.dataUrl) delete f.background.dataUrl;
+    scrubBackgroundForSave(f.background);
   });
   return copy;
 }
@@ -537,6 +547,9 @@ function reportSaveFailure(e,phase){
 }
 async function runSave(){
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
+  /* 落盘前统一资产化：内嵌 dataUrl（PDF 导入 / JSON 导入 / 旧草稿）必须先拿到 assetId，
+     否则 persistableState 会剥离 dataUrl，重开即永久丢图（N-03） */
+  await ensureProjectBackgroundAssets(state);
   const snapshot=persistableState();
   let warn=0;
   try{
@@ -677,6 +690,12 @@ async function ensureFloorBackgroundAssets(st){
       delete bg.dataUrl;
     }catch(_){}
   }
+}
+/** 保存前统一资产化（N-03）：当前楼层 + 其余楼层的内嵌底图 dataUrl 都转成 assetId。
+ *  写入失败由 ensure* 内部保留 dataUrl，随后 scrubBackgroundForSave 的兜底分支不会删掉它。 */
+async function ensureProjectBackgroundAssets(st){
+  await ensureBackgroundAsset(st);
+  await ensureFloorBackgroundAssets(st);
 }
 /** 由原始 JSON 构建清洗后的工程对象；不写全局 state，供导入/打开工程做“先校验后替换”的事务 */
 function buildProject(p){

@@ -2,6 +2,31 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-03 修复 PDF 底图落盘丢失与解压炸弹前置拦截
+
+- **Commit Hash**：本条提交（`fix(io): PDF 内嵌底图改走资产入库，解压上限前移到累计阶段`）；完整哈希见回填提交与本次汇报。
+- **核心改动**
+  - `js/features/io-import.js`：PDF 导入的最大内嵌图不再只写运行时 `dataUrl`，改为与图片导入同一路径——`assetIdFor` + `assetPut` 入库并写 `state.background.assetId`；IndexedDB 不可用时才退回 `dataUrl` 兜底并提示「仅本次会话有效」。旧实现 `assetId=''` + 内联 `dataUrl`，`persistableState` 剥掉 `dataUrl` 后自动保存即永久丢图。
+  - `js/core/persistence.js`：新增 `scrubBackgroundForSave`（有 assetId → 剥离 dataUrl；无 assetId 但有 dataUrl → **保留**，不删最后一份数据；两者都无 → 不再落必然读不出的 `image` 槽）；`runSave` 前置 `ensureProjectBackgroundAssets(state)`（当前楼层 + 非当前楼层统一资产化），覆盖 JSON 导入/旧草稿等历史 `dataUrl` 路径。
+  - `js/common/pdf-read.js`：`inflate` 的 64 MB 上限从「`arrayBuffer()` 完整展开后再判断」改为 `readStreamCapped` 流式累计，超限立即 `cancel()` 并抛错；压缩体积超限先拒；解压超限不再退 `deflate-raw` 二次展开；Flate 图像先按 `/Width × /Height × 分量 × 位深` 估算声明尺寸，明显超限不进解压器。导出 `inflate` / `readStreamCapped` 供自测。
+  - `tests/e2e/pdf-multipage.spec.mjs`：新增带 FlateDecode 内嵌图的真实 PDF 用例「导入当场 assetId=bg… 且无 dataUrl → 自动保存 → 刷新后 `bgImageState=ready`、资产可读」。
+  - `scripts/selftest.mjs`：新增 7.1 节（dataUrl 兜底 / 有资产剥离 / 空底图不落库 / 非当前楼层）与解压炸弹 5 项断言（无限流累计超限即拒、拉取块数 ≤ 4、限内拼接、真实压缩流超限被拒）；沙箱补 `ReadableStream`。
+  - `README.md`：断言数 2706 → 2716、体积 783,226 → 784,803 B、e2e 90 → 94、SW 行改为指纹清单口径（N-01 遗留的 README 行在本次一并对齐）。
+  - 文档：`docs/features.md` §7/§23 更新 PDF 导入与解压上限；`docs/known-issues.md` P0-1 → 已修复（9 条），P0 剩 2 条；`docs/plans/README.md` 状态表 N-03 → 已交付。
+- **实测验证（2026-11-08 本机，五道门禁全绿）**
+  - **负向先证**：仅回退 PDF 导入与 `persistableState` 两处 → selftest 7.1 **3 项变红**（保留 dataUrl 兜底/空底图/非当前楼层），e2e「导入当场 assetId」**变红**（实测为空串）；恢复后全绿。
+  - `node scripts/check.mjs --selftest`：**2716 通过 / 0 失败**（45 脚本，较 N-02 +10）；契约 7 项 0 违约；插件 API 23 键 0 泄漏；i18n **45.96%**；SW `VERSION=8`。
+  - `node scripts/e2e.mjs`：**94 tests → 93 passed / 1 skipped（浸泡）/ 0 failed**（1.9m）；PDF spec 3/3。
+  - `node scripts/build.mjs --check`：**784,803 B（766.4 KB）/ gzip 244,088 B**，SHA256 `77ad11a1…`，较 N-02 **+1,577 B**，余量 54,877 B。
+  - `node scripts/check-gates.mjs`：基线 6/6 + 9/9（场景 1 P95 4.69ms、场景 6 清单=8/当前=8、场景 9 VERSION 回退 8→7 均被拦）；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 真实扫描件 PDF（JPEG/DCTDecode + 大型 Flate 图）未做运行期样本验证；e2e 用的是构造的 2×2 Flate 图。
+  - 非当前楼层的 PDF 导入没有独立 UI 入口（PDF 只落在当前楼层），该路径由 `persistableState` 自测覆盖，未做浏览器端验证。
+  - 解压炸弹的「峰值内存下降」未用堆采样量化，只断言了取消时机（拉取块数 ≤ 4）与拒绝行为。
+- **遗留风险**
+  - 无 assetId 且无 dataUrl 的底图会被降级为 `kind:'none'`（丢弃 image 槽元数据）；这是「不落空底图」的取舍，旧工程若已丢字节将看不到校准入口。
+  - `scrubBackgroundForSave` 保留 dataUrl 会把内嵌字节写进工程记录，极端情况下可能触碰 localStorage 配额；`runSave` 已先尝试资产化，只有 IDB 不可用才会走到该分支。
+
 ## 2026-11-08 · N-02 封堵插件沙箱逃逸（BC/MC/MP + onmessage/onerror）
 
 - **Commit Hash**：`7db1782`（`fix(plugin): 封堵沙箱 BroadcastChannel/MessageChannel/MessagePort 与 onmessage/onerror 旁路`）。

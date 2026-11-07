@@ -75,6 +75,7 @@ const sandbox = {
   decodeURIComponent, escape, unescape, TextEncoder, TextDecoder, Blob, atob, btoa,
   setTimeout: setTimeoutStub, clearTimeout, setInterval: setTimeoutStub, clearInterval,
   CompressionStream:globalThis.CompressionStream, DecompressionStream:globalThis.DecompressionStream, Response:globalThis.Response,
+  ReadableStream:globalThis.ReadableStream,
   document: documentStub,
   localStorage: localStorageStub,
   navigator: {},
@@ -382,6 +383,32 @@ await section("7. 底图资产：内容寻址哈希 + dataURL 解码", async () 
   eq('dataURL→哈希可重入', api.ContentAssets.idFor(bin.bytes, 'bg') === api.ContentAssets.idFor(bin.bytes, 'bg'), true);
 }
 
+});
+
+/* 7.1 底图落盘不静默丢图（N-03） ------------------------------------------ */
+await section("7.1 底图落盘：dataUrl 兜底与空底图", async () => {
+{
+  const st = api.resetState();
+  st.background.kind = 'image';
+  st.background.assetId = '';
+  st.background.dataUrl = 'data:image/png;base64,AAAA';
+  let out = api.persistableState();
+  eq('N-03 无资产时保留 dataUrl 兜底', out.background.dataUrl, 'data:image/png;base64,AAAA');
+
+  st.background.assetId = 'bg-abc-4';
+  out = api.persistableState();
+  eq('N-03 有资产时剥离 dataUrl', out.background.dataUrl === undefined, true);
+  eq('N-03 有资产时保留 assetId', out.background.assetId, 'bg-abc-4');
+
+  st.background = { kind: 'image', assetId: '', dataUrl: '', fileName: 'lost.png', width: 10, height: 10, metersPerPixel: 0.05 };
+  out = api.persistableState();
+  ok('N-03 既无资产也无数据不落空 image 底图', out.background.kind !== 'image');
+
+  const st2 = api.resetState();
+  st2.floors.push({ id: 'F2', name: '2F', background: { kind: 'image', assetId: '', dataUrl: 'data:image/png;base64,BBBB', width: 1, height: 1 }, objects: [] });
+  const out2 = api.persistableState();
+  eq('N-03 非当前楼层无资产时同样保留 dataUrl', out2.floors.find(f => f.id === 'F2').background.dataUrl, 'data:image/png;base64,BBBB');
+}
 });
 
 /* 8. 表格导入规划与应用 --------------------------------------------------- */
@@ -3551,6 +3578,26 @@ asyncSuites.push((async()=>{
   const two=pdf.replace('%%EOF',obj(5,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>')+'%%EOF');
   await rejects('加固PDF-两页超过上限1', api.PdfRead.parsePdf(two,{maxPages:1}), /页数/);
   eq('加固PDF-对象数恰好等于上限可通过', (await api.PdfRead.parsePdf(two,{maxObjects:5})).paths.length, 1);
+
+  /* N-03：解压上限必须落在累计阶段，不能先完整展开再报错 */
+  {
+    let pulled = 0, cancelled = false;
+    const endless = new ReadableStream({
+      pull(c) {
+        if (cancelled) return new Promise(() => {});   /* 取消后不再拉取，避免向已关闭的 controller enqueue */
+        pulled++; c.enqueue(new Uint8Array(1024 * 1024));
+      },
+      cancel() { cancelled = true; }
+    });
+    await rejects('N-03 解压炸弹-无限流累计超限即拒绝', api.PdfRead.readStreamCapped(endless, 2 * 1024 * 1024 + 1), /解压炸弹/);
+    ok('N-03 解压炸弹-未完整展开（拉取块数 ≤ 4）', pulled <= 4);
+    const small = await api.PdfRead.readStreamCapped(new Response(new Uint8Array([1, 2, 3])).body, 1024);
+    eq('N-03 限内流按序拼接', Array.from(small), [1, 2, 3]);
+    const bombSrc = new Uint8Array(4 * 1024 * 1024);
+    const packed = new Uint8Array(await new Response(new Blob([bombSrc]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+    ok('N-03 压缩炸弹样本足够小', packed.length < 64 * 1024);
+    await rejects('N-03 解压炸弹-真实压缩流超限被拒', api.PdfRead.inflate(packed, { maxInflateBytes: 1024 * 1024 }), /解压炸弹|上限/);
+  }
 })());
 
 });

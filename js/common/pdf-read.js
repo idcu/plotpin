@@ -17,19 +17,40 @@ const PDF_LIMITS=__pdf.PDF_LIMITS;
 function binaryToBytes(s){ return __pdf.binaryToBytes(s); }
 
 /* ---------------- Flate 解压（zlib 头优先，失败退 deflate-raw 去头） ---------------- */
-async function inflate(bytes){
+/** 流式累计读取：一旦超过上限立即 cancel 并报错，避免「先完整展开再报错」（解压炸弹）。
+ *  导出供自测用：可用无限流断言拉取块数，证明不是读完才判断。 */
+async function readStreamCapped(stream, limit){
+  const reader=stream.getReader();
+  const chunks=[]; let total=0;
+  try{
+    for(;;){
+      const {done,value}=await reader.read();
+      if(done) break;
+      if(!value||!value.byteLength) continue;
+      total+=value.byteLength;
+      if(total>limit){
+        try{ await reader.cancel(); }catch(_){}
+        throw new Error('PDF 内嵌流解压后超过 '+(limit/1048576)+'MB 上限，疑似解压炸弹');
+      }
+      chunks.push(value);
+    }
+  }finally{
+    try{ reader.releaseLock(); }catch(_){}
+  }
+  const out=new Uint8Array(total); let off=0;
+  for(const c of chunks){ out.set(c,off); off+=c.byteLength; }
+  return out;
+}
+async function inflate(bytes,opt){
   if(typeof DecompressionStream==='undefined') throw new Error('当前浏览器不支持 DecompressionStream，无法读取该 PDF');
-  const tryStream=(data,format)=>new Promise((resolve,reject)=>{
-    try{
-      const st=new Blob([data]).stream().pipeThrough(new DecompressionStream(format));
-      new Response(st).arrayBuffer().then(b=>{
-        if(b.byteLength>PDF_LIMITS.maxInflateBytes)
-          return reject(new Error('PDF 内嵌流解压后超过 '+(PDF_LIMITS.maxInflateBytes/1048576)+'MB 上限，疑似解压炸弹'));
-        resolve(new Uint8Array(b));
-      }).catch(reject);
-    }catch(e){ reject(e); }
-  });
+  const limit=(opt&&Number(opt.maxInflateBytes)>0)?Number(opt.maxInflateBytes):PDF_LIMITS.maxInflateBytes;
+  /* 压缩体积本身已超上限：不可能解出更小的可用结果，先拒再进解压器 */
+  if(bytes.length>limit) throw new Error('PDF 内嵌流压缩体积超过 '+(limit/1048576)+'MB 上限，疑似解压炸弹');
+  const tryStream=(data,format)=>
+    readStreamCapped(new Blob([data]).stream().pipeThrough(new DecompressionStream(format)),limit);
   try{ return await tryStream(bytes,'deflate'); }catch(e){
+    /* 超限是结论，不是编码不匹配：不再退 deflate-raw 重试，避免二次展开 */
+    if(/解压炸弹|超过/.test(String(e&&e.message))) throw e;
     const raw=bytes.subarray(2,bytes.length-4);   /* 去 zlib 头与 adler32 */
     return tryStream(raw,'deflate-raw');
   }
@@ -304,9 +325,14 @@ async function parsePdf(input,opt){
         const b=binaryToBytes(o.data);
         if(b[0]===0xFF&&b[1]===0xD8) images.push({mime:'image/jpeg',bytes:b,width:w,height:h});
       }else if(isFlate){
-        const decoded=await inflate(binaryToBytes(o.data));
         const cs=dictName(o.dict,'ColorSpace');
         const bpc=dictNumber(o.dict,'BitsPerComponent')||8;
+        /* 先按声明的像素尺寸估算解压后体积，明显不可能的流不进解压器 */
+        const isGray=cs==='DeviceGray'||/DeviceGray/.test(o.dict);
+        const comp=/DeviceCMYK/.test(o.dict)?4:(isGray?1:3);
+        if(w*h*comp*(bpc/8)>PDF_LIMITS.maxInflateBytes)
+          throw new Error('PDF 内嵌图像声明尺寸 '+w+'×'+h+' 超过 '+(PDF_LIMITS.maxInflateBytes/1048576)+'MB 上限');
+        const decoded=await inflate(binaryToBytes(o.data));
         let rgb=null;
         if(bpc===8 && (cs==='DeviceRGB'||/DeviceRGB/.test(o.dict))){
           const dp=dictRawBlock(o.dict,'DecodeParms');
@@ -333,5 +359,5 @@ async function parsePdf(input,opt){
     unitMeter:PT_TO_METER};
 }
 
-global.PdfRead={ parsePdf, layoutPdfPages, PT_TO_METER, tokenizeContent, looksLikeCidGarbage, LIMITS: PDF_LIMITS };
+global.PdfRead={ parsePdf, layoutPdfPages, PT_TO_METER, tokenizeContent, looksLikeCidGarbage, inflate, readStreamCapped, LIMITS: PDF_LIMITS };
 })(typeof window !== 'undefined' ? window : globalThis);
