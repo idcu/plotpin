@@ -16,7 +16,7 @@ PlotPin 是一个在浏览器里运行的图纸标注工具：在一张图片底
 
 - **两种对象、两套语义**：点设备表示"设备在哪里"，图标屏幕大小固定；区域/折线表示"实际占多大范围"，始终按世界坐标（米）绘制，缩放时与底图同比例。
 - **双槽底图**：每个楼层可同时保存 1 张图片底图和 1 个矢量场地，两者独立替换、互不覆盖。
-- **数据留在本机**：工程写入 IndexedDB（不可用时降级 localStorage），底图与照片按内容哈希存资产库；默认不向任何服务器上传数据。
+- **数据留在本机**：工程写入 IndexedDB（不可用时降级 localStorage），底图与照片按内容哈希存资产库；默认不向任何服务器上传数据，实时协作仅在手动建连时传输对象。
 - **运行时零外部依赖**：不引用 npm、CDN 或后端；第三方能力以 `@idcu/*` 模块源码形式放在 `ngm.vendor/`，版本由 `ngm.lock` 与 `.ngm-version` 锁定。`node scripts/check.mjs` 会校验入口没有任何 `http(s)` 远程资源。
 - **一个 HTML 入口，44 个脚本**：34 个项目脚本（`js/common` → `js/core` → `js/features` 三层）加 10 个 vendor 脚本，按 `index.html` 中的 classic `<script>` 顺序加载，共享全局作用域，不使用 ES Module。
 
@@ -53,9 +53,11 @@ node scripts/serve.mjs
 
 ## 核心能力
 
+本节只保留上手所需的能力概览；完整功能边界、阈值与实现口径以 [docs/features.md](docs/features.md) 为准，不复述。
+
 ### 底图、场地与校准
 
-- 图片底图支持 PNG / JPG / WebP / BMP / GIF / SVG；最长边超过 3000px 自动降采样，透明图在体积允许时保留 PNG。
+- 图片底图支持 PNG / JPG / WebP / BMP / GIF / SVG；降采样与透明图处理口径见 features.md。
 - 两点定距求旋转 + 等比缩放，≥3 点求完整仿射（最小二乘），校准点可继续拖拽修改。
 - 图片整体变换只提供平移、旋转、等比缩放、切变四类手柄，不提供四角自由拖拽。
 - 矢量场地独立于对象列表，按米绘制，支持矩形、圆形、椭圆、扇形、平行四边形、多边形；场地标注可显示节点坐标、段长、半径、面积、周长。
@@ -107,7 +109,7 @@ CSV/TSV/XLSX 导出对 `= + - @`、Tab/CR 开头且非纯数字的单元格加�
 - 画布、SVG、PNG/PDF 共用同一 path 源；DXF 将符号降级为 `LWPOLYLINE` 折线近似并在导出报告标注。
 - **插件 API**：全局 `PlotPin` 共 23 个承诺键（见 `contracts/plugin-api.json`），`PlotPin.apiVersion = "1.1.0"`，`PlotPin.version` 为应用版本。
 - 隔离加载：`PlotPin.loadPlugin({id, apiVersion, capabilities, code})` 在独立 Worker 执行，无 DOM / `window` / `parent` / IndexedDB / 网络；能力白名单为 `state:read` / `state:write` / `annotate` / `types` / `icons` / `export` / `import` / `rules`，未声明即拒绝；初始化与单次调用 2s 超时即 terminate。
-- 清单导入：设置 → 插件面板可导入 `plotpin.plugin/v1` 清单（清单 ≤192KB、`code` ≤64KB），仅本会话有效，刷新后需重新导入。
+- 清单导入：设置 → 插件面板可导入 `plotpin.plugin/v1` 清单，仅本会话有效，刷新后需重新导入；清单与代码大小上限见 [docs/engineering.md](docs/engineering.md) 的插件章节。
 - 旧同源 `<script>` 路径保留为受信任兼容入口，不做能力门。可运行示例见 [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js) 与 [plugins/sample-exporter.js](plugins/sample-exporter.js)。
 
 ### 界面与性能
@@ -154,7 +156,7 @@ CSV/TSV/XLSX 导出对 `= + - @`、Tab/CR 开头且非纯数字的单元格加�
 
 ## 开发与验证
 
-需要 Node 18+。运行与自测不需要 `npm install`；浏览器级测试才需要安装 Playwright。
+需要 Node 18+。运行与自测不需要 `npm install`；浏览器级测试才需要安装 Playwright。命令参数与阈值口径分别见 [docs/testing.md](docs/testing.md) 与 [docs/performance.md](docs/performance.md)。
 
 ### 直接运行脚本
 
@@ -271,9 +273,9 @@ node scripts/perf-browser.mjs [--no-gate]         # 真实 Chromium 性能基线
 | K10 | 协作仅 LWW 合并、无服务端、无冲突解决 UI；跨设备可靠同步不在承诺范围 |
 | K12 | 硬上限：导入文件 32MB、对象 10 万、撤销 20 条、墓碑 2 万、快照 20 条/16MB、底图解码 40MP；超限明确报错或淘汰 |
 
-跨版本兼容是另一条硬边界：当前 schema 为 v2，旧版 App 只认 v1，遇到 v2 工程会拒绝加载/导入；本项目不做双写兜底。
+K11 已随文档拆分关闭，不再列为限制。
 
-仓库当前状态另有一条既有问题：`node scripts/check-ngm.mjs` 会在 `js/common/dxf.js` 适配层命名上报告 `global.Dxf =` 与登记不一致，因此 `npm test` 会在该步退出 1；`node scripts/selftest.mjs` 本身的 2706 项断言全部通过。
+跨版本兼容是另一条硬边界：当前 schema 为 v2，旧版 App 只认 v1，遇到 v2 工程会拒绝加载/导入；本项目不做双写兜底。
 
 以下项目在当前仓库中**未验证**，不应视为已承诺能力：
 
