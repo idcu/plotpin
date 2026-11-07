@@ -113,8 +113,8 @@ function renderList(){
   $('objectTbody').querySelectorAll('[data-row-select]').forEach(chk=>chk.addEventListener('click',e=>{
     e.stopPropagation(); const id=chk.dataset.rowSelect; chk.checked?selectedIds.add(id):selectedIds.delete(id); refreshUI();
   }));
-  $('objectTbody').querySelectorAll('[data-toggle-visible]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleVisible); if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(); });
-  $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(); });
+  $('objectTbody').querySelectorAll('[data-toggle-visible]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleVisible); if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); });
+  $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); });
 }
 $('headSelectChk').addEventListener('change',e=>{
   const q=$('filterText').value.trim().toLowerCase(), kf=$('filterKind').value, lf=$('filterLayer').value;
@@ -126,13 +126,13 @@ $('selectAllChk').addEventListener('change',e=>{
   const rows=state.objects.filter(o=>(!kf||o.kind===kf)&&(!lf||o.layerId===lf)&&(!q||[o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(q)));
   rows.forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
 });
-$('batchLayerBtn').onclick=()=>{ const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可修改的选中对象','warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层'); };
+$('batchLayerBtn').onclick=()=>{ const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可修改的选中对象','warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层', items.map(o=>o.id)); };
 $('batchMoveBtn').onclick=()=>{
   const dx=Number($('batchDx').value)||0,dy=Number($('batchDy').value)||0; if(!dx&&!dy) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可移动的选中对象','warn');
   pushHistory(); items.forEach(o=>{
     o.x+=dx;o.y+=dy;if(o.points)o.points=o.points.map(p=>[p[0]+dx,p[1]+dy]);
-  }); commitChange('已批量平移');
+  }); commitChange('已批量平移', items.map(o=>o.id));
 };
 $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0);
 $('batchDeleteBtn').onclick=deleteSelected;
@@ -145,7 +145,7 @@ function setSelectedAnnot(on){
   if(!plan.length) return toast('选中对象标注状态未变化','warn');
   pushHistory();
   plan.forEach(([o,k])=>setAnnot(o,k,on));
-  commitChange(on?'已批量显示标注':'已批量隐藏标注');
+  commitChange(on?'已批量显示标注':'已批量隐藏标注', Array.from(new Set(plan.map(([o])=>o.id))));
 }
 $('batchShowAnnotBtn').onclick=()=>setSelectedAnnot(true);
 $('batchHideAnnotBtn').onclick=()=>setSelectedAnnot(false);

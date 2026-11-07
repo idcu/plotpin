@@ -472,8 +472,9 @@ canvas.addEventListener('pointerup',e=>{
     const pushed=isSite||['node','rotate','rect','shapeHandle'].includes(drag.type)||!!drag.moved;
     if(!changed && pushed) history.past.pop();
     if(isSite && changed && state.site) state.site.updatedAt=nowISO();
+    const changedIds=dragChangedIds(drag);
     drag=null;
-    if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+    if(changed) commitChange(undefined, changedIds); else { updateHistoryButtons(); refreshUI(); requestRender(); }
     return;
   }
   if(draft && ['rect','areaParallelogram'].includes(draft.kind) && draft.pending===false){ finishDraft(); return; }
@@ -573,7 +574,7 @@ function editLineNodeByDoubleClick(e){
   if(best){
     /* 取双击点在线段上的垂足，再做网格吸附，保证新节点在线段上而非点击处 */
     const foot=nearestPointOnSegment(wp,best.a,best.b);
-    pushHistory(); insertLineNode(o,best.k,snapPoint(foot,e)); commitChange('已插入节点');
+    pushHistory(); insertLineNode(o,best.k,snapPoint(foot,e)); commitChange('已插入节点',[o.id]);
   }
 }
 function moveObjectBy(o,orig,d){
@@ -661,17 +662,23 @@ function objectMovedFrom(orig,o){
   delete a.updatedAt; delete b.updatedAt;
   return !sameSerializable(a,b);
 }
+/** 拖拽实际变更的对象 id（N-06）：只给真正变化的对象打点，拖回原位/微抖不计 */
+function dragChangedIds(d){
+  if(!d) return [];
+  if(d.type==='move'){
+    const idx=objectIndexById();
+    const ids=[];
+    d.originals.forEach((orig,id)=>{ if(objectMovedFrom(orig,idx.get(id))) ids.push(id); });
+    return ids;
+  }
+  if(['node','rotate','rect','shapeHandle'].includes(d.type)) return objectMovedFrom(d.original,state.objects.find(x=>x.id===d.id))?[d.id]:[];
+  return [];
+}
 /** 当前拖拽是否产生实际变更：click/pointermove 抖动、拖回原位都不算（审计 P1-1） */
 function dragChanged(d){
   if(!d) return false;
-  if(d.type==='move'){
-    const idx=objectIndexById();
-    let changed=false;
-    d.originals.forEach((orig,id)=>{ if(objectMovedFrom(orig,idx.get(id))) changed=true; });
-    return changed;
-  }
+  if(['move','node','rotate','rect','shapeHandle'].includes(d.type)) return dragChangedIds(d).length>0;
   if(d.type==='siteHandle') return !sameSerializable(d.originalShape,state.site?.shape);
-  if(['node','rotate','rect','shapeHandle'].includes(d.type)) return objectMovedFrom(d.original,state.objects.find(x=>x.id===d.id));
   if(d.type==='imageHandle') return !!d.origin&&!sameSerializable(state.background?.transform,d.origin);
   if(d.type==='calibPoint') return !!d.moved;
   return false;
@@ -702,7 +709,7 @@ function cancelActiveDrag(){
     if(d.moved) calibUndo(); else calibUndoStack.pop();
     requestRender(); return true;
   }else return true;
-  if(changed) commitChange(); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+  if(changed) commitChange(undefined, dragChangedIds(d)); else { updateHistoryButtons(); refreshUI(); requestRender(); }
   return true;
 }
 canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(...pointerScreen(e),e.deltaY<0?1.15:1/1.15); },{passive:false});
@@ -1035,7 +1042,7 @@ function duplicateSelected(){
   withObjectNameScope(allObjectNames(), () => olds.forEach(o=>{
     const n=deepClone(o); n.id=uid('OBJ'); n.name=nextObjectId(); n.x+=1;n.y+=1; if(n.points)n.points=n.points.map(p=>[p[0]+1,p[1]+1]); n.z=state.objects.length; state.objects.push(n); fresh.push(n.id);
   }));
-  selectedIds=new Set(fresh); commitChange('已复制对象');
+  selectedIds=new Set(fresh); commitChange('已复制对象', fresh);
 }
 function copySelected(){
   clipboard=state.objects.filter(o=>selectedIds.has(o.id)).map(o=>deepClone(o));
@@ -1202,7 +1209,7 @@ window.addEventListener('keydown',e=>{
     e.preventDefault(); const step=(state.settings.gridSize||1)*(e.shiftKey?10:1);
     const d={ArrowUp:[0,step],ArrowDown:[0,-step],ArrowLeft:[-step,0],ArrowRight:[step,0]}[e.key];
     if(!arrowHistoryArmed){ pushHistory(); arrowHistoryArmed=true; }
-    items.forEach(o=>{o.x+=d[0];o.y+=d[1];if(o.points)o.points=o.points.map(p=>[p[0]+d[0],p[1]+d[1]]);}); commitChange();
+    items.forEach(o=>{o.x+=d[0];o.y+=d[1];if(o.points)o.points=o.points.map(p=>[p[0]+d[0],p[1]+d[1]]);}); commitChange(undefined, items.map(o=>o.id));
   }
 });
 window.addEventListener('keyup',e=>{

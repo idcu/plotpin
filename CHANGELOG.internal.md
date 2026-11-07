@@ -2,6 +2,31 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-06 统一对象变更时间戳
+
+- **Commit Hash**：N-06 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/core/persistence.js`：新增 `stampObjects(ids)` 单一打点助手（支持数组/Set/Map；不存在 id 忽略；同一毫秒内按 +1ms 单调递增，保证后一次编辑不被 LWW 判旧）。`commitChange(message, ids)` / `commitObjectEdit(ids)` 新增可选 ids，只对实际变化对象打点；无 id 或空列表不遍历对象，保持幂等。
+  - `js/core/interaction.js`：新增 `dragChangedIds(d)` 作为拖拽变更对象清单源，`dragChanged` 复用它；move/node/rotate/rect/shapeHandle 在 pointerup/cancel 时把变化 id 传给 `commitChange`。方向键平移、复制、双击插节点同样传入变化 id。
+  - `js/features/props.js`、`js/features/ui-panels.js`：批量图层/隐藏/锁定/对齐/分布/重编号、对象显隐/锁定、自定义属性增删、折线节点插入/删除/上下移均传入实际变化 id。此前这些路径只 `commitChange()`，对象 `updatedAt` 不更新，协作合并会按旧时间戳丢弃。
+  - `scripts/selftest.mjs`：新增 28.5 节 11 项断言（指定 id 递增、未列出对象不变、无 id/空列表幂等、同毫秒严格递增、Map 形式、缺失 id、dragChangedIds 位移/拖回/旋转）。
+  - `tests/e2e/collab.spec.mjs`：新增双标签用例「N-06」——真实鼠标拖动后本地 `updatedAt` 严格递增、对端收到位移且时间戳更新；对端在已同步副本上改属性后，合并同时保留位移与属性。
+  - `sw.js`：`VERSION` 12 → 14（含一次修正后的输入刷新）；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步。
+  - 文档：`docs/ARCHITECTURE.md` §8（打点助手、合并统计键补齐 N-04 的 `siteDeleted/siteCleared`）、`docs/modules.md`（persistence API + interaction 说明）、`docs/features.md` §10、`docs/testing.md`、`README.md` 数字口径。
+- **实测验证（2026-11-08 本机）**
+  - **证据漂移说明**：当前代码的几何拖拽（`moveObjectBy` / `resizeRectByHandle` / `resizeParallelogramByHandle` / `resizeShapeByHandle`）已在 pointermove 内直接写 `updatedAt`，计划中「拖动只改几何、不回写时间戳」在现状仅部分成立；真实缺口是批量属性/显隐/节点增删等只 `commitChange()` 的路径。本轮按计划目标补齐这些缺口并集中到 `stampObjects`。
+  - **负向先证**：临时让 `stampObjects` 直接返回 0 → selftest **2753 通过 / 4 失败**（指定 id 递增、同毫秒递增、Map、commitObjectEdit 均变红）；恢复后全绿。
+  - `node scripts/check.mjs --selftest`：**2757 通过 / 0 失败**（111 分区，较 N-05 +11）；契约 7/0；插件 API 23/0；i18n 46.01%；SW `VERSION=14`。
+  - `node scripts/e2e.mjs`：**98 tests → 97 passed / 1 skipped / 0 failed**（2.1m）；N-06 用例 1/1。
+  - `node scripts/build.mjs --check`：**787,058 B（768.6 KB）/ gzip 244,693 B**，SHA256 `afb32df2…`，较 N-05 **+1,119 B**，余量 **52,622 B**。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9/9；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未做批量操作（对齐/重编号/批量图层）的双标签 e2e，仅覆盖 selftest 与真实拖动的协作合并；批量路径的广播仍依赖既有 `markDirty`。
+  - 未量化 `stampObjects` 在 5000 对象工程中的额外耗时（每次提交一次 Map 构建，O(n)）。
+- **遗留风险**
+  - `stampObjects` 每次按 id 构建对象索引，超大工程的高频提交有 O(n) 成本；M2 若测出抖动需改为按需缓存索引。
+  - 几何路径仍直接写 `updatedAt`（未走 `stampObjects`），两条打点路径需保持一致；新增几何写入入口时应复用 `dragChangedIds` + `stampObjects`。
+
 ## 2026-11-08 · N-05 统一导出可见性口径并隔离草稿/校准
 
 - **Commit Hash**：N-05 提交（哈希由 N-05~N-11 阶段末统一回填）。

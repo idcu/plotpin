@@ -168,7 +168,8 @@ Schema 为 `offline-drawing-annotation/v2`；`v1` 只读兼容，读取时迁移
 - 楼层墓碑：`deletedAt >= max(两侧楼层写入时间)` 时整层删除，胜过该层所有较早编辑；合并结果至少保留一层。
 - 场地 LWW：`site.updatedAt` 优先，缺失时退回楼层 `updatedAt`；时间相同且本地无场地、远端有场地时保留远端。
 - 图层与对象类型按 id 并集，同 id 以本地为准；规则配置本地优先；设置项本地覆盖远端；`meta` 本地覆盖远端但 `updatedAt` 取较晚者。
-- 合并只产出一个工程对象与统计 `{added, updated, deleted, conflicts, floorsAdded, floorMetaUpdated, floorsDeleted}`；落地由调用方决定是否入撤销栈。
+- 对象 `updatedAt` 打点：`persistence.js` 的 `stampObjects(ids)` 是唯一助手，`commitChange(message, ids)` / `commitObjectEdit(ids)` 只对实际变化的 id 打点；批量显隐/图层/对齐/重编号与节点增删都传入变化 id，无变化提交（无 id）不产生新时间戳。几何拖拽在 `interaction.js` 内对单个对象直接更新时间戳（`dragChangedIds` 判定是否真实变化）。同一毫秒内连续提交按 +1ms 单调递增，避免后一次编辑被 LWW 判旧。
+- 合并只产出一个工程对象与统计 `{added, updated, deleted, siteDeleted, siteCleared, conflicts, floorsAdded, floorMetaUpdated, floorsDeleted}`；落地由调用方决定是否入撤销栈。
 
 实时通道在 [collab.js](file:///f:/proj/plotpin/js/features/collab.js)：
 

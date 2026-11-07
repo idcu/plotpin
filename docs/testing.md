@@ -12,8 +12,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **110 个分区 / 2,746 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **34 个 spec / 97 个用例**（默认 96 跑 + 1 条件跳过） | **否** |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **111 个分区 / 2,757 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **34 个 spec / 98 个用例**（默认 97 跑 + 1 条件跳过） | **否** |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 9 种人为破坏 | 是 |
 

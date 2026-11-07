@@ -441,10 +441,10 @@ function renderMultiProps(box,objs){
       </div>
       <p class="hint-text">${esc(L('编号跨楼层自动避让；置顶/置底改变叠放顺序。'))}</p>
     </div>`;
-  $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层'); };
+  $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层', items.map(o=>o.id)); };
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
-  $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象'); };
-  $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象'); };
+  $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
+  $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
   $('multiDeleteBtn').onclick=deleteSelected;
   box.querySelectorAll('[data-align]').forEach(b=>{
     b.onclick=()=>{
@@ -452,7 +452,7 @@ function renderMultiProps(box,objs){
       if(items.length<2) return toast(L('至少选择两个对象'),'warn');
       pushHistory();
       const n=alignObjects(items,b.dataset.align);
-      commitChange(L('已对齐 {n} 个对象',{n}));
+      commitChange(L('已对齐 {n} 个对象',{n}), n?items.map(o=>o.id):[]);
     };
   });
   box.querySelectorAll('[data-distribute]').forEach(b=>{
@@ -461,7 +461,7 @@ function renderMultiProps(box,objs){
       if(items.length<3) return toast(L('至少选择三个对象'),'warn');
       pushHistory();
       const n=distributeObjects(items,b.dataset.distribute);
-      commitChange(L('已分布 {n} 个对象',{n}));
+      commitChange(L('已分布 {n} 个对象',{n}), n?items.map(o=>o.id):[]);
     };
   });
   if($('multiRenumberBtn')) $('multiRenumberBtn').onclick=()=>{
@@ -474,7 +474,7 @@ function renderMultiProps(box,objs){
     const used=allObjectNames(); items.forEach(o=>used.delete(o.name));
     pushHistory();
     const n=renumberObjects(items,prefix,start,step,used);
-    commitChange(L('已重新编号 {n} 个对象',{n}));
+    commitChange(L('已重新编号 {n} 个对象',{n}), n?items.map(o=>o.id):[]);
   };
   const restack=mode=>{
     const items=objs.filter(isEditable);
@@ -513,13 +513,13 @@ function bindPropEvents(box,o){
     insert:i=>{
       const a=o.points[i], c=o.points[i+1];
       const p=c?[(a[0]+c[0])/2,(a[1]+c[1])/2]:[a[0]+1,a[1]];
-      pushHistory(); insertLineNode(o,i,p); commitChange('已插入节点');
+      pushHistory(); insertLineNode(o,i,p); commitChange('已插入节点',[o.id]);
     },
     remove:i=>{
       if(o.points.length<=lineMinNodes(o)) return toast(L('至少保留 {n} 个节点',{n:lineMinNodes(o)}),'warn');
-      pushHistory(); removeLineNode(o,i); commitChange('已删除节点');
+      pushHistory(); removeLineNode(o,i); commitChange('已删除节点',[o.id]);
     },
-    move:(i,dir)=>{ if(moveNodeStep(o,i,dir)){ pushHistory(); commitChange(dir<0?'节点已上移':'节点已下移'); } },
+    move:(i,dir)=>{ if(moveNodeStep(o,i,dir)){ pushHistory(); commitChange(dir<0?'节点已上移':'节点已下移',[o.id]); } },
     changed,
     focusNode:i=>setFocusNode(i===null?null:{id:o.id,index:i})
   });
@@ -528,14 +528,14 @@ function bindPropEvents(box,o){
   box.querySelector('[data-action="delete"]').onclick=()=>deleteSelected();
   box.querySelector('[data-action="raise"]').onclick=()=>reorderSelected(1);
   box.querySelector('[data-action="lower"]').onclick=()=>reorderSelected(-1);
-  box.querySelector('[data-action="visibility"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(); };
-  box.querySelector('[data-action="lock"]').onclick=()=>{ if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(); };
+  box.querySelector('[data-action="visibility"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); };
+  box.querySelector('[data-action="lock"]').onclick=()=>{ if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); };
   $('propAdd')?.addEventListener('click',()=>{
     const k=$('propKey').value.trim(),v=$('propValue').value.trim(); if(!k) return;
-    o.props[k]=v; commitChange();
+    o.props[k]=v; commitChange(undefined,[o.id]);
   });
   box.querySelectorAll('[data-prop-del]').forEach(btn=>btn.onclick=()=>{
-    const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; delete o.props[k]; commitChange();
+    const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; delete o.props[k]; commitChange(undefined,[o.id]);
   });
   /* 设备照片：复用内容寻址资产库（与底图同一 storage），照片随撤销栈可达集合保留 */
   box.querySelectorAll('[data-photo-input]').forEach(inp=>inp.addEventListener('change',async()=>{

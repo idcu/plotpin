@@ -129,7 +129,7 @@ code += `\n;globalThis.__api = {
   normalizeIcon, TYPE_ICONS, mergeTypes,
   SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
   markDirty, MARK_DIRTY_PROFILES,
-  dragChanged, sameSerializable, objectMovedFrom, cancelActiveDrag,
+  dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
@@ -1544,6 +1544,46 @@ await section("28.4 N-05 导出口径统一：全量台账「显示」列=有效
   vo.visible=false;
   ok('N05-对象自身隐藏时图纸排除', api.exportScope(vo,'draw')===false);
   eq('N05-对象自身隐藏时台账显示否', api.objectRows().find(r=>r['编号']==='N05V')['显示'], '否');
+  api.resetState();
+}
+
+});
+
+/* 28.5 N-06 对象变更时间戳：只对实际变化 id 打点，同毫秒严格递增 ---- */
+await section("28.5 N-06 对象变更时间戳：只对实际变化 id 打点，同毫秒严格递增", async () => {
+{
+  api.resetState();
+  const a=api.baseObject('point','point.marker',{name:'N06A',x:1,y:1});
+  const b=api.baseObject('point','point.marker',{name:'N06B',x:2,y:2});
+  api.state.objects.push(a,b);
+  const t0=a.updatedAt, b0=b.updatedAt;
+
+  api.commitChange(undefined,[a.id]);
+  ok('N06-指定 id 打点严格递增', a.updatedAt>t0);
+  eq('N06-未列出的对象不被打点', b.updatedAt, b0);
+  const t1=a.updatedAt;
+
+  api.commitChange();
+  eq('N06-无 id 提交不产生新时间戳', a.updatedAt, t1);
+  api.commitChange(undefined,[]);
+  eq('N06-空 id 列表不产生新时间戳', a.updatedAt, t1);
+
+  api.stampObjects([a.id]);
+  ok('N06-同毫秒内连续打点仍严格递增', a.updatedAt>t1);
+  eq('N06-不存在的 id 不计数', api.stampObjects(['missing.n06']), 0);
+  eq('N06-Map 形式 id 可打点', api.stampObjects(new Map([[a.id,1]])), 1);
+
+  const orig=JSON.parse(JSON.stringify(a));
+  a.x=orig.x+3;
+  eq('N06-dragChangedIds 只返回真实位移对象', api.dragChangedIds({type:'move',originals:new Map([[a.id,orig]])}), [a.id]);
+  a.x=orig.x;
+  eq('N06-dragChangedIds 拖回原位为空', api.dragChangedIds({type:'move',originals:new Map([[a.id,orig]])}).length, 0);
+  const rotOrig=JSON.parse(JSON.stringify(b));
+  b.angle=(b.angle||0)+15;
+  eq('N06-dragChangedIds 旋转返回自身 id', api.dragChangedIds({type:'rotate',id:b.id,original:rotOrig}), [b.id]);
+
+  api.commitObjectEdit([b.id]);
+  ok('N06-commitObjectEdit 走同一打点助手', b.updatedAt>b0);
   api.resetState();
 }
 

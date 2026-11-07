@@ -233,6 +233,49 @@ test('N-04：对端清空场地可见可撤销；场地拖点实时同步；旧�
   await expect.poll(() => page.evaluate(() => state.site), { timeout: 5000 }).toBe(null);
 });
 
+test('N-06：拖动只给变化对象打点；拖动与对端属性编辑合并后都保留', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-stamp');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+  const created = await p2.evaluate(() => state.objects[0].updatedAt);
+
+  /* 单击空白不产生新时间戳（幂等） */
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  const box = await page.evaluate(() => {
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+  });
+  const tSel = await page.evaluate(() => state.objects[0].updatedAt);
+  await page.mouse.click(box.x + box.w * 0.3, box.y + box.h * 0.3);
+  expect(await page.evaluate(() => state.objects[0].updatedAt)).toBe(tSel);
+
+  /* 真实鼠标拖动：对象 updatedAt 必须严格递增，并同步到对端 */
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 70, box.y + 40, { steps: 6 });
+  await page.mouse.up();
+  const dragged = await page.evaluate(() => ({ x: state.objects[0].x, t: state.objects[0].updatedAt }));
+  expect(dragged.t > tSel).toBe(true);
+  await expect.poll(() => p2.evaluate(() => state.objects[0].x), { timeout: 5000 }).toBe(dragged.x);
+  expect(await p2.evaluate(() => state.objects[0].updatedAt)).not.toBe(created);
+
+  /* 对端在其已同步副本上改属性：合并后拖动位移与属性同时保留 */
+  await p2.evaluate(() => { const o = state.objects[0]; o.name = 'B改'; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(800);
+  await expect.poll(() => page.evaluate(() => state.objects[0].name), { timeout: 6000 }).toBe('B改');
+  expect(await page.evaluate(() => state.objects[0].x)).toBe(dragged.x);
+});
+
 test('离线重连：本地未同步修改不丢且对端可见（短间隔确定性）', async ({ page, context }) => {
   const p2 = await context.newPage();
   await openApp(page);

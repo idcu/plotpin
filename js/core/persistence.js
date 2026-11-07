@@ -144,14 +144,34 @@ function markDirty(kind){
   else if(p.ui==='lists'){ renderList(); renderLayers(); renderStats(); }
   if(p.broadcast&&typeof collabOnLocalChange==='function') collabOnLocalChange();
 }
-function commitChange(message){
+/** 对象变更打点（N-06）：只对实际变化的 id 写 updatedAt，供协作 LWW 判定。
+ *  ids 支持数组 / Set / Map；省略或为空时不遍历对象（无变化不产生新时间戳）。
+ *  同一毫秒内连续提交也对每个对象严格递增，避免后一次编辑被合并判旧。 */
+function stampObjects(ids){
+  if(!ids) return 0;
+  const list=ids instanceof Map?Array.from(ids.keys()):Array.from(ids);
+  if(!list.length) return 0;
+  const idx=objectIndexById();
+  let n=0;
+  for(const id of list){
+    const o=idx.get(id); if(!o) continue;
+    const prev=typeof o.updatedAt==='string'?o.updatedAt:'';
+    let ts=new Date().toISOString();
+    if(prev && ts<=prev) ts=new Date(new Date(prev).getTime()+1).toISOString();
+    o.updatedAt=ts; n++;
+  }
+  return n;
+}
+function commitChange(message, ids){
+  stampObjects(ids);
   touchFloor();
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
   markDirty('object');
   if(message) toast(message,'success');
 }
-function commitObjectEdit(){
+function commitObjectEdit(ids){
+  stampObjects(ids);
   touchFloor();
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
