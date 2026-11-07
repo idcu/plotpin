@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { deflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { buildStandalone } from './pack-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -216,12 +217,33 @@ code += `\n;globalThis.__api = {
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
-/* ---------------- 微型测试框架 ---------------- */
+/* ---------------- 微型测试框架（D-13：分区注册 / --list / --filter） ---------------- */
 let pass = 0, fail = 0;
 const asyncSuites=[];
 const failures = [];
+/* 分区：默认按原顺序全跑；--list 只列分区；--filter=<regex> 只跑名称匹配的分区，
+   未匹配分区的断言不执行、也不计入统计（默认口径不变）。分段名随失败输出。 */
+const sectionNames=[];
+const sectionCtx=new AsyncLocalStorage();
+const cliArgs=process.argv.slice(2);
+const listOnly=cliArgs.includes('--list');
+function parseFilter() {
+  const i=cliArgs.findIndex(a=>a==='--filter'||a.startsWith('--filter='));
+  if (i<0) return null;
+  const raw=cliArgs[i].startsWith('--filter=')?cliArgs[i].slice('--filter='.length):cliArgs[i+1];
+  if (!raw) { console.error('--filter 需要正则表达式'); process.exit(2); }
+  try { return new RegExp(raw, 'i'); } catch { console.error('--filter 正则无效：' + raw); process.exit(2); }
+}
+const filterRe=listOnly?null:parseFilter();
+async function section(name, fn) {
+  sectionNames.push(name);
+  if (listOnly) return;
+  if (filterRe && !filterRe.test(name)) return;
+  await sectionCtx.run(name, fn);
+}
+function currentSection() { return sectionCtx.getStore() || '（未分区）'; }
 function ok(name, cond) {
-  if (cond) { pass++; } else { fail++; failures.push(name); console.error('  ✗ ' + name); }
+  if (cond) { pass++; } else { fail++; const tag='['+currentSection()+'] '+name; failures.push(tag); console.error('  ✗ ' + tag); }
 }
 function eq(name, actual, expected) {
   const a = JSON.stringify(actual), e = JSON.stringify(expected);
@@ -232,10 +254,13 @@ function approx(name, actual, expected, eps = 1e-9) {
 }
 
 const api = sandbox.__api;
-ok('公共命名空间 Zip/XmlLite/Xlsx/DSV/ContentAssets 已挂载',
-  !!api.Zip && !!api.XmlLite && !!api.Xlsx && !!api.DSV && !!api.ContentAssets);
+await section('0. 公共命名空间', async () => {
+  ok('公共命名空间 Zip/XmlLite/Xlsx/DSV/ContentAssets 已挂载',
+    !!api.Zip && !!api.XmlLite && !!api.Xlsx && !!api.DSV && !!api.ContentAssets);
+});
 
 /* 1. 几何 ---------------------------------------------------------------- */
+await section("1. 几何", async () => {
 eq('多边形面积-正方形100', api.polygonArea([[0,0],[10,0],[10,10],[0,10]]), 100);
 eq('多边形面积-三角形50', api.polygonArea([[0,0],[10,0],[0,10]]), 50);
 eq('折线长度 3+4+5', api.polylineLength([[0,0],[3,0],[3,4],[3,9]]), 12);
@@ -254,10 +279,16 @@ eq('线段不相交', api.segmentsIntersect([0,0],[1,0],[5,5],[6,5]), false);
 eq('角度归一化', [api.normalizeAngle(-90), api.normalizeAngle(370)], [270, 10]);
 approx('绕原点旋转90°', api.rotatePoint([1,0],[0,0],90)[1], 1, 1e-9);
 
+});
+
 /* 2. CRC32 标准向量 ------------------------------------------------------- */
+await section("2. CRC32 标准向量", async () => {
 eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789')), 0xCBF43926);
 
+});
+
 /* 3. ZIP 往返 ------------------------------------------------------------- */
+await section("3. ZIP 往返", async () => {
 {
   const bin = new Uint8Array([0, 1, 2, 250, 255, 10, 31]);
   const buf = api.Zip.build([
@@ -270,7 +301,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('ZIP 魔数头', new Uint8Array(buf)[0] === 0x50 && new Uint8Array(buf)[1] === 0x4b);
 }
 
+});
+
 /* 4. XLSX 构建→读取双向往返 ---------------------------------------------- */
+await section("4. XLSX 构建→读取双向往返", async () => {
 {
   const C4=api.TABLE_COLUMNS;
   const r4=(m)=>C4.map((_,i)=>m[i]??'');
@@ -295,7 +329,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('列字母 A/Z/AA', [api.Xlsx.colLetter(0), api.Xlsx.colLetter(25), api.Xlsx.colLetter(26)], ['A', 'Z', 'AA']);
 }
 
+});
+
 /* 5. CSV / TSV 解析 ------------------------------------------------------- */
+await section("5. CSV / TSV 解析", async () => {
 {
   const csv = '\ufeff编号,名称\nO0001,"含,逗号"\nO0002,"引号""内"\nO0003,"换行\n字段"\r\nO0004,普通';
   const rows = api.DSV.parseRows(csv, ',');
@@ -310,7 +347,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('分隔符自动探测-制表', api.DSV.detectDelimiter('a\tb\tc\n'), '\t');
 }
 
+});
+
 /* 6. XmlLite 直接断言 ----------------------------------------------------- */
+await section("6. XmlLite 直接断言", async () => {
 {
   const doc = api.XmlLite.parse('<root xmlns:r="http://x"><a r:id="r1" q="v&amp;w">文&amp;本</a><b><c>1</c><c>2</c></b></root>');
   const a = doc.getElementsByTagName('a')[0];
@@ -323,7 +363,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('XmlLite 畸形标签报错', threw, true);
 }
 
+});
+
 /* 7. 底图资产：内容寻址哈希 + dataURL 解码 -------------------------------- */
+await section("7. 底图资产：内容寻址哈希 + dataURL 解码", async () => {
 {
   const a = api.ContentAssets.idFor(new Uint8Array([1, 2, 3, 4]), 'bg');
   const b = api.ContentAssets.idFor(new Uint8Array([1, 2, 3, 4]), 'bg');
@@ -339,7 +382,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('dataURL→哈希可重入', api.ContentAssets.idFor(bin.bytes, 'bg') === api.ContentAssets.idFor(bin.bytes, 'bg'), true);
 }
 
+});
+
 /* 8. 表格导入规划与应用 --------------------------------------------------- */
+await section("8. 表格导入规划与应用", async () => {
 {
   const st = api.resetState();
   const p0 = api.baseObject('point');
@@ -376,7 +422,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('无有效表头报错', noHeader.warnings.length === 1 && noHeader.updates.length === 0);
 }
 
+});
+
 /* 8.1 B-08 原义：批量布点 + 条件批量替换（严格模式全有或全无） -------------------- */
+await section("8.1 B-08 原义：批量布点 + 条件批量替换（严格模式全有或全无）", async () => {
 {
   const st = api.resetState();
   const mk = (name, text, x, y) => {
@@ -446,7 +495,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   console.log('  [B-08] 500 行表格：规划 ' + (t1 - t0) + ' ms，应用 ' + (t2 - t1) + ' ms');
 }
 
+});
+
 /* 9. 矢量场地模型 --------------------------------------------------------- */
+await section("9. 矢量场地模型", async () => {
 {
   eq('域-image 像素×mpp', api.siteDomainOf({kind:'image',width:1000,height:700,metersPerPixel:0.1}), {w:100,h:70});
   eq('域-rect 直接米', api.siteDomainOf({kind:'rect',shape:{type:'rect',w:12,h:8}}), {w:12,h:8});
@@ -459,7 +511,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('场地中文名', [api.siteKindName('image'),api.siteKindName('circle')], ['图片底图','圆形场地']);
 }
 
+});
+
 /* 10. 物理尺寸点设备命中（世界坐标） --------------------------------------- */
+await section("10. 物理尺寸点设备命中（世界坐标）", async () => {
 {
   api.resetState();
   api.state.viewport.zoom = 1;   // 经 getter 改闭包内 state（hitPhysicalPoint 读同一引用）
@@ -491,7 +546,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('零尺寸不命中物理', api.hitPhysicalPoint(Object.assign({},cam,{phys:0}),'sector',[5,5]), false);
 }
 
+});
+
 /* 11. 旧工程迁移与清洗 ----------------------------------------------------- */
+await section("11. 旧工程迁移与清洗", async () => {
 {
   const legacy = {
     schema: 'offline-drawing-annotation/v1',
@@ -557,7 +615,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
     objectTypes: [{ id:'t2', kind:'point', name:'X', color:'#123456', scaleShape:'weird' }] }).objectTypes.find(t=>t.id==='t2').scaleShape, undefined);
 }
 
+});
+
 /* 12. 场地形状：默认值、规整、健壮性与描述文案 ----------------------------- */
+await section("12. 场地形状：默认值、规整、健壮性与描述文案", async () => {
 {
   /* 新建工程默认就是 100×70 的矩形矢量场地（独立 site 槽），图片槽为空 */
   const init = api.createInitialState();
@@ -603,7 +664,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('场地中文名覆盖四种', ['image','rect','circle','polygon'].map(api.siteKindName), ['图片底图','矩形场地','圆形场地','多边形场地']);
 }
 
+});
+
 /* 13. 物理尺寸：缩放不变性、朝向覆盖、自定义视场、默认值 --------------------- */
+await section("13. 物理尺寸：缩放不变性、朝向覆盖、自定义视场、默认值", async () => {
 {
   api.resetState();
   /* 新建点对象默认纯位置（phys=0） */
@@ -659,7 +723,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('方旋转45° 轴上8m 不在', api.hitPhysicalPoint(chg45,'square',[8,0]), false);
 }
 
+});
+
 /* 14. 区域参数形状：面积/命中/采样/标签中心 ------------------------------- */
+await section("14. 区域参数形状：面积/命中/采样/标签中心", async () => {
 {
   const rect={kind:'rect',x:0,y:0,width:10,height:10,angle:0,shape:null};
   const circle={kind:'rect',x:0,y:0,shape:{type:'circle',r:10}};
@@ -706,7 +773,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('参数文案-扇形含张角', api.areaParamText(sector).includes('90'));
 }
 
+});
+
 /* 15. 区域形状互换：中心保持、等面积换算、角度保留 -------------------------- */
+await section("15. 区域形状互换：中心保持、等面积换算、角度保留", async () => {
 {
   /* 10×10 矩形（左下原点）→ 圆：面积 100 不变，圆心移到矩形中心 (5,5) */
   const o1={kind:'rect',x:0,y:0,width:10,height:10,angle:0,shape:null};
@@ -749,7 +819,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('换形-未知形状忽略', JSON.stringify(o5), before);
 }
 
+});
+
 /* 16. 点设备图标倍率：三层连乘与钳制（屏幕语义，与 zoom 无关） ------------- */
+await section("16. 点设备图标倍率：三层连乘与钳制（屏幕语义，与 zoom 无关）", async () => {
 {
   api.resetState();
   const st=api.state;
@@ -768,7 +841,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   st.settings.markerScale=1;
 }
 
+});
+
 /* 17. 椭圆/扇形矢量场地：构造、域、描述、迁移清洗 -------------------------- */
+await section("17. 椭圆/扇形矢量场地：构造、域、描述、迁移清洗", async () => {
 {
   /* 包围盒两角点 → 中心在域中心 */
   eq('椭圆场地-角点规整', api.ellipseShapeFromCorners([0,0],[20,10]),
@@ -806,7 +882,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
     api.siteDescription({kind:'sector',shape:s1})));
 }
 
+});
+
 /* 18. 迁移：区域参数形状、点 iconSize、全局倍率、自定义类型图标大小 --------- */
+await section("18. 迁移：区域参数形状、点 iconSize、全局倍率、自定义类型图标大小", async () => {
 {
   /* 圆形/椭圆/扇形区域对象往返 */
   const m1=api.migrateProject({ schema:'offline-drawing-annotation/v1',
@@ -896,7 +975,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('迁移-面积图签关闭保留', api.migrateProject({schema:'offline-drawing-annotation/v1',settings:{showAreaTag:false}}).settings.showAreaTag, false);
 }
 
+});
+
 /* 19. 区域基点：面板设置 (o.x,o.y) 与渲染/命中同基准，允许负值 ---------------- */
+await section("19. 区域基点：面板设置 (o.x,o.y) 与渲染/命中同基准，允许负值", async () => {
 {
   api.resetState();
   const field=(k,v)=>({dataset:{field:k}, value:String(v), type:'number', checked:false});
@@ -930,7 +1012,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   approx('基点-移动后圆面积不变', api.shapeArea(c), 25*Math.PI, 1e-9);
 }
 
+});
+
 /* 20. 折线节点编辑：坐标修改、插入、删除、最小点数与锚点同步 ----------------- */
+await section("20. 折线节点编辑：坐标修改、插入、删除、最小点数与锚点同步", async () => {
 {
   const mk=closed=>api.baseObject('line','line.custom',{points:[[0,0],[10,0],[10,10]],closed:!!closed,x:0,y:0});
 
@@ -985,7 +1070,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('节点编辑器-含坐标输入框', eh.includes('data-node-axis="x"') && eh.includes('data-node-axis="y"'));
 }
 
+});
+
 /* 21. 节点排序：move/step 语义、越界保护、锚点同步 -------------------------- */
+await section("21. 节点排序：move/step 语义、越界保护、锚点同步", async () => {
 {
   const mk=()=>api.baseObject('line','line.custom',{points:[[0,0],[1,1],[2,2],[3,3]],x:0,y:0});
 
@@ -1015,7 +1103,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('排序-非折线拒绝', api.moveNode({kind:'rect'},0,1), false);
 }
 
+});
+
 /* 22. 静态资源引用完整性：index.html 引用的本地文件都必须真实存在 ------------- */
+await section("22. 静态资源引用完整性：index.html 引用的本地文件都必须真实存在", async () => {
 {
   const exists = rel => { try { readFileSync(join(root, rel)); return true; } catch { return false; } };
   const referenced = [...html.matchAll(/(?:src|href)="(?!https?:|data:|#)([^"]+)"/g)].map(m => m[1]);
@@ -1027,7 +1118,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('静态-标题含图钉品牌', /图钉 PlotPin/.test(html));
 }
 
+});
+
 /* 23. Shift 精确约束：正交/极轴/正方形（预览与落点共用纯函数） ---------------- */
+await section("23. Shift 精确约束：正交/极轴/正方形（预览与落点共用纯函数）", async () => {
 {
   /* 正交：主导分量为 X 时钳为水平（Y 回到基点）；主导为 Y 时钳为垂直 */
   eq('正交-水平(右)', api.orthoPoint([0,0],[8,2],true), [8,0]);
@@ -1057,7 +1151,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('正方形-零位移透传', api.squareCorner([0,0],[0,0],true), [0,0]);
 }
 
+});
+
 /* 24. 对象捕捉 OSNAP：候选收集、阈值命中、自身排除、类型齐全 ------------------ */
+await section("24. 对象捕捉 OSNAP：候选收集、阈值命中、自身排除、类型齐全", async () => {
 {
   api.resetState();
   const st=api.state;
@@ -1125,7 +1222,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('锁定象限-空旷处无命中', api.findOsnap(st,[80,80],0.5,null,null,'quadrant'), null);
 }
 
+});
+
 /* 25. 捕捉扩展：象限点/垂足/跨对象交点/切点 ------------------------------- */
+await section("25. 捕捉扩展：象限点/垂足/跨对象交点/切点", async () => {
 {
   api.resetState();
   const st=api.state;
@@ -1194,7 +1294,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('边-圆曲线收集1个', api.collectSnapCircles(st).length, 1);
 }
 
+});
+
 /* 26. 测距链(ruler)：可编辑性、节点操作、长度/面积语义 ---------------------- */
+await section("26. 测距链(ruler)：可编辑性、节点操作、长度/面积语义", async () => {
 {
   api.resetState();
   const ruler=api.baseObject('dimension','dimension.distance',{subtype:'ruler',points:[[0,0],[3,4],[3,14]],x:0,y:0});
@@ -1233,7 +1336,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('测距-两点距离无面积', api.objectArea(distDim), 0);
 }
 
+});
+
 /* 27. 面积/长度统计：区域四形状、闭合折线、开放折线、点设备 ------------------- */
+await section("27. 面积/长度统计：区域四形状、闭合折线、开放折线、点设备", async () => {
 {
   const rect={kind:'rect',x:0,y:0,width:10,height:10,shape:null};
   const circle={kind:'rect',x:0,y:0,shape:{type:'circle',r:5}};
@@ -1253,7 +1359,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('统计-点设备长度0', api.objectLength({kind:'point'}), 0);
 }
 
+});
+
 /* 28. 表格导入导出往返：节点坐标/闭合/形状/标注类型新列 + CSV 引号往返 -------- */
+await section("28. 表格导入导出往返：节点坐标/闭合/形状/标注类型新列 + CSV 引号往返", async () => {
 {
   /* 28.1 节点坐标编解码：负坐标、空白/分号、容错 */
   eq('节点码-编码', api.formatNodeCoords([[0,0],[3.5,-2],[10,4]]), '0.00,0.00;3.50,-2.00;10.00,4.00');
@@ -1312,7 +1421,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('导出-列头含全部新列', ['形状','形状参数','闭合','标注类型','节点坐标'].every(k=>api.TABLE_COLUMNS.includes(k)));
 }
 
+});
+
 /* 28.3 导出字段表 + 行渲染器单一来源（B-08）：列/台账/参数/读数/盲区属性同源 */
+await section("28.3 导出字段表 + 行渲染器单一来源（B-08）：列/台账/参数/读数/盲区属性同源", async () => {
 {
   const D=api.EXPORT_FIELD_DEFS;
   eq('字段表-表格列与字段表一致', api.TABLE_COLUMNS.join(','), D.filter(f=>f.table).map(f=>f.key).join(','));
@@ -1370,7 +1482,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('盲区GeoJSON-口径版本', fc.coverageSpec.version, 2);
 }
 
+});
+
 /* 29. 表格规划与应用：折线/测距/形状重建、基点平移、非法行告警 -------------- */
+await section("29. 表格规划与应用：折线/测距/形状重建、基点平移、非法行告警", async () => {
 {
   const st=api.resetState();
   const L1=api.baseObject('line','line.custom',{name:'L1',points:[[0,0],[10,0],[10,10]],x:0,y:0});
@@ -1441,7 +1556,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('表格29-旧表头折线缺坐标告警', oldPlan.warnings.some(w=>w.includes('O101')&&w.includes('节点坐标')));
 }
 
+});
+
 /* 30. JSON 工程往返：基点(含负值)/节点/闭合/测距子类型/形状全保留 ----------- */
+await section("30. JSON 工程往返：基点(含负值)/节点/闭合/测距子类型/形状全保留", async () => {
 {
   const m=api.migrateProject({ schema:'offline-drawing-annotation/v1',
     objects:[
@@ -1467,7 +1585,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('JSON-圆形负圆心保留', [C1.x,C1.y,C1.shape.r], [-50,-50,12]);
 }
 
+});
+
 /* 31. 导入面积/长度/节点数核对：导出回导零告警、篡改告警非阻断、取整容差、非法值 ---- */
+await section("31. 导入面积/长度/节点数核对：导出回导零告警、篡改告警非阻断、取整容差、非法值", async () => {
 {
   /* 31.1 全类型工程导出后原样回导：长度/面积/节点数必须零告警（含大坐标多小数的取整传播） */
   const st=api.resetState();
@@ -1555,7 +1676,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('核对-旧表头无核对告警', p9.warnings.length, 0);
 }
 
+});
+
 /* 32. 评估报告高优先缺陷回归：框选错轴 / 校准漂移 / 资产可达集合 / 捕捉粗筛 -------- */
+await section("32. 评估报告高优先缺陷回归：框选错轴 / 校准漂移 / 资产可达集合 / 捕捉粗筛", async () => {
 {
   /* 5.3 boundsIntersect：报告中的两个反例（原实现 b.maxY<a.minX 错轴） */
   const A={minX:10,maxX:20,minY:0,maxY:5};
@@ -1611,7 +1735,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('资产-无引用空集合', api.reachableBgAssetIds().length, 0);
 }
 
+});
+
 /* 32.1 资产可达集：命名空间覆盖历史/剪贴板/拖拽/多个工程记录（审计 P0-1） --- */
+await section("32.1 资产可达集：命名空间覆盖历史/剪贴板/拖拽/多个工程记录（审计 P0-1）", async () => {
 {
   api.resetState();
   api.history.past.length=0; api.history.future.length=0;
@@ -1648,7 +1775,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   api.setClipboard([]); api.setDrag(null); api.resetState();
 }
 
+});
+
 /* 33. 捕捉包围盒粗筛：500 个远处矩形不影响 tol 内交点/垂足命中（性能优化不改变结果） --- */
+await section("33. 捕捉包围盒粗筛：500 个远处矩形不影响 tol 内交点/垂足命中（性能优化不改变结果）", async () => {
 {
   const st=api.createInitialState();
   /* 远处铺满 500 个矩形（2000 条边），距鼠标邻域极远 */
@@ -1674,7 +1804,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('性能-空旷处无命中', api.findOsnap(st,[500,500],0.3), null);
 }
 
+});
+
 /* 34. SVG 导出与画布语义一致：扇形弧/闭合边/面积角度文字/设备图标 ------------- */
+await section("34. SVG 导出与画布语义一致：扇形弧/闭合边/面积角度文字/设备图标", async () => {
 {
   /* 扇形场地 a0=30,a1=120：圆弧两端点必须不同（原 a0||0+sweep 优先级 bug 会退化为同点） */
   const st=api.resetState();
@@ -1727,7 +1860,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   ok('SVG-同组开放折线编号不受影响', api.buildSceneSvg().includes('>LOPEN<'));
 }
 
+});
+
 /* 35. DXF 解析/生成往返 + 多页 PDF 结构 --------------------------------------- */
+await section("35. DXF 解析/生成往返 + 多页 PDF 结构", async () => {
 {
   /* 35.1 生成一段含 7 类实体的 R12 DXF 再解析回来 */
   const ents=[
@@ -1826,7 +1962,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('A2-PDF golden SHA-256', shaA, createHash('sha256').update(readFileSync(pdfGolden)).digest('hex'));
 }
 
+});
+
 /* 36. DXF 高级实体：凸度弧 / ELLIPSE / SPLINE / INSERT 块 / MTEXT ---------------- */
+await section("36. DXF 高级实体：凸度弧 / ELLIPSE / SPLINE / INSERT 块 / MTEXT", async () => {
 {
   const P=(c,v)=>c+'\n'+v+'\n';
   let s=P(0,'SECTION')+P(2,'HEADER')+P(9,'$INSUNITS')+P(70,0)+P(0,'ENDSEC');
@@ -1903,7 +2042,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   approx('高级-MTEXT字高', mt.height, 2.5, 1e-9);
 }
 
+});
+
 /* 36.1 B-03：DXF 版本审计 + SOLID/3DFACE/LEADER/ATTRIB 补充解析矩阵 --------------- */
+await section("36.1 B-03：DXF 版本审计 + SOLID/3DFACE/LEADER/ATTRIB 补充解析矩阵", async () => {
 {
   const P=(c,v)=>c+'\n'+v+'\n';
   const head=ver=>P(0,'SECTION')+P(2,'HEADER')+P(9,'$ACADVER')+P(1,ver)+P(9,'$INSUNITS')+P(70,4)+P(0,'ENDSEC');
@@ -1964,7 +2106,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
   eq('B-03-不支持类型如实记录', Object.keys(onlyDim.inspect.unsupportedTypes).sort().join(','), 'DIMENSION,HATCH');
 }
 
+});
+
 /* 36.2 B-02：DWG 版本识别 + DXF 预检保真度/单位确认/参考层命名 ---------------------- */
+await section("36.2 B-02：DWG 版本识别 + DXF 预检保真度/单位确认/参考层命名", async () => {
 {
   const P=(c,v)=>c+'\n'+v+'\n';
   const head=ver=>P(0,'SECTION')+P(2,'HEADER')+P(9,'$ACADVER')+P(1,ver)+P(9,'$INSUNITS')+P(70,4)+P(0,'ENDSEC');
@@ -2006,7 +2151,10 @@ eq('CRC32("123456789")=0xCBF43926', api.Zip.crc32(api.Zip.encodeUtf8('123456789'
 }
 
 
+});
+
 /* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
+await section("37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG", async () => {
 asyncSuites.push((async()=>{
   const toLatin=bytes=>{ let s=''; for(let i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]); return s; };
   /* 内容流：描边矩形、直线、填充矩形 + 一段标准字体文本 */
@@ -2063,7 +2211,10 @@ asyncSuites.push((async()=>{
   eq('PDF-拉丁文本保留', api.PdfRead.looksLikeCidGarbage('Building A-101'), false);
 })());
 
+});
+
 /* 37b. B-13 多页 PDF：页序 / 每页独立原点 / 导出回读往返 -------------------- */
+await section("37b. B-13 多页 PDF：页序 / 每页独立原点 / 导出回读往返", async () => {
 asyncSuites.push((async()=>{
   const obj=(n,body)=>n+' 0 obj\n'+body+'\nendobj\n';
   /* /Kids 顺序故意与对象编号相反：对象 3 是第二页（宽 300），对象 5 是第一页（宽 200） */
@@ -2101,7 +2252,10 @@ asyncSuites.push((async()=>{
   approx('B-13-往返第二页独立原点', api.PdfRead.layoutPdfPages(back.pages)[1].x, 216, 1e-9);
 })());
 
+});
+
 /* 38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区 ------------------- */
+await section("38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区", async () => {
 {
   api.resetState();
   /* 20×20 区域（面积400），先不放点设备 → 全盲 */
@@ -2160,7 +2314,10 @@ asyncSuites.push((async()=>{
   eq('覆盖-多边形包围盒', (()=>{const bb=api.polygonBBox(rg[0].points);return [bb.minX,bb.minY,bb.maxX,bb.maxY];})(), [0,0,10,10]);
 }
 
+});
+
 /* 39. 仿射校准：像素↔世界映射 / 相似与完整仿射求解 / 旧对象随映射迁移 ---------- */
+await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射求解 / 旧对象随映射迁移", async () => {
 {
   /* 39.1 缺省（轴对齐）映射与往返：像素 v 向下、世界 y 向上 */
   const bg={kind:'image',width:100,height:10,metersPerPixel:0.1,transform:null};
@@ -2314,7 +2471,10 @@ asyncSuites.push((async()=>{
   }
 }
 
+});
+
 /* D-02：校准前置状态机（S0a 空槽无场地 / S0b 仅场地 / S1 图片未就绪 / S2 图片就绪） */
+await section("D-02：校准前置状态机（S0a 空槽无场地 / S0b 仅场地 / S1 图片未就绪 / S2 图片就绪）", async () => {
 {
   const emptyBg={kind:'empty'};
   const imageBg={kind:'image',width:100,height:80,metersPerPixel:0.1};
@@ -2359,7 +2519,10 @@ asyncSuites.push((async()=>{
   ok('校准前置-isCalibTool', api.isCalibTool('affine')&&!api.isCalibTool('select'));
 }
 
+});
+
 /* 40. 矢量场地标注：边界折点 / 几何中心 / 面积周长（三开关默认值与旧档迁移） -------- */
+await section("40. 矢量场地标注：边界折点 / 几何中心 / 面积周长（三开关默认值与旧档迁移）", async () => {
 {
   api.resetState();
   /* 缺省矩形场地（域 100×70，基点原点）：四角折点、中心均值、面积周长 */
@@ -2422,7 +2585,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 41. 场地节点编辑：实际包围盒取景框 / pan 补偿 / 控制点拖拽改写 ------------------ */
+await section("41. 场地节点编辑：实际包围盒取景框 / pan 补偿 / 控制点拖拽改写", async () => {
 {
   api.resetState();
   /* siteBounds：默认矩形（基点原点）与实际取景框一致 */
@@ -2571,7 +2737,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 42. 场地属性面板：未选中对象时的可编辑场地属性 / 图片底图摘要 ------------------------ */
+await section("42. 场地属性面板：未选中对象时的可编辑场地属性 / 图片底图摘要", async () => {
 {
   api.resetState();
   /* 矢量场地（默认模式 = 未选中对象时显示，可编辑） */
@@ -2666,7 +2835,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 43. 逐对象标注开关：默认值 / setAnnot / annotationItems / 面板 HTML / 迁移清洗 ---- */
+await section("43. 逐对象标注开关：默认值 / setAnnot / annotationItems / 面板 HTML / 迁移清洗", async () => {
 {
   api.resetState();
   /* 支持键与类型默认值（保持既有观感） */
@@ -2845,7 +3017,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 44. 逐对象标注开关完全优先：全局总开关仅作未显式配置对象的缺省值 --------- */
+await section("44. 逐对象标注开关完全优先：全局总开关仅作未显式配置对象的缺省值", async () => {
 {
   /* 编号：全局关 → 未配置对象隐藏；显式开 → 全局关也显示；显式关 → 全局开也隐藏 */
   api.resetState();
@@ -2910,7 +3085,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 45. 画布渲染链路：逐对象标注显隐与 SVG 一致（非选中态、受全局开关影响时仍按对象配置） ---- */
+await section("45. 画布渲染链路：逐对象标注显隐与 SVG 一致（非选中态、受全局开关影响时仍按对象配置）", async () => {
 {
   /* 记录型 2D 上下文：只关心 fillText 文本，其余绘制调用一律吞掉 */
   const recCtx=()=>{
@@ -2981,7 +3159,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 46. 平行四边形：区域与矢量场地共用的参数形状 ------------------------------ */
+await section("46. 平行四边形：区域与矢量场地共用的参数形状", async () => {
 {
   api.resetState();
   api.state.settings.precision=2;
@@ -3116,7 +3297,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 47. 分层渲染：视口裁剪矩形与静态层缓存签名 -------------------------------- */
+await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", async () => {
 {
   api.resetState();
   api.state.background={kind:'rect',fileName:'',assetId:'',width:0,height:0,origin:[0,0],metersPerPixel:1,calibrated:false,
@@ -3142,7 +3326,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 48. 覆盖率：分辨率参数与盲区多边形导出数据 -------------------------------- */
+await section("48. 覆盖率：分辨率参数与盲区多边形导出数据", async () => {
 {
   api.resetState();
   api.state.objects.push(api.baseObject('rect','rect.area',{name:'B1',x:0,y:0,width:20,height:20}));
@@ -3171,7 +3358,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 48.1 覆盖率口径 v2：与缩放无关、按面积分配固定格数、隐藏图层不计入 ------- */
+await section("48.1 覆盖率口径 v2：与缩放无关、按面积分配固定格数、隐藏图层不计入", async () => {
 {
   api.resetState();
   api.state.objects.push(api.baseObject('rect','rect.area',{name:'R2',x:0,y:0,width:50,height:40}));
@@ -3235,7 +3425,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 49. 运行环境能力探测：file:// 与 IDB/SW/Blob 缺失时的显式降级 ---------------- */
+await section("49. 运行环境能力探测：file:// 与 IDB/SW/Blob 缺失时的显式降级", async () => {
 {
   const fileEnv=api.detectCapabilities({protocol:'file:',indexedDB:{},serviceWorker:{},Blob:function(){},createObjectURL:true});
   eq('能力-file模式识别', fileEnv.file, true);
@@ -3262,7 +3455,10 @@ asyncSuites.push((async()=>{
   ok('PWA-注册路径指向根 sw.js', /serviceWorker\.register\(\s*['"]sw\.js['"]\s*\)/.test(appSrc));
 }
 
+});
+
 /* 50. 解析器加固：ZIP/XLSX/DXF/PDF 的输入上限与畸形样例 ---------------------- */
+await section("50. 解析器加固：ZIP/XLSX/DXF/PDF 的输入上限与畸形样例", async () => {
 asyncSuites.push((async()=>{
   const rejects=async(name,promise,re)=>{
     try{ await promise; ok(name+'（未抛错）',false); }
@@ -3357,7 +3553,10 @@ asyncSuites.push((async()=>{
   eq('加固PDF-对象数恰好等于上限可通过', (await api.PdfRead.parsePdf(two,{maxObjects:5})).paths.length, 1);
 })());
 
+});
+
 /* 51. 布点优化：贪心覆盖最大化、增益递减、目标/台数上限 ---------------------- */
+await section("51. 布点优化：贪心覆盖最大化、增益递减、目标/台数上限", async () => {
 {
   api.resetState();
   api.state.objects.push(api.baseObject('rect','rect.area',{name:'A',x:0,y:0,width:100,height:100}));
@@ -3395,7 +3594,10 @@ asyncSuites.push((async()=>{
   eq('布点-无区域无建议', none.suggestions.length, 0);
 }
 
+});
+
 /* 52. 设备台账扩展字段 + 零依赖二维码编码器 -------------------------------- */
+await section("52. 设备台账扩展字段 + 零依赖二维码编码器", async () => {
 {
   const q=api.Qr;
   eq('QR-矩阵尺寸29', q.SIZE, 29);
@@ -3454,7 +3656,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 53. 多楼层 / 多底图：数据切换、持久化裁剪、迁移与资产可达 ------------------ */
+await section("53. 多楼层 / 多底图：数据切换、持久化裁剪、迁移与资产可达", async () => {
 {
   const st=api.resetState();
   eq('楼层-默认一层', st.floors.length, 1);
@@ -3545,7 +3750,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 导出双槽与场地标注证据：JSON / SVG / DXF 真实产物断言（PNG/PDF 共用 drawScene，浏览器回归触发） */
+await section("导出双槽与场地标注证据：JSON / SVG / DXF 真实产物断言（PNG/PDF 共用 drawScene，浏览器回归触发）", async () => {
 {
   api.resetState();
   Object.assign(api.state.settings,{siteNodes:true,siteSegLen:true,siteBase:true,siteRadius:true,siteArea:true,sitePerimeter:true});
@@ -3575,7 +3783,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 54. 方向约束（平行/垂直/等距/极轴）与临时参考线 ---------------------------- */
+await section("54. 方向约束（平行/垂直/等距/极轴）与临时参考线", async () => {
 {
   const p=(wp,opt)=>api.directionalSnap([0,0],wp,opt);
   let r=p([10,0.5],{refDir:0});
@@ -3630,7 +3841,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 55. 符号库（C-04）：36 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden */
+await section("55. 符号库（C-04）：36 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden", async () => {
 {
   const lib=api.SYMBOL_LIBRARY;
   eq('符号库-总数36', lib.length, 36);
@@ -3808,7 +4022,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 56. 单文件发行包：内联、去外链、图标 data URI、CSP 哈希白名单 ---------------- */
+await section("56. 单文件发行包：内联、去外链、图标 data URI、CSP 哈希白名单", async () => {
 {
   const sample='<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; img-src \'self\' data:"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="a.css"></head><body><script src="a.js"></script><script src="b.js"></script></body></html>';
   const files={'a.css':'body{color:red}','a.js':'console.log("a")','b.js':'const x="</script>";','icon.svg':'<svg/>','manifest.webmanifest':'{}'};
@@ -3841,7 +4058,10 @@ asyncSuites.push((async()=>{
   ok('打包-真实入口CSP哈希全覆盖', realInline>10&&realInline===realHashes);
 }
 
+});
+
 /* 56.1 type.icon 白名单 + esc：4 条注入路径（审计 A-02） -------------------- */
+await section("56.1 type.icon 白名单 + esc：4 条注入路径（审计 A-02）", async () => {
 {
   /* 1) normalizeIcon：任意字符串不得原样回传 */
   eq('图标-白名单内保留', api.normalizeIcon('camera','point'), 'camera');
@@ -3889,7 +4109,10 @@ asyncSuites.push((async()=>{
   ok('CSP-不允许远程源', !/https?:/.test(csp));
 }
 
+});
+
 /* 57. 插件注册点：导出器 / 导入器注册、校验、查找与注销 -------------------- */
+await section("57. 插件注册点：导出器 / 导入器注册、校验、查找与注销", async () => {
 {
   const PP=api.PlotPin;
   ok('插件-暴露全局 API 与版本', !!PP&&typeof PP.version==='string'&&PP.version.length>0);
@@ -3980,7 +4203,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 57.1 插件 API 版本化与能力白名单（C-01） -------------------------------- */
+await section("57.1 插件 API 版本化与能力白名单（C-01）", async () => {
 {
   const PP=api.PlotPin;
   ok('插件-API 版本常量', PP.apiVersion==='1.1.0');
@@ -4022,7 +4248,10 @@ asyncSuites.push((async()=>{
   ok('清单-超过 192 KB 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{filler:'x'.repeat(200000)}));return !r.ok&&/192 KB/.test(r.reason);})());
 }
 
+});
+
 /* 57.2 C-05 几何规则检查：配置 / 框架 / 三条规则 / CSV / 定位 --------------- */
+await section("57.2 C-05 几何规则检查：配置 / 框架 / 三条规则 / CSV / 定位", async () => {
 {
   eq('规则-默认版本', api.createRuleConfig().version, 1);
   eq('规则-默认范围', api.createRuleConfig().scope, 'all');
@@ -4070,7 +4299,10 @@ asyncSuites.push((async()=>{
   eq('规则-合并缺失侧逻辑直接判定', api.mergeRuleSide({}, remoteRules).spacing.types['point.marker'], 4);
 }
 
+});
+
 /* 57.3 规则注册框架 -------------------------------------------------------- */
+await section("57.3 规则注册框架", async () => {
 {
   api.resetState();
   const st = api.state;
@@ -4111,7 +4343,10 @@ asyncSuites.push((async()=>{
   ok('规则框架-插件规则可注销', api.unregisterRule('test.owned').ok&&!api.listRules().some(r=>r.id==='test.owned'));
 }
 
+});
+
 /* 57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨楼层 --------------------- */
+await section("57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨楼层", async () => {
 {
   const rect = (x,y,w=10,h=10,name='R') => api.baseObject('rect','rect.area',{x,y,width:w,height:h,name});
   const run = objs => { api.resetState(); api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
@@ -4152,7 +4387,10 @@ asyncSuites.push((async()=>{
   eq('重叠-当前楼层范围仅统计本层', api.runRuleCheck({scope:'current'}).stats.objects, 1);
 }
 
+});
+
 /* 57.5 最小间距：不足 / 刚好达标 / 改配置重查 / 双类型取 max / 点-区域 ------- */
+await section("57.5 最小间距：不足 / 刚好达标 / 改配置重查 / 双类型取 max / 点-区域", async () => {
 {
   const pt = (x,y,name='P') => api.baseObject('point','point.marker',{x,y,name});
   const run = objs => { api.resetState(); api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
@@ -4213,7 +4451,10 @@ asyncSuites.push((async()=>{
   eq('间距-平行线净距 0.5m', rl.violations.find(v=>v.ruleId==='spacing').value, 0.5);
 }
 
+});
+
 /* 57.6 越界：场内 / 贴边 / 部分 / 完全 / 文字 / 尺寸 / 隐藏 / 无场地 --------- */
+await section("57.6 越界：场内 / 贴边 / 部分 / 完全 / 文字 / 尺寸 / 隐藏 / 无场地", async () => {
 {
   const rect = (x,y,w=10,h=10,name='R') => api.baseObject('rect','rect.area',{x,y,width:w,height:h,name});
   const run = objs => { api.resetState(); api.state.objects = objs; return api.runRuleCheck({scope:'current'}); };
@@ -4244,7 +4485,10 @@ asyncSuites.push((async()=>{
   ok('越界-无场地记录跳过原因', noSite.skipped.some(s=>s.ruleId==='bounds'&&/未设置/.test(s.reason)));
 }
 
+});
+
 /* 57.7 违规清单 CSV 导出与点击定位 ------------------------------------------ */
+await section("57.7 违规清单 CSV 导出与点击定位", async () => {
 {
   api.resetState();
   api.state.objects = [
@@ -4270,7 +4514,10 @@ asyncSuites.push((async()=>{
   ok('定位-异常对象安全返回', (await api.locateRuleViolation({objectId:'missing',floorId:api.state.activeFloorId})) === false);
 }
 
+});
+
 /* 57.8 规则采样误差 golden（A5）：固定几何 + 容差断言 ---------------------- */
+await section("57.8 规则采样误差 golden（A5）：固定几何 + 容差断言", async () => {
 {
   api.resetState();
   api.state.objectTypes.push(
@@ -4317,7 +4564,10 @@ asyncSuites.push((async()=>{
   approx('A5-凹多边形与自身交面积=7500', api.rulePolygonIntersectionArea(L,L), 7500, 1e-6);
 }
 
+});
+
 /* 57.9 DXF 折线与 SVG 几何一致性（A6） ------------------------------------- */
+await section("57.9 DXF 折线与 SVG 几何一致性（A6）", async () => {
 {
   /* 1) 合成非对称符号：viewBox 24、size 24、对象在 (100,100)、angle 0。
    * 按「中心缩放 + 局部 Y 翻转」规格独立推导：x∈[88,100]，y∈[100,112]。 */
@@ -4369,7 +4619,10 @@ asyncSuites.push((async()=>{
   }
 }
 
+});
+
 /* 58. 中英界面切换与无障碍标记 --------------------------------------------- */
+await section("58. 中英界面切换与无障碍标记", async () => {
 {
   const I=api.I18N;
   eq('i18n-默认中文', I.lang, 'zh');
@@ -4486,7 +4739,10 @@ asyncSuites.push((async()=>{
   I.setLang('zh');
 }
 
+});
+
 /* 59. 离线协作：工程级 LWW 合并与删除墓碑 -------------------------------- */
+await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async () => {
 {
   const T1 = '2026-10-01T01:00:00.000Z';
   const T2 = '2026-10-01T02:00:00.000Z';
@@ -4815,7 +5071,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 60. 测试盲区补强：SVG 视觉快照 + 弹窗焦点管理（真实 DOM 语义桩） ---------- */
+await section("60. 测试盲区补强：SVG 视觉快照 + 弹窗焦点管理（真实 DOM 语义桩）", async () => {
 {
   api.resetState();
   const push=(kind,typeId,patch)=>api.state.objects.push(api.baseObject(kind,typeId,patch));
@@ -4868,7 +5127,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 61. 停车规划：双面垂直车位/通道布局、净宽检查与旋转排列 ---------- */
+await section("61. 停车规划：双面垂直车位/通道布局、净宽检查与旋转排列", async () => {
 {
   const base={siteX:0,siteY:0,siteW:100,siteH:70,stallWidth:2.5,stallDepth:5.3,aisleWidth:6,margin:1,orientation:'x'};
   const r=api.parkingLayout(base);
@@ -4935,7 +5197,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 62. 实时协作：长消息分块与本地提交防抖（WebRTC/BC 传输层为浏览器环境） ---------- */
+await section("62. 实时协作：长消息分块与本地提交防抖（WebRTC/BC 传输层为浏览器环境）", async () => {
 {
   const text='A'.repeat(100);
   const parts=api.collabChunkText(text,30);
@@ -5015,7 +5280,10 @@ asyncSuites.push((async()=>{
   ok('合并历史-整层删除写栈', api.mergeHistoryNeeded({floorsDeleted:1}) === true);
 }
 
+});
+
 /* 63. 多楼层汇总：逐层对象数/分类/面积/长度与合计 ---------------------------- */
+await section("63. 多楼层汇总：逐层对象数/分类/面积/长度与合计", async () => {
 {
   const st=api.resetState();
   st.objects.push(api.baseObject('point','point.marker',{name:'A',x:1,y:1}));
@@ -5049,7 +5317,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 64. 资源上限：缩放/图标/段长阈值、底图降采样策略、设置迁移与 HTML 转义 ---------- */
+await section("64. 资源上限：缩放/图标/段长阈值、底图降采样策略、设置迁移与 HTML 转义", async () => {
 {
   eq('资源上限-缩放范围', [api.APP_LIMITS.ZOOM_MIN, api.APP_LIMITS.ZOOM_MAX], [0.02, 200]);
   eq('资源上限-图标倍率范围', [api.APP_LIMITS.ICON_SCALE_MIN, api.APP_LIMITS.ICON_SCALE_MAX], [0.2, 8]);
@@ -5088,7 +5359,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 65. 对象对齐与分布：包围盒边界/中线、等间距、少于阈值不动 -------------------- */
+await section("65. 对象对齐与分布：包围盒边界/中线、等间距、少于阈值不动", async () => {
 {
   const mk=(patch)=>api.baseObject('rect','rect.area',Object.assign({x:0,y:0,width:10,height:10},patch));
   const boxes=objs=>objs.map(o=>api.objectBounds(o));
@@ -5141,7 +5415,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 66. 批量编号与层级：跨层避让、步长/空前缀/非法参数、置顶置底 ------------------ */
+await section("66. 批量编号与层级：跨层避让、步长/空前缀/非法参数、置顶置底", async () => {
 {
   const st=api.resetState();
   const mk=(name,z)=>api.baseObject('point','point.marker',{name,x:1,y:1,z});
@@ -5220,7 +5497,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 67. 多楼层台账：导出楼层列、导入按楼层路由、未知楼层与跨层重号 ------------ */
+await section("67. 多楼层台账：导出楼层列、导入按楼层路由、未知楼层与跨层重号", async () => {
 {
   const st=api.resetState();
   st.objects.push(api.baseObject('point','point.marker',{name:'A',x:1,y:1}));
@@ -5266,7 +5546,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 53. 清空当前楼层：双槽/对象/标注/校准/选中/取景框全清，可整体撤销 ---------- */
+await section("53. 清空当前楼层：双槽/对象/标注/校准/选中/取景框全清，可整体撤销", async () => {
 {
   api.resetState();
   api.state.background={kind:'image',fileName:'p.png',assetId:'bg.test',width:100,height:80,origin:[0,0],
@@ -5307,7 +5590,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 63. 撤销/重做/增删楼层统一落盘（A-03 / 审计 P0-4） ---------------------------- */
+await section("63. 撤销/重做/增删楼层统一落盘（A-03 / 审计 P0-4）", async () => {
 asyncSuites.push(async()=>{
   const origSave=api.scheduleSave;
   let calls=0, saved=null;
@@ -5345,7 +5631,10 @@ asyncSuites.push(async()=>{
   }
 });
 
+});
+
 /* 64. XLSX 导出：单元格一律 inlineStr（文本），不存在公式节点（A-07 的另一半） ---- */
+await section("64. XLSX 导出：单元格一律 inlineStr（文本），不存在公式节点（A-07 的另一半）", async () => {
 asyncSuites.push(async()=>{
   const bytes=api.Xlsx.build([['=cmd|calc','@SUM(1)'],['-1','普通文本']],'T');
   const entries=await api.Zip.readEntries(bytes);
@@ -5358,7 +5647,10 @@ asyncSuites.push(async()=>{
   eq('XLSX-At 串按原文保存', rows[0][1], '@SUM(1)');
 });
 
+});
+
 /* 65. A-12 快赢包：椭圆圆心 / 图标尺寸编辑 / 统计场地类型 / 文件 accept ---------- */
+await section("65. A-12 快赢包：椭圆圆心 / 图标尺寸编辑 / 统计场地类型 / 文件 accept", async () => {
 {
   /* 65.1 椭圆数值输入：半径不得兼作圆心（审计 P1-5） */
   const es=api.ellipseShapeFromInput('40,25');
@@ -5404,7 +5696,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 66. A-04 存储 v2 + 楼层 updatedAt + 统一 LWW ---------------------------------- */
+await section("66. A-04 存储 v2 + 楼层 updatedAt + 统一 LWW", async () => {
 {
   /* 66.1 schema v2 与 v1 兼容读取 */
   eq('存储-当前 schema v2', api.SCHEMA, 'offline-drawing-annotation/v2');
@@ -5447,7 +5742,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 67. 变更提交协议 markDirty：清覆盖率/落盘/广播按 kind 差异化 --------------- */
+await section("67. 变更提交协议 markDirty：清覆盖率/落盘/广播按 kind 差异化", async () => {
 {
   api.resetState();
   const realSave=api.scheduleSave;
@@ -5501,7 +5799,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 68. 交互提交判定 dragChanged / cancelActiveDrag：单击不写保存、不留空快照 --------------- */
+await section("68. 交互提交判定 dragChanged / cancelActiveDrag：单击不写保存、不留空快照", async () => {
 {
   api.resetState();
   const realSave=api.scheduleSave;
@@ -5571,7 +5872,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 69. A-08 转义与场地样式白名单 ------------------------------------------------------------ */
+await section("69. A-08 转义与场地样式白名单", async () => {
 {
   eq('xmlEscape 转义五类字符', api.xmlEscape(`<&>"'`), '&lt;&amp;&gt;&quot;&#39;');
   eq('xmlEscape 空值', api.xmlEscape(null), '');
@@ -5597,7 +5901,10 @@ asyncSuites.push(async()=>{
   eq('modalBody safeHTML 保留片段', api.modalBody(['<div>','</div>'], api.safeHTML('<i>ok</i>')), '<div><i>ok</i></div>');
 }
 
+});
+
 /* 70. A-09 导入限值与事务化原语 ------------------------------------------------------------- */
+await section("70. A-09 导入限值与事务化原语", async () => {
 {
   eq('APP_LIMITS 已冻结', Object.isFrozen(api.APP_LIMITS), true);
   eq('APP_LIMITS 历史栈上限', api.APP_LIMITS.HISTORY_MAX, 20);
@@ -5623,7 +5930,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 71. A-11 墓碑按对象 id 保留 + 增量淘汰（离线旧端合并不复活） ------------------------ */
+await section("71. A-11 墓碑按对象 id 保留 + 增量淘汰（离线旧端合并不复活）", async () => {
 {
   const L = api.APP_LIMITS;
   eq('A-11 墓碑硬上限 2 万', L.TOMBSTONE_MAX, 20000);
@@ -5686,7 +5996,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 72. A-15 公共抽象：outlineOf golden / objectIndexById / siteBounds 唯一源 / ensureVendor */
+await section("72. A-15 公共抽象：outlineOf golden / objectIndexById / siteBounds 唯一源 / ensureVendor", async () => {
 {
   api.resetState();
   const push=(kind,typeId,patch)=>api.state.objects.push(api.baseObject(kind,typeId,patch));
@@ -5755,7 +6068,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 73. B-04 版本快照：独立命名空间、照片引用化、A/B 差异分类与误报 --------------- */
+await section("73. B-04 版本快照：独立命名空间、照片引用化、A/B 差异分类与误报", async () => {
 {
   eq('B-04 快照命名空间独立', api.snapshotKey('PRJ4321','SNAP1'), 'snap:PRJ4321:SNAP1');
   eq('B-04 快照键解析', api.snapshotIdOfKey('snap:PRJ4321:SNAP1'), 'SNAP1');
@@ -5861,7 +6177,10 @@ asyncSuites.push(async()=>{
   api.resetState();
 }
 
+});
+
 /* 74. B-10 历史栈结构共享/增量：未变子树与 base64 字符串复用、物化隔离、普通条目兼容 --- */
+await section("74. B-10 历史栈结构共享/增量：未变子树与 base64 字符串复用、物化隔离、普通条目兼容", async () => {
 {
   api.resetState();
   const huge = 'data:image/png;base64,' + 'A'.repeat(1 << 20);   /* 1MB 内嵌照片 */
@@ -5911,7 +6230,10 @@ asyncSuites.push(async()=>{
   api.resetState(); api.history.past = []; api.history.future = [];
 }
 
+});
+
 /* 75. B-05 产品目录校验 / BOM 聚合 / 报价字段表与数值往返 ---------------- */
+await section("75. B-05 产品目录校验 / BOM 聚合 / 报价字段表与数值往返", async () => {
 {
   /* 75.1 合法目录规范化：去空白、缺省类别/单位、params 白名单 */
   const raw = { schema:'plotpin-catalog/v1', items:[
@@ -6057,7 +6379,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 })());
 
+});
+
 /* 75.10 B-07 图框/标题栏：默认模板、旧档降级、持久化、导出叠加与默认不变 --- */
+await section("75.10 B-07 图框/标题栏：默认模板、旧档降级、持久化、导出叠加与默认不变", async () => {
 {
   api.resetState();
   const d = api.createTitleBlock();
@@ -6101,7 +6426,10 @@ asyncSuites.push((async()=>{
   api.resetState();
 }
 
+});
+
 /* 75.11 B-14 i18n 插值模板：中文语义不变、英文整句命中、缺参回退、转义边界 --- */
+await section("75.11 B-14 i18n 插值模板：中文语义不变、英文整句命中、缺参回退、转义边界", async () => {
 {
   const I = api.I18N;
   const orig = I.lang;
@@ -6128,7 +6456,10 @@ asyncSuites.push((async()=>{
   I.setLang(orig);
 }
 
+});
+
 /* ---------------- D-01 首次引导与示例工程 ---------------- */
+await section("D-01 首次引导与示例工程", async () => {
 {
   const demo = api.buildDemoProject();
   eq('D-01 示例对象数', demo.objects.length, 6);
@@ -6159,7 +6490,10 @@ asyncSuites.push((async()=>{
   eq('D-01 图片底图算老工程', api.savedProjectHasContent({ meta: {}, objects: [], background: { kind: 'image' } }), true);
 }
 
+});
+
 /* ---------------- D-07 加载完整性审计与资产状态区分 ---------------- */
+await section("D-07 加载完整性审计与资产状态区分", async () => {
 {
   const v2='offline-drawing-annotation/v2';
   const base={schema:v2,floors:[{id:'F1'}],activeFloorId:'F1',objects:[],layers:[{id:'L1'}],
@@ -6191,7 +6525,10 @@ asyncSuites.push((async()=>{
   ok('D-07 解码中提示不误报缺失', !dec.ok&&!dec.assetMissing&&dec.reason.includes('解码'));
 }
 
+});
+
 /* ---------------- D-08 保存失败分类与有限退避 ---------------- */
+await section("D-08 保存失败分类与有限退避", async () => {
 {
   api.resetSaveHealth();
   eq('D-08 配额错误分类', api.classifySaveError({name:'QuotaExceededError'}), 'quota');
@@ -6210,7 +6547,10 @@ asyncSuites.push((async()=>{
   api.resetSaveHealth();
 }
 
+});
+
 /* ---------------- D-09 多标签同工程编辑租约（假时钟） ---------------- */
+await section("D-09 多标签同工程编辑租约（假时钟）", async () => {
 {
   const prevId=api.state.meta.projectId, P='D09-P';
   api.state.meta.projectId=P;
@@ -6232,7 +6572,10 @@ asyncSuites.push((async()=>{
   api.state.meta.projectId=prevId;
 }
 
+});
+
 /* ---------------- D-03 帮助中心：三页签与 i18n ---------------- */
+await section("D-03 帮助中心：三页签与 i18n", async () => {
 {
   const orig = api.I18N.lang;
   api.I18N.setLang('zh');
@@ -6261,7 +6604,15 @@ asyncSuites.push((async()=>{
   api.I18N.setLang(orig);
 }
 
+});
+
 /* ---------------- 结果汇总 ---------------- */
+if (listOnly) {
+  console.log(`共 ${sectionNames.length} 个分区（--filter=<regex> 选择执行）：`);
+  sectionNames.forEach((n, i) => console.log(`  ${String(i + 1).padStart(3, ' ')}. ${n}`));
+  process.exit(0);
+}
 await Promise.all(asyncSuites.map(s=>typeof s==='function'?s():s));
 console.log(`\n${fail === 0 ? '✅' : '❌'} 逻辑层自测：${pass} 通过 / ${fail} 失败，共 ${pass + fail} 项断言（加载 ${srcs.length} 个脚本）`);
+if (filterRe) console.log(`（已过滤：${filterRe}，仅统计匹配分区）`);
 if (fail) { failures.forEach(f => console.error('  - ' + f)); process.exit(1); }

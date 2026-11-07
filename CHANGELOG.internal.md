@@ -2,6 +2,36 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 自测分区、列表与过滤（D-13）
+
+- **Commit Hash**：本条提交（`test(selftest): 分区注册与 --list/--filter`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `scripts/selftest.mjs` 新增分区注册：`section(name, fn)` 以 **108 个原注释区块**为边界（断言内容未移动），用 `AsyncLocalStorage` 绑定分区上下文，异步套件（`asyncSuites`）内的断言也能带对分区名。
+  - 新增 `--list`（只列分区、不执行断言）与 `--filter=<regex>`（也接受 `--filter <regex>`；正则不区分大小写，无效正则退出码 2）。未匹配分区**不执行、不计入统计**；默认无参数时按原顺序全量执行，汇总行格式不变。
+  - 失败行与最终失败清单带 `[分区名]`，例如 `✗ [1. 几何] 多边形面积-正方形100（期望 100，实际 101）`。
+  - 文档同步：`README.md` 自测节补 `--list` / `--filter` 示例与「默认口径不变」说明；`docs/engineering.md` 新增 D-13 分区段并回填 D-11 后的体积/gzip/SHA 实测；`docs/plans/README.md` 回填 D-11 ✅ `9c1ecd0`、D-13 ✅。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/selftest.mjs` | **2706 通过 / 0 失败**，与 D-11 完全持平（分区化不改断言） | 0 |
+| `node scripts/selftest.mjs --list` | **108 个分区**（按原注释区块，非重命名） | 0 |
+| `node scripts/selftest.mjs --filter="1\. 几何"` | **17 通过 / 0 失败**，仅统计匹配分区 | 0 |
+| `node scripts/selftest.mjs --filter="D-08"` | **12 通过 / 0 失败**，仅统计匹配分区 | 0 |
+| 失败定位（临时副本故意改错 1 条断言） | 输出 `✗ [1. 几何] 多边形面积-正方形100（期望 100，实际 101）`，退出码 1；临时文件已删除 | 1（预期） |
+| `node scripts/check.mjs --selftest` | 通过：2706 / 0，32 脚本语法、入口、离线、契约、分层、i18n 全过 | 0 |
+| `node scripts/build.mjs --check` | **776,704 B（758.5 KB）**、gzip 241,484 B；SHA256 `1f89ec03e99a…` 不变，**产物 0 B 变化** | 0 |
+| `node scripts/check-discipline.mjs` | **13/13 → L4**；最大文档 `engineering.md` 50.6 KB / 558 行；49 条命令可解析 | 0 |
+
+- **新增/调整公共抽象**
+  - 仅测试脚本内新增 `section(name, fn)`、`currentSection()`、`parseFilter()`；不进入运行时、不新增脚本、不改产物。
+- **遗留 / 风险**
+  - `--filter` 只按名称筛分区，不自动补跑前置分区；依赖前置状态的用例需自行带上相邻分区（例如先跑初始化区块）。
+  - 分区名沿用原注释文本，含重复编号（历史区块 53/63/64/65 等各出现两次）；过滤时按正则可能同时命中两条，属预期。
+  - 使用 `node:async_hooks` 的 `AsyncLocalStorage`，要求 Node 18+（与 README 声明一致）。
+  - 未 push；未读取/修改根目录 `camera-*`。
+
+
 ## 2026-11-07 · i18n 覆盖率门禁与字典收敛（D-11）
 
 - **Commit Hash**：本条提交（`test(i18n): 覆盖率门禁与字典收敛`）；完整哈希见 `git log HEAD` 与本次汇报。

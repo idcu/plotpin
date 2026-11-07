@@ -150,9 +150,13 @@ npx serve .
 
 ```powershell
 node scripts/selftest.mjs
+node scripts/selftest.mjs --list              # 列出全部分区（108 个，按原断言区块）
+node scripts/selftest.mjs --filter="几何"     # 只跑名称匹配的分区（正则，忽略大小写）
 # 或
 npm test
 ```
+
+默认执行仍是全量 2706 条断言、顺序与统计口径不变；`--filter` 只用于定位回归，未匹配分区不执行也不计入统计。
 
 门禁与依赖自检（语法 / 入口资源 / 离线承诺 / 断言数 / 契约 / 分层 / 自测）走另一条：
 
