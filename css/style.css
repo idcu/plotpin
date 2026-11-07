@@ -180,6 +180,11 @@
   .storage-bar>i.danger{background:var(--danger)}
   .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 8px;background:#f8fafc;font-family:Consolas,Menlo,monospace;font-size:12px;white-space:nowrap}
   .help-grid{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;align-items:center}
+  .help-tabs{margin-bottom:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .help-tab{margin-right:6px;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:6px;padding:5px 12px;cursor:pointer}
+  .help-tab.active{background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:600}
+  .help-panel{max-height:52vh;overflow:auto}
+  .help-term{font-weight:600;color:#0f172a;white-space:nowrap}
   .prop-empty{color:var(--muted);line-height:1.7;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:12px}
   .custom-prop{display:grid;grid-template-columns:1fr 1fr 28px;gap:5px;margin-bottom:5px}
   .node-list{display:flex;flex-direction:column;gap:4px;max-height:230px;overflow:auto;padding-right:2px}

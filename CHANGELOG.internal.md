@@ -2,6 +2,38 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 易用性：帮助中心三页签（D-03）
+
+- **Commit Hash**：本条提交（`feat(ux): 帮助中心三页签（快捷键/概念词典/导出清单）`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `js/core/interaction.js` 的 `openShortcutsHelp()` 扩展为三页签帮助中心：快捷键（原 20 行原样保留）、概念词典（6 条：图片底图 / 矢量场地 / 楼层 / 比例尺 / 仿射 / 覆盖率口径）、导出检查清单（8 种格式）。
+  - 导出清单逐项写明差异：JSON 可回导、PNG 位图快照、SVG 矢量且底图嵌入、PDF 图纸页为位图页、DXF 场地写入独立 SITE 图层（毫米坐标）、CSV/TSV/XLSX 公式注入防护。
+  - 页签通过 `data-help-tab` / `data-help-panel` 与 `switchHelpTab()` 切换，同步 `aria-selected` 与 `hidden`；弹窗仍复用 `openModal` / `modalBody`，无新脚本。
+  - `openShortcutsHelp()` 打开前先聚焦画布，使 `openModal` 记录的返回焦点为画布；`Esc` 关闭后焦点回到画布。
+  - 新增文案全部在渲染时经 `L()`：页签、概念词典 6 条、导出清单 8 组、弹窗标题；英文条目集中于 `js/common/i18n.js` 的 `PHRASES`。
+  - 新增 `tests/e2e/help-center.spec.mjs` 1 条；`scripts/selftest.mjs` 新增 14 条（三页签结构、6 条词典、8 种导出、PDF/SITE/公式标注、中英字典覆盖与英文无中文回退）。
+  - 同步 `docs/features.md`（新增帮助中心条目、单文件体积）、`docs/testing.md`（e2e 清单）、`docs/engineering.md`（体积/断言数）、`docs/manual-acceptance.md`（断言数）、`README.md`（`?` 快捷键说明与断言徽章）。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2649 通过 / 0 失败**（41 个脚本；基线 2635，D-03 新增 14 条） | 0 |
+| `node scripts/e2e.mjs` | **72 passed / 1 skipped / 73 total**（基线 71/1/72，新增 1 条 help-center；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **750,603 B（733.0 KB）**，gzip **232,191 B（226.7 KB）**；基线 744,752 B → 增量 **+5,851 B（+0.79%，预算 ≤6,000 B）**，gzip **+2,303 B**；上限 839,680 B，余量 **89,077 B**；SHA256 `9a213b37ece2b530efef5c13756b0d8b4c48c6ff469114e9e55d8c6015125040`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **32.34%**（基线 29.82% → +2.52pp，无回退）；字面量 1209、走翻译入口 448（字典化 391 / 缺口 57）、硬编码 761；PHRASES 814 / TEMPLATES 103 | 0 |
+| 导出 golden | 本轮未改导出代码（`git diff` 未触及 `io-export.js` / `io-fields.js` 等）；`selftest` 内 `tests/golden/*` 6 份快照逐字节通过；D-02 的 8 格式临时比对未重跑（D-03 不涉及导出行为） | 0 |
+
+- **新增/调整公共抽象**
+  - 无新增公共 API；新增 `helpShortcutRows / helpGlossaryRows / helpExportRows / helpTabDefs / helpPanelHTML / helpRowsHTML / switchHelpTab` 均为 `interaction.js` 内部函数，仅 `switchHelpTab` 供弹窗事件使用，其余为内容单一源；`scripts/selftest.mjs` 仅通过测试注入面读取前四项。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。
+- **遗留 / 风险**
+  - 体积增量距本任务 6,000 B 预算仅剩 **149 B**，后续若再扩帮助文案需先回收或改走数据外置；总产物体积余量仍有 89,077 B。
+  - 快捷键 20 行的**按键列**（如「对象捕捉」「双指」）沿用旧实现，仍为中文硬编码，不在 `PHRASES`；D-03 只保证新增文案 100% 入字典，旧列留给 D-11 收敛。
+  - 导出清单为人工维护的第二份导出说明，与 `io-export.js` 的真实行为存在漂移风险；本轮已用 selftest 断言锁定 PDF 位图页 / DXF SITE / 公式防护三项关键差异。
+  - 未 push；未读取/修改 `camera-*`。
+
 ## 2026-11-07 · 易用性：校准/底图工具前置状态机（D-02）
 
 - **Commit Hash**：本条提交（`feat(calib): 校准/底图工具前置状态机`）；完整哈希见 `git log HEAD` 与本次汇报。

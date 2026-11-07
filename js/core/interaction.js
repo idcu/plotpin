@@ -1049,8 +1049,10 @@ function pasteClipboard(){
   }));
   selectedIds=new Set(fresh); commitChange(L('已粘贴 {n} 个对象',{n:fresh.length}));
 }
-function openShortcutsHelp(){
-  const rows=[
+/* -------------------- 帮助中心（D-03）：快捷键 / 概念词典 / 导出检查清单 -------------------- */
+/* 三页签共用现有 modal；新增文案在渲染时经 L()，英文条目集中于 i18n PHRASES */
+function helpShortcutRows(){
+  return [
     ['Ctrl + Z / Y','撤销 / 重做'],['Delete / Backspace','删除选中对象'],
     ['Ctrl + D','原地复制选中对象'],['Ctrl + C / V','复制 / 粘贴对象（偏移 1m）'],
     ['Esc / 右键（绘制中）','取消当前绘制 / 清除选择（右键取消测距等逐点录入，无草稿时平移）'],['双击 / Enter','完成测距、折线或面积标注（双击处不会产生重复节点）'],
@@ -1067,8 +1069,63 @@ function openShortcutsHelp(){
     ['触屏单指 / 双指','单指绘制与移动；双指捏合缩放、双指拖动平移'],
     ['拖拽文件到画布','导入 JSON / DXF / CSV·TSV·XLSX 表格或底图图片'],['?','显示本帮助']
   ];
-  openModal(L('快捷键帮助'),'<div class="help-grid">'+rows.map(r=>'<span class="kbd">'+esc(r[0])+'</span><span>'+esc(L(r[1]))+'</span>').join('')+'</div>',
-    [{text:L('知道了'),class:'primary',click:closeModal}]);
+}
+function helpGlossaryRows(){
+  return [
+    [L('图片底图'), L('栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。')],
+    [L('矢量场地'), L('按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。')],
+    [L('楼层'), L('每层独立底图/场地与对象；图层、类型、工程库与 JSON 跨层共享。')],
+    [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
+    [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
+    [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')]
+  ];
+}
+function helpExportRows(){
+  return [
+    [L('JSON 工程'), L('全部楼层、底图与照片，可回导。')],
+    [L('PNG 高清图'), L('当前楼层位图快照，放大不保真。')],
+    [L('SVG 矢量图'), L('当前楼层矢量图，底图嵌入，可无损缩放。')],
+    [L('PDF 矢量（图纸+清单）'), L('图纸页为位图页；清单独立分页。')],
+    [L('DXF（CAD 互通）'), L('场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。')],
+    [L('CSV 表格'), L('全楼层台账；= + - @ 开头加单引号防公式注入。')],
+    [L('TSV 表格'), L('同 CSV，制表符分隔；同一公式防护。')],
+    [L('Excel (.xlsx)'), L('全楼层台账；单元格按文本写入，无公式。')]
+  ];
+}
+function helpRowsHTML(rows,cls='kbd'){
+  return '<div class="help-grid">'+rows.map(r=>'<span class="'+cls+'">'+esc(r[0])+'</span><span>'+esc(r[1])+'</span>').join('')+'</div>';
+}
+function helpTabDefs(){
+  return [
+    {key:'shortcuts', label:L('快捷键')},
+    {key:'glossary', label:L('概念词典')},
+    {key:'exports', label:L('导出检查清单')}
+  ];
+}
+function helpPanelHTML(key){
+  if(key==='glossary') return helpRowsHTML(helpGlossaryRows(),'help-term');
+  if(key==='exports') return helpRowsHTML(helpExportRows(),'help-term');
+  return helpRowsHTML(helpShortcutRows());
+}
+function switchHelpTab(key){
+  const body=$('modalBody');
+  body.querySelectorAll('[data-help-tab]').forEach(btn=>{
+    const on=btn.dataset.helpTab===key;
+    btn.classList.toggle('active',on);
+    btn.setAttribute('aria-selected',on?'true':'false');
+  });
+  body.querySelectorAll('[data-help-panel]').forEach(panel=>{ panel.hidden=panel.dataset.helpPanel!==key; });
+}
+function openShortcutsHelp(){
+  /* 先聚焦画布：openModal 记录当前焦点，Esc 关闭后焦点回到画布可继续绘图 */
+  try{ $('canvas').focus(); }catch(_){}
+  const tabs=helpTabDefs();
+  const body='<div class="help-tabs" role="tablist">'+
+    tabs.map((t,i)=>'<button type="button" class="help-tab'+(i?'':' active')+'" data-help-tab="'+t.key+'" role="tab" aria-selected="'+(i?'false':'true')+'">'+esc(t.label)+'</button>').join('')+
+    '</div>'+
+    tabs.map((t,i)=>'<section class="help-panel" data-help-panel="'+t.key+'" role="tabpanel"'+(i?' hidden':'')+'>'+helpPanelHTML(t.key)+'</section>').join('');
+  openModal(L('帮助中心'),body,[{text:L('知道了'),class:'primary',click:closeModal}]);
+  $('modalBody').querySelectorAll('[data-help-tab]').forEach(btn=>btn.addEventListener('click',()=>switchHelpTab(btn.dataset.helpTab)));
 }
 function reorderSelected(delta){
   if(selectedIds.size!==1) return;

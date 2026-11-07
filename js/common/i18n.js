@@ -283,6 +283,40 @@
     '单指绘制与移动；双指捏合缩放、双指拖动平移':'One finger draws/moves; pinch to zoom, two-finger drag to pan',
     '导入 JSON / DXF / CSV·TSV·XLSX 表格或底图图片':'Import JSON/DXF/CSV·TSV·XLSX tables or a base-map image',
     '显示本帮助':'Show this help', '快捷键帮助':'Keyboard shortcuts', '知道了':'Got it',
+    /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
+    '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
+    '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
+    '栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。':
+      'Raster image (PNG/JPG/WebP). Calibrate pixels to metres first; affects image objects only.',
+    '按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。':
+      'Metre-based rect/circle/ellipse/sector/parallelogram/polygon; no calibration.',
+    '每层独立底图/场地与对象；图层、类型、工程库与 JSON 跨层共享。':
+      'Each floor has its own base map/site and objects; layers, types and archives are shared.',
+    '用两点及其实距求像素→米比例与旋转；仅作用于图片底图。':
+      'Two points and their real distance solve pixel-to-metre scale and rotation; image maps only.',
+    '用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。':
+      'Real X,Y points solve image-to-world; 2 points = similarity, 3+ = full affine.',
+    '按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。':
+      'Camera FOV and mounting height projected; counts visible devices and blind spots.',
+    'JSON 工程':'JSON project', 'PNG 高清图':'HD PNG', 'SVG 矢量图':'SVG vector',
+    'PDF 矢量（图纸+清单）':'PDF (drawing + list)', 'DXF（CAD 互通）':'DXF (CAD)',
+    'CSV 表格':'CSV table', 'TSV 表格':'TSV table', 'Excel (.xlsx)':'Excel (.xlsx)',
+    '全部楼层、底图与照片，可回导。':
+      'All floors, base maps, photos; re-importable.',
+    '当前楼层位图快照，放大不保真。':
+      'Current-floor raster snapshot; not lossless when zoomed.',
+    '当前楼层矢量图，底图嵌入，可无损缩放。':
+      'Vector drawing with embedded raster base; scales losslessly.',
+    '图纸页为位图页；清单独立分页。':
+      'Drawing page bitmap; list pages separate.',
+    '场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。':
+      'Site in standalone SITE layer; millimetre coordinates stay editable.',
+    '全楼层台账；= + - @ 开头加单引号防公式注入。':
+      'All-floor ledger; leading apostrophe guards = + - @ formula injection.',
+    '同 CSV，制表符分隔；同一公式防护。':
+      'Tab-separated CSV; same formula guard.',
+    '全楼层台账；单元格按文本写入，无公式。':
+      'All-floor ledger; cells are text, no formula nodes.',
     /* 工程库 / 楼层 / 底图 / 导入预览 / 覆盖率 */
     '切换':'Switch', '重命名':'Rename', '打开':'Open', '关闭':'Close', '层':'floors', '对象':'objects', '个':'',
     '楼层 / 多底图':'Floors / Base maps', '当前楼层：':'Current floor: ',
