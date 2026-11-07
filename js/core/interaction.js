@@ -1215,7 +1215,7 @@ function flushBeforeUnload(){
   try{
     clearTimeout(saveTimer);
     const snapshot=persistableState();
-    try{ localStorage.setItem(LS_KEY,JSON.stringify(snapshot)); }catch(_){}
+    writeLocalDraft(snapshot);
     idbPut(snapshot).catch(()=>{});
   }catch(e){}
 }

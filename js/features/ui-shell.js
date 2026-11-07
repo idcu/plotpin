@@ -194,6 +194,26 @@ function showLoadAuditBanner(result){
     setRescueHold(false); bar.remove();
   });
 }
+function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }
+const SAVE_FAIL_TEXT={
+  quota:'保存失败：存储空间不足，请导出 JSON 并清理空间',
+  idb:'保存失败：IndexedDB 不可用，已降级 localStorage（容量有限）',
+  io:'保存失败：自动重试 3 次仍未成功，请导出 JSON'
+};
+/** 保存失败常驻横幅（D-08）：配额给「导出 JSON / 清理空间」，其余给导出与原因 */
+function showSaveFailureBanner(code){
+  let bar=$('saveBanner');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='saveBanner'; bar.className='load-banner error';
+    bar.innerHTML='<span></span><button id="saveExportBtn">导出 JSON</button><button id="saveCleanBtn">清理空间</button>';
+    document.body.insertBefore(bar,document.body.firstChild);
+    $('saveExportBtn').addEventListener('click',()=>{ exportJSON().catch(e=>toast('导出失败：'+e.message,'error')); });
+    $('saveCleanBtn').addEventListener('click',()=>{ pruneBgAssets(); toast('已清理未引用资产，正在重试保存','warn'); scheduleSave(); });
+  }
+  bar.querySelector('span').textContent=SAVE_FAIL_TEXT[code]||SAVE_FAIL_TEXT.io;
+  bar.dataset.code=code;
+}
 function showFirstRunGuide(){
   let chosen=false;
   const body=`<div style="line-height:1.8">

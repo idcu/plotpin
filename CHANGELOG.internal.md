@@ -2,6 +2,44 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 持久化：保存失败可见性与有限退避（D-08）
+
+- **Commit Hash**：本条提交（`fix(persist): 保存失败可见性与有限退避`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **验收口径修正（已获确认，不属放宽门禁）**：计划源文件两处互斥——技术方案要求「配额错误不重试」，e2e 条目却要求注入 `QuotaExceededError` 后「重试计数 3」。二者无法同时成立，强行兼顾只能伪造计数（违反红线）。经拍板按 **方案 A** 执行：`QuotaExceededError` 不重试，另用**瞬时 IO 错误**独立验证 1s/3s/9s 三次退避；配额用例验证横幅、`retry=0`、手动导出与内存不丢。e2e 由 1 条拆为 2 条独立用例，覆盖更严格而非更宽松。
+- **核心改动点**
+  - `js/core/persistence.js` 新增 `SAVE_RETRY_MS`、`saveHealth={state,errorCode,lastOkAt,retry}`、`classifySaveError()`、`reportSaveFailure()`、`runSave()`、`saveStatus()` 与 `writeLocalDraft()`。
+  - 错误分类：`QuotaExceededError`/消息含 quota → `quota`；消息含 `IndexedDB`/`标签页占用`/`被占用` → `idb`；其余 → `io`。配额不重试并直接给「导出 JSON / 清理空间」；`io` 按 1s/3s/9s 退避，第 3 次重试失败后停止并给导出入口；`idb` 复用 `notifyIdbFallback()` 降级 localStorage。
+  - 工程库副本（`idbPutKey`）失败不再静默：`reportSaveFailure(e,'project')` 置 `degraded` 并提示，不计入重试、不影响草稿保存。
+  - 成功保存才写「已保存/已自动保存」并清除横幅、重置重试计数；失败时状态栏显示真实原因与重试进度（`保存失败：N 秒后自动重试（k/3）`）或「请手动导出」。
+  - `js/features/ui-shell.js` 新增 `showSaveFailureBanner(code)` / `hideSaveFailureBanner()` 与 `SAVE_FAIL_TEXT`：复用 D-07 的 `.load-banner` 样式，横幅置底避免与加载横幅重叠；提供「导出 JSON」（复用 `exportJSON()`）与「清理空间」（`pruneBgAssets()` 后重试）。
+  - **无损回收（实现 D-08 前先做，实测 −174 B）**：合并 `scheduleSave` 的重复快照（`persistableState()` 只取一次）、抽取 `writeLocalDraft()` 复用于保存/关窗两处兜底、用 `const s=state.settings` 消除 17 处重复 `state.settings.` 前缀。回收后产物 754,408 B（D-07 754,582 B）。
+  - 新增 `tests/e2e/save-failure.spec.mjs` 2 条；`scripts/selftest.mjs` 新增 12 条（分类 3 + 配额 3 + 退避阶梯/上限/终态 6）。同步 `docs/features.md`、`docs/testing.md`、`docs/engineering.md`、`docs/modules.md`、`docs/manual-acceptance.md`、`README.md`（断言徽章 2678）。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2678 通过 / 0 失败**（D-07 基线 2666，新增 12 条） | 0 |
+| `node scripts/e2e.mjs` | **77 passed / 1 skipped / 78 total**（新增 2 条：配额 2.1s、瞬时 IO 14.9s；skip 仍为需 `COLLAB_SOAK=1` 的浸泡） | 0 |
+| `node scripts/build.mjs --check` | **756,956 B（739.2 KB）**，gzip **234,529 B（229.0 KB）**；无损回收 −174 B 后实现 D-08，**净增 +2,374 B**（预算 ≤5,000 B），gross 代码增量 +2,548 B；上限 839,680 B，余量 **82,724 B**；SHA256 `2d001a411401…`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg **0.4 ms** / P95 **0.61 ms**（≤8/≤3）；重建 **26.52 ms**（≤60）；heapUsed **31.83 MB**（≤64）；裁剪 **99.4%**（≥60）；覆盖率 8.9 ms / 大场地 16.5 ms（≤300）；缩放差异 0pp | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **31.6%**（D-11 基线 29.82% 未回退；D-07 31.84% → **−0.24pp**，因 D-08 新增 8 条保存失败中文提示未入字典）；字面量 1234、走翻译入口 451（字典化 390 / 缺口 61）、硬编码 783；PHRASES 813 / TEMPLATES 103 | 0 |
+| 8 种导出 golden | 未改导出实现：`git diff` 未触及 `io-export.js` / `io-fields.js` / `dxf.js` / `pdf.js`；`tests/golden/*` 在 selftest 内逐字节通过。整体 8 格式比对未重跑，夹具固化留 D-13 | 0 |
+
+- **新增/调整公共抽象**
+  - 新增 `SAVE_RETRY_MS`、`saveHealth`、`classifySaveError(err)`、`reportSaveFailure(err, phase)`、`runSave()`、`saveStatus(t)`、`writeLocalDraft(s)`（`js/core/persistence.js`）与 `showSaveFailureBanner(code)` / `hideSaveFailureBanner()` / `SAVE_FAIL_TEXT`（`js/features/ui-shell.js`）。
+  - `writeLocalDraft()` 替换 `persistence.js` 保存失败与 `interaction.js` 关窗落盘两处重复 `try{localStorage.setItem(LS_KEY…)}catch`；两处行为不变，后者忽略返回值（关窗路径无法提示）。
+  - `scheduleSave()` 签名不变，内部由内联异步回调整体替换为 `runSave()`；所有 `markDirty` 调用方无需改动。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。
+- **遗留 / 风险**
+  - 瞬时错误的最坏提示时延约 **13.5s**（450ms 防抖 + 1s + 3s + 9s）；期间状态栏持续显示倒计时，用户可随时手动导出。
+  - 配额错误不会自动恢复，必须用户导出/清理后再次编辑触发保存；横幅不会自行消失。
+  - `idb`/`io` 失败仍会把完整工程快照写入 localStorage 兜底；大工程可能同时触发 localStorage 配额上限，此时 `saveHealth.state='failed'`。
+  - 工程库副本失败只降级提示，草稿已保存；下一次成功保存会清除横幅。
+  - D-08 新增 8 条中文提示未走 `L()`（按指示不改 i18n 文案），英文界面显示中文，与 D-07 两条缺失一起留待 D-11。
+  - 未新增任何存储键；未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 持久化：加载完整性审计与救援导出（D-07）
 
 - **Commit Hash**：本条提交（`fix(persist): 加载完整性审计与救援导出`）；完整哈希见 `git log HEAD` 与本次汇报。

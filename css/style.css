@@ -182,6 +182,7 @@
   .help-grid{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;align-items:center}
   .load-banner{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fef3c7;border:1px solid #f59e0b}
   .load-banner.error{background:#fee2e2;border-color:#dc2626}
+  #saveBanner{top:auto;bottom:16px}
   .help-tabs{margin-bottom:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
   .help-tab{margin-right:6px;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:6px;padding:5px 12px;cursor:pointer}
   .help-tab.active{background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:600}

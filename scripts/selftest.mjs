@@ -197,6 +197,9 @@ code += `\n;globalThis.__api = {
   calibPrecheck, isCalibTool, CALIB_TOOL_KEYS,
   helpShortcutRows, helpGlossaryRows, helpExportRows, helpTabDefs,
   auditProject,
+  classifySaveError, reportSaveFailure, writeLocalDraft, SAVE_RETRY_MS,
+  get saveHealth(){ return saveHealth; },
+  resetSaveHealth(){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0}; },
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
@@ -6151,6 +6154,25 @@ asyncSuites.push((async()=>{
   ok('D-07 资产缺失与解码中区分', !miss.ok&&miss.assetMissing===true&&miss.reason.includes('资产缺失'));
   const dec=api.calibPrecheck('calibrate',{background:{kind:'image',assetId:'a1'},site:null,imageReady:false,imageState:'decoding'});
   ok('D-07 解码中提示不误报缺失', !dec.ok&&!dec.assetMissing&&dec.reason.includes('解码'));
+}
+
+/* ---------------- D-08 保存失败分类与有限退避 ---------------- */
+{
+  api.resetSaveHealth();
+  eq('D-08 配额错误分类', api.classifySaveError({name:'QuotaExceededError'}), 'quota');
+  eq('D-08 IDB 不可用分类', api.classifySaveError(new Error('IndexedDB unavailable')), 'idb');
+  eq('D-08 瞬时 IO 分类', api.classifySaveError(new Error('disk write failed')), 'io');
+  eq('D-08 配额不重试', api.reportSaveFailure({name:'QuotaExceededError'},'idb'), 0);
+  eq('D-08 配额重试计数 0', api.saveHealth.retry, 0);
+  eq('D-08 配额错误码', api.saveHealth.errorCode, 'quota');
+  api.resetSaveHealth();
+  eq('D-08 首次退避 1s', api.reportSaveFailure(new Error('x'),'idb'), 1000);
+  eq('D-08 第二次退避 3s', api.reportSaveFailure(new Error('x'),'idb'), 3000);
+  eq('D-08 第三次退避 9s', api.reportSaveFailure(new Error('x'),'idb'), 9000);
+  eq('D-08 三次后停止', api.reportSaveFailure(new Error('x'),'idb'), 0);
+  eq('D-08 重试上限 3', api.saveHealth.retry, 3);
+  eq('D-08 瞬时最终状态 failed', api.saveHealth.state, 'failed');
+  api.resetSaveHealth();
 }
 
 /* ---------------- D-03 帮助中心：三页签与 i18n ---------------- */

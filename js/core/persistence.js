@@ -500,24 +500,65 @@ function renameFloor(id,name){
 let rescueHold=false;
 /** 加载审计为 error 时阻止自动保存覆盖原记录；用户确认后解除 */
 function setRescueHold(v){ rescueHold=!!v; }
+/** 草稿 localStorage 兜底唯一写法；返回是否写入成功 */
+function writeLocalDraft(s){
+  try{ localStorage.setItem(LS_KEY,JSON.stringify(s)); return true; }catch(_){ return false; }
+}
+/* -------------------- 保存健康：错误分类与有限退避（D-08） -------------------- */
+/** 仅瞬时错误重试；1s/3s/9s 三次后停止。配额错误不重试，直接给导出/清理入口 */
+const SAVE_RETRY_MS=[1000,3000,9000];
+let saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0};
+let saveRetry=0,saveRetryTimer=null;
+function saveStatus(t){ const e=$('saveState'); if(e) e.textContent=t; }
+/** 错误归类：quota=配额耗尽（不可自动恢复）；idb=IndexedDB 不可用；io=其它瞬时写入异常 */
+function classifySaveError(e){
+  const n=String(e&&e.name||''),m=String(e&&e.message||'');
+  if(n==='QuotaExceededError'||/quota/i.test(n+m)) return 'quota';
+  if(/IndexedDB|标签页占用|被占用/.test(n+m)) return 'idb';
+  return 'io';
+}
+/**
+ * 保存失败统一出口。返回下一次重试延迟（0=不再重试）。
+ * phase='project' 表示工程库副本写入失败：草稿已保存，只降级提示，不计入重试。
+ */
+function reportSaveFailure(e,phase){
+  const code=classifySaveError(e);
+  if(phase==='project'){ saveHealth.state='degraded'; saveHealth.errorCode=code; showSaveFailureBanner(code); return 0; }
+  if(code==='idb') notifyIdbFallback();
+  saveHealth.state='failed'; saveHealth.errorCode=code;
+  let delay=0;
+  if(code==='quota'){ saveRetry=0; saveStatus('保存失败：存储空间不足'); showSaveFailureBanner(code); }
+  else if(saveRetry<SAVE_RETRY_MS.length){
+    delay=SAVE_RETRY_MS[saveRetry++];
+    saveStatus('保存失败：'+(delay/1000)+' 秒后自动重试（'+saveRetry+'/3）');
+  }else{ saveStatus(L('请手动导出')); showSaveFailureBanner(code); }
+  saveHealth.retry=saveRetry;
+  return delay;
+}
+async function runSave(){
+  clearTimeout(saveRetryTimer); saveRetryTimer=null;
+  const snapshot=persistableState();
+  let warn=0;
+  try{
+    await idbPut(snapshot);
+    if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(e=>{ warn=1; reportSaveFailure(e,'project'); });
+    const s=state.settings;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:s.showLabels,gridSize:s.gridSize,snap:s.snap,markerScale:s.markerScale,showCursor:s.showCursor,showSegLen:s.showSegLen,osnap:s.osnap,showAreaTag:s.showAreaTag,siteNodes:s.siteNodes,siteSegLen:s.siteSegLen,siteBase:s.siteBase,siteRadius:s.siteRadius,siteArea:s.siteArea,sitePerimeter:s.sitePerimeter,polar:s.polar,polarStep:s.polarStep,lang:s.lang}));
+    if(!warn){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:nowISO(),retry:0}; hideSaveFailureBanner(); }
+    saveStatus((state.meta.projectId?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString());
+  }catch(e){
+    const ok=writeLocalDraft(snapshot);
+    const delay=reportSaveFailure(e,'idb');
+    saveHealth.state=ok?'degraded':'failed';
+    if(delay>0) saveRetryTimer=setTimeout(runSave,delay);
+  }
+}
 function scheduleSave(){
-  if(rescueHold){ $('saveState').textContent='救援模式：原记录未被覆盖'; return; }
-  $('saveState').textContent=L('待保存…');
+  if(rescueHold){ saveStatus('救援模式：原记录未被覆盖'); return; }
+  saveStatus(L('待保存…'));
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(async()=>{
-    try{
-      const snapshot=persistableState();
-      await idbPut(snapshot);
-      /* 绑定到工程库的工程：同名键同步更新，工程库内容即最新（失败静默，不影响草稿） */
-      if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(()=>{});
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:state.settings.showLabels,gridSize:state.settings.gridSize,snap:state.settings.snap,markerScale:state.settings.markerScale,showCursor:state.settings.showCursor,showSegLen:state.settings.showSegLen,osnap:state.settings.osnap,showAreaTag:state.settings.showAreaTag,siteNodes:state.settings.siteNodes,siteSegLen:state.settings.siteSegLen,siteBase:state.settings.siteBase,siteRadius:state.settings.siteRadius,siteArea:state.settings.siteArea,sitePerimeter:state.settings.sitePerimeter,polar:state.settings.polar,polarStep:state.settings.polarStep,lang:state.settings.lang}));
-      $('saveState').textContent=(state.meta.projectId?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString();
-    }catch(e){
-      try{ localStorage.setItem(LS_KEY, JSON.stringify(persistableState())); }catch(_){}
-      notifyIdbFallback();
-      $('saveState').textContent=L('请手动导出');
-    }
-  },450);
+  clearTimeout(saveRetryTimer); saveRetryTimer=null;
+  saveTimer=setTimeout(runSave,450);
 }
 function auditProject(raw){
   const errors=[],warnings=[];
