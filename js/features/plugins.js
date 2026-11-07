@@ -334,8 +334,12 @@
       'var input=d.input||{},ctx={state:input.state,projectName:input.projectName,site:input.site,file:input.file,toast:toast,download:function(data,name){return dl(d.callId,name,data);}};',
       'try{var r=fn.call(api,ctx);Promise.resolve(r).then(function(){return Promise.all(dls);}).then(function(){dls=[];send({type:"invoke-result",callId:d.callId,ok:true});},function(err){dls=[];send({type:"invoke-result",callId:d.callId,ok:false,error:String(err&&err.message||err)});});}catch(err){dls=[];send({type:"invoke-result",callId:d.callId,ok:false,error:String(err&&err.message||err)});}',
       '});',
-      /* 全局硬化：直连 API 与原型链一起删；bootstrap 用的引用已提前绑定 */
-      '["fetch","indexedDB","XMLHttpRequest","WebSocket","EventSource","importScripts","caches","localStorage","sessionStorage","navigator","location","postMessage","addEventListener","removeEventListener","self","Worker","SharedWorker","close"].forEach(function(k){',
+      /* 全局硬化：直连 API 与原型链一起删；bootstrap 用的引用已提前绑定。
+         除网络/存储外，还必须封掉「第二条通信通道」与「事件处理器旁路」：
+         BroadcastChannel 可直接加入主工程的协作频道（plotpin-collab-*），
+         MessageChannel/MessagePort 可自建端口；onmessage/onerror 可在 token 校验之外
+         截获消息、吞掉异常（onerror 返回 true 会让主线程收不到 error 事件）。 */
+      '["fetch","indexedDB","XMLHttpRequest","WebSocket","EventSource","importScripts","caches","localStorage","sessionStorage","navigator","location","postMessage","addEventListener","removeEventListener","self","Worker","SharedWorker","close","BroadcastChannel","MessageChannel","MessagePort","onmessage","onerror","onmessageerror"].forEach(function(k){',
       'try{Object.defineProperty(g,k,{value:undefined,configurable:false,writable:false});}catch(e){}',
       'var p=g;while(p){try{delete p[k];}catch(e){}p=Object.getPrototypeOf(p);}});',
       'later(function(){send({type:"loaded"});},0);',
@@ -606,7 +610,11 @@
       if (rec.url) { try { URL.revokeObjectURL(rec.url); } catch (_) {} }
       return fail('无法创建隔离 Worker：' + (e && e.message || e));
     }
-    rec.worker.onmessage = e => onSandboxMessage(rec, e.data);
+    rec.worker.onmessage = e => {
+      /* 专用 Worker 的消息只会来自它自己，source 校验是 token 之外的第二道闸 */
+      if (e && e.source && e.source !== rec.worker) return;
+      onSandboxMessage(rec, e.data);
+    };
     rec.worker.onerror = e => {
       disablePlugin(rec, '插件异常：' + String(e && e.message ? e.message : '脚本错误'));
     };

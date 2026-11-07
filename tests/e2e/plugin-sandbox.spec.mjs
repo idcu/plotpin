@@ -257,3 +257,63 @@ test('示例插件：加载后可导出 Markdown，卸载后撤销注册', async
   expect(await page.evaluate(() => window.PlotPin.listExporters().some(e => e.id === 'sandbox-markdown'))).toBe(false);
   expect(await page.evaluate(() => Array.from(document.querySelectorAll('#exportKind option')).some(o => o.value === 'plugin:sandbox-markdown'))).toBe(false);
 });
+
+/* N-02：第二条通信通道与事件处理器旁路。旧实现只删 fetch/indexedDB/...，
+   BroadcastChannel 可直接加入 plotpin-collab-* 协作频道，onmessage/onerror 可在
+   token 校验之外截获消息、吞掉异常。 */
+test('沙箱逃逸：BroadcastChannel / MessageChannel / MessagePort / onmessage / onerror 均不可用', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'evil.channels',
+    apiVersion: '1.0',
+    capabilities: [],
+    code: [
+      'var probe=[typeof BroadcastChannel,typeof MessageChannel,typeof MessagePort,typeof onmessage,typeof onerror].join(",");',
+      'try{globalThis.onmessage=function(){};globalThis.onerror=function(){return true;};}catch(e){}',
+      'var wrote=(typeof globalThis.onmessage==="function")||(typeof globalThis.onerror==="function");',
+      'PlotPin.toast("probe="+probe+";wrote="+wrote);'
+    ].join('\n')
+  });
+  expect(r.ok).toBe(true);
+  await expect.poll(() => page.locator('#toastWrap').innerText())
+    .toContain('probe=undefined,undefined,undefined,undefined,undefined;wrote=false');
+  await drawPoint(page);
+});
+
+test('插件无法加入协作频道（plotpin-collab-*）：发送被阻断且对端收不到', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.__gateCollabMsgs = 0;
+    window.__gateCollabCh = new BroadcastChannel('plotpin-collab-gateprobe');
+    window.__gateCollabCh.onmessage = () => { window.__gateCollabMsgs++; };
+  });
+  const r = await loadPlugin(page, {
+    id: 'evil.collab',
+    apiVersion: '1.0',
+    capabilities: [],
+    code: 'var c=new BroadcastChannel("plotpin-collab-gateprobe");c.postMessage({__pp:1,pwned:1});PlotPin.toast("collab-joined");'
+  });
+  expect(r.ok).toBe(false);
+  expect(r.reason).toMatch(/BroadcastChannel/);
+  const rec = await waitDisabled(page, 'evil.collab');
+  expect(rec.reason).toMatch(/BroadcastChannel/);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__gateCollabMsgs)).toBe(0);
+  expect(await page.locator('#toastWrap').innerText()).toContain('插件已禁用');
+  await page.evaluate(() => window.__gateCollabCh.close());
+  await drawPoint(page);
+});
+
+test('覆写 onerror 后插件异常仍走禁用路径', async ({ page }) => {
+  await openApp(page);
+  await loadPlugin(page, {
+    id: 'evil.onerror',
+    apiVersion: '1.0',
+    capabilities: [],
+    code: 'try{globalThis.onerror=function(){return true;};}catch(e){}\nthrow new Error("hidden-boom");'
+  });
+  const rec = await waitDisabled(page, 'evil.onerror');
+  expect(rec.reason).toMatch(/hidden-boom|脚本错误/);
+  await expect.poll(() => page.locator('#toastWrap').innerText()).toContain('插件已禁用');
+  await drawPoint(page);
+});

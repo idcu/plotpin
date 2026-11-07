@@ -2,6 +2,27 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-02 封堵插件沙箱逃逸（BC/MC/MP + onmessage/onerror）
+
+- **Commit Hash**：本条提交（`fix(plugin): 封堵沙箱 BroadcastChannel/MessageChannel/MessagePort 与 onmessage/onerror 旁路`）；完整哈希见回填提交与本次汇报。
+- **核心改动**
+  - `js/features/plugins.js`：Worker 硬化清单新增 `BroadcastChannel` / `MessageChannel` / `MessagePort` / `onmessage` / `onerror` / `onmessageerror`，仍是「全局自有属性置 `undefined`（不可写不可配置）+ 沿原型链删除」双保险。此前插件可在 Worker 内 `new BroadcastChannel('plotpin-collab-<pid>')` 直接加入协作频道收发消息，或覆写 `onerror` 返回 `true` 吞掉异常、阻止主线程收到 error 事件。主线程 `worker.onmessage` 增加 `event.source` 校验作为 token 之外的第二道闸。
+  - `tests/e2e/plugin-sandbox.spec.mjs`：新增 3 条恶意用例（探针断言五者为 `undefined` 且赋值不生效；`plotpin-collab-*` 频道对端收到 0 条；覆写 `onerror` 后异常仍走禁用路径），现有 10 条不回退。
+  - `sw.js`：`VERSION` 6 → 7（`plugins.js` 是预缓存输入，N-01 的新门禁在提交前实测拦下了这次变更）；`scripts/sw-inputs.sha256` 由 `--update` 重新生成；`scripts/dist-manifest.json` 随 `build.mjs` 刷新。
+  - 文档：`docs/features.md` §12/§19 去掉「广播通道未封堵」的限制描述，`docs/known-issues.md` P0-4 → 已修复（8 条），同步 K1 的 N-01 结论；`docs/plans/README.md` 状态表 N-02 → 已交付。
+- **实测验证（2026-11-08 本机，五道门禁全绿）**
+  - **负向先证**：仅回退硬化清单（其余不变）跑新增 3 条 e2e → **3 failed**：探针输出不含 `undefined,...,wrote=false`；`new BroadcastChannel(...)` 插件 `ok=true`（构造成功）；覆写 `onerror` 后插件状态停在 `active`（异常被吞）。恢复后 3 条全绿。
+  - `node scripts/check.mjs --selftest`：**2706 通过 / 0 失败**（45 个脚本）；契约 7 项 0 违约；插件 API 23 键 0 泄漏 0 落空；i18n 46.16%；SW `VERSION=7`。
+  - `node scripts/e2e.mjs`：**93 tests → 92 passed / 1 skipped（离线 5 分钟浸泡）/ 0 failed**（1.9m）；插件沙箱 13/13；`sw.spec` 实测缓存名 `plotpin-v7`、50 条预缓存。
+  - `node scripts/build.mjs --check`：**783,374 B（765.0 KB）/ gzip 243,727 B**，SHA256 `601ac257…`，较 N-01 基线 **+148 B**，余量 56,306 B（上限 839,680 B）。
+  - `node scripts/check-gates.mjs`：**正面基线 6/6 全绿 + 9/9 破坏被拦截**；`node scripts/check-discipline.mjs --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - Firefox / Safari 的 Worker 硬化行为未验证（M2，仅 Chromium）。
+  - 未验证「插件通过其他未列举的浏览器通道（如 `RTCPeerConnection`、`SharedArrayBuffer`）外联」；本轮只按计划封堵 BC/MC/MP 与事件处理器。
+- **遗留风险**
+  - 若第三方插件曾依赖 `MessageChannel` 做内部并发，升级后会被拒绝；插件契约未承诺该能力，已写入 `docs/features.md`。
+  - `onmessage` 同时被置空：使用 `addEventListener('message')` 的插件不受影响，但直接依赖 `self.onmessage` 的插件将失效（同样不在契约内）。
+
 ## 2026-11-08 · N-01 修复假绿门禁（契约/插件 API 真实判据 + SW 指纹基线）
 
 - **Commit Hash**：`5c0404c`（`fix(gate): 契约与插件 API 改为真实判据，SW 版本改用指纹清单基线`）。

@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=6
+version=7
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -35,7 +35,7 @@ ce1a4256a1fad738c09985f00b6394e9934b845e395e8a1833240a9eaf05f1cd  js/features/io
 6b20732067dcd3a3382bebb3d45adef06f5f731c5f922982b5a516ee029b7f39  js/features/io-table.js
 83e8e12277360d0ba4950cf4a99d14f66784da546de48baadddfff3d70c62908  js/features/io.js
 3da86cdc124ac48306f6207d5c0b643fcf5911fcb7b3dd102ad774af7e07448d  js/features/parking.js
-49ba8582ed082ab8297da2b24554e135c04cb94c247e8fb8a620f6ce73b5ed03  js/features/plugins.js
+b320eb52ee0c789218f0fc1d7e8b297c130158be5e4768c48c08bf59736f4c3c  js/features/plugins.js
 1cc3990f4339e3738221f445588a38b6c6ffa04628606d98560340af7190f7d0  js/features/props.js
 2941b39eb9e71fc7ac48b0575c203422bc3c045b1cf82c8d5c00f61f1bfb5e78  js/features/rules.js
 573aff7de2ff6e39e071338851d61d018756cf957e4548ba6a20223d73928696  js/features/snapshot-ui.js
