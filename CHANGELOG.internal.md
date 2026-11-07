@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-11 JSON 导入事务顺序与资产回收
+
+- **Commit Hash**：N-11 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/features/io-import.js`：`importJsonFile` 的提交顺序由「替换 state → `pruneBgAssets()` → `afterStateLoaded()`」改为「替换 state → `afterStateLoaded()` → `pruneBgAssets()`」。此前若资产转换阶段抛错，catch 只还原 state/history，但旧工程资产已被按新 state 的可达集删除，回滚后旧 `assetId` 指向已删资产。
+  - 失败路径保持零副作用：`assetPrune` 未被调用；state/history/选中集/草稿完整还原；错误 toast 不变。
+  - 成功路径语义不变：先完成全楼层照片 `dataUrl→assetId` 转换，再按全库可达集回收不可达旧资产，最后 `scheduleSave()`。
+  - `scripts/selftest.mjs`：api 新增 `importJsonFile` 与 `draft` 读写器；新增 28.9 节 9 项断言——以 fake `assetPrune`/`reachableAssetIds` 计数，注入 `afterStateLoaded` 抛错后断言状态回滚、旧 `assetId` 保留、回收 0 次、草稿与选中集保留、错误提示；成功导入后断言工程替换、回收 1 次且 keep 集不含旧资产。
+  - `sw.js`：`VERSION` 19 → 20；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步（49 个预缓存输入一致）。
+  - 文档：`docs/features.md` JSON 导入段补充「资产回收延后到 `afterStateLoaded()` 成功之后」；`docs/known-issues.md` 关闭 IO-P1-4（已修复 19 → 20，P1 16 → 15），并把 `openProjectById` 同类风险登记为 IO-P1-6；`docs/testing.md` 116 分区 / 2819 断言；`README.md` 数字口径。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：临时恢复旧顺序（prune 在 `afterStateLoaded` 之前）→ selftest **2818 通过 / 1 失败**（「失败路径未回收资产」期望 0 实际 1）；Edit 还原后 2819/0。
+  - `node scripts/check.mjs --selftest`：**2819 通过 / 0 失败**（116 分区，较 N-10 +9）；契约 7/0；插件 API 23/0；i18n 45.6%；SW `VERSION=20`。
+  - `node scripts/e2e.mjs`：**99 tests → 98 passed / 1 skipped / 0 failed**（2.2m），persistence.spec.mjs 四条导入/资产用例全绿。
+  - `node scripts/build.mjs --check`：**791,803 B（773.2 KB）/ gzip 245,856 B（240.4 KB）**，SHA256 `d26a10d1…`，较 N-10 **+0 B**，余量 **47,877 B**。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9/9；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未新增 e2e 用例：验收 ①②③ 均由 selftest 的注入式假资产库覆盖，真实 IndexedDB 下的回滚时间窗未做浏览器级复现。
+  - 未改 `tests/e2e/persistence.spec.mjs`；既有 4 条用例保持通过，未覆盖「坏资产转换 + 回滚」路径。
+- **遗留风险**
+  - `openProjectById` 仍是「先 prune 再 `afterStateLoaded`」，同类失败会误删旧资产；已登记 IO-P1-6，未在本条扩大范围。
+  - 回收延后意味着成功导入期间旧资产短暂多留一份，存储占用峰值略增。
+
 ## 2026-11-08 · N-10 导出层转义与结构注入加固
 
 - **Commit Hash**：N-10 提交（哈希由 N-05~N-11 阶段末统一回填）。

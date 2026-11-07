@@ -31,8 +31,8 @@ async function importJsonFile(f){
        资产回收必须走全库可达集（其他工程库记录仍可达），不能只保留当前底图 */
     history={past:[],future:[]};
     selectedIds.clear(); draft=null;
-    await pruneBgAssets();
-    await afterStateLoaded();           /* 等全楼层照片 dataUrl→资产转换完成，导入才算提交 */
+    await afterStateLoaded();           /* 先等全楼层照片 dataUrl→资产转换完成，导入才算提交 */
+    await pruneBgAssets();              /* N-11：提交成功后才回收；失败回滚不误删旧工程资产 */
     scheduleSave(); toast('工程已导入','success');
   }catch(err){
     if(swapped){

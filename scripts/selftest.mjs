@@ -94,7 +94,9 @@ vm.createContext(sandbox);
 /* 暴露内部函数给断言 */
 code += `\n;globalThis.__api = {
   get state(){ return state; },
+  get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
+  importJsonFile,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, baseObject,
   importLimitErrors, importLimitMessage,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
@@ -1694,6 +1696,49 @@ await section("28.8 N-10 导出层转义与结构注入加固", async () => {
   eq('N10-A 起始裸路径不抛异常', threw, false);
   eq('N10-合法 M+A 路径可离散', api.pathToPolylines('M0,0 A5,5 0 0 1 10,0').length, 1);
   api.resetState();
+}
+});
+
+/* 28.9 N-11 JSON 导入事务顺序：提交成功后才回收资产 ---- */
+await section("28.9 N-11 JSON 导入事务顺序：成功后才回收资产", async () => {
+{
+  const origPrune=sandbox.assetPrune, origAfter=sandbox.afterStateLoaded,
+        origToast=sandbox.toast, origSave=sandbox.scheduleSave, origReach=sandbox.reachableAssetIds;
+  const payload=JSON.stringify({schema:api.SCHEMA,meta:{name:'IMPORTED'},objects:[]});
+  const file=()=>({size:payload.length,text:async()=>payload});
+  try{
+    /* ① 提交阶段失败（afterStateLoaded 抛错）：回滚且不回收到旧资产 */
+    api.resetState();
+    api.state.background.assetId='OLD_ASSET';
+    api.draft={probe:1};
+    api.selectedIds.clear(); api.selectedIds.add('S1');
+    let pruneCalls=0, keeps=[], errToasts=0;
+    sandbox.assetPrune=async keep=>{ pruneCalls++; keeps.push(keep.slice()); return []; };
+    sandbox.reachableAssetIds=async()=>[];
+    sandbox.afterStateLoaded=async flag=>{ if(flag===false) return; throw new Error('资产转换失败'); };
+    sandbox.scheduleSave=()=>{};
+    sandbox.toast=(m,t)=>{ if(t==='error') errToasts++; };
+    const beforeState=api.state, beforeDraft=api.draft;
+    await api.importJsonFile(file());
+    eq('N11-失败后状态回滚', api.state, beforeState);
+    eq('N11-失败后旧底图 assetId 保留', api.state.background.assetId, 'OLD_ASSET');
+    eq('N11-失败路径未回收资产', pruneCalls, 0);
+    eq('N11-失败后草稿保留', api.draft, beforeDraft);
+    ok('N11-失败后选中集恢复', api.selectedIds.has('S1'));
+    ok('N11-失败后有错误提示', errToasts>0);
+    /* ② 成功导入：提交完成后再回收，旧资产进入不可达集合 */
+    sandbox.afterStateLoaded=async()=>{};
+    sandbox.toast=()=>{};
+    pruneCalls=0; keeps=[];
+    await api.importJsonFile(file());
+    eq('N11-成功导入替换工程', api.state.meta.name, 'IMPORTED');
+    eq('N11-成功路径回收一次', pruneCalls, 1);
+    ok('N11-成功回收 keep 不含旧资产', keeps.length===1&&!keeps[0].includes('OLD_ASSET'));
+  } finally {
+    sandbox.assetPrune=origPrune; sandbox.afterStateLoaded=origAfter;
+    sandbox.toast=origToast; sandbox.scheduleSave=origSave; sandbox.reachableAssetIds=origReach;
+    api.resetState();
+  }
 }
 });
 
