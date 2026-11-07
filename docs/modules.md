@@ -4,7 +4,7 @@
 
 ## 为什么是分目录，不是可插拔模块
 
-PlotPin 是**双击 `index.html` 即用**的离线单页工具：44 个 classic `<script>`（`js/` 34 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
+PlotPin 是**双击 `index.html` 即用**的离线单页工具：45 个 classic `<script>`（`js/` 35 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
 `const SCHEMA`、`state`、`I18N` 都是裸标识符，文件之间直接引用。改 `<script type="module">`
 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
 
@@ -31,10 +31,10 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：44 个 classic 
 > 判据立刻报「层序倒退：第 1 层排在第 2 层之后」——它们实际依赖功能域。已按代码事实移到
 > `js/features/`。这正是分层需要判据的理由：目录名可以随便起，顺序不会撒谎。
 
-**geometry 按职责拆分（D-12）**：`js/core/geometry.js` 保留基础向量/捕捉/对象轮廓与形状参数（420 行）；
-`geometry-site.js` 承接矢量场地几何、命中与图片变换手柄（418 行）；`geometry-coverage.js` 承接
-覆盖率栅格、仿射矩阵与世界变换（489 行）。三者同属第 1 层，全局函数名、签名与调用方式不变，
-脚本数 **42 → 44**。
+**geometry 按职责拆分（D-12，2026-11-07 二次拆分）**：`js/core/geometry.js` 保留基础向量/捕捉/对象轮廓、形状参数与 `fmt`（421 行）；
+`geometry-site.js` 承接矢量场地几何、命中与图片变换手柄（418 行）；`geometry-coverage.js` 只保留
+覆盖率栅格与布点优化（279 行）；`geometry-transform.js` 承接仿射校准、世界变换与对象迁移（209 行）。
+四者同属第 1 层，全局函数名、签名与调用方式不变；脚本数 **44 → 45**（相对 D-12 前的 42 为 **42 → 45**，分两步完成）。
 
 ## 判据
 
@@ -52,7 +52,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：44 个 classic 
 |---|---|---|
 | `createEmptyBackground / createSiteSlot / isImageBackground / siteShapeOf` | `js/core/model.js` | 全仓 |
 | `siteDomainOf / siteBounds / siteOutlinePoints` | `js/core/geometry-site.js`（`siteDomainOf` 的宽高直接取自 `siteBounds`，包围盒只有一个源） | 视口、渲染、导出、交互 |
-| `imageWorldFrame` | `js/core/geometry-coverage.js`（图片四角世界包围框，仿射与米每像素共用） | `siteBounds`、图片变换手柄、交互 |
+| `imageWorldFrame` | `js/core/geometry-transform.js`（图片四角世界包围框，仿射与米每像素共用） | `siteBounds`、图片变换手柄、交互 |
 | `siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` | `js/core/geometry-site.js`（场地几何唯一实现） | `render.js` 标注、`io-export.js` SVG、属性面板 |
 | `siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` | `js/core/geometry-site.js`（手柄几何唯一实现；交互层只做命中与事件分发） | `render.js` 手柄绘制、`interaction.js` 拖拽 |
 | `pickScreenHandle` | `js/core/geometry-site.js`（屏幕阈值唯一实现） | `render.js` 对象手柄命中、`interaction.js` 场地手柄命中（半径 9px 同源） |
@@ -60,9 +60,10 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：44 个 classic 
 | `renderNodeEditor(o, opts) / bindNodeEditorEvents(box, spec) / layerOptionsHTML(id)` | `js/features/props.js` | 折线/闭合区域节点编辑与场地多边形顶点编辑共用同一套 DOM 与事件契约 |
 | `calibPrecheck(tool, ctx?) / refreshCalibStatus()` | `js/core/interaction.js`（三入口前置状态唯一判断源：S0a 空槽无场地 / S0b 仅场地 / S1 图片未就绪 / S2 图片就绪；`ctx` 仅供自测注入） | `ui-panels.js` 顶栏与工具栏绑定、`props.js` 图片属性面板、`persistence.js`/`io-import.js` 解码后就绪刷新、selftest/e2e |
 | `calibPoints / calibSelection / calibUndoStack` 及 `calibHitAt / calibPushUndo / calibUndo` | `js/core/model.js`（状态） / `js/core/interaction.js`（控制点编辑） | 比例尺与仿射校准：拖拽/增删/撤销只改临时控制点，`Enter`/✓ 提交时才 `applyWorldTransform`（内部复用 `solveImageAffine` + `migrateObjectsByAffine`） |
-| `applyWorldTransform(M, opts) / siteShapeByAffine(shape, M)` | `js/core/geometry-coverage.js`（世界变换唯一入口；对象、底图仿射/米每像素一次迁移，场地默认不动、可 `{site:true}` 显式迁移） | `interaction.js` 的比例尺/仿射校准提交；任何「整体缩放/纠偏」不得再直接遍历对象，必须走该入口 |
+| `applyWorldTransform(M, opts) / siteShapeByAffine(shape, M)` | `js/core/geometry-transform.js`（世界变换唯一入口；对象、底图仿射/米每像素一次迁移，场地默认不动、可 `{site:true}` 显式迁移） | `interaction.js` 的比例尺/仿射校准提交；任何「整体缩放/纠偏」不得再直接遍历对象，必须走该入口 |
 | `imageHandleList / imageHandleDragTo / siteCornerPoints` | `js/core/geometry-site.js`（图片整体变换手柄唯一实现） | `render.js` 手柄绘制、`interaction.js` 拖拽、`selftest.mjs` 变换断言 |
-| `affTranslate / affRotateAbout / affScaleAbout / affShearX / affApply / affMul / affInv / solveImageAffine / validImageTransform` | `js/core/geometry-coverage.js`（仿射矩阵与求解入口） | 图片变换手柄、`applyWorldTransform`、`migrateObjectsByAffine`、`selftest.mjs` |
+| `affTranslate / affRotateAbout / affScaleAbout / affShearX` | `js/core/geometry-site.js`（基础仿射构造） | 图片变换手柄、`selftest.mjs` |
+| `affApply / affMul / affInv / solveImageAffine / validImageTransform` | `js/core/geometry-transform.js`（仿射矩阵与求解入口） | 图片变换手柄、`applyWorldTransform`、`migrateObjectsByAffine`、`selftest.mjs` |
 | `collectSnapCandidates` 内的场地角点追加 | `js/core/geometry.js` | 场地不在 objects，单独追加折点→端点 / 圆心→center；图层隐藏时不参与 |
 | `applyVectorSite / siteDxfEntities` | `js/features/io-import.js` / `js/features/io-export.js` | 仅功能域内部 |
 | `annotToggleGroupHTML(items, opts) / bindAnnotToggleInputs(box, spec)` | `js/features/props.js`（标注开关渲染与事件绑定的唯一实现） | 点设备/区域/折线的属性面板与场地属性面板共用；新增开关组只需传 `items` 与 `attr` |

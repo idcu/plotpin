@@ -418,3 +418,4 @@ function convertAreaShape(o,newType){
   o.x=c[0]; o.y=c[1]; o.width=0; o.height=0;
 }
 
+function fmt(n){ const p=state.settings.precision ?? 2; return (Math.round(n*Math.pow(10,p))/Math.pow(10,p)).toFixed(p); }

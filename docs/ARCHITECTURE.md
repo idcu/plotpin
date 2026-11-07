@@ -6,7 +6,7 @@
 ## 1. 运行形态
 
 - 单页离线工具：双击 `index.html` 即用；无构建、无运行时依赖、无后端。
-- **44 个 classic `<script>`**（`js/` 34 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，文件之间直接引用裸标识符。改 `<script type="module">` 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
+- **45 个 classic `<script>`**（`js/` 35 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，文件之间直接引用裸标识符。改 `<script type="module">` 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
 - 单文件发行包由 [pack-core.mjs](../scripts/pack-core.mjs) 内联、[minify-core.mjs](../scripts/minify-core.mjs) 构建期无损压缩；源码本身不压缩，`index.html` 仍按层序加载可读源码。
 - 外部能力以 `ngm.vendor/` 随仓库分发，版本由 `ngm.lock` 钉住；本仓库不引入 npm 运行时依赖。
 
@@ -16,7 +16,7 @@
 index.html（按层序加载脚本）
 ├── ngm.vendor/            外部公共模块（XML / ZIP / XLSX / DSV / DXF / PDF / QR / 资产 / 几何）
 ├── js/common/    层 0     项目专有公共库：i18n、LWW 合并、符号库、DXF/PDF 适配、二维码、资产可达集
-├── js/core/      层 1     内核：config（常量/限额）、model、geometry（轮廓/捕捉）、geometry-site（场地/图片手柄）、geometry-coverage（覆盖率/变换）、render、interaction、persistence、viewport、snapshot、tab-lease
+├── js/core/      层 1     内核：config（常量/限额）、model、geometry（轮廓/捕捉）、geometry-site（场地/图片手柄）、geometry-coverage（覆盖率/布点）、geometry-transform（仿射/世界变换）、render、interaction、persistence、viewport、snapshot、tab-lease
 ├── js/features/  层 2     功能域：props、ui-panels、ui-shell、plugins（Worker 沙箱）、io*、rules、parking、collab、snapshot-ui、catalog
 └── js/core/app.js 层 3    入口：能力探测、恢复工程、首屏适配、Service Worker 注册；必须最后加载
 ```
@@ -41,7 +41,7 @@ index.html（按层序加载脚本）
 | 机器可读约定（文件头 / i18n 键 / 枚举同源） | [conventions.json](../contracts/conventions.json) | [check-contracts.mjs](../scripts/check-contracts.mjs) |
 | 中英字典与整句模板 | [i18n.js](../js/common/i18n.js)（`PHRASES` / `TEMPLATES`） | [i18n-scan.mjs](../scripts/i18n-scan.mjs)、selftest、契约判据 |
 | 导出字段与行渲染 | [io-fields.js](../js/features/io-fields.js) | `io-export.js` / `io-table.js` / SVG / DXF / PDF / 打印报告 / selftest golden |
-| 几何与覆盖率口径 | [geometry.js](../js/core/geometry.js)（轮廓/捕捉）+ [geometry-site.js](../js/core/geometry-site.js)（`siteBounds` / 场地手柄）+ [geometry-coverage.js](../js/core/geometry-coverage.js)（`applyWorldTransform` / `analyzeCoverage`） | `render.js` / `io-export.js` / `interaction.js` / bench / selftest |
+| 几何与覆盖率口径 | [geometry.js](../js/core/geometry.js)（轮廓/捕捉）+ [geometry-site.js](../js/core/geometry-site.js)（`siteBounds` / 场地手柄）+ [geometry-coverage.js](../js/core/geometry-coverage.js)（`analyzeCoverage`）+ [geometry-transform.js](../js/core/geometry-transform.js)（`applyWorldTransform`） | `render.js` / `io-export.js` / `interaction.js` / bench / selftest |
 | 持久化协议 | [persistence.js](../js/core/persistence.js)（`markDirty` / `runSave` / `auditProject` / `buildProject`） | `app.js` / `ui-shell.js` / `scheduleSave` / selftest |
 | 多标签租约 | [tab-lease.js](../js/core/tab-lease.js) | `app.js` / `scheduleSave` / `ui-shell.js` 横幅 |
 | 符号路径 | [symbols.js](../js/common/symbols.js) | 画布 / SVG / PNG / PDF / DXF 折线近似 |

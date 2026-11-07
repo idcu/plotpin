@@ -2,6 +2,28 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · geometry-coverage.js 按职责二次拆分
+
+- **Commit Hash**：本条提交（`refactor(geometry): 拆出 geometry-transform.js（纯搬移）`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `geometry-coverage.js` **489 → 279 行**：只保留覆盖率栅格/盲区/布点优化（`coverageGridPlan`、`analyzeCoverage`、`blindSpotRects`、`optimizeCameraPlacement` 等）。
+  - 新增 `js/core/geometry-transform.js`（**209 行**）：仿射校准（`defaultImageTransform` / `bgPixelToWorld` / `solveImageAffine` / `validImageTransform`）、世界变换与对象迁移（`imageWorldFrame` / `migrateObjectsByAffine` / `applyWorldTransform` / `siteShapeByAffine`）。
+  - `fmt`（通用数字格式化）移至 `geometry.js` 末尾；全部为函数声明，调用方在运行时解析，全局函数名/签名/行为不变。
+  - `index.html` 在 `geometry-coverage.js` 后插入 `geometry-transform.js`；两者同属第 1 层，层序不变。
+  - `sw.js` 的 `VERSION` **3 → 4**（预缓存输入 `index.html` 变更，新门禁强制）；未改 SW 运行时逻辑。
+  - 文档同步：`docs/modules.md`（脚本数 45、四文件归属与行数，并修正 `affTranslate/affRotateAbout/affScaleAbout/affShearX` 实际位于 `geometry-site.js` 的旧错误、`imageWorldFrame`/`applyWorldTransform` 归入新文件）；`docs/ARCHITECTURE.md`（45 脚本、层内文件名、权威源分列）；`docs/testing.md`（`sw.spec.mjs` 缓存名 v4、预缓存实测 50 条，旧文档 46 为陈旧计数）。
+- **纯搬移验证**
+  - 以 `git show HEAD:js/core/geometry-coverage.js` 为原文，按「coverage + transform 主体 + geometry 末尾 fmt」重组并归一化换行后 **逐字节一致**（21,523 B，差异位置仅 EOF）。
+- **验证数据（本机，退出码均为 0）**
+  - `node scripts/selftest.mjs`：**2706 通过 / 0 失败**，加载 **45 个脚本**（8 种导出 golden 逐字节校验保持）。
+  - `node scripts/check.mjs --selftest`：语法/入口/离线/断言数/契约/API/分层/i18n/SW 全过；35 个业务脚本。
+  - `node scripts/e2e.mjs tests/e2e/sw.spec.mjs`：1 passed；输出 `{"names":["plotpin-v4"],"entries":50,"controlled":true}`。
+  - `node scripts/build.mjs --check`：**786,139 B（767.7 KB）/ gzip 244,262 B**；较上一版 786,029 B **+110 B**（多一个脚本头 + 一行 `<script>`），距 839,680 B 上限余 **53,541 B**。
+- **遗留 / 风险**
+  - `geometry-transform.js` 依赖 `geometry.js` 中的 `d2r/r2d` 等基础函数与 `geometry-site.js` 的仿射构造，三者共享全局词法作用域；与既有 classic script 架构一致，禁止改 ES Module。
+  - 拆分后 coverage 279 / transform 209 行，均低于 500 行门限；后续新增覆盖率逻辑应继续写进 coverage 或新开文件。
+  - 未 push；未触碰 `camera-*`。
+
 ## 2026-11-07 · known-issues 复核与 K1 自动门禁
 
 - **Commit Hash**：本条提交（`fix(gate): SW 缓存版本以 git HEAD 为基线强制递增`）；完整哈希见 `git log HEAD` 与本次汇报。
