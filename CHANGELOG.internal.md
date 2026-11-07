@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · N-01 修复假绿门禁（契约/插件 API 真实判据 + SW 指纹基线）
 
-- **Commit Hash**：本条提交（`fix(gate): 契约与插件 API 改为真实判据，SW 版本改用指纹清单基线`）；完整哈希见回填提交与本次汇报。
+- **Commit Hash**：`5c0404c`（`fix(gate): 契约与插件 API 改为真实判据，SW 版本改用指纹清单基线`）。
 - **核心改动**
   - `scripts/check.mjs`：第 6/7 步不再把 `--selftest` 透传给 `check-contracts` / `check-plugin-api`（旧行为会让脚本只跑解析器自检后退出，汇总行却打印「契约守约、插件 API 面守约」）。现在真实核对**总是**执行，`--selftest` 只额外加跑判据自检；两处都打印读数。
   - `scripts/check-sw.mjs`：基线由 `git diff HEAD`（干净检出一律为空）改为**提交入库的 `scripts/sw-inputs.sha256`**——预缓存输入的文件内容指纹 + 清单 `version=`。非 git 环境不再直接 `exit 0`；缺清单即红。新增 `--update` 生成器；指纹按 UTF-8 读取、CRLF→LF 归一，路径字典序，Windows/CI 结果一致。合并冲突处理写进文件头与文档：不手工合并哈希行，取合并后工作树重新 `--update`。
