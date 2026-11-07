@@ -196,6 +196,7 @@ code += `\n;globalThis.__api = {
   get calibUndoStack(){ return calibUndoStack; }, set calibUndoStack(v){ calibUndoStack=v; },
   calibPrecheck, isCalibTool, CALIB_TOOL_KEYS,
   helpShortcutRows, helpGlossaryRows, helpExportRows, helpTabDefs,
+  auditProject,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
@@ -2323,9 +2324,10 @@ asyncSuites.push((async()=>{
   eq('校准前置-S0b 比例尺原因', api.calibPrecheck('calibrate',{background:emptyBg,site,imageReady:false}).reason, '场地按米绘制，无需校准');
   eq('校准前置-S0b 仿射原因', api.calibPrecheck('affine',{background:emptyBg,site,imageReady:false}).reason, '场地按米绘制，无需校准');
   eq('校准前置-S0b 图片变换原因', api.calibPrecheck('image-transform',{background:emptyBg,site,imageReady:false}).reason, '图片变换仅适用于图片底图');
-  /* S1：图片槽存在但尚未解码 → 统一禁用且原因可区分 */
+  /* S1：图片槽存在但尚未解码 → 统一禁用且区分「解码中 / 资产缺失」 */
   eq('校准前置-S1 比例尺禁用', api.calibPrecheck('calibrate',{background:imageBg,site,imageReady:false}).ok, false);
-  ok('校准前置-S1 原因提示未就绪', api.calibPrecheck('calibrate',{background:imageBg,site,imageReady:false}).reason.includes('尚未就绪'));
+  ok('校准前置-S1 原因提示解码中', api.calibPrecheck('calibrate',{background:imageBg,site,imageReady:false}).reason.includes('解码'));
+  ok('校准前置-S1 资产缺失单独提示', api.calibPrecheck('calibrate',{background:imageBg,site,imageReady:false,imageState:'missing'}).reason.includes('资产缺失'));
   eq('校准前置-S1 仿射禁用', api.calibPrecheck('affine',{background:imageBg,imageReady:false}).ok, false);
   eq('校准前置-S1 图片变换禁用', api.calibPrecheck('image-transform',{background:imageBg,imageReady:false}).ok, false);
   /* S2：图片就绪 → 比例尺 1/2 → 2/2，仿射 1/2 → ≥3 */
@@ -6117,6 +6119,38 @@ asyncSuites.push((async()=>{
   eq('D-01 有对象算老工程', api.savedProjectHasContent({ meta: {}, objects: [{}] }), true);
   eq('D-01 绑定工程算老工程', api.savedProjectHasContent({ meta: { projectId: 'PRJ1' }, objects: [] }), true);
   eq('D-01 图片底图算老工程', api.savedProjectHasContent({ meta: {}, objects: [], background: { kind: 'image' } }), true);
+}
+
+/* ---------------- D-07 加载完整性审计与资产状态区分 ---------------- */
+{
+  const v2='offline-drawing-annotation/v2';
+  const base={schema:v2,floors:[{id:'F1'}],activeFloorId:'F1',objects:[],layers:[{id:'L1'}],
+    background:{kind:'empty'},site:{shape:{type:'rect',w:100,h:70}}};
+  eq('D-07 正常工程 ok', api.auditProject(base).level, 'ok');
+  const broken=api.auditProject('{"schema":"'+v2+'","objects":[');
+  eq('D-07 非法 JSON 为 error', broken.level, 'error');
+  ok('D-07 非法 JSON 原因', broken.errors[0].includes('损坏'));
+  eq('D-07 非对象为 error', api.auditProject('"x"').level, 'error');
+  eq('D-07 schema 不可读为 error', api.auditProject(Object.assign({},base,{schema:'x'})).level, 'error');
+  eq('D-07 楼层结构损坏为 error', api.auditProject(Object.assign({},base,{floors:'x'})).level, 'error');
+  eq('D-07 对象列表损坏为 error', api.auditProject(Object.assign({},base,{objects:'x'})).level, 'error');
+  const noFloor=api.auditProject(Object.assign({},base,{floors:[],activeFloorId:''}));
+  eq('D-07 楼层为空为 warn', noFloor.level, 'warn');
+  ok('D-07 楼层为空原因', noFloor.warnings.some(w=>w.includes('楼层为空')));
+  ok('D-07 活动楼层缺失告警',
+    api.auditProject(Object.assign({},base,{activeFloorId:'NOPE'})).warnings.some(w=>w.includes('活动楼层')));
+  const dup=api.auditProject(Object.assign({},base,{objects:[{id:'A',layer:'L1'},{id:'A',layer:'L1'}]}));
+  ok('D-07 重复对象 id 告警', dup.warnings.some(w=>w.includes('重复')));
+  const badLayer=api.auditProject(Object.assign({},base,{objects:[{id:'A',layer:'LX'}]}));
+  ok('D-07 未知图层告警', badLayer.warnings.some(w=>w.includes('未知图层')));
+  const noAsset=api.auditProject(Object.assign({},base,{background:{kind:'image',assetId:'',dataUrl:''}}));
+  ok('D-07 底图资产缺失只告警', noAsset.level==='warn'&&noAsset.warnings.some(w=>w.includes('资产缺失')));
+  ok('D-07 场地结构损坏告警',
+    api.auditProject(Object.assign({},base,{site:'x'})).warnings.some(w=>w.includes('场地')));
+  const miss=api.calibPrecheck('calibrate',{background:{kind:'image',assetId:'a1'},site:null,imageReady:false,imageState:'missing'});
+  ok('D-07 资产缺失与解码中区分', !miss.ok&&miss.assetMissing===true&&miss.reason.includes('资产缺失'));
+  const dec=api.calibPrecheck('calibrate',{background:{kind:'image',assetId:'a1'},site:null,imageReady:false,imageState:'decoding'});
+  ok('D-07 解码中提示不误报缺失', !dec.ok&&!dec.assetMissing&&dec.reason.includes('解码'));
 }
 
 /* ---------------- D-03 帮助中心：三页签与 i18n ---------------- */

@@ -59,7 +59,7 @@ test('D-02 仅矢量场地：提示场地按米绘制，无需校准', async ({ 
   expect(r.tool).toBe('select');
 });
 
-test('D-02 图片底图未就绪：禁用并提示，解码后自动恢复步骤指示', async ({ page }) => {
+test('D-02 图片资产缺失：禁用并提示原因，重新导入后自动恢复步骤指示', async ({ page }) => {
   await boot(page);
   await page.evaluate(async () => {
     state.site = null;
@@ -68,7 +68,11 @@ test('D-02 图片底图未就绪：禁用并提示，解码后自动恢复步骤
     await afterStateLoaded(false);
   });
   await expect(calib(page)).toBeDisabled();
-  await expect(status(page)).toContainText('尚未就绪');
+  await expect(status(page)).toContainText('资产缺失');
+  /* D-07 状态区分：解码中与资产缺失不混淆，均保持禁用但文案不同 */
+  await page.evaluate(() => { bgImageState = 'decoding'; refreshCalibStatus(); });
+  await expect(calib(page)).toBeDisabled();
+  await expect(status(page)).toContainText('解码');
 
   await page.setInputFiles('#bgInput', { name: 'tiny.png', mimeType: 'image/png', buffer: TINY_PNG });
   await expect(calib(page)).toBeEnabled();

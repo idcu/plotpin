@@ -582,7 +582,6 @@
     '请先导入图片底图':'Import a base image first',
     '场地按米绘制，无需校准':'The site is drawn in metres; calibration is not required',
     '图片变换仅适用于图片底图':'Image transform only applies to image base maps',
-    '图片底图尚未就绪，请稍后重试或重新导入':'Base image is not ready yet; wait or import it again',
     '未知的校准工具':'Unknown calibration tool',
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '已取消仿射校准':'Affine calibration cancelled',
     '已取消测距':'Measure cancelled', '已取消当前绘制':'Drawing cancelled',

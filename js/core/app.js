@@ -2,8 +2,9 @@
 /* -------------------- 启动 -------------------- */
 (async function init(){
   const caps=detectRuntimeCapabilities();
-  const saved=await loadSavedProject();
-  if(saved) state=saved;
+  const loaded=await loadSavedProject();
+  if(loaded&&loaded.state) state=loaded.state;
+  showLoadAuditBanner(loaded);
   try{ const ss=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); Object.assign(state.settings,ss); }catch(e){}
   await catalogLoad();
   /* 界面语言先于首屏渲染：动态面板/ARIA 标签也按当前语言生成 */
@@ -15,7 +16,7 @@
   if(state.viewport.zoom===1) fitView();
   updateOsnapChip();
   /* 首次启动引导：仅有「无已保存工程」且当前来源从未完成引导时展示；老工程一律不打扰 */
-  if(firstRunGuideState(savedProjectHasContent(saved)).shouldShow) showFirstRunGuide();
+  if(!(loaded.audit&&loaded.audit.level==='error') && firstRunGuideState(savedProjectHasContent(loaded.state)).shouldShow) showFirstRunGuide();
   /* IndexedDB 不可用：首次启动即提示降级，避免自动保存静默失效 */
   if(!caps.idb) notifyIdbFallback();
   /* 仅托管（http/https）部署可注册 Service Worker；file:// 双击模式本身即离线。

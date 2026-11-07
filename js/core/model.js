@@ -11,6 +11,7 @@ const RULE_TYPE_LIMIT = 200;
 
 let state = createInitialState();
 let bgImage = null;
+let bgImageState = 'none';
 let bgDataUrl = '';      // 运行时底图（dataURL，仅内存；持久化走 assets 库的 assetId）
 let bgLoadSeq = 0;       // 防止旧底图异步加载覆盖新底图
 let currentTool = 'select';

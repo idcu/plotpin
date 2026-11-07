@@ -174,6 +174,26 @@ function openDemoProject(){
   toast(L('已打开示例工程'),'success');
   return true;
 }
+let rescueText;
+function showLoadAuditBanner(result){
+  const fallback=result.fallback?'已从本地备份恢复':'';
+  const err=result.audit.level==='error';
+  const msgs=(err?result.audit.errors:result.audit.warnings).slice(0,3);
+  if(!err&&!fallback&&!msgs.length) return;
+  rescueText=result.rescue?result.rescue.text:null;
+  setRescueHold(err);
+  const text=[err?'工程加载异常':'',fallback,msgs.join('；')].filter(Boolean).join('：');
+  const bar=document.createElement('div');
+  bar.id='loadBanner'; bar.className='load-banner '+(err?'error':'warn');
+  bar.innerHTML='<span>'+esc(text)+'</span>'+(rescueText
+    ?'<button id="loadRescueBtn">导出救援 JSON</button>'
+    :'<button id="loadBannerClose">关闭</button>');
+  document.body.insertBefore(bar,document.body.firstChild);
+  bar.querySelector('button').addEventListener('click',()=>{
+    if(rescueText) downloadBlob(new Blob([rescueText],{type:'application/json'}),'plotpin-rescue-'+Date.now()+'.json');
+    setRescueHold(false); bar.remove();
+  });
+}
 function showFirstRunGuide(){
   let chosen=false;
   const body=`<div style="line-height:1.8">

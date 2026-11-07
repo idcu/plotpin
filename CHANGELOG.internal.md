@@ -2,6 +2,43 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 持久化：加载完整性审计与救援导出（D-07）
+
+- **Commit Hash**：本条提交（`fix(persist): 加载完整性审计与救援导出`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `js/core/persistence.js` 新增纯函数 `auditProject(raw)`：校验 schema 可读、`floors` 结构、`activeFloorId` 存在、对象 id 唯一、图层引用有效、`background/site` 形状；资产缺失（`kind:'image'` 且无 `assetId`/`dataUrl`）只告警不阻断。返回 `{level:'ok'|'warn'|'error', errors, warnings}`。
+  - `loadSavedProject()` 返回结构改为 `{state, audit, rescue, fallback}`：IndexedDB 记录结构损坏时保留 `rescue.text` 并回退 localStorage；本地备份可读则迁移载入并标记 `fallback`；两者皆坏时 `state=null`，由调用方进入空工程。原记录在内存中保留，不写回覆盖。
+  - 新增 `setRescueHold(v)`：审计为 `error` 时 `scheduleSave()` 直接返回并显示「救援模式：原记录未被覆盖」，阻止空工程自动保存覆盖原记录；用户导出救援 JSON 或关闭横幅即确认并解除。
+  - `js/features/ui-shell.js` 新增 `showLoadAuditBanner(result)`：按 `audit.level` 渲染 `#loadBanner`（`error`/`warn`），error 且存在救援文本时提供「导出救援 JSON」，否则「关闭」；文案经 `esc` 转义。
+  - `js/core/model.js` 新增运行时状态 `bgImageState`（`none/decoding/ready/missing`）；`afterStateLoaded()` 与 `io-import.js` 维护该状态，`calibPrecheck()` 依据 `imageState` 区分「图片底图正在解码，请稍后重试」与「底图资产缺失，请重新导入底图」，后者不再长期禁用校准入口。`ctx.imageState` 为可选自测注入参数，既有调用签名不变。
+  - `js/core/app.js` 消费新返回结构：`error` 时不弹首启引导，横幅优先；`showLoadAuditBanner` 在语言与目录初始化前调用，保证救援入口最先可见。
+  - 新增 `tests/e2e/load-audit.spec.mjs` 3 条；`tests/e2e/calibration-precheck.spec.mjs` 第 3 条按新语义更新（资产缺失 + 模拟解码态），未删断言。`scripts/selftest.mjs` 新增 17 条（auditProject 各分支 + 资产状态区分）。
+  - 同步 `docs/features.md`、`docs/testing.md`、`docs/engineering.md`、`docs/modules.md`、`docs/manual-acceptance.md`、`README.md`（断言徽章 2666）。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2666 通过 / 0 失败**（41 个脚本；D-03 基线 2649，新增 17 条） | 0 |
+| `node scripts/e2e.mjs` | **75 passed / 1 skipped / 76 total**（D-03 基线 72/1/73，新增 3 条 load-audit；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **754,582 B（736.9 KB）**，gzip **233,621 B（228.1 KB）**；D-03 基线 750,603 B → 增量 **+3,979 B（+0.53%，预算 ≤4,000 B）**，gzip **+1,430 B**；上限 839,680 B，余量 **85,098 B**；SHA256 `9e47aee2c91f22c09b08c316db304317ab2eb5930930bdd3df438c4cdd5c2296`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg **0.4 ms** / P95 **0.56 ms**（≤8/≤3）；静态层重建 **31.85 ms**（≤60）；heapUsed **31.79 MB**（≤64）；裁剪 **99.4%**（≥60）；覆盖率 9.9 ms / 大场地 17 ms（≤300） | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **31.84%**（D-11 基线 29.82% → 未回退；D-03 为 32.34% → **−0.50pp**，因新增审计横幅中文硬编码且为省体积移除 2 条英文短语）；字面量 1225、走翻译入口 449（字典化 390 / 缺口 59）、硬编码 776；PHRASES 813 / TEMPLATES 103 | 0 |
+| 8 种导出 golden | 本轮未改导出实现：`git diff` 未触及 `io-export.js` / `io-fields.js` / `dxf.js` / `pdf.js`；`tests/golden/*.dxf`、`*.svg` 在 selftest 内逐字节通过。8 格式整体比对未重跑（D-07 不涉及导出行为），夹具固化留给 D-13 | 0 |
+
+- **新增/调整公共抽象**
+  - 新增 `auditProject(raw)`、`setRescueHold(v)`（`js/core/persistence.js`）、`showLoadAuditBanner(result)`（`js/features/ui-shell.js`）与运行时状态 `bgImageState`（`js/core/model.js`）。
+  - 调整 `loadSavedProject()` 返回结构（旧签名无参不变），调用方仅 `app.js` 与 `selftest.mjs`，均已同步；无其他调用方受影响。
+  - `calibPrecheck(tool, ctx?)` 新增可选 `ctx.imageState`，缺省读取 `bgImageState`，旧调用与旧返回字段保持兼容。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。
+- **遗留 / 风险**
+  - 体积增量距 D-07 的 4,000 B 预算仅剩 **21 B**，后续任何文案/样式增量都需先回收；总产物余量仍有 85,098 B。
+  - 为压体积移除了「底图资产缺失」与「图片正在解码」两条英文短语，英文界面下这两条回退中文；**D-11 必须补齐**，且不得借此拉低覆盖率基线。
+  - 审计为结构性启发式：`error` 仅覆盖 schema/楼层/对象列表等硬损坏，其余（空楼层、活动楼层失效、id 重复、未知图层、资产缺失、场地形状异常）为 `warn` 并走迁移修复，避免误挡正常工程。
+  - 救援保持只在 `error` 期间生效；用户导出/关闭横幅即视为确认，之后正常自动保存会把当前（空）工程写入草稿，原始数据仅保留在下载的救援 JSON 中，属既定交互，需在帮助文档与验收中说明。
+  - 未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 易用性：帮助中心三页签（D-03）
 
 - **Commit Hash**：本条提交（`feat(ux): 帮助中心三页签（快捷键/概念词典/导出清单）`）；完整哈希见 `git log HEAD` 与本次汇报。

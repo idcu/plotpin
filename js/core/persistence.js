@@ -172,7 +172,7 @@ function clearCurrentFloor(){
   touchFloor();                     /* 清空楼层也是楼层级写入，供协作 LWW 判定 */
   state.meta.updatedAt=nowISO();
   bgLoadSeq++;
-  bgImage=null; bgDataUrl='';
+  bgImage=null; bgImageState='none'; bgDataUrl='';
   selectedIds.clear(); draft=null; drag=null; rubber=null;
   calibPoints=[]; affinePairs=[]; calibSelection=null; calibUndoStack=[];
   activeOsnap=null; trackLine=null; refEdge=null;
@@ -497,7 +497,11 @@ function renameFloor(id,name){
   return true;
 }
 
+let rescueHold=false;
+/** 加载审计为 error 时阻止自动保存覆盖原记录；用户确认后解除 */
+function setRescueHold(v){ rescueHold=!!v; }
 function scheduleSave(){
+  if(rescueHold){ $('saveState').textContent='救援模式：原记录未被覆盖'; return; }
   $('saveState').textContent=L('待保存…');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{
@@ -515,23 +519,64 @@ function scheduleSave(){
     }
   },450);
 }
+function auditProject(raw){
+  const errors=[],warnings=[];
+  let p=raw;
+  if(typeof p==='string'){
+    try{ p=JSON.parse(p); }catch(_){ return {level:'error',errors:['JSON 损坏'],warnings}; }
+  }
+  if(!p||typeof p!=='object'||Array.isArray(p)) return {level:'error',errors:['非对象'],warnings};
+  if(!isReadableSchema(p.schema)) errors.push('schema 不可读');
+  if(p.floors!==undefined&&!Array.isArray(p.floors)) errors.push('楼层损坏');
+  const floors=Array.isArray(p.floors)?p.floors:[];
+  if(!floors.length) warnings.push('楼层为空');
+  if(!p.activeFloorId||!floors.some(f=>f&&f.id===p.activeFloorId)) warnings.push('活动楼层');
+  if(p.objects!==undefined&&!Array.isArray(p.objects)) errors.push('对象列表损坏');
+  const objs=Array.isArray(p.objects)?p.objects:[];
+  const ids=new Set(); let dup=0;
+  objs.forEach(o=>{ if(!o||typeof o!=='object'||!o.id){ dup++; return; } if(ids.has(o.id)) dup++; else ids.add(o.id); });
+  if(dup) warnings.push('id 重复 '+dup);
+  const layerIds=new Set((Array.isArray(p.layers)?p.layers:[]).map(l=>l&&l.id).filter(Boolean));
+  let badLayer=0;
+  if(layerIds.size) objs.forEach(o=>{ if(o&&typeof o==='object'&&o.layer&&!layerIds.has(o.layer)) badLayer++; });
+  if(badLayer) warnings.push('未知图层 '+badLayer);
+  const bg=p.background;
+  if(bg!==undefined&&(!bg||typeof bg!=='object'||Array.isArray(bg))) warnings.push('底图损坏');
+  else if(bg&&bg.kind==='image'&&!bg.assetId&&!bg.dataUrl) warnings.push('资产缺失');
+  const site=p.site;
+  if(site!==undefined&&(!site||typeof site!=='object'||Array.isArray(site))) warnings.push('场地损坏');
+  return {level:errors.length?'error':(warnings.length?'warn':'ok'),errors,warnings};
+}
 async function loadSavedProject(){
-  let st=null;
+  const ok={level:'ok',errors:[],warnings:[]};
+  let st=null,audit=ok,rescue=null,idbFailed=false,lsHit=false;
   try{
     const p=await idbGet();
-    if(p && isReadableSchema(p.schema)) st=migrateProject(p);
-  }catch(e){ /* file:// 或浏览器限制时退回 localStorage */ }
+    if(p&&typeof p==='object'){
+      audit=auditProject(p);
+      if(audit.level==='error'){ rescue={source:'IndexedDB',text:JSON.stringify(p)}; idbFailed=true; }
+      else if(isReadableSchema(p.schema)) st=migrateProject(p);
+    }
+  }catch(e){ idbFailed=true; }
   if(!st){
     try{
       const raw=localStorage.getItem(LS_KEY);
-      if(raw){ const p=JSON.parse(raw); if(p&&isReadableSchema(p.schema)) st=migrateProject(p); }
+      if(raw){
+        lsHit=true;
+        const a=auditProject(raw);
+        if(a.level==='error'){ if(!rescue) rescue={source:'localStorage',text:raw}; audit=a; }
+        else{
+          const p=JSON.parse(raw);
+          if(isReadableSchema(p.schema)){ st=migrateProject(p); audit=a; }
+        }
+      }
     }catch(e){}
   }
   if(st){
     state=st;
-    await ensureBackgroundAsset(state);   // 旧版 dataUrl 底图迁入资产库
+    await ensureBackgroundAsset(state);
   }
-  return st;
+  return {state:st,audit,rescue,fallback:!!st&&lsHit&&idbFailed};
 }
 /**
  * 若工程携带内嵌 dataUrl（旧版草稿 / 跨设备导入的 JSON），转存为内容寻址资产。
@@ -1032,7 +1077,7 @@ function loadImageSrc(src){
 }
 async function afterStateLoaded(fit=true){
   const seq=++bgLoadSeq;
-  bgImage=null; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
+  bgImage=null; bgImageState='none'; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
   calibSelection=null; calibUndoStack=[];                          /* 校准控制点的选中态与专用撤销栈同样清空 */
   invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
   resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
@@ -1044,6 +1089,7 @@ async function afterStateLoaded(fit=true){
   requestRender();
   const bg=state.background;
   if(!isImageBackground(bg)) return;   /* 空槽（含仅场地）无需加载图片 */
+  bgImageState='decoding';
   try{
     let url='';
     if(bg.assetId){
@@ -1058,11 +1104,11 @@ async function afterStateLoaded(fit=true){
     }else if(bg.dataUrl){
       url=bg.dataUrl;              // IDB 不可用的退化环境
     }
-    if(!url) return;
+    if(!url){ bgImageState='missing'; refreshCalibStatus(); return; }
     bgDataUrl=url;
     const img=await loadImageSrc(url);
-    if(seq===bgLoadSeq){ bgImage=img; refreshCalibStatus(); requestRender(); }
+    if(seq===bgLoadSeq){ bgImage=img; bgImageState='ready'; refreshCalibStatus(); requestRender(); }
   }catch(e){
-    if(seq===bgLoadSeq) toast('底图读取失败，请重新导入底图','warn');
+    if(seq===bgLoadSeq){ bgImageState='missing'; refreshCalibStatus(); toast('底图读取失败，请重新导入底图','warn'); }
   }
 }

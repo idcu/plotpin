@@ -20,7 +20,7 @@
 | `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（7 列表头、数值、合计、目录版本/导出时间）→ 替换目录后重导仍为冻结单价、改数量后按新目录重算 → 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 → 跨厂商重名未填厂商不带价、填厂商后按精确键计价 |
 | `table-batch.spec.mjs` | B-08 原义：CSV 条件替换命中 2 台并改写业务类型/台账、批量新增落点 (10,20) 可复算；严格模式下非法更新行整批拒绝（无「合并导入」按钮），现有对象数量与文本不变 |
 | `world-transform.spec.mjs` | B-12：已仿射校准底图 + 矩形场地 + 点位做 2× 世界缩放后，对象世界坐标 ×2、与底图同一像素屏幕偏差 < 0.5 px，`metersPerPixel` 0.05→0.1、`transform.a` 同步 ×2，设备物理尺寸 ×2；场地默认保持 100×70（场地优先校准）。退化变换 `ok=false` 且对象/mp 不变；`scaleWorldAround` 旧签名可用、无 transform 时只缩放 m/p；显式 `{site:true}` 时圆场地等比放大仍为圆 |
-| `calibration-precheck.spec.mjs` | D-02：无底图无场地时比例尺/仿射/图片变换三入口 `disabled` 且 `aria-describedby` 指向原因，程序化点击不改变 `currentTool`；仅矢量场地时提示「场地按米绘制，无需校准」，图片变换提示仅适用图片底图；图片未解码时提示「尚未就绪」，导入真实 PNG 解码后三入口自动恢复，比例尺状态位 `1/2 → 2/2 → 可应用` |
+| `calibration-precheck.spec.mjs` | D-02：无底图无场地时比例尺/仿射/图片变换三入口 `disabled` 且 `aria-describedby` 指向原因，程序化点击不改变 `currentTool`；仅矢量场地时提示「场地按米绘制，无需校准」，图片变换提示仅适用图片底图；图片资产缺失时提示「资产缺失」、模拟解码态提示「解码中」，导入真实 PNG 解码后三入口自动恢复，比例尺状态位 `1/2 → 2/2 → 可应用` |
 | `perf-render.spec.mjs` | B-11：真实 Chromium 1600×900 离屏渲染基线（A 基础场景 / B 标注+图元，均 2000 对象）。输出重建 / 缓存命中 / 直接全量的 avg·P50·P95·P99、`staticKey`、`filter+sort`、`measureText` 与 `Path2D` 单帧调用、heapDelta、zoom=6 裁剪率；断言为宽松上限（重建 P95 <160ms、缓存帧 P50 <8ms / P95 <12ms、直接 P95 <160ms、裁剪 >60%）只作防回归，不作为性能承诺 |
 | `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
 | `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
@@ -34,6 +34,7 @@
 | `symbols.spec.mjs` | C-04：别名搜索（烟感 / NVR）与分类筛选、放置后角度与物理尺寸写回对象、5 例恶意 SVG（script / onload / 外部 href / 超深嵌套 / 超大字节）逐条 toast 原因且类型数不变、自有符号 JSON 导出仅含当前工程符号且内存重置后导入只写入当前工程 |
 | `onboarding.spec.mjs` | D-01：首次访问展示三步引导；「空白开始」写入 `completed/blank` 后刷新不再展示且对象数 0；示例工程场地 `rect 100×70`、6 个对象（2 点设备 / 1 区域 / 1 折线 / 1 文字 / 1 标注）、背景空槽且资产库无新增、刷新后 6 对象恢复；Esc 只写 `skipped/later`，下次启动仍展示 |
 | `help-center.spec.mjs` | D-03：`?` 打开三页签（快捷键 20 行 / 概念词典 6 条 / 导出清单 8 种）；页签点击切换并同步 `aria-selected`；`Esc` 关闭后 `document.activeElement` 回到画布；导出清单含 PDF 位图页、DXF SITE 图层、公式注入说明 |
+| `load-audit.spec.mjs` | D-07：损坏 `current` → 横幅「工程加载异常」；救援保持期间触发 `markDirty` 后 2 秒原记录未被覆盖；救援导出字节等于注入文本，导出后横幅移除；IDB 不可用但 localStorage 正常 → 从备份恢复并提示来源、无救援按钮；两者皆坏 → 空工程 + error 横幅 + 不弹首启引导 |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
 `/Catalog → /Pages → /Kids` 递归恢复文档页序（缺失/损坏时退回扫描顺序并追加未覆盖页，不静默丢内容）。

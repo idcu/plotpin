@@ -874,6 +874,7 @@ function calibPrecheck(tool,ctx){
   const bg=c.background!==undefined?c.background:state.background;
   const site=c.site!==undefined?c.site:state.site;
   const imageReady=c.imageReady!==undefined?!!c.imageReady:!!bgImage;
+  const imageState=c.imageState!==undefined?String(c.imageState):(bgImage?'ready':bgImageState);
   const calibratePts=c.calibPoints||calibPoints;
   const affinePts=c.affinePairs||affinePairs;
   const hasImage=isImageBackground(bg), hasSite=!!site;
@@ -883,7 +884,11 @@ function calibPrecheck(tool,ctx){
       return {ok:false,reason:hasSite?L('图片变换仅适用于图片底图'):L('请先导入图片底图'),step:null};
     return {ok:false,reason:hasSite?L('场地按米绘制，无需校准'):L('请先导入图片底图'),step:null};
   }
-  if(!imageReady) return {ok:false,reason:L('图片底图尚未就绪，请稍后重试或重新导入'),step:null};
+  if(!imageReady){
+    if(imageState==='missing')
+      return {ok:false,reason:L('底图资产缺失，请重新导入底图'),step:null,assetMissing:true};
+    return {ok:false,reason:L('图片底图正在解码，请稍后重试'),step:null};
+  }
   if(tool==='calibrate'){
     const n=Math.min(2,Math.max(0,(calibratePts||[]).length));
     const label=n>=2

@@ -307,6 +307,7 @@ async function importPdfFile(f){
     state.background.transform=null;   /* 新图像素坐标改变，清除旧仿射校准 */
     bgDataUrl=dataUrl;
     try{ bgImage=await loadImageSrc(dataUrl); }catch(e){ bgImage=null; }
+    bgImageState=bgImage?'ready':'missing';
     bgNote=L('底图 {w}×{h}',{w:img.width,h:img.height});
     /* 矢量叠加仍以 PDF 页世界尺寸为场地，图片米/像素一致 */
   }
@@ -504,6 +505,7 @@ async function importBackgroundFile(f){
   bgDataUrl=dataUrl;
   const seq=++bgLoadSeq;
   bgImage=image;
+  bgImageState='ready';
   if(seq===bgLoadSeq) requestRender();
   refreshCalibStatus();   /* 图片解码完成：三个校准/变换入口从「未就绪」恢复可用 */
   fitView(); pruneBgAssets(); commitChange('底图已导入');
