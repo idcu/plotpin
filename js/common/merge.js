@@ -17,7 +17,7 @@ function mergeRuleSide(local, incoming){
 function mergeProjectData(currentRaw, incomingRaw){
   const A = mergeNormalizeSide(currentRaw);
   const B = mergeNormalizeSide(incomingRaw);
-  const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0, floorMetaUpdated:0, floorsDeleted:0 };
+  const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0, floorMetaUpdated:0, floorsDeleted:0, siteDeleted:0, siteCleared:0 };
   const tombs = mergeTombstoneMaps(A.tombstones, B.tombstones);
   const floors = new Map();
   const order = [];
@@ -220,12 +220,15 @@ function mergeBlankMissingTimestamps(raw){
 function mergeTime(v){ return v && typeof v.updatedAt === 'string' ? v.updatedAt : ''; }
 function mergeLater(a, b){ const x = mergeTime(a), y = mergeTime(b); return x > y ? x : y; }
 
-/** 楼层最后写入时间：楼层自身 updatedAt 与该层全部对象 updatedAt 的最大值 */
+/** 楼层最后写入时间：楼层自身、场地、该层全部对象 updatedAt 的最大值。
+ *  场地独立编辑只写 site.updatedAt（props 面板/拖点），不写楼层 updatedAt；
+ *  墓碑判定若不纳入它，会吞掉晚于墓碑的较新场地编辑（N-04）。 */
 function mergeFloorWrite(fa, fb){
   let t = '';
   [fa, fb].forEach(f => {
     if (!f) return;
     if (f.updatedAt > t) t = f.updatedAt;
+    if (f.site && typeof f.site.updatedAt === 'string' && f.site.updatedAt > t) t = f.site.updatedAt;
     f.order.forEach(id => { const ts = mergeTime(f.objects.get(id)); if (ts > t) t = ts; });
   });
   return t;
@@ -243,23 +246,29 @@ function mergeSiteTime(f){
   return typeof t === 'string' && t ? t : f.updatedAt;
 }
 /** 同名楼层元数据：名称/底图/场地按最后写入较新的一方，视口保持本地。
- *  stats.floorMetaUpdated 只在远端确实覆盖了本地不同的元数据时 +1（供协作撤销栈判定）。 */
+ *  场地 LWW 的 **null 是有效值**（显式清空）：较新一侧为 null 时必须清空，
+ *  不能让 `fa.site || fb.site` 把较旧的场地复活。镜头/场地被远端清空时计入
+ *  stats.siteDeleted（存在→不存在）与 stats.siteCleared（远端显式 null 胜出），
+ *  供协作撤销栈与横幅判定；stats.floorMetaUpdated 仍只统计「远端覆盖本地」的元数据项。 */
 function mergeFloorMeta(fa, fb, stats){
   if (!fa) return fb;
   if (!fb) return fa;
   const newer = mergeTime(fb) > mergeTime(fa);
   const ta = mergeSiteTime(fa), tb = mergeSiteTime(fb);
-  const siteNewer = tb > ta || (tb === ta && fb.site && !fa.site);
+  const siteNewer = tb > ta || (tb === ta && !!fb.site && !fa.site);
   const nameWon = newer && !!fb.name && fb.name !== fa.name;
   const bgWon = newer && !!fb.background && mergeStable(fb.background) !== mergeStable(fa.background);
-  const siteWon = siteNewer && !!fb.site && mergeStable(fb.site) !== mergeStable(fa.site);
-  if (stats && (nameWon || bgWon || siteWon)) stats.floorMetaUpdated++;
+  const site = siteNewer ? fb.site : fa.site;
+  const siteLost = !!(fa.site && !site);
+  if (stats && (nameWon || bgWon || siteLost)) stats.floorMetaUpdated++;
+  if (stats && siteLost) stats.siteDeleted++;
+  if (stats && siteLost && siteNewer && !fb.site) stats.siteCleared++;
   return {
     id: fa.id,
     name: newer ? fb.name : (fa.name || fb.name),
     updatedAt: newer ? fb.updatedAt : fa.updatedAt,
     background: newer ? (fb.background || fa.background) : (fa.background || fb.background),
-    site: siteNewer ? fb.site : (fa.site || fb.site),
+    site,
     viewport: fa.viewport || fb.viewport
   };
 }

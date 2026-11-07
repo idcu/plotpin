@@ -843,7 +843,7 @@ function markTombstone(id,kind='object'){
 /** 合并是否发生了「远端覆盖本地」：协作条件写历史的唯一判据（纯函数）。 */
 function mergeHistoryNeeded(stats){
   const s=stats||{};
-  return ((s.updated||0)+(s.deleted||0)+(s.floorMetaUpdated||0)+(s.floorsDeleted||0))>0;
+  return ((s.updated||0)+(s.deleted||0)+(s.floorMetaUpdated||0)+(s.floorsDeleted||0)+(s.siteDeleted||0)+(s.siteCleared||0))>0;
 }
 /** 合并他人工程 JSON（离线 LWW）：读取→清洗→按 id/更新时间合并→替换现场。
  *  schema 不符或结构损坏时抛错，由调用方提示；合并无变化时不写历史栈。 */

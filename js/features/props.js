@@ -228,7 +228,8 @@ function updateSiteStats(box){
 }
 function bindSiteNodeEvents(box){
   box.addEventListener('focusin',()=>pushHistory(),{once:true});
-  const changed=()=>{ state.meta.updatedAt=nowISO(); coverageResult=null; syncFramePan(); updateSiteStats(box); scheduleSave(); requestRender(); };
+  /* 场地属性/顶点编辑走统一提交协议：touchFloor + 落盘 + 协作广播 + 撤销栈（focusin 已压一次快照） */
+  const changed=()=>{ coverageResult=null; syncFramePan(); updateSiteStats(box); commitObjectEdit(); };
   box.querySelectorAll('[data-site-field]').forEach(el=>el.addEventListener('input',()=>{
     if(applySiteField(el.dataset.siteField,el.value)){ state.site.updatedAt=nowISO(); changed(); }
   }));

@@ -840,6 +840,7 @@
     '最近一次合并':'Last merge', '无变化':'No changes',
     '已写入撤销栈，可 Ctrl+Z 回滚':'Written to undo stack; press Ctrl+Z to roll back',
     '可按 Ctrl+Z 回滚':'press Ctrl+Z to roll back', '楼层元数据覆盖':'floor metadata overwritten',
+    '场地已清空':'Site cleared', '对端清空了场地':'the peer cleared the site',
     '协作覆盖':'Collaboration overwrote', '发送失败：':'Send failed: ',
     '通道拥塞，消息已跳过':'Channel congested; message skipped',
     '通道拥塞，消息已跳过（将在下次变更时重试）':'Channel congested; message skipped (will retry on next change)',

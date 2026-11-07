@@ -4813,7 +4813,7 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   });
   const M = (a, b) => api.mergeProjectData(a, b);
   const ids = p => (p.objects || []).map(o => o.id).join(',');
-  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0 };
+  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0, siteDeleted: 0, siteCleared: 0 };
 
   const m1 = M(P([]), P([O('A', T1)]));
   eq('合并-新增对象数量', m1.project.objects.length, 1);
@@ -4866,6 +4866,26 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   eq('合并-较旧场地不覆盖', msO.project.site.shape.w, 30);
   eq('合并-场地独立保留', !!msO.project.site, true);
   eq('合并-图片槽与场地共存', msO.project.background.kind, 'rect');
+
+  /* N-04：场地「存在→不存在」独立计数；较新 null 必须获胜且不能被旧值复活 */
+  const siteFloorA=P([], {site:siteA, floors:[{id:'floor.default',name:'1F',updatedAt:T1,site:siteA}]});
+  const siteFloorNullNewer=P([], {site:null, floors:[{id:'floor.default',name:'1F',updatedAt:T2,site:null}]});
+  const mClear=M(siteFloorA, siteFloorNullNewer);
+  eq('合并-较新清空场地生效', mClear.project.site, null);
+  eq('合并-场地清空计数', mClear.stats.siteCleared, 1);
+  eq('合并-场地删除计数', mClear.stats.siteDeleted, 1);
+  eq('合并-场地清空计入楼层元数据覆盖', mClear.stats.floorMetaUpdated, 1);
+  ok('合并-场地清空触发写栈', api.mergeHistoryNeeded(mClear.stats) === true);
+
+  const mLocalNull=M(siteFloorNullNewer, siteFloorA);
+  eq('合并-本地较新清空不被旧场地复活', mLocalNull.project.site, null);
+  eq('合并-本地清空不产生远端清空计数', mLocalNull.stats.siteCleared, 0);
+  eq('合并-本地清空不产生删除计数', mLocalNull.stats.siteDeleted, 0);
+
+  const mTie=M(P([], {site:siteA, floors:[{id:'floor.default',name:'1F',updatedAt:T1,site:siteA}]}),
+    P([], {site:null, floors:[{id:'floor.default',name:'1F',updatedAt:T1,site:null}]}));
+  eq('合并-同时间戳保留本地场地', mTie.project.site && mTie.project.site.id, 'site.merge');
+  eq('合并-同时间戳不误报清空', mTie.stats.siteCleared, 0);
 
   const m7 = M(P([O('A', T1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
   eq('合并-删除墓碑胜过旧对象', m7.project.objects.length, 0);
@@ -4949,6 +4969,17 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   const mf5 = M(fRevA, fRevB);
   eq('合并-较新楼层编辑胜过删除', mf5.project.floors.length, 2);
   ok('合并-楼层复活后清理过期墓碑', !(mf5.project.tombstones || []).some(t => t.id === 'floor.F2'));
+
+  /* N-04：场地独立编辑只写 site.updatedAt；楼层墓碑判定必须纳入它，否则较新场地会被整层删除吞掉 */
+  const siteF2Newer = Object.assign({}, siteA, { updatedAt: T3 });
+  const fSiteNewerA = P([], { floors: [
+    { id: 'floor.default', name: '1F' },
+    { id: 'floor.F2', name: '2F', updatedAt: T1, site: siteF2Newer, objects: [] }
+  ] });
+  const mfSite = M(fSiteNewerA, P([], { tombstones: [{ id: 'floor.F2', deletedAt: T2, kind: 'floor' }] }));
+  eq('合并-较新场地编辑不被楼层墓碑吞掉', mfSite.project.floors.length, 2);
+  eq('合并-较新场地编辑保留内容', mfSite.project.floors[1].site.updatedAt, T3);
+  eq('合并-较新场地不误报整层删除', mfSite.stats.floorsDeleted, 0);
 
   const fNewB = P([], {
     floors: [
@@ -5325,6 +5356,8 @@ await section("62. 实时协作：长消息分块与本地提交防抖（WebRTC/
   ok('合并历史-删除写栈', api.mergeHistoryNeeded({deleted:1}) === true);
   ok('合并历史-楼层元数据覆盖写栈', api.mergeHistoryNeeded({floorMetaUpdated:1}) === true);
   ok('合并历史-整层删除写栈', api.mergeHistoryNeeded({floorsDeleted:1}) === true);
+  ok('合并历史-场地删除写栈', api.mergeHistoryNeeded({siteDeleted:1}) === true);
+  ok('合并历史-场地清空写栈', api.mergeHistoryNeeded({siteCleared:1}) === true);
 }
 
 });

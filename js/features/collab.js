@@ -150,10 +150,11 @@ function collabRefreshConflictInfo(){
   if(!el) return;
   const m=collabLastMerge;
   if(!m){ el.textContent=L('尚无冲突记录'); el.className='hint-text'; return; }
-  const changed=(m.added||0)+(m.updated||0)+(m.deleted||0)+(m.floorsAdded||0)+(m.floorMetaUpdated||0)+(m.floorsDeleted||0);
+  const changed=(m.added||0)+(m.updated||0)+(m.deleted||0)+(m.floorsAdded||0)+(m.floorMetaUpdated||0)+(m.floorsDeleted||0)+(m.siteDeleted||0);
   if(!changed){ el.textContent=L('最近一次合并：无变化'); el.className='hint-text'; return; }
-  const overwritten=(m.updated||0)+(m.deleted||0)+(m.floorMetaUpdated||0)+(m.floorsDeleted||0);
+  const overwritten=(m.updated||0)+(m.deleted||0)+(m.floorMetaUpdated||0)+(m.floorsDeleted||0)+(m.siteDeleted||0);
   el.textContent=`${L('最近一次合并')}：+${m.added||0} ~${m.updated||0} -${m.deleted||0} · ${L('冲突')} ${m.conflicts||0}`+
+    (m.siteCleared?` · ${L('场地已清空')}`:'')+
     (overwritten?` · ${L('已写入撤销栈，可 Ctrl+Z 回滚')}`:'');
   el.className='hint-text'+(overwritten?' warn':'');
 }
@@ -296,15 +297,17 @@ function collabQueueApply(raw,from){
       const stats=await mergeProjectJSON(raw,{history:'overwrite'});
       collabLastMerge=Object.assign({at:nowISO(),from},stats);
       try{ window.__collabLastMerge=collabLastMerge; }catch(_){}
-      const changed=(stats.added||0)+(stats.updated||0)+(stats.deleted||0)+(stats.floorsAdded||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0);
+      const changed=(stats.added||0)+(stats.updated||0)+(stats.deleted||0)+(stats.floorsAdded||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0)+(stats.siteDeleted||0);
       if(!changed){
         collabSetStatus(`${L('已同步')}：${L('无变化')}`,'ok');
         collabRefreshConflictInfo();
         return;
       }
-      const overwritten=(stats.updated||0)+(stats.deleted||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0);
+      const overwritten=(stats.updated||0)+(stats.deleted||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0)+(stats.siteDeleted||0);
+      const siteNote=stats.siteCleared?` · ${L('对端清空了场地')}`:'';
       const detail=`+${stats.added||0} ~${stats.updated||0} -${stats.deleted||0}`+
         (stats.floorMetaUpdated?` · ${L('楼层元数据覆盖 {n}',{n:stats.floorMetaUpdated})}`:'')+
+        siteNote+
         (stats.conflicts?` · ${L('冲突 {n}',{n:stats.conflicts})}`:'');
       if(overwritten){
         collabSetStatus(L('已同步：{detail} · 可按 Ctrl+Z 回滚',{detail}),'warn');
@@ -328,6 +331,7 @@ function collabNotifyOverwrite(stats){
   if(stats.updated) parts.push(`~${stats.updated}`);
   if(stats.deleted) parts.push(`-${stats.deleted}`);
   if(stats.floorMetaUpdated) parts.push(`${L('楼层')} ${stats.floorMetaUpdated}`);
+  if(stats.siteCleared) parts.push(L('场地已清空'));
   toast(`${L('协作覆盖')}：${parts.join(' ')}，${L('可按 Ctrl+Z 回滚')}`,'warn');
 }
 

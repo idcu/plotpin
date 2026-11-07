@@ -2,6 +2,33 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-04 修复场地静默删除与本地清空失效
+
+- **Commit Hash**：本条提交（`fix(collab): 场地编辑/清空进入提交与广播，合并按 null 获胜`）；完整哈希见回填提交与本次汇报。
+- **核心改动**
+  - `js/common/merge.js`：`mergeFloorMeta` 的场地改为严格 LWW——`siteNewer ? fb.site : fa.site`，**较新一侧为 `null` 即清空**，不再用 `fa.site || fb.site` 复活较旧场地；新增 `stats.siteDeleted`（存在→不存在）与 `stats.siteCleared`（远端显式 null 胜出）独立计数并计入 `floorMetaUpdated`。`mergeFloorWrite` 把 `site.updatedAt` 纳入楼层最后写入时间，避免较新场地编辑被较旧楼层墓碑整层删除吞掉。
+  - `js/core/persistence.js`：`mergeHistoryNeeded` 纳入 `siteDeleted` / `siteCleared`，远端清空场地会压入撤销栈。
+  - `js/features/collab.js`：状态栏、合并详情与覆盖 toast 反映场地清空（「对端清空了场地」「场地已清空」「可按 Ctrl+Z 回滚」）。
+  - `js/features/props.js`：场地属性/顶点面板的 `changed` 从 `scheduleSave + requestRender` 改为 `commitObjectEdit()`，补齐 touchFloor、自动保存、协作广播与撤销链路（拖点路径原本已走 `commitChange`）。
+  - `scripts/selftest.mjs`：新增 15 项（较新清空生效/计数/写栈、本地较新清空不复活、同时间戳保留本地、墓碑不吞较新场地、`mergeHistoryNeeded` 场地两项）。
+  - `tests/e2e/collab.spec.mjs`：新增双标签用例「N-04」——真实鼠标拖动场地节点与属性面板输入均同步到对端；对端清空后状态栏提示且撤销栈 +1，Ctrl+Z 恢复；随后本地清空，对端注入较旧快照不复活。
+  - `js/common/i18n.js`：新增 `场地已清空` / `对端清空了场地` 英文词条。
+  - `sw.js`：`VERSION` 8 → 9；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 随之刷新。
+  - 文档：`docs/features.md` §5/§10、`docs/user-guide.md` §5.3/§13/§18、`docs/known-issues.md`（P0-2/P0-3 → 已修复 11 条，P0 清零）、`docs/plans/README.md` 状态表 N-04 → 已交付。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：回退 `merge.js` → selftest **11 项变红**（清空计数、复活、墓碑吞层等）并在「较新场地编辑保留内容」处抛错；回退 `props.js` 并等待拖点防抖广播发完后，e2e 属性面板同步断言 **变红**（对端停留 30）。恢复后全绿。
+  - `node scripts/check.mjs --selftest`：**2731 通过 / 0 失败**（45 脚本，较 N-03 +15）；契约 7 项 0 违约；插件 API 23 键 0 泄漏；i18n **46.01%**；SW `VERSION=9`（清单 version=9，49 个输入一致）。
+  - `node scripts/e2e.mjs`：**95 tests → 94 passed / 1 skipped（浸泡）/ 0 failed**。
+  - `node scripts/build.mjs --check`：**785,351 B（766.9 KB）/ gzip 244,245 B**，SHA256 `85a15cdf…`，余量 54,329 B。
+  - `node scripts/check-gates.mjs`：基线 6/6 + 9/9；`check-discipline --strict`：13/13。
+- **未执行 / 未验证**
+  - 真实双设备 WebRTC 下的场地清空、拖点同步未验证（仅同机双标签 BroadcastChannel）；离线合并仅用 selftest 与注入快照覆盖，未做 5 分钟断线浸泡。
+  - 场地高频拖动时的广播流量与合并耗时未做打点（500ms 防抖沿用现有实现）。
+- **遗留风险**
+  - 同时间戳且一侧为 null 时保留非 null 一侧（确定性 tie-break），极端并发下双方可能各自保留不同场地，需下一次编辑收敛。
+  - 楼层新增/删除/改名/切换仍不广播（RT-P1-02 未变），与场地已同步的口径不同，用户文档已注明。
+
+
 ## 2026-11-08 · N-03 修复 PDF 底图落盘丢失与解压炸弹前置拦截
 
 - **Commit Hash**：`91fdb24`（`fix(io): PDF 内嵌底图改走资产入库，解压上限前移到累计阶段`）。

@@ -168,6 +168,71 @@ test('冲突提示与回滚：LWW 覆盖写入撤销栈，Ctrl+Z 恢复本地值
   await expect.poll(() => page.evaluate(() => state.objects[0].x)).toBe(100);
 });
 
+test('N-04：对端清空场地可见可撤销；场地拖点实时同步；旧快照不复活已清空场地', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-site');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  /* 初始场地只由 p1 创建，验证增量同步 */
+  await page.evaluate(() => {
+    state.site = createSiteSlot({ type: 'rect', w: 20, h: 10 });
+    state.site.updatedAt = nowISO();
+    commitChange();
+  });
+  await expect.poll(() => p2.evaluate(() => !!state.site), { timeout: 4000 }).toBe(true);
+
+  /* ④ 场地拖点：真实鼠标拖动右上角手柄，p2 收到并合并 */
+  await page.locator('.tool-btn[data-tool="site-node"]').click();
+  const pt = await page.evaluate(() => {
+    const s = w2s([20, 10]);
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { x: r.left + s[0], y: r.top + s[1] };
+  });
+  await page.mouse.move(pt.x, pt.y);
+  await page.mouse.down();
+  await page.mouse.move(pt.x + 80, pt.y - 40, { steps: 6 });
+  await page.mouse.up();
+  const draggedW = await page.evaluate(() => state.site && state.site.shape.w);
+  expect(draggedW).toBeGreaterThan(20);
+  await expect.poll(() => p2.evaluate(() => state.site && Math.round(state.site.shape.w)), { timeout: 5000 })
+    .toBeGreaterThan(20);
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  await page.waitForTimeout(700);   /* 等拖点产生的 500ms 防抖广播发完，隔离属性面板自身的广播 */
+
+  /* ④b 属性面板精确输入：走 commitObjectEdit，同样实时广播给对端（N-04 修复的静默路径） */
+  await page.locator('#propPanel [data-site-field="w"]').fill('35');
+  await expect.poll(() => p2.evaluate(() => Math.round(state.site.shape.w)), { timeout: 5000 }).toBe(35);
+
+  /* ② 对端清空场地 → 本地状态栏明确提示 + 写入撤销栈 + Ctrl+Z 恢复 */
+  const oldSnapshot = await p2.evaluate(() => persistableState());
+  const histBefore = await page.evaluate(() => history.past.length);
+  await p2.evaluate(() => { state.site = null; touchFloor(); commitChange(); });
+  await expect.poll(() => page.evaluate(() => state.site), { timeout: 5000 }).toBe(null);
+  const cleared = await page.evaluate(() => window.__collabLastMerge);
+  expect(cleared.siteCleared).toBeGreaterThanOrEqual(1);
+  expect(cleared.siteDeleted).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => page.evaluate(() => history.past.length)).toBe(histBefore + 1);
+  await openCollab(page);
+  await expect(page.locator('#collabStatus')).toContainText('对端清空了场地');
+  await expect(page.locator('#collabStatus')).toContainText('Ctrl+Z');
+  await closeModal(page);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => !!state.site)).toBe(true);
+
+  /* ③ 本地清空后，对端较旧的快照不能把场地复活 */
+  await page.evaluate(() => { pushHistory(); clearCurrentFloor(); commitChange('已清空当前楼层'); });
+  await page.waitForTimeout(700);
+  await p2.evaluate(proj => collabSendObject({ t: 'snapshot', project: proj }), oldSnapshot);
+  await expect.poll(() => page.evaluate(() => state.site), { timeout: 5000 }).toBe(null);
+});
+
 test('离线重连：本地未同步修改不丢且对端可见（短间隔确定性）', async ({ page, context }) => {
   const p2 = await context.newPage();
   await openApp(page);
