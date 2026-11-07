@@ -24,6 +24,11 @@ const rel = (p) => path.relative(ROOT, p).replace(/\\/g, '/');
 const fail = (msg) => errors.push(msg);
 const warn = (msg) => warnings.push(msg);
 
+/* 承诺名比对：空白不参与语义（`global.Dxf =` 与 `global.Dxf=` 等价）；
+   仍要求完整名字连续出现，`global.DxfExtra=` 不会命中 `global.Dxf=`。 */
+const squash = (s) => String(s).replace(/\s+/g, '');
+const keepsName = (src, name) => squash(src).includes(squash(name));
+
 function readJson(relPath) {
   const abs = path.join(ROOT, relPath);
   if (!fs.existsSync(abs)) {
@@ -293,7 +298,7 @@ if (project && lock) {
           if (!declaredPaths.has(m)) fail(`适配层 ${a.file} 声明依赖 ${m}，但 ngm.json 里没有`);
         }
         for (const k of a.keeps || []) {
-          if (!src.includes(k)) fail(`适配层 ${a.file} 没有保留承诺的名字：${k}`);
+          if (!keepsName(src, k)) fail(`适配层 ${a.file} 没有保留承诺的名字：${k}`);
         }
       }
       for (const f of adapterFiles) {

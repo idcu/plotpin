@@ -68,7 +68,7 @@ bench 的 Node 桩数据替代**——两者的场景、渲染器与绝对值不
 
 | 产物 | 入库 | 判据 |
 |---|---|---|
-| `ngm.vendor/` | ✅（`linkMode: copy`，部署机不联网） | `scripts/check-ngm.mjs` 三角对账（vendor ↔ ngm.json ↔ ngm.lock） |
+| `ngm.vendor/` | ✅（`linkMode: copy`，部署机不联网） | `scripts/check-ngm.mjs` 三角对账（vendor ↔ ngm.json ↔ ngm.lock）；适配层 `keeps` 以无空白规范形式登记，比对时剔除空白差异（`global.Dxf=` 与 `global.Dxf =` 等价），改名或删除导出仍会红 |
 | `ngm.mappings.json` | ✅ | 同上；它是依赖清单的投影，不入库就没有复现依据 |
 | `scripts/dist-manifest.json` | ✅（单文件发行包的哈希登记） | `scripts/build.mjs --check` 从源重建并比对 SHA256 / 字节数；改 js/css/index.html 后必须运行 `node scripts/build.mjs` 刷新 |
 | `dist/` 实体产物 | ❌（gitignore） | `scripts/build.mjs` 可重建；存在时 `--check` 额外逐字节比对 |
