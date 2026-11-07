@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · known-issues 复核与 K1 自动门禁
+
+- **Commit Hash**：本条提交（`fix(gate): SW 缓存版本以 git HEAD 为基线强制递增`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **复核分类（K 类与未关闭项）**
+  - 代码可修复：**K1**（SW 缓存版本无自动门禁）→ 本轮修复并关闭。
+  - 仅文档口径（保留）：K2/K3/K6/K7/K9/K10/K12——均为已量化取舍；只核对文档与实测一致，未改代码、未降级口径。
+  - 需外部条件（保留）：K4（CAD 转换）、K5（上游二维码编码器固定 Version 3-M，`MAX_BYTES=42` 有 selftest 断言）、K8（DXF/浏览器格式与人工观感）、M1–M8（真机/跨浏览器/双设备/真实语料/GPU）。
+  - 未把任何真实缺陷改判为「已知限制」；K1 关闭依据见下。
+- **核心改动点**
+  - 新增 `scripts/check-sw.mjs`：以 `git HEAD:sw.js` 为上一版基线，计算 `index.html` 自身 + 其引用的脚本/样式/resource 为预缓存输入；这些文件相对 HEAD 有改动（含未跟踪新文件）时 `VERSION` 必须严格递增，版本回退直接报错；非 git 或无 HEAD 时明确打印跳过。
+  - `scripts/check.mjs` 增加第 12 步常驻执行（不依赖 `--selftest`），最终通过行补「SW 缓存版本守约」。
+  - `scripts/check-gates.mjs` 新增第 6 场景：临时副本内 `git init` 并以预缓存文件建基线，随后改 `js/core/render.js` 但不 bump，断言 `check-sw.mjs` 退出码非 0；控制台计数改为按 `scenarios.length`。
+  - 文档同步：`docs/known-issues.md` K1 关闭 + 新增「3.1 复核分类」；`docs/engineering.md` 从「故意不设门禁」移除 SW 行并补门禁说明，命令清单 5→6；`docs/testing.md` 无新增 spec（既有 `sw.spec.mjs` 下限断言不变）。
+  - 未改 `sw.js` 运行时逻辑、未 bump `VERSION`（本次无预缓存输入变更）；未新增依赖、未改公共 API。
+- **验证数据（本机，退出码均为 0）**
+  - `node scripts/check-sw.mjs`：`VERSION=3`，预缓存输入变更 0 个，HEAD=3，通过。
+  - `node scripts/check.mjs --selftest`：2706 通过 / 0 失败（44 个脚本）；i18n 42.02% / 缺口 0 / UI 硬编码 1；SW 门禁通过。
+  - `node scripts/check-gates.mjs`：**6/6** 人为破坏全部被拦截；第 6 场景输出「预缓存输入已变更但 VERSION 未递增（HEAD=3，当前=3）」退出码 1。
+  - `node scripts/build.mjs --check`：**786,029 B（767.6 KB）/ gzip 244,204 B**，SHA256 `178927cf…` 不变；scripts 不进入单文件产物，体积增量 **0 B**。
+- **遗留 / 风险**
+  - 门禁以 git 为事实源：脱离 git 的解压包会跳过该步（已在输出中明示），CI 与日常提交在仓库内照常生效。
+  - 预缓存输入按 `index.html` 引用解析；只改运行时未引用的脚本不会触发版本要求（与 SW 实际缓存范围一致）。
+  - 未 push；未触碰 `camera-*`。
+
 ## 2026-11-07 · 清单页平移/旋转输入框布局
 
 - **Commit Hash**：本条提交（`fix(list): 加宽清单页平移/旋转输入框并适配触控`）；完整哈希见 `git log HEAD` 与本次汇报。

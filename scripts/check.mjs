@@ -13,6 +13,7 @@
  * 9) 模块分层：js/ 下只允许 common/core/features，且加载顺序按层非递减（docs/modules.md）
  * 10) --selftest：显式执行逻辑层自测并把退出码纳入本门禁（CI 必须传）
  * 11) --selftest：i18n 覆盖率门禁（scripts/i18n-scan.mjs --check，D-11）
+ * 12) Service Worker 缓存版本：预缓存输入相对 HEAD 变更时 VERSION 必须递增（K1）
  *
  * 用法：node scripts/check.mjs [--selftest]
  */
@@ -130,9 +131,15 @@ if (withSelftest) {
   else console.log(`  [门禁] i18n 已执行：${i18nTail}`);
 }
 
+/* 12. Service Worker 缓存版本门禁（K1）：预缓存输入变更时必须递增 VERSION */
+const sw = spawnSync(process.execPath, [join(root, 'scripts', 'check-sw.mjs')], { encoding: 'utf8' });
+const swTail = (sw.stdout || '').trim().split('\n').pop() || (sw.stderr || '').trim().split('\n').pop() || '';
+if (sw.status !== 0) errors.push('SW 缓存版本门禁未通过：\n' + (sw.stdout || sw.stderr || '').trim());
+else console.log(`  [门禁] SW 缓存版本已执行：${swTail}`);
+
 if (errors.length) {
   console.error('❌ 工程自检未通过：');
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、i18n 覆盖率守约`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、i18n 覆盖率守约、SW 缓存版本守约`);

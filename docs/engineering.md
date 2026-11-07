@@ -13,7 +13,7 @@
 ## 1. 命令：`npm run ci`（CI 同一条）
 
 ```
-node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 → 断言数 → 契约 → API → 分层 → 自测 → i18n
+node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 → 断言数 → 契约 → API → 分层 → 自测 → i18n → SW 缓存版本
         ├── scripts/badge.mjs --check        断言数三处一致（README 徽章/正文/命令注释）
         ├── scripts/check-contracts.mjs --selftest   契约判据 + 判据自己会红
         ├── scripts/check-plugin-api.mjs --selftest  API 面 + 解析器会红
@@ -21,7 +21,7 @@ node scripts/check.mjs --selftest   语法 → 入口资源 → 离线承诺 →
         └── scripts/i18n-scan.mjs --check   i18n 覆盖率 ≥40% / 缺口 ≤10 / UI 文案硬编码 ≤20（口径见 testing.md）
 node scripts/bench.mjs              渲染基准（avg / P95 / 重建 / heapUsed / 裁剪 / 覆盖率阈值）
 node scripts/build.mjs --check      源重建 ↔ scripts/dist-manifest.json 登记哈希比对
-node scripts/check-gates.mjs        门禁牙齿：5 种人为破坏必须让对应门禁非 0
+node scripts/check-gates.mjs        门禁牙齿：6 种人为破坏必须让对应门禁非 0
 node scripts/e2e.mjs               浏览器级功能测试（可选，devDependency；**不在 ci 路径**）
 node scripts/perf-browser.mjs      真实浏览器性能基线（可选；**不在 ci 路径**，见 [performance.md](performance.md) §5.4）
 ```
@@ -249,13 +249,16 @@ Worker 是**隔离边界**而不是完整语言级沙箱——插件仍可访问
 
 | 项 | 为什么不设 | 现在的做法 |
 |---|---|---|
-| Service Worker 的 `CACHE` 版本号 | "改了 js 就必须 bump"没有可读的事实源：SW 的预缓存清单在运行时从 `index.html` 解析，构建期不知道"上一版是什么" | 靠发布纪律 + `sw.js` 注释；`pwa.test.mjs` 只守下限（版本号格式与 ≥ 基线） |
 | 英文文案的**质量** | 判据只能证明"键在、非空"，证明不了译文准确；D-11 覆盖率门禁只守数量与可达性 | selftest 覆盖"全量中英文案"路径；`i18n-scan --check` 守 ≥40% / 缺口 ≤10 / UI 未字典化 ≤20；语义由评审看 |
 | 渲染性能的**真实设备基线** | 真机 GPU / 不同 DPI 的组合无法在离线 CI 里稳定复现；绝对阈值只能说明“这台机器上没退化”，证明不了所有用户设备流畅 | Node 桩下已有阻断门禁（§5.1）；真实浏览器基线（[performance.md](performance.md) §5.4）在 Chromium headless + SwiftShader 上可重复采集，但默认不进 `npm run ci`，数据不得与 bench 混用 |
 | 插件 API 的**向后兼容** | 版本号与能力集合已有矩阵门禁；键的**语义/行为**兼容仍无法用键集合证明，破坏性变更只能靠评审 | D-06 起：selftest/e2e 固化 1.0→1.1、1.2/2.0/畸形矩阵；`npm run api` 校验契约描述与代码同源；破坏性变更写进 README |
 
 **这一节比上面几节更重要**：把"没有判据"的区域写出来，读者才不会把绿色的
 `npm run ci` 当成"全部保证"。
+
+> 2026-11-07 起，Service Worker 的 `CACHE` 版本号已移出本节：`scripts/check-sw.mjs` 以 git HEAD
+> 为上一版基线，预缓存输入（`index.html` 及其引用的脚本/样式/资源）改动时强制 `VERSION` 递增，
+> 并在 `check-gates.mjs` 第 6 场景验证会红。SW 运行时仍从 `index.html` 动态解析清单，行为不变。
 
 ### 5.1 阻断阈值与门禁牙齿（A-13）
 
@@ -482,9 +485,9 @@ F2 西门子 `SM-9` ×2 @900 = 1,800；合计数量 **6**、合计金额 **5,750
 往返；**Excel/WPS 人工打开未验证**（只验证 OOXML 结构与数值往返）。详见 CHANGELOG.internal.md。
 
 **门禁牙齿（`npm run gates`）**：上面这些判据本身也会假绿（只打印不比对、缺文件退 0、
-模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 5 种破坏——
-P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败——
-断言对应门禁全部非 0 退出。它不碰仓库本身，也不依赖任何第三方包。
+模板缺失空操作）。`scripts/check-gates.mjs` 在系统临时目录的整仓副本里构造 6 种破坏——
+P95 超标、`dist` 产物篡改、`ngm.json` 缺失、README 断言数模板缺失、selftest 失败、
+预缓存输入变更但 SW 版本未递增——断言对应门禁全部非 0 退出。它不碰仓库本身，也不依赖任何第三方包。
 
 ### 5.2 浏览器级测试（A-14，可选）
 

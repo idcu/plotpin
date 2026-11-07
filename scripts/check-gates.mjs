@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* check-gates.mjs —— 门禁的牙齿：在临时副本里构造 5 种人为破坏，断言对应门禁会红
+/* check-gates.mjs —— 门禁的牙齿：在临时副本里构造 6 种人为破坏，断言对应门禁会红
  *
  * 为什么需要它：门禁脚本本身也会假绿（只打印不比对、缺文件退 0、模板缺失空操作）。
  * 一条从未红过的判据，与没有判据的区别只在于它更贵。这里把「会红」这件事本身做成判据：
@@ -9,12 +9,13 @@
  *   3. ngm.json 缺失                → node scripts/check-ngm.mjs      必须非 0
  *   4. README 断言数模板被删除      → node scripts/badge.mjs --check  必须非 0
  *   5. selftest 人为失败            → node scripts/check.mjs --selftest 必须非 0
+ *   6. 预缓存输入变更但 SW 版本未升  → node scripts/check-sw.mjs      必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
  * 用法：node scripts/check-gates.mjs
  */
-import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, unlinkSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -110,10 +111,29 @@ const scenarios = [
       writeFileSync(p, text.replace('/* ---------------- 结果汇总 ---------------- */',
         "eq('门禁牙齿-人为失败', 1, 2);\n\n/* ---------------- 结果汇总 ---------------- */"));
     }
+  },
+  {
+    name: '预缓存输入变更但 SW 版本未递增',
+    expected: 'node scripts/check-sw.mjs 退出码非 0',
+    args: ['scripts/check-sw.mjs'],
+    sabotage(dir) {
+      /* check-sw 以 git HEAD 为上一版基线；临时副本不含 .git，这里只提交预缓存相关文件作为基线 */
+      const git = (args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+      const init = git(['init', '-q']);
+      if (init.status !== 0) throw new Error('临时仓库 git init 失败：' + tail(init));
+      const paths = ['sw.js', 'index.html', 'manifest.webmanifest', 'icon.svg', 'css', 'js']
+        .filter(p => existsSync(join(dir, p)));
+      const add = git(['add', '--', ...paths]);
+      if (add.status !== 0) throw new Error('临时仓库 git add 失败：' + tail(add));
+      const commit = git(['-c', 'user.name=gate', '-c', 'user.email=gate@local', 'commit', '-q', '-m', 'baseline']);
+      if (commit.status !== 0) throw new Error('临时仓库 git commit 失败：' + tail(commit));
+      appendFileSync(join(dir, 'js', 'core', 'render.js'),
+        '\n/* 门禁牙齿：预缓存输入变更但 VERSION 未递增 */\n');
+    }
   }
 ];
 
-console.log('门禁牙齿自测（5 种人为破坏，均在临时副本中构造，不改动仓库）');
+console.log(`门禁牙齿自测（${scenarios.length} 种人为破坏，均在临时副本中构造，不改动仓库）`);
 const failures = [];
 let tempDirs = [];
 try {
