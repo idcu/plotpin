@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 字典体积无损回收
+
+- **Commit Hash**：本条提交（`perf(size): 回收未被引用的字典条目与重复 CSS 规则`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **回收口径**：只删「在 `js/**`（除 `i18n.js` 本身）与 `index.html` 中不存在任何字面量/文本引用，且不含动态拼接片段」的条目；对含拼接片段（`上移`/`在此`/` X（米，可为负）`/` m` 等）的 21 条节点·顶点类 key 一律保留，避免英文界面回退中文。
+- **逐项回收（实测）**
+  - PHRASES：**31 条**，条目文本（key+英文+引号分隔，UTF-8）**−3,035 B**；旧场地/协作/校准文案与旧拼接片段，如 `已批量旋转`、`已连接，开始实时同步`、`比例尺校准需要先载入图片底图`、`：半径 `。998 → 967。
+  - TEMPLATES：**1 条**（`当前：{desc}`，源码已改用 `当前：` + 值拼接），条目文本 **−36 B**。112 → 111。
+  - DICT.zh/en：**7 键**（`savePending` / `saveSaved` / `saveAuto` / `saveManual` / `cursorPrefix` / `toolSelectHint` / `ariaLabels`，均无 `data-i18n` 或 `I18N.t()` 调用方），中英合计 **−611 B**。200 → 193。
+  - CSS：`.brand` 两条规则合并为一（`font-size` 15→16 的覆盖合并进主规则，级联结果不变），**−25 B**。
+  - 合计：条目文本 −3,682 B + 被删缩进/换行 −189 B = `i18n.js` 源码 **−3,871 B**（LF 归一）；`style.css` **−25 B**；经构建期 minify 后单文件产物 **786,995 → 783,226 B（−3,769 B）**，gzip **244,529 → 243,688 B（−841 B）**。
+- **实测数据（本机，退出码均为 0）**
+  - `node scripts/selftest.mjs`：**2706 通过 / 0 失败**，45 个脚本；8 种导出 golden 逐字节不变。
+  - `node scripts/i18n-scan.mjs --json`：覆盖率 **46.16%**（与回收前一致）、缺口 **0**、`uiCopy` **1**、`templateCopy` **0**；PHRASES 967 / TEMPLATES 111 / DICT.zh 193。
+  - `node scripts/check.mjs --selftest`：全部门禁通过；SW 门禁 `VERSION=6`（预缓存输入变更 2 个，HEAD=5）。
+  - `node scripts/check-gates.mjs`：**7/7** 人为破坏均被拦截。
+  - `node scripts/e2e.mjs`：**90 tests → 89 passed / 1 skipped / 0 failed**（1.9m）。
+  - `node scripts/build.mjs --check`：**783,226 B（764.9 KB）/ gzip 243,688 B**；较上一版 **−3,769 B**（gzip **−841 B**），距 839,680 B 上限余 **56,454 B**。
+- **遗留 / 风险**
+  - 21 条动态拼接 key 未删（`L('上移'+nodeLabel)` 等运行时拼 key，静态扫描无法证明未引用）；后续若把拼接改为 `TEMPLATES` 整句，可再评估回收。
+  - 删除的 PHRASES 对第三方插件若硬编码同名字符串，英文界面将回退中文；内置代码路径已逐一确认无引用。
+  - `sw.js VERSION 5 → 6`（`i18n.js` / `style.css` 属预缓存输入，按 K1 门禁递增）。
+  - 未 push；未触碰 `camera-*`。
+
 ## 2026-11-07 · i18n 扫描模板内中文盲区（D-15）
 
 - **Commit Hash**：本条提交（`fix(i18n): 模板内中文纳入扫描并新增零硬编码门禁`）；完整哈希见 `git log HEAD` 与本次汇报。

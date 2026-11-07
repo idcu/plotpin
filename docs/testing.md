@@ -27,7 +27,7 @@
 | `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
 | `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
 | `i18n-template.spec.mjs` | B-14：切换英文后顶栏导出按钮为 `Export`；`L('已粘贴 {n} 个对象',{n:3})` 经 `toast` 输出 `Pasted 3 objects`、表格导入整句输出英文；把 `<img src=x onerror=...>` 作为文件名参数注入，toast 内 `childTags=0` 且 `window.__xss` 未触发（`textContent` 边界不引入注入面） |
-| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v5` 且预缓存 50 条（实测输出 `entries:50`，旧文档的 46 为陈旧计数） → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
+| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v6` 且预缓存 50 条（实测输出 `entries:50`，旧文档的 46 为陈旧计数） → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
 | `mobile.spec.mjs` | B-15：390×844 / DPR3 / touch 移动模拟下 `viewport-fit=cover`、画布 `touch-action:none`、工具栏命中区 ≥44px、☰ 侧栏开合并可点空白关闭、点工具轻触画布落点；同一次运行输出 2000 对象的移动与桌面重建/缓存帧/首屏数据，断言仅作宽松防回归 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
 | `coverage.spec.mjs` | A-11：覆盖率 v2 固定格数口径跨 zoom 0.25/1/4/16 差异 ≤1pp、隐藏对象/图层退出分母、盲区 GeoJSON 下载、布点优化应用后重跑闭环 |
@@ -102,7 +102,12 @@ D-15 起：含插值的模板串按 `${...}` 拆成静态片段；无插值的 H
 PHRASES 998 / TEMPLATES 112 / DICT.zh 200）。新增 7 条 PHRASES 与 4 处模板接入 `L()` 后，
 `ui-shell` / `ui-panels` / `render` 的模板内中文全部转为已字典化。
 
-**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v5`），
+**字典体积回收（2026-11-07）**：删除未被任何 `js/**` / `index.html` 字面量引用的 31 条 PHRASES、
+1 条 TEMPLATES 与 7 条 DICT 键（`savePending/saveSaved/saveAuto/saveManual/cursorPrefix/toolSelectHint/ariaLabels`）；
+节点/顶点类动态拼接 key（`L('上移'+nodeLabel)` 等）全部保留。实测 PHRASES **967**、TEMPLATES **111**、
+DICT.zh **193**，覆盖率仍为 **46.16%**（缺口 0 / `uiCopy` 1 / `templateCopy` 0），门禁门槛未变。
+
+**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v6`），
 `activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本清单从 `index.html` 解析，新增脚本无需手工维护。
 安装用 `Promise.allSettled` 逐项 `cache.add`，单个 404 不会让新版本永远装不上；安装/激活失败时旧版本继续
 服务。`fetch` 网络优先（在线始终取最新，避免旧缓存卡住升级），离线回退缓存，导航请求 `ignoreSearch` 回退
