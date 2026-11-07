@@ -167,11 +167,22 @@ function renderLayers(){
   $('layerList').querySelectorAll('[data-layer-rename]').forEach(b=>b.onclick=async()=>{
     const l=getLayer(b.dataset.layerRename); const v=await showPrompt({title:L('重命名图层'),label:L('名称'),value:l.name}); if(v){ pushHistory(); l.name=v; commitChange(); }
   });
-  $('layerList').querySelectorAll('[data-layer-delete]').forEach(b=>b.onclick=()=>{
+  $('layerList').querySelectorAll('[data-layer-delete]').forEach(b=>b.onclick=async()=>{
     const l=getLayer(b.dataset.layerDelete);
+    if(!l) return;
     if(state.layers.length===1) return toast('至少保留一个图层','warn');
-    if(state.objects.some(o=>o.layerId===l.id)) return toast('请先移走该图层下的对象','warn');
-    pushHistory(); state.layers=state.layers.filter(x=>x.id!==l.id); commitChange('已删除图层');
+    /* N-08：跨楼层检查引用；有引用时显式确认并迁移到默认图层，避免其他楼层悬空 */
+    const refs=floorRefs(o=>o.layerId===l.id);
+    const target=state.layers.find(x=>x.id!==l.id&&x.id==='layer.default')||state.layers.find(x=>x.id!==l.id);
+    if(refs.length){
+      const total=refs.reduce((n,r)=>n+r.count,0);
+      const ok=await showConfirm(L('图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？',
+        {layer:l.name,floors:refs.length,count:total,target:target.name}));
+      if(!ok) return;
+    }
+    pushHistory();
+    if(refs.length) state.floors.forEach(f=>(f.objects||[]).forEach(o=>{ if(o&&o.layerId===l.id) o.layerId=target.id; }));
+    state.layers=state.layers.filter(x=>x.id!==l.id); commitChange('已删除图层');
   });
 }
 function getLayer(id){ return state.layers.find(l=>l.id===id); }
@@ -195,10 +206,22 @@ function renderTypes(){
   $('typeList').querySelectorAll('[data-type-rename]').forEach(b=>b.onclick=async()=>{
     const t=state.objectTypes.find(x=>x.id===b.dataset.typeRename); const v=await showPrompt({title:L('重命名类型'),label:L('名称'),value:t.name}); if(v){ pushHistory(); t.name=v; commitChange(); }
   });
-  $('typeList').querySelectorAll('[data-type-delete]').forEach(b=>b.onclick=()=>{
+  $('typeList').querySelectorAll('[data-type-delete]').forEach(b=>b.onclick=async()=>{
     const t=state.objectTypes.find(x=>x.id===b.dataset.typeDelete);
-    if(state.objects.some(o=>o.typeId===t.id)) return toast('该类型仍被对象使用','warn');
-    pushHistory(); state.objectTypes=state.objectTypes.filter(x=>x.id!==t.id); commitChange('已删除类型');
+    if(!t) return;
+    /* N-08：跨楼层检查引用；有引用时显式确认并迁移到同类内置类型，避免其他楼层悬空 */
+    const refs=floorRefs(o=>o.typeId===t.id);
+    const target=state.objectTypes.find(x=>x.id===defaultTypeId(t.kind)&&x.id!==t.id);
+    if(refs.length&&!target) return toast('该类型仍被对象使用，且没有可迁移的同类内置类型','warn');
+    if(refs.length){
+      const total=refs.reduce((n,r)=>n+r.count,0);
+      const ok=await showConfirm(L('类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？',
+        {type:typeDisplayName(t),floors:refs.length,count:total,target:typeDisplayName(target)}));
+      if(!ok) return;
+    }
+    pushHistory();
+    if(refs.length) state.floors.forEach(f=>(f.objects||[]).forEach(o=>{ if(o&&o.typeId===t.id) o.typeId=target.id; }));
+    state.objectTypes=state.objectTypes.filter(x=>x.id!==t.id); commitChange('已删除类型');
   });
 }
 $('addTypeBtn').onclick=async()=>{

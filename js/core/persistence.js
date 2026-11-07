@@ -405,6 +405,25 @@ function currentFloor(){
   return (state.floors||[]).find(f=>f.id===state.activeFloorId)||null;
 }
 function currentFloorName(){ const f=currentFloor(); return f?f.name:'1F'; }
+/** 楼层名归一：增删改、重命名与表格导入共用同一口径（去首尾空白、截断 40 字符） */
+function normalizeFloorName(name){ return String(name==null?'':name).trim().slice(0,40); }
+/** 楼层名是否已被占用（exceptId 用于重命名自身）；精确比较，与导入首行匹配口径一致 */
+function floorNameTaken(name, exceptId){
+  const nm=normalizeFloorName(name);
+  if(!nm) return false;
+  return (state.floors||[]).some(f=>f&&f.id!==exceptId&&normalizeFloorName(f.name)===nm);
+}
+/** 全楼层引用统计：返回 [{id,name,count}]（仅 count>0），供删除图层/类型前的跨楼层检查 */
+function floorRefs(pred){
+  syncActiveFloor();
+  const out=[];
+  (state.floors||[]).forEach(f=>{
+    const objs=Array.isArray(f.objects)?f.objects:[];
+    const count=objs.filter(o=>o&&pred(o)).length;
+    if(count) out.push({id:f.id,name:f.name,count});
+  });
+  return out;
+}
 function floorObjectCount(f){
   return f&&f.id===state.activeFloorId?state.objects.length:(f&&Array.isArray(f.objects)?f.objects.length:0);
 }
@@ -485,9 +504,11 @@ async function withFloor(id, fn){
 /** 新增楼层：空白矢量场地；当前楼层数据先写回再创建 */
 async function addFloor(name){
   syncActiveFloor();
-  pushHistory();
   const n=(state.floors||[]).length+1;
-  const nm=(String(name||'').trim()||('F'+n)).slice(0,40);
+  const nm=normalizeFloorName(name)||('F'+n);
+  /* N-08：楼层名必须唯一（导入按名称定位楼层）；查重先于 pushHistory，重复尝试不污染撤销栈 */
+  if(floorNameTaken(nm)) return null;
+  pushHistory();
   const init=createInitialState();
   const id='floor_'+uid('F');
   state.floors.push({id,name:nm,updatedAt:nowISO(),background:init.background,site:init.site,objects:[],viewport:init.viewport});
@@ -518,11 +539,12 @@ async function deleteFloor(id){
   }else commitChange('已删除楼层');
   return true;
 }
-/** 重命名楼层 */
+/** 重命名楼层：空名/同名不生效，与既有楼层重名时拒绝（N-08） */
 function renameFloor(id,name){
   const f=(state.floors||[]).find(x=>x.id===id);
-  const nm=String(name||'').trim().slice(0,40);
+  const nm=normalizeFloorName(name);
   if(!f||!nm||nm===f.name) return false;
+  if(floorNameTaken(nm,id)) return false;
   pushHistory(); f.name=nm; commitChange('楼层已重命名');
   return true;
 }
@@ -778,12 +800,14 @@ function buildProject(p){
     const tombstones=sanitizeTombstones(p.tombstones);
     /* 楼层：当前楼层数据取顶层 background/site/objects；其余楼层各自清洗并保留 */
     const rawFloors=Array.isArray(p.floors)?p.floors.filter(f=>f&&typeof f==='object'):[];
-    const floors=[]; const seenFloor=new Set();
+    const floors=[]; const seenFloor=new Set(); const seenFloorNames=new Set(); let dupFloorName=0;
     rawFloors.forEach((f,i)=>{
       const id=safeId(f.id||('FLOOR'+(i+1)),'FLOOR');
       if(seenFloor.has(id)) return;
       seenFloor.add(id);
-      const name=(String(f.name||('F'+(i+1))).trim()||('F'+(i+1))).slice(0,40);
+      const name=normalizeFloorName(f.name||('F'+(i+1)))||('F'+(i+1));
+      /* N-08：旧工程可能已有重名楼层，加载只告警不阻断、不改名（不静默改数据） */
+      if(seenFloorNames.has(name)) dupFloorName++; else seenFloorNames.add(name);
       /* v1→v2：保留已有楼层时间；旧档缺失时写空串，避免迁移瞬间把旧楼层当成最新写入 */
       const updatedAt=typeof f.updatedAt==='string'?f.updatedAt:'';
       const entry={id,name,updatedAt};
@@ -801,6 +825,9 @@ function buildProject(p){
     if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
     if(report.duplicateIds||report.normalizedIds||report.duplicateNames){
       if(typeof console!=='undefined'&&console.warn) console.warn('[sanitize] 对象唯一性修正',report);
+    }
+    if(dupFloorName&&typeof console!=='undefined'&&console.warn){
+      console.warn('[sanitize] 楼层重名 '+dupFloorName+' 个，已保留原名；导入前请先重命名');
     }
     /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
     return Object.assign(base,p,{schema:SCHEMA,meta,settings,rules:normalizeRuleConfig(p.rules),background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});

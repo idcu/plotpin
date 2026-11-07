@@ -57,6 +57,7 @@ function openFloorManager(){
     if(v===null) return;
     const id=await addFloor(v);
     if(id){ closeModal(); openFloorManager(); toast(L('已新增楼层：{name}',{name:currentFloorName()}),'success'); }
+    else toast(L('楼层名称「{name}」已存在，请换一个名称',{name:v}),'warn');
   };
   document.querySelectorAll('.proj-row[data-floor]').forEach(row=>{
     row.querySelectorAll('button[data-fop]').forEach(btn=>btn.onclick=async()=>{
@@ -70,6 +71,7 @@ function openFloorManager(){
           const v=await showPrompt({title:L('重命名楼层'),label:L('楼层名称'),value:f?f.name:''});
           if(v===null) return;
           if(renameFloor(id,v)){ closeModal(); openFloorManager(); }
+          else if(v!==(f?f.name:'')) toast(L('楼层名称「{name}」已存在，请换一个名称',{name:v}),'warn');
         }else if(op==='del'){
           const f=floors.find(x=>x.id===id);
           const ok=await showConfirm(L('确定删除楼层「{name}」及其全部对象？此操作可撤销。',{name:(f?f.name:id)}));

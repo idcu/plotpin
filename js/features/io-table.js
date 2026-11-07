@@ -234,7 +234,17 @@ function rowsToObjectsPlan(rows){
   const floors=(state.floors||[]).map(f=>({id:f.id,name:f.name,active:f.id===state.activeFloorId,objects:Array.isArray(f.objects)?f.objects:[]}));
   const current=floors.find(f=>f.active);
   if(!current) floors.push({id:state.activeFloorId||'',name:currentFloorName(),active:true,objects:state.objects});
-  const floorByName=new Map(floors.map(f=>[String(f.name||'').trim(),f]));
+  /* N-08：楼层名重复则「楼层」列无法定位目标，整批拒绝（errors 通道 → 预览不提供合并导入） */
+  const floorNameSeen=new Set(), floorNameDup=new Set();
+  floors.forEach(f=>{
+    const nm=normalizeFloorName(f.name);
+    if(nm) (floorNameSeen.has(nm)?floorNameDup:floorNameSeen).add(nm);
+  });
+  if(floorNameDup.size){
+    floorNameDup.forEach(nm=>errors.push('楼层名称「'+nm+'」重复，无法确定导入目标楼层；请先重命名楼层后重新导入（本批未生效）'));
+    return {updates:[],creates:[],replaces:[],warnings,errors,strict};
+  }
+  const floorByName=new Map(floors.map(f=>[normalizeFloorName(f.name),f]));
   const codeMaps=new Map(floors.map(f=>[f.id,new Map((f.objects||[]).map(o=>[o.name,o]))]));
   const updates=[],creates=[],replaces=[];
   const problem=msg=>{ (strict?errors:warnings).push(msg); };

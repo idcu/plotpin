@@ -89,3 +89,32 @@ test('B-08：非法行整批拒绝，现有对象不被修改', async ({ page })
   expect(after).toEqual(before);
   expect(errors).toEqual([]);
 });
+
+test('N-08：楼层重名时表格导入整批拒绝，现有数据不变', async ({ page }) => {
+  const errors = await openApp(page);
+  await seedTwoPoints(page);
+  await page.evaluate(() => {
+    state.floors.push({ id: 'floor.dup', name: '1F', objects: [], updatedAt: '' });
+    refreshUI();
+  });
+  const before = await page.evaluate(() => ({
+    count: state.objects.length, floors: state.floors.length, first: state.objects[0].text
+  }));
+
+  const header = ['操作', '编号', '对象类型', 'X', 'Y', '楼层'];
+  await page.setInputFiles('#fileInput', {
+    name: 'dup-floor.csv', mimeType: 'text/csv',
+    buffer: Buffer.from(csv([header, ['新增', '', '点设备', '10', '20', '1F']]), 'utf8')
+  });
+  await expect(page.locator('#modalBackdrop')).toHaveClass(/show/);
+  await expect(page.locator('#modalTitle')).toContainText('无法导入');
+  await expect(page.locator('#modalBody')).toContainText('整批取消导入');
+  await expect(page.locator('#modalFooter button', { hasText: '合并导入' })).toHaveCount(0);
+  await page.locator('#modalFooter button', { hasText: '知道了' }).click();
+
+  const after = await page.evaluate(() => ({
+    count: state.objects.length, floors: state.floors.length, first: state.objects[0].text
+  }));
+  expect(after).toEqual(before);
+  expect(errors).toEqual([]);
+});

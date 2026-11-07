@@ -2,6 +2,31 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-08 楼层名唯一化与跨楼层引用检查
+
+- **Commit Hash**：N-08 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/core/persistence.js`：新增公共助手 `normalizeFloorName(name)`（去首尾空白 + 截断 40）、`floorNameTaken(name, exceptId)`（精确比较，重命名自身豁免）、`floorRefs(pred)`（`syncActiveFloor()` 后统计全部楼层引用，返回 `[{id,name,count}]`）。`addFloor` 先去重再 `pushHistory()`，重名返回 `null` 且不污染撤销栈；`renameFloor` 重名返回 `false` 且不改名。`buildProject` 清洗楼层时检测重名，只 `console.warn('[sanitize] 楼层重名 …')`，保留原名不阻断加载。
+  - `js/features/io.js`：楼层新增/重命名入口在数据层拒绝时 toast「楼层名称「{name}」已存在」；重命名输入与原值相同时不误报。
+  - `js/features/io-table.js`：`rowsToObjectsPlan` 在构建 `floorByName` 前检查归一楼层名重复；命中写入 `errors` 并返回空计划（`updates/creates/replaces` 全空），复用既有「整批取消导入」通道，事务化不落库。
+  - `js/features/ui-panels.js`：删除图层改为 `async`，用 `floorRefs(o=>o.layerId===l.id)` 跨楼层统计；有引用时 `showConfirm` 列出「引用楼层数 / 对象数 / 迁移目标」，确认后逐层迁移到 `layer.default`（否则第一个其他图层）再删除，取消则零改动。删除类型同理，迁移目标为 `defaultTypeId(t.kind)` 对应内置类型；无可用目标类型时拒绝。
+  - `scripts/selftest.mjs`：api 新增 `normalizeFloorName / floorNameTaken / floorRefs / addFloor / renameFloor`；新增 28.7 节 16 项断言（归一/占用/空名/自身豁免、重名新增被拒且楼层数不变、重名重命名被拒且名称不变、归一值落库、跨楼层图层/类型引用楼层数与对象数、导入重名整批拒绝且计划为空）。
+  - `tests/e2e/table-batch.spec.mjs`：新增「N-08」用例——构造两层同名后导入合法 CSV，断言弹窗「无法导入 / 整批取消导入」、无「合并导入」按钮，现有对象数量、首对象文本与楼层数不变。
+  - `sw.js`：`VERSION` 16 → 17；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步（49 个预缓存输入一致）。
+  - 文档：`docs/features.md`（楼层、表格导入、图层/类型限制）、`docs/user-guide.md`（楼层/图层/表格导入的常见坑与故障排查）、`docs/known-issues.md`（关闭 IO-P1-2、RT-P1-08，已修复 15 → 17，P1 20 → 18）、`docs/testing.md`（113 分区 / 2788 断言 / 34 spec / 99 用例，并同步 §3.2 陈旧计数）、`README.md` 数字口径。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：`floorNameTaken` 临时短路为 `return false` → selftest **2781 通过 / 7 失败**（占用判定、新增重名、楼层数、重命名拒绝、名称不变、归一落库、类型跨楼层计数）；恢复后改移除导入重名分支 → **2786 / 2 失败**（导入重名拒绝、拒绝时无新增）；两次均用 Edit 还原，最终 2788/0 全绿。
+  - `node scripts/check.mjs --selftest`：**2788 通过 / 0 失败**（113 分区，较 N-07 +16）；契约 7 项 0 违约；插件 API 23 键 0 泄漏；i18n 45.56%；SW `VERSION=17`。
+  - `node scripts/e2e.mjs`：**99 tests → 98 passed / 1 skipped / 0 failed**，N-08 新用例 1/1 通过。
+  - `node scripts/build.mjs --check`：**790,736 B（772.2 KB）/ gzip 245,453 B（240.0 KB）**，SHA256 `458a07fc…`，较 N-07 **+2,623 B**，余量 **48,944 B**（上限 839,680 B 未放宽）。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9 种破坏 9/9 拦截；`node scripts/check-discipline.mjs --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未对 e2e 新用例单独做负向先证；同一分支已由 selftest 负向先证覆盖。
+  - 未用超大工程（万级对象 × 多楼层）实测 `floorRefs` 的遍历耗时；当前为删除按钮触发的一次性 O(全楼层对象) 扫描。
+- **遗留风险**
+  - 旧工程的重名楼层只在加载时告警，不自动改名；此类工程每次表格导入都会被整批拒绝，需用户手动改名。
+  - 类型删除迁移会改变对象外观语义（同类内置类型），已在确认弹窗显式说明；协作对端若仍持有被删类型，下次合并按 LWW 收敛。
+
 ## 2026-11-08 · N-07 导入对象唯一性
 
 - **Commit Hash**：N-07 提交（哈希由 N-05~N-11 阶段末统一回填）。

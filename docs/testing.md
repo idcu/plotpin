@@ -12,8 +12,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **112 个分区 / 2,772 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **34 个 spec / 98 个用例**（默认 97 跑 + 1 条件跳过） | **否** |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **113 个分区 / 2,788 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **34 个 spec / 99 个用例**（默认 98 跑 + 1 条件跳过） | **否** |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 9 种人为破坏 | 是 |
 
@@ -79,11 +79,11 @@
 |---|---|
 | 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(3)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(4)、history-increment(4)、save-failure(2)、tab-lease(2)、snapshot(5) |
-| 协作 | collab(6)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(2)、title-block(1)、perf-render(1)、coverage(1) |
+| 协作 | collab(8)（含 1 个 soak 条件跳过） |
+| 导出与图面 | pdf-multipage(3)、title-block(1)、export-scope(2)、perf-render(1)、coverage(1) |
 | 符号与目录 | symbols(3)、catalog(1) |
-| 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(2) |
-| 插件 | plugin-sandbox(10)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
+| 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(3) |
+| 插件 | plugin-sandbox(13)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
 | 规则 | rules(1) |
 | 校准前置 | calibration-precheck(3)（只验入口可用性与提示，不拖手柄） |
 | 移动端/离线 | mobile(2)、sw(1) |
@@ -91,7 +91,7 @@
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
 
-合计 **90** 个用例、**33** 个 spec。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
+合计 **99** 个用例、**34** 个 spec。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 

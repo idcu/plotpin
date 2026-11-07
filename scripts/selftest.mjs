@@ -131,6 +131,7 @@ code += `\n;globalThis.__api = {
   markDirty, MARK_DIRTY_PROFILES,
   dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects,
   sanitizeObjects, sanitizeReport, safeId,
+  normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
@@ -1626,6 +1627,41 @@ await section("28.6 N-07 导入对象唯一性：重复 id / safeId 归并 / 重
   api.resetState();
 }
 
+});
+
+/* 28.7 N-08 楼层名唯一化与跨楼层引用检查 ---- */
+await section("28.7 N-08 楼层名唯一化与跨楼层引用检查", async () => {
+{
+  const st=api.resetState();
+  eq('N08-楼层名归一（去空白/截断）', api.normalizeFloorName('  A  '), 'A');
+  eq('N08-已存在名称判定', api.floorNameTaken('1F'), true);
+  eq('N08-空名不算占用', api.floorNameTaken('   '), false);
+  eq('N08-重命名自身豁免', api.floorNameTaken('1F','floor.default'), false);
+  const n=st.floors.length;
+  eq('N08-新增重名楼层被拒', await api.addFloor('1F'), null);
+  eq('N08-新增重名不改楼层数', st.floors.length, n);
+  st.floors.push({id:'floor.b',name:'2F',objects:[],updatedAt:''});
+  eq('N08-重命名为已存在名称被拒', api.renameFloor('floor.b','1F'), false);
+  eq('N08-重命名被拒后名称不变', st.floors[1].name, '2F');
+  ok('N08-重命名为新名称成功', api.renameFloor('floor.b',' 3F '));
+  eq('N08-重命名按归一值落库', st.floors[1].name, '3F');
+  /* 跨楼层引用统计：当前楼层 + 非当前楼层各 1 个对象 */
+  const a=api.baseObject('point','point.marker',{name:'A'});
+  st.objects.push(a);
+  const b=api.baseObject('point','point.marker',{name:'B'});
+  b.layerId='layer.other'; st.floors[1].objects.push(b);
+  eq('N08-跨楼层图层引用楼层数', api.floorRefs(o=>o.layerId==='layer.default').length, 1);
+  const trefs=api.floorRefs(o=>o.typeId==='point.marker');
+  eq('N08-跨楼层类型引用楼层数', trefs.length, 2);
+  eq('N08-跨楼层引用对象计数', trefs.reduce((s,r)=>s+r.count,0), 2);
+  /* 导入：楼层重名 → errors 且计划为空（事务化不落库） */
+  st.floors.push({id:'floor.c',name:'3F',objects:[],updatedAt:''});
+  const plan=api.rowsToObjectsPlan([['编号','对象类型','X','Y','楼层'],['','点设备','1','2','1F']]);
+  ok('N08-导入重名楼层整批拒绝', plan.errors.some(e=>e.includes('楼层名称')&&e.includes('重复')));
+  eq('N08-拒绝时无更新', plan.updates.length, 0);
+  eq('N08-拒绝时无新增', plan.creates.length, 0);
+  api.resetState();
+}
 });
 
 /* 29. 表格规划与应用：折线/测距/形状重建、基点平移、非法行告警 -------------- */
