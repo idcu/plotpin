@@ -2434,6 +2434,36 @@ asyncSuites.push((async()=>{
 
 });
 
+/* 37c. N-09 PDF 导入 CTM：曲线采样与文本坐标统一到设备空间 --------------- */
+await section("37c. N-09 PDF 导入 CTM：曲线与文本随 /cm 变换", async () => {
+asyncSuites.push((async()=>{
+  const obj=(n,body)=>n+' 0 obj\n'+body+'\nendobj\n';
+  /* 起点(10,10)、控制点(20,20)(30,30)(40,40)：t=0.5 采样在中点 25，终点 40 */
+  const base='10 10 m 20 20 30 30 40 40 c S\nBT /F1 12 Tf 5 7 Td (CTM) Tj ET\n';
+  const build=body=>{
+    let s='%PDF-1.4\n';
+    s+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+    s+=obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    s+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+    s+=obj(4,'<< /Length '+body.length+' >>\nstream\n'+body+'endstream');
+    return s;
+  };
+  const plain=await api.PdfRead.parsePdf(build(base));
+  const scaled=await api.PdfRead.parsePdf(build('q 2 0 0 2 0 0 cm\n'+base+'Q\n'));
+  const op=plain.paths[0].points, sp=scaled.paths[0].points;
+  approx('N09-无CTM曲线中点25', op[4][0], 25, 1e-9);
+  approx('N09-无CTM曲线终点40', op[8][0], 40, 1e-9);
+  approx('N09-CTM曲线中点50', sp[4][0], 50, 1e-9);
+  approx('N09-CTM曲线终点80', sp[8][0], 80, 1e-9);
+  approx('N09-无CTM文本x5', plain.texts[0].x, 5, 1e-9);
+  approx('N09-无CTM文本y7', plain.texts[0].y, 7, 1e-9);
+  approx('N09-CTM文本x10', scaled.texts[0].x, 10, 1e-9);
+  approx('N09-CTM文本y14', scaled.texts[0].y, 14, 1e-9);
+  eq('N09-文本内容不变', scaled.texts[0].text, 'CTM');
+})());
+
+});
+
 /* 38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区 ------------------- */
 await section("38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区", async () => {
 {

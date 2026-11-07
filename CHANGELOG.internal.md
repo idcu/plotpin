@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-09 修正 PDF 导入 CTM
+
+- **Commit Hash**：N-09 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/common/pdf-read.js`：贝塞尔 `c/v/y` 的三个控制点先经 `tx()` 变换到设备空间，再与已变换的 `cur` 一起插值，采样点不再二次变换；`cur` 直接取变换后的终点。此前 `cur` 是设备坐标、控制点是用户坐标，混算后再整体 `tx`，含 `/cm` 的曲线被放大两次。
+  - `js/common/pdf-read.js`：`interpretContent` 在主循环记录每个 `BT` 时刻的 CTM（`textCTMs`，与 `collectTJ` 的块序一一对应）；`collectTJ(content, ctms)` 把文本原点 `Tm[4]+dx, Tm[5]+dy` 再乘 CTM 后输出。此前只取 `Tm/Td`，`/cm` 文本不随图面缩放。
+  - `scripts/selftest.mjs`：新增 37c 节 9 项断言——最小 PDF 构造 `q 2 0 0 2 0 0 cm`，曲线中点/终点与文本坐标均为恒等 CTM 的 2 倍；无 `/cm` 的既有中点/终点/文本坐标不变；文本内容不变。夹具按既有 37/37b 的方式在用例内内联构造，未新增 fixture 文件。
+  - `sw.js`：`VERSION` 17 → 18；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步（49 个预缓存输入一致）。
+  - 文档：`docs/features.md` PDF 导入段改为「曲线与文字已统一到设备空间，字号未随 CTM 缩放」；`docs/known-issues.md` 关闭 IO-P1-5（已修复 17 → 18，P1 18 → 17）；`docs/testing.md` 114 分区 / 2797 断言；`README.md` 数字口径。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：临时恢复「采样点二次 `tx` + 文本不乘 CTM」→ selftest **2793 通过 / 4 失败**（CTM 曲线中点 50→100、终点 80→160、文本 x 10→5、y 14→7）；Edit 还原后 2797/0。
+  - `node scripts/check.mjs --selftest`：**2797 通过 / 0 失败**（114 分区，较 N-08 +9）；契约 7/0；插件 API 23/0；i18n 45.56%；SW `VERSION=18`。
+  - `node scripts/e2e.mjs`：**99 tests → 98 passed / 1 skipped / 0 failed**（2.2m），既有多页 PDF 用例不回退。
+  - `node scripts/build.mjs --check`：**790,931 B（772.4 KB）/ gzip 245,528 B（240.0 KB）**，SHA256 `402b02ee…`，较 N-08 **+195 B**，余量 **48,749 B**。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9/9；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未用真实 CAD 打印的含 `/cm` PDF 做端到端导入；判据为构造最小 PDF。
+  - 只构造了 2 倍缩放 CTM；旋转/斜切 CTM 走同一矩阵乘路径但无专门断言。
+  - 文本字号未乘 CTM（仅修正定位），已在 `docs/features.md` 标注为限制。
+- **遗留风险**
+  - 文本提取仍是正则近似（只取首个 `Tm` 与累计 `Td`），复杂排版 PDF 的逐字定位不保证；本条只承诺 `/cm` 场景。
+  - 若 PDF 在 `BT` 内再嵌套 `cm`（非标准用法），`textCTMs` 取的是 `BT` 时刻的 CTM。
+
 ## 2026-11-08 · N-08 楼层名唯一化与跨楼层引用检查
 
 - **Commit Hash**：N-08 提交（哈希由 N-05~N-11 阶段末统一回填）。

@@ -90,6 +90,7 @@ function interpretContent(str){
   const paths=[];
   const stack=[];
   const ctmStack=[];
+  const textCTMs=[];            /* 每个 BT 块的当前 CTM（与 collectTJ 的块序一一对应） */
   let m=ID;
   let sub=null;                 /* {pts:[],closed:false} */
   let cur=null;
@@ -108,22 +109,24 @@ function interpretContent(str){
     if(op==='q'){ ctmStack.push(m); }
     else if(op==='Q'){ m=ctmStack.pop()||ID; }
     else if(op==='cm'){ const a=nums(); m=mulCTM(m,[a[0],a[1],a[2],a[3],a[4],a[5]]); }
+    else if(op==='BT'){ textCTMs.push(m.slice()); }
     else if(op==='m'){ const a=nums(); finish(false); cur=tx([a[0],a[1]]); begin(cur); }
     else if(op==='l'){ const a=nums(); line(tx([a[0],a[1]])); }
     else if(op==='c'||op==='v'||op==='y'){
-      const a=nums(); let p1,p2,p3;
-      if(op==='c'){ p1=[a[0],a[1]]; p2=[a[2],a[3]]; p3=[a[4],a[5]]; }
-      else if(op==='v'){ p1=cur; p2=[a[0],a[1]]; p3=[a[2],a[3]]; }
-      else { p1=[a[0],a[1]]; p2=p1; p3=[a[2],a[3]]; }
+      const a=nums(); let P1,P2,P3;
+      /* N-09：控制点先变换到设备空间，插值全程不再与原始用户坐标混用 */
+      if(op==='c'){ P1=tx([a[0],a[1]]); P2=tx([a[2],a[3]]); P3=tx([a[4],a[5]]); }
+      else if(op==='v'){ P1=cur; P2=tx([a[0],a[1]]); P3=tx([a[2],a[3]]); }
+      else { P1=tx([a[0],a[1]]); P2=P1; P3=tx([a[2],a[3]]); }
       if(!sub||!cur) continue;
       const N=8;
       for(let k=1;k<=N;k++){
         const t=k/N, u=1-t;
-        const x=u*u*u*cur[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0];
-        const y=u*u*u*cur[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1];
-        line(tx([x,y]));
+        const x=u*u*u*cur[0]+3*u*u*t*P1[0]+3*u*t*t*P2[0]+t*t*t*P3[0];
+        const y=u*u*u*cur[1]+3*u*u*t*P1[1]+3*u*t*t*P2[1]+t*t*t*P3[1];
+        line([x,y]);
       }
-      cur=tx(p3);
+      cur=P3;
     }
     else if(op==='re'){ const a=nums(); finish(false); const [x,y,w,h]=a;
       const q=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
@@ -134,7 +137,7 @@ function interpretContent(str){
     else if(op==='n'){ sub=null; }
     /* BT..ET 文本在 collectTJ 中单独扫描，主循环不处理栈上字符串 */
   }
-  const texts=collectTJ(str);
+  const texts=collectTJ(str,textCTMs);
   /* 去重近重复文本（Tj 与 TJ 可能提取到同一串） */
   const seen=new Set(); const finalTexts=[];
   for(const t of texts){
@@ -152,12 +155,13 @@ function interpretContent(str){
   }).filter(p=>p.points.length>=2);
   return {paths:finalPaths,texts:finalTexts};
 }
-/* BT..ET 区间提取 Tj/TJ 文本（定位取最近 Tm；PDF 内嵌标准字体的拉丁字符可解，CID 字体丢弃） */
-function collectTJ(content){
+/* BT..ET 区间提取 Tj/TJ 文本（定位取最近 Tm/Td；N-09：文本原点再乘 BT 时的 CTM） */
+function collectTJ(content,ctms){
   const out=[];
-  const re2=/BT([\s\S]*?)ET/g; let mm;
+  const re2=/BT([\s\S]*?)ET/g; let mm, bi=0;
   while((mm=re2.exec(content))){
     const body=mm[1];
+    const ctm=ctms&&ctms[bi]?ctms[bi]:ID; bi++;
     let mat=ID, fs=1, dx=0, dy=0;
     const tmM=body.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+Tm/);
     if(tmM) mat=tmM.slice(1,7).map(Number);
@@ -180,7 +184,10 @@ function collectTJ(content){
       }
     }
     const text=parts.join('').replace(/\s+/g,' ').trim();
-    if(text&&!looksLikeCidGarbage(text)) out.push({x:mat[4]+dx,y:mat[5]+dy,size:fs,text});
+    if(text&&!looksLikeCidGarbage(text)){
+      const pos=applyCTM(ctm,[mat[4]+dx,mat[5]+dy]);
+      out.push({x:pos[0],y:pos[1],size:fs,text});
+    }
   }
   return out;
 }
