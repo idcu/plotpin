@@ -12,8 +12,8 @@ let ruleLastResult=null;
 function ruleNow(){ return (typeof performance!=='undefined'&&performance.now)?performance.now():Date.now(); }
 function ruleRound(v,d=1){ const n=Number(v); if(!Number.isFinite(n)) return 0; const p=Math.pow(10,d); return Math.round(n*p)/p; }
 
-/** 注册规则：返回 {ok,id} 或 {ok:false,reason}，不抛异常 */
-function registerRule(def){
+/** 注册规则：返回 {ok,id} 或 {ok:false,reason}，不抛异常；owner 为插件 id（受信任同源路径） */
+function registerRule(def,owner){
   const id=String(def&&def.id||'').trim();
   if(!/^[A-Za-z][A-Za-z0-9_.-]{1,39}$/.test(id)) return {ok:false,reason:'规则 id 非法（2–40 位，首字母开头）'};
   if(!def||typeof def.check!=='function') return {ok:false,reason:'规则缺少 check(ctx) 函数'};
@@ -23,6 +23,7 @@ function registerRule(def){
     name:String(def.name||id).slice(0,60),
     description:String(def.description||'').slice(0,200),
     builtin:false,
+    owner:String(owner||'').slice(0,64),
     check:def.check
   });
   return {ok:true,id};
@@ -37,7 +38,7 @@ function unregisterRule(id){
   return {ok:true,id:key};
 }
 function listRules(){
-  return Array.from(RULE_REGISTRY.values()).map(r=>({id:r.id,name:r.name,description:r.description,builtin:r.builtin}));
+  return Array.from(RULE_REGISTRY.values()).map(r=>({id:r.id,name:r.name,description:r.description,builtin:r.builtin,owner:r.owner||''}));
 }
 
 /* -------------------- 基础几何（纯函数，便于自测） -------------------- */
@@ -602,8 +603,11 @@ function renderRuleConfig(){
       '<input type="number" min="0" max="1000" step="0.1" data-rule-type-min="'+esc(t.id)+'" value="'+(on?esc(cfg.spacing.types[t.id]):'')+'" placeholder="未配置" style="width:86px">'+
       '<span class="hint-text">m</span></div>';
   }).join('');
+  const custom=listRules().filter(r=>!r.builtin);
+  const customRows=custom.length?'<div class="hint-text" style="margin:8px 0 2px">已注册规则（'+custom.length+'）</div>'+
+    custom.map(r=>'<div class="hint-text" style="margin:2px 0">'+esc(r.name)+' · 来源 '+esc(r.owner?'插件: '+r.owner:'页面脚本')+'</div>').join(''):'';
   box.innerHTML=
-    '<p class="hint-text" style="margin:0 0 8px">这是几何检查，不是消防/规范审图；不内置任何规范数值。</p>'+
+    '<p class="hint-text" style="margin:0 0 8px">这是几何检查，不是消防/规范审图；不内置任何规范数值。</p>'+customRows+
     '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleOverlapOn"'+(cfg.overlap.enabled?' checked':'')+'> 对象重叠，贴合容差 '+
       '<input type="number" min="0" max="1000" step="0.01" id="ruleOverlapTol" value="'+esc(cfg.overlap.tolerance)+'" style="width:74px"> m</label>'+
     '<label style="display:block;margin:6px 0"><input type="checkbox" id="ruleSpacingOn"'+(cfg.spacing.enabled?' checked':'')+'> 最小间距（按类型填写阈值；留空=不检查该类型）</label>'+

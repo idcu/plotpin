@@ -3983,9 +3983,10 @@ asyncSuites.push((async()=>{
 /* 57.1 插件 API 版本化与能力白名单（C-01） -------------------------------- */
 {
   const PP=api.PlotPin;
-  ok('插件-API 版本常量', PP.apiVersion==='1.0.0');
-  ok('插件-能力表冻结且七项', Object.isFrozen(PP.capabilities)&&Object.keys(PP.capabilities).length===7);
+  ok('插件-API 版本常量', PP.apiVersion==='1.1.0');
+  ok('插件-能力表冻结且八项', Object.isFrozen(PP.capabilities)&&Object.keys(PP.capabilities).length===8);
   ok('插件-能力表含五类核心能力', ['state:read','state:write','annotate','types','icons'].every(c=>!!PP.capabilities[c]));
+  ok('插件-rules 能力已声明（仅受信任路径）', !!PP.capabilities.rules);
   ok('插件-兼容声明 1.0', PP.checkPlugin({apiVersion:'1.0',capabilities:[]}).ok);
   ok('插件-拒绝主版本不兼容并给原因', (()=>{const r=PP.checkPlugin({apiVersion:'2.0',capabilities:[]});return !r.ok&&/主版本/.test(r.reason);})());
   ok('插件-拒绝缺失 apiVersion', (()=>{const r=PP.checkPlugin({capabilities:[]});return !r.ok&&/apiVersion/.test(r.reason);})());
@@ -4076,6 +4077,12 @@ asyncSuites.push((async()=>{
   eq('规则框架-异常不影响其他规则', run2.violations.filter(v=>v.ruleId==='test.flag').length, 1);
   ok('规则框架-注销自定义规则成功', api.unregisterRule('test.flag').ok && api.unregisterRule('test.throw').ok);
   eq('规则框架-注销后恢复三条内建', api.listRules().length, 3);
+  eq('规则框架-内建规则 owner 为空', api.listRules().find(r=>r.id==='overlap').owner, '');
+  ok('规则框架-注册 owner 来源可见', (()=>{
+    const r=api.registerRule({id:'test.owned',name:'插件规则',check(){return [];}}, 'demo.plugin');
+    return r.ok&&api.listRules().find(x=>x.id==='test.owned').owner==='demo.plugin';
+  })());
+  ok('规则框架-插件规则可注销', api.unregisterRule('test.owned').ok&&!api.listRules().some(r=>r.id==='test.owned'));
 }
 
 /* 57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨楼层 --------------------- */

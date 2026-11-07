@@ -15,6 +15,7 @@
  *   icons        自定义类型允许携带 symbol 图元（否则 symbol 一律拒绝）
  *   export       注册/执行导出器
  *   import       注册/执行导入器
+ *   rules        声明规则意图；沙箱不提供注册入口，规则只能经受信任同源路径注册
  */
 (function (global) {
   'use strict';
@@ -31,7 +32,7 @@
   const TYPE_SHAPES = ['none', 'circle', 'square', 'sector', 'bar'];
 
   /* -------------------- 版本与能力 ---------------------------------------- */
-  const PLUGIN_API_VERSION = '1.0.0';
+  const PLUGIN_API_VERSION = '1.1.0';
   const PLUGIN_CALL_TIMEOUT = 2000;   /* 单次调用/初始化上限，超时直接 terminate */
   const PLUGIN_CAPABILITIES = Object.freeze({
     'state:read': '读取工程对象快照',
@@ -40,16 +41,17 @@
     'types': '注册/注销自定义对象类型',
     'icons': '自定义类型允许携带 symbol 图元',
     'export': '注册/执行导出器',
-    'import': '注册/执行导入器'
+    'import': '注册/执行导入器',
+    'rules': '声明规则意图；沙箱不提供注册入口，仅受信任同源路径可注册'
   });
   const CAP_KEYS = Object.keys(PLUGIN_CAPABILITIES);
   const API_MAJOR = 1;
-  const API_MINOR = 0;
+  const API_MINOR = 1;
 
   /** 版本协商：只接受 1.x 且次版本不高于宿主；失败必须给出可读原因，绝不抛异常 */
   function checkPluginApiVersion(v) {
     const raw = String(v == null ? '' : v).trim();
-    if (!raw) return { ok: false, reason: '未声明 apiVersion（本宿主兼容 1.0，示例：apiVersion: "1.0"）' };
+    if (!raw) return { ok: false, reason: '未声明 apiVersion（本宿主兼容 1.1，示例：apiVersion: "1.0"）' };
     const m = raw.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-[0-9A-Za-z.-]+)?$/);
     if (!m) return { ok: false, reason: 'apiVersion 格式非法：' + raw + '（示例：1.0）' };
     const major = Number(m[1]);
@@ -410,6 +412,8 @@
           needCap(rec, 'import');
           value = removeImporter(a0, rec.id);
           break;
+        case 'registerRule':
+          throw new Error('沙箱不提供规则注册：规则只能经受信任同源路径注册');
         default:
           throw new Error('未知的插件调用：' + String(d.method));
       }
@@ -621,6 +625,10 @@
     /** 注销插件类型；被对象使用时拒绝，避免既有图纸丢失外观 */
     unregisterObjectType(id) { return removeType(id); },
     listPluginTypes() { return Array.from(pluginTypes.values()).map(cloneJSON); },
+    /** 规则注册/注销/列表：owner 可选，受信任同源路径传入插件 id 以便来源标识 */
+    registerRule(def, owner) { return registerRule(def, owner); },
+    unregisterRule(id) { return unregisterRule(id); },
+    listRules() { return listRules(); },
     findExporter(id) { return exporters.find(e => e.id === id) || null; },
     findImporter(ext) { const e = normExt(ext); return importers.find(x => x.ext === e) || null; },
     listExporters() { return exporters.map(e => ({ id: e.id, label: e.label, ext: e.ext, mime: e.mime })); },

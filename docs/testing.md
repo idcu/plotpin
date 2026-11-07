@@ -31,6 +31,7 @@
 | `coverage.spec.mjs` | A-11：覆盖率 v2 固定格数口径跨 zoom 0.25/1/4/16 差异 ≤1pp、隐藏对象/图层退出分母、盲区 GeoJSON 下载、布点优化应用后重跑闭环 |
 | `plugin-sandbox.spec.mjs` | C-01：Worker 隔离执行、`capabilities` 未声明能力拒绝、超时 2s 由主线程 terminate、插件异常只禁用该插件；`symbol` 未声明 `icons` 被拒；带 `"><img onerror=…>` 的类型名/图标经 `esc` 后不产生 DOM 注入 |
 | `rules.spec.mjs` | C-05：规则页签配置容差与类型阈值 → 重叠/间距/越界违规清单（规则名/对象/关联对象/楼层/坐标/实测值）→ 单击行跨楼层定位并选中主/关联对象 → CSV 导出含表头与转义；恰好等于阈值不报违规 |
+| `rule-plugin.spec.mjs` | D-04：`PlotPin.registerRule(def, owner)` 受信任路径注册 → `listRules()` 含 `owner`、规则页签显示「插件: demo.plugin」→ 运行检查产出该规则违规 → `unregisterRule` 后来源与违规均消失 |
 | `symbols.spec.mjs` | C-04：别名搜索（烟感 / NVR）与分类筛选、放置后角度与物理尺寸写回对象、5 例恶意 SVG（script / onload / 外部 href / 超深嵌套 / 超大字节）逐条 toast 原因且类型数不变、自有符号 JSON 导出仅含当前工程符号且内存重置后导入只写入当前工程 |
 | `onboarding.spec.mjs` | D-01：首次访问展示三步引导；「空白开始」写入 `completed/blank` 后刷新不再展示且对象数 0；示例工程场地 `rect 100×70`、6 个对象（2 点设备 / 1 区域 / 1 折线 / 1 文字 / 1 标注）、背景空槽且资产库无新增、刷新后 6 对象恢复；Esc 只写 `skipped/later`，下次启动仍展示 |
 | `help-center.spec.mjs` | D-03：`?` 打开三页签（快捷键 20 行 / 概念词典 6 条 / 导出清单 8 种）；页签点击切换并同步 `aria-selected`；`Esc` 关闭后 `document.activeElement` 回到画布；导出清单含 PDF 位图页、DXF SITE 图层、公式注入说明 |

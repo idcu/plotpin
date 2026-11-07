@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](#)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-2683%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-2687%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 [![PWA](https://img.shields.io/badge/PWA-installable-7c3aed.svg)](manifest.webmanifest)
 
 在同一层可叠加「图片底图 + 矢量场地」双槽（每层最多 1 图 + 1 场地），在底图上标注设备点位、按真实比例绘制区域与折线、完成尺寸测量与统计，并可离线导出图纸与台账表格。无需安装、无需服务器、无需联网——一个 HTML 入口，双击打开即可工作，数据完全留在本机。
@@ -108,7 +108,7 @@ npx serve .
 │   └── common/               # 项目专有库：i18n、LWW 合并、符号库；XML/ZIP/XLSX/DSV/DXF/PDF/PDF-image/QR/资产/几何走 ngm.vendor
 ├── contracts/
 │   ├── conventions.json      # 机器可读契约：版本号 / i18n 键 / 文件头 / 枚举同源
-│   └── plugin-api.json       # PlotPin 对外承诺的 19 个键（双向比对；含沙箱 loadPlugin）
+│   └── plugin-api.json       # PlotPin 对外承诺的 22 个键（双向比对；含沙箱 loadPlugin）
 ├── scripts/                  # check（门禁总闸）/ check-contracts（契约判据）/ selftest / badge / bench / build
 ├── package.json              # 仅提供 npm 入口，无任何依赖
 └── docs/
@@ -160,8 +160,9 @@ npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象�
 **插件 API 面**（`contracts/plugin-api.json`）是另一条：`PlotPin.*` 的每个键都必须在清单里登记，
 清单里的每个键也必须真的存在——`npm run api` 双向比对，`npm run api:selftest` 验证解析器。
 「代码有、清单没有」是 API 泄漏：插件一旦依赖，你改名就是静默破坏兼容。
-`PlotPin.apiVersion = "1.0.0"` 与 `PlotPin.version`（应用版本）分开；`PlotPin.checkPlugin` 做加载前自检，
+`PlotPin.apiVersion = "1.1.0"` 与 `PlotPin.version`（应用版本）分开；`PlotPin.checkPlugin` 做加载前自检，
 `PlotPin.loadPlugin({id, apiVersion, capabilities, code})` 在独立 Worker 执行并按能力白名单通信（2 s 超时硬终止）。
+1.1 新增规则公共面 `registerRule / unregisterRule / listRules`（规则在主线程，沙箱不能注册，须经受信任同源路径并传 `owner` 标来源）。
 能力表、版本规则、隔离机制与明确限制见 [docs/engineering.md](docs/engineering.md) §4.1；
 可运行示例见 [plugins/sample-sandboxed.js](plugins/sample-sandboxed.js)。
 刻意**不设**门禁的项（Service Worker 缓存换代、译文质量、真实浏览器渲染基线）逐一写在
@@ -169,7 +170,7 @@ npm run perf:browser   # 真实 Chromium 性能基线（2000/5000/10000 对象�
 
 覆盖几何计算、统一参数形状（矩 / 圆 / 椭圆 / 扇形 / 平行四边形）、形状互换换算、点设备图标倍率与物理尺寸命中、
 CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢量场地规整、旧工程迁移清洗、
-底图资产哈希与全库命名空间可达性回收（草稿/撤销重做/剪贴板/拖拽原件/全部工程库记录，禁止跨工程误删）、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、**全量中英文案（动态短语/插值模板/内置类型名/载入工程兼容）**、**弹窗焦点管理、页签方向键与画布键盘策略**、**SVG 视觉快照与真实 DOM 焦点桩**、**停车规划布局（车位数/通道数/旋转排列/边界与净宽检查）**、**实时协作传输辅助（48KB 分块、SDP 清洗、本地提交防抖）、协作消息层护栏（TTL/key/字节上限、重复 hello 去重、发送异常不冒泡）与邀请串编解码/二维码容量判定**、**多楼层汇总（逐层分类/面积/长度与合计）**、**资源上限与底图降采样策略（长边限制/透明保留/HTML 转义）**、**对象对齐与分布（包围盒边界/中线/等间距）**、**批量编号与层级（跨层避让/置顶置底）**、**多楼层台账导出与按楼层导入路由**、**版本快照与差异分类（独立命名空间/照片引用化/六类差异/回滚撤销关系）**、**导出字段表单一来源（CSV/TSV/XLSX/PDF/报告与 SVG/DXF 同源；8 种产物改造前后逐字节一致）**、静态资源引用完整性等纯逻辑模块，当前共 **2683 项断言全部通过**。
+底图资产哈希与全库命名空间可达性回收（草稿/撤销重做/剪贴板/拖拽原件/全部工程库记录，禁止跨工程误删）、节点增删改与排序、绘图辅助开关迁移、Shift 正交/极轴/正方形约束、七类对象捕捉（端点/中点/圆心/象限/垂足/交点/切点）与优先级及 Tab 类型锁定（含包围盒粗筛性能）、校准围绕世界原点同比缩放、框选包围盒相交、区域/扇形周长公式、测距链模型与迁移清洗、表格导入导出往返（节点坐标/闭合/形状/标注类型新列、基点平移、CSV 引号与 XLSX OOXML 双向往返、长度/面积/节点数几何核对与取整容差）、SVG 与画布语义一致（扇形弧/闭合边/面积角度文字/设备图标）、DXF 生成解析往返（七类实体/单位换算/图层颜色/凸度弧/椭圆/样条/INSERT 块/MTEXT）、PDF 读取（内容流算子/文本/Flate 与 JPEG 内嵌栅格重组）、多页 PDF 结构、**视场覆盖率分析（扇形/圆形覆盖判定、区域栅格覆盖率与盲区面积）**、**底图仿射校准（像素↔世界映射、2 点相似与 ≥3 点最小二乘完整仿射、四角包围框、旧对象随映射迁移）**、**离线协作 LWW 合并（对象/楼层增删改、删除墓碑与复活、图层类型并集、幂等与确定性）**、**全量中英文案（动态短语/插值模板/内置类型名/载入工程兼容）**、**弹窗焦点管理、页签方向键与画布键盘策略**、**SVG 视觉快照与真实 DOM 焦点桩**、**停车规划布局（车位数/通道数/旋转排列/边界与净宽检查）**、**实时协作传输辅助（48KB 分块、SDP 清洗、本地提交防抖）、协作消息层护栏（TTL/key/字节上限、重复 hello 去重、发送异常不冒泡）与邀请串编解码/二维码容量判定**、**多楼层汇总（逐层分类/面积/长度与合计）**、**资源上限与底图降采样策略（长边限制/透明保留/HTML 转义）**、**对象对齐与分布（包围盒边界/中线/等间距）**、**批量编号与层级（跨层避让/置顶置底）**、**多楼层台账导出与按楼层导入路由**、**版本快照与差异分类（独立命名空间/照片引用化/六类差异/回滚撤销关系）**、**导出字段表单一来源（CSV/TSV/XLSX/PDF/报告与 SVG/DXF 同源；8 种产物改造前后逐字节一致）**、静态资源引用完整性等纯逻辑模块，当前共 **2687 项断言全部通过**。
 
 ---
 
@@ -178,7 +179,7 @@ CRC32/ZIP 往返、XLSX 双向往返、CSV/TSV 解析、表格导入规划、矢
 - ✅ 多楼层多底图、设备台账二维码、照片附件（已交付）。
 - ✅ 顶栏「清空」：一键清空当前楼层双槽/对象/标注/校准/选中态并恢复默认取景框，二次确认且可 `Ctrl+Z` 整体撤销（已交付）。
 - ✅ PWA/Service Worker 离线缓存（缓存名版本化 + 激活清理旧缓存 + 新版本可用提示，离线打开不白屏）、36 个六类行业符号库与自定义 SVG/JSON 图元（C-04，已交付）。
-- ✅ 单文件发行包（构建期无损压缩，当前 **745.1 KB / 762,943 B**、gzip 230.9 KB / 236,462 B；体积门禁 ≤820 KB / 839,680 B，余量 76,737 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
+- ✅ 单文件发行包（构建期无损压缩，当前 **745.8 KB / 763,709 B**、gzip 231.2 KB / 236,721 B；体积门禁 ≤820 KB / 839,680 B，余量 75,971 B）、插件注册点（导出器 / 导入器 / 自定义设备类型）、中英界面与无障碍补强（已交付）。
 - ✅ 停车场规划模式：双面垂直车位 + 通道净距检查、横/纵排列、实时预览与独立图层（已交付）。
 - ✅ 离线协作（CRDT 家族 LWW）：对象/楼层级 Last-Writer-Wins + 删除墓碑 + 工程 JSON 合并；存储 v2 为每个楼层补 `updatedAt`，v1 旧档读取即迁移（已交付，工程库「合并他人工程」）。
 - ✅ 实时协作：本机 BroadcastChannel 多标签 + 跨设备 WebRTC 手动信令（无服务器、零依赖）；邀请串三步建连、连接状态常驻可见、LWW 覆盖提示并可 `Ctrl+Z` 回滚，消息层设 TTL / key / 字节上限与发送异常保护（已交付；内置二维码编码器 42 字节上限装不下 SDP 邀请串，面板只提示不渲染假码）。
@@ -264,7 +265,7 @@ DOM / `window` / `parent` / IndexedDB / network; only declared capabilities are 
 ```js
 PlotPin.loadPlugin({
   id: 'sandbox-markdown',
-  apiVersion: '1.0',                    // host API is 1.0.0; incompatible versions get a readable reason
+  apiVersion: '1.0',                    // host API is 1.1.0; 1.0 plugins still load; incompatible versions get a readable reason
   capabilities: ['state:read', 'export'],
   code: `
     PlotPin.registerExporter({
@@ -312,7 +313,7 @@ PlotPin.registerImporter({
 ### Test
 
 ```bash
-node scripts/selftest.mjs   # 2683 assertions, no dependencies
+node scripts/selftest.mjs   # 2687 assertions, no dependencies
 node scripts/check.mjs      # 语法 / 入口完整性 / 离线引用 / 断言数门禁（CI 用 --selftest）
 node scripts/bench.mjs      # 渲染基准（avg/P95/重建/heapUsed 超阈值则退出码 1）
 node scripts/build.mjs --check   # 单文件发行包：源重建 ↔ dist-manifest 哈希比对 + 无外链 + 体积上限

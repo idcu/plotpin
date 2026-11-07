@@ -2,6 +2,42 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 插件：规则注册进入公共 API 与来源标识（D-04）
+
+- **Commit Hash**：本条提交（`feat(plugin): 规则注册进入公共 API 与来源标识`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `js/features/rules.js`：`registerRule(def, owner?)` 新增可选第二参，`owner` 截断 64 字符并随规则记录；`listRules()` 输出新增 `owner`（内建规则为 `''`）。规则页签在开关列表前新增「已注册规则（N）」区块，逐条显示名称与来源：有 `owner` 显示「插件: <id>」，否则「页面脚本」。
+  - `js/features/plugins.js`：`PLUGIN_API_VERSION` 1.0.0 → **1.1.0**、`API_MINOR` 0 → 1（1.0 插件仍可加载）；能力表新增 `rules`（共 8 项），描述明确「仅声明意图，沙箱不提供注册入口」。`PlotPin` 新增 `registerRule(def, owner?)` / `unregisterRule(id)` / `listRules()` 三键。沙箱 RPC 新增 `registerRule` 分支，命中即抛「沙箱不提供规则注册」而非落入未知方法。
+  - `contracts/plugin-api.json`：键 19 → **22**（`registerRule` / `unregisterRule` / `listRules`），能力与版本描述同步 1.1.0；`npm run api` 双向比对 22 个键、0 泄漏、0 落空。
+  - 新增 `tests/e2e/rule-plugin.spec.mjs` 1 条：受信任路径 `PlotPin.registerRule(def, 'demo.plugin')` → 规则页签出现「插件: demo.plugin」→ 运行检查产出违规 → `unregisterRule` 后来源与违规消失。
+  - `scripts/selftest.mjs` 新增 4 条：API 版本 1.1.0、能力表 8 项且含 `rules`、内建规则 owner 为空、插件规则注册后 owner 可见且可注销。
+  - 同步 `docs/modules.md`（规则行补 owner/来源与沙箱限制、e2e rule-plugin）、`docs/features.md`（1.1.0 与规则公共面）、`docs/engineering.md`（§4.1 版本矩阵/能力表 rules 行、§4.2 来源说明、体积/SHA/断言）、`docs/testing.md`、`docs/manual-acceptance.md`、`README.md`（22 键、1.1.0、公共面说明）。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2687 通过 / 0 失败**（D-09 基线 2683，新增 4 条；加载 42 个脚本） | 0 |
+| `node scripts/e2e.mjs` | **80 passed / 1 skipped / 81 total**（D-09 基线 79/1/80，新增 rule-plugin 1 条；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **763,709 B（745.8 KB）**，gzip **236,721 B（231.2 KB）**；D-09 762,943 B → 净增 **+766 B（预算 ≤6,000 B）**；上限 839,680 B，余量 **75,971 B**；SHA256 `eb633563d352…`；二次构建确定性一致 | 0 |
+| `node scripts/check-plugin-api.mjs` | **22 个键 / 清单 22 条 / 0 泄漏 / 0 落空** | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg **0.4 ms** / P95 **0.58 ms**（≤8/≤3）；重建 **36.72 ms**（≤60）；heapUsed **31.72 MB**（≤64）；裁剪 **99.4%**（≥60）；覆盖率 9.7 ms / 大场地 16.4 ms（≤300）；缩放差异 0pp；规则检查 15.6 ms（≤500） | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **31.81%**（D-11 基线 29.82% 未回退；D-09 31.94% → **−0.13pp**，因规则来源 4 条中文未入字典，留 D-11）；字面量 1245、硬编码 788；PHRASES 818 / TEMPLATES 104 | 0 |
+| 8 种导出 golden | 未改导出实现：`git diff` 未触及 `io-export.js` / `io-fields.js` / `dxf.js` / `pdf.js`；`tests/golden/*` 在 selftest 内逐字节通过。8 格式整体比对未重跑，夹具固化留 D-13 | 0 |
+
+- **新增/调整公共抽象**
+  - 调整 `registerRule(def, owner?)`（`js/features/rules.js`）与 `listRules()` 返回项新增 `owner`；既有调用（内建规则注册、`PlotPin.registerRule(def)`）签名不变、行为不变。
+  - 新增 `PlotPin.registerRule` / `unregisterRule` / `listRules` 与 `PLUGIN_CAPABILITIES['rules']`（`js/features/plugins.js`）；契约 19 → 22 键。
+  - `PLUGIN_API_VERSION` 1.1.0、`API_MINOR` 1；`checkPluginApiVersion` 未改返回结构，1.0 声明仍通过。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。
+- **遗留 / 风险**
+  - `rules` 能力在沙箱内**不可用**：声明后调用 `registerRule` 会明确失败，避免弱化 Worker 隔离；这是有意限制，不是缺陷。真正的沙箱规则执行需先解决主线程执行与安全评审，留待后续。
+  - 公共同源路径 `PlotPin.unregisterRule(id)` 不校验 owner，任何页面脚本都能注销其他插件的规则（与既有 `unregisterExporter` 同权限模型）；如需隔离需引入 owner 令牌，属后续安全评审范围。
+  - 规则页签新增的来源区块为中文硬编码（4 条），`i18n` 覆盖率小幅回落；按计划留 D-11 统一收敛，不用硬编码英文凑数。
+  - 规则注册表仍为内存态，刷新即丢失；插件需在加载时重新注册，未新增持久化格式。
+  - 体积余量 75,971 B；未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 持久化：同工程多标签编辑租约（D-09）
 
 - **Commit Hash**：本条提交（`feat(persist): 同工程多标签编辑租约`）；完整哈希见 `git log HEAD` 与本次汇报。
