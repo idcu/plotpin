@@ -6,7 +6,7 @@
 
 | 文档 | 范围 | 状态 |
 |---|---|---|
-| [next-phase-2026-11.md](next-phase-2026-11.md) | 2026-11 下一阶段：易学易用 / 持久性 / 扩展性 / 可维护性，D-01 ~ D-13 | 执行中 |
+| [next-phase-2026-11.md](next-phase-2026-11.md) | 2026-11 下一阶段：易学易用 / 持久性 / 扩展性 / 可维护性，D-01 ~ D-13 | 已交付（D-01 ~ D-13） |
 
 计划内的通用门禁：`node scripts/check.mjs --selftest` 0 失败且断言数不减少；`node scripts/e2e.mjs` 不低于既有通过数；`node scripts/build.mjs --check` 通过且产物 ≤ 839,680 B；同一提交更新受影响文档与 [CHANGELOG.internal.md](../../CHANGELOG.internal.md)；禁止 push。
 
@@ -25,8 +25,8 @@
 | D-06 | 插件 API 兼容矩阵与契约演进门禁 | ✅ 已交付 | `edaa9a5` |
 | D-10 | 文档入口收口：ARCHITECTURE / user-guide / plans 索引 | ✅ 已交付 | `e7e2716` |
 | D-11 | i18n 覆盖率门禁与字典收敛 | ✅ 已交付 | `9c1ecd0` |
-| D-12 | geometry.js 按职责拆分（行为不变） | ⏳ 待执行 | — |
-| D-13 | 自测分区、列表与过滤 | ✅ 已交付 | `待回填` |
+| D-12 | geometry.js 按职责拆分（行为不变） | ✅ 已交付 | `待回填` |
+| D-13 | 自测分区、列表与过滤 | ✅ 已交付 | `53962ae` |
 
 ## 相关入口
 

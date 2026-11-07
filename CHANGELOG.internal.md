@@ -2,6 +2,40 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · geometry.js 按职责拆分（D-12）
+
+- **Commit Hash**：本条提交（`refactor(geometry): 按职责拆为三个脚本（行为不变）`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **执行顺序**：按计划原文先交付 D-13（分区/过滤，`53962ae`），再做 D-12 拆分，便于用 `--filter` 精准定位拆分回归；两者均独立提交。
+- **核心改动点**
+  - `js/core/geometry.js` 拆为 3 个脚本（均属第 1 层，全局函数名、签名与调用方式**全部不变**）：
+    - `geometry.js`：基础向量委托、OSNAP/参考线、Shift 约束、对象轮廓/对齐、形状参数与轮廓，**420 行 / 17,866 B**。
+    - `geometry-site.js`：矢量场地几何、场地命中、图片变换手柄与 `siteCornerPoints`，**418 行 / 19,140 B**。
+    - `geometry-coverage.js`：视场覆盖率栅格/盲区、仿射矩阵、`applyWorldTransform` 与世界迁移，**489 行 / 21,523 B**。
+  - `index.html` 加载顺序：`geometry.js` → `geometry-site.js` → `geometry-coverage.js` → `persistence.js`；三文件共享同一全局词法作用域，`__geo` 只在 `geometry.js` 声明一次（不重复声明）。
+  - 纯移动：未改任何函数体、未改注释内容，仅新增两个文件头与分文件边界；脚本数 **42 → 44**（`js/` 32 → 34 + vendor 10）。
+  - 文档同步：`docs/modules.md`（第 7 行计数、唯一源表按新文件重分、新增拆分说明）、`docs/ARCHITECTURE.md`（44 个脚本、层内文件名、权威源链接）、`docs/engineering.md`（CSP 44=44、体积/gzip/SHA 回填）、`docs/plans/README.md`（D-12/D-13 状态）。
+- **实测验证（本机）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/selftest.mjs` | **2706 通过 / 0 失败**，与 D-13 完全持平（含 8 种导出 golden 逐字节校验） | 0 |
+| `node scripts/check.mjs --selftest` | 通过：加载 **44 个脚本**（js 34 + vendor 10）；分层/契约/插件 API/离线引用/i18n 全过 | 0 |
+| `node scripts/e2e.mjs` | **85 passed / 1 skipped / 0 failed**（2.4m），与拆分前一致 | 0 |
+| `node scripts/build.mjs --check` | **776,918 B（758.7 KB）**、gzip 241,542 B、SHA256 `81f212c2a01a…`；较 D-13 的 776,704 B **+214 B**（预算 ≤2,000 B），余量 62,762 B | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg 0.48 ms / P95 0.85 ms；重建 37.11 ms ≤ 60 ms；heapUsed 23.65 MB；覆盖率 11.1 / 21.6 ms；裁剪 99.4% | 0 |
+| `node scripts/check-gates.mjs` | **5/5** 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | **13/13 → L4**；最大文档 `engineering.md` 50.7 KB / 558 行 | 0 |
+| `node scripts/check-deletions.mjs` | 1 条记录 / 192 个受跟踪文件 / 0 违约 | 0 |
+
+- **新增/调整公共抽象**
+  - 无新增公共函数或常量；仅文件归属变化。调用方（`render.js` / `io-export.js` / `interaction.js` / `persistence.js` / selftest / bench）零改动。
+  - 拆分映射：`siteBounds/siteBoundaryPoints/siteShapeCenter/siteBasePoint/siteRadiusText/siteAreaPerimeter/siteHandlesOf/siteHandleList/siteHandleDragTo/resizeSiteByHandle/pickScreenHandle/imageHandleList/imageHandleDragTo/siteCornerPoints` → `geometry-site.js`；`imageWorldFrame/coverageGridPlan/analyzeCoverage/regionPolygons/aff*/solveImageAffine/validImageTransform/applyWorldTransform/siteShapeByAffine` → `geometry-coverage.js`；其余轮廓/捕捉/形状留在 `geometry.js`。
+- **遗留 / 风险**
+  - `geometry-coverage.js` 已 489 行，接近 500 行门限；后续覆盖率/仿射新逻辑应新开文件或先做等价收敛，不得原地膨胀。
+  - 三文件依赖共享全局词法作用域（`__geo`、形状常量在 `geometry.js` 声明，后两文件运行时引用）；与既有 classic script 架构一致，selftest 的串联加载与浏览器多 `<script>` 均验证通过，但禁止改为 ES Module。
+  - bench 重建 37.11 ms 高于上一轮 30.85 / 27.74 ms，属同机多次运行波动（阈值 60 ms），非拆分引入的逻辑变化；如需更稳基线，应固定机器负载后复测。
+  - 未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 自测分区、列表与过滤（D-13）
 
 - **Commit Hash**：本条提交（`test(selftest): 分区注册与 --list/--filter`）；完整哈希见 `git log HEAD` 与本次汇报。

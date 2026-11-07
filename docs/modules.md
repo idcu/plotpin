@@ -4,7 +4,7 @@
 
 ## 为什么是分目录，不是可插拔模块
 
-PlotPin 是**双击 `index.html` 即用**的离线单页工具：42 个 classic `<script>`（`js/` 32 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
+PlotPin 是**双击 `index.html` 即用**的离线单页工具：44 个 classic `<script>`（`js/` 34 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
 `const SCHEMA`、`state`、`I18N` 都是裸标识符，文件之间直接引用。改 `<script type="module">`
 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
 
@@ -31,6 +31,11 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：42 个 classic 
 > 判据立刻报「层序倒退：第 1 层排在第 2 层之后」——它们实际依赖功能域。已按代码事实移到
 > `js/features/`。这正是分层需要判据的理由：目录名可以随便起，顺序不会撒谎。
 
+**geometry 按职责拆分（D-12）**：`js/core/geometry.js` 保留基础向量/捕捉/对象轮廓与形状参数（420 行）；
+`geometry-site.js` 承接矢量场地几何、命中与图片变换手柄（418 行）；`geometry-coverage.js` 承接
+覆盖率栅格、仿射矩阵与世界变换（489 行）。三者同属第 1 层，全局函数名、签名与调用方式不变，
+脚本数 **42 → 44**。
+
 ## 判据
 
 `scripts/check.mjs` 第 9 步守三件事：
@@ -46,16 +51,18 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：42 个 classic 
 | 能力 | 归属 | 调用方 |
 |---|---|---|
 | `createEmptyBackground / createSiteSlot / isImageBackground / siteShapeOf` | `js/core/model.js` | 全仓 |
-| `siteDomainOf / siteBounds / siteOutlinePoints / imageWorldFrame` | `js/core/geometry.js`（`siteDomainOf` 的宽高直接取自 `siteBounds`，包围盒只有一个源） | 视口、渲染、导出、交互 |
-| `siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` | `js/core/geometry.js`（场地几何唯一实现） | `render.js` 标注、`io-export.js` SVG、属性面板 |
-| `siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` | `js/core/geometry.js`（手柄几何唯一实现；交互层只做命中与事件分发） | `render.js` 手柄绘制、`interaction.js` 拖拽 |
-| `pickScreenHandle` | `js/core/geometry.js`（屏幕阈值唯一实现） | `render.js` 对象手柄命中、`interaction.js` 场地手柄命中（半径 9px 同源） |
+| `siteDomainOf / siteBounds / siteOutlinePoints` | `js/core/geometry-site.js`（`siteDomainOf` 的宽高直接取自 `siteBounds`，包围盒只有一个源） | 视口、渲染、导出、交互 |
+| `imageWorldFrame` | `js/core/geometry-coverage.js`（图片四角世界包围框，仿射与米每像素共用） | `siteBounds`、图片变换手柄、交互 |
+| `siteBoundaryPoints / siteShapeCenter / siteBasePoint / siteRadiusText / siteAreaPerimeter` | `js/core/geometry-site.js`（场地几何唯一实现） | `render.js` 标注、`io-export.js` SVG、属性面板 |
+| `siteHandlesOf / siteHandleList / siteHandleDragTo / resizeSiteByHandle` | `js/core/geometry-site.js`（手柄几何唯一实现；交互层只做命中与事件分发） | `render.js` 手柄绘制、`interaction.js` 拖拽 |
+| `pickScreenHandle` | `js/core/geometry-site.js`（屏幕阈值唯一实现） | `render.js` 对象手柄命中、`interaction.js` 场地手柄命中（半径 9px 同源） |
 | `siteLayerOf / siteIsVisible / siteIsLocked` | `js/core/model.js`（场地与业务对象共用图层可见/锁定语义） | 视口取景、渲染、交互守卫、属性面板 |
 | `renderNodeEditor(o, opts) / bindNodeEditorEvents(box, spec) / layerOptionsHTML(id)` | `js/features/props.js` | 折线/闭合区域节点编辑与场地多边形顶点编辑共用同一套 DOM 与事件契约 |
 | `calibPrecheck(tool, ctx?) / refreshCalibStatus()` | `js/core/interaction.js`（三入口前置状态唯一判断源：S0a 空槽无场地 / S0b 仅场地 / S1 图片未就绪 / S2 图片就绪；`ctx` 仅供自测注入） | `ui-panels.js` 顶栏与工具栏绑定、`props.js` 图片属性面板、`persistence.js`/`io-import.js` 解码后就绪刷新、selftest/e2e |
 | `calibPoints / calibSelection / calibUndoStack` 及 `calibHitAt / calibPushUndo / calibUndo` | `js/core/model.js`（状态） / `js/core/interaction.js`（控制点编辑） | 比例尺与仿射校准：拖拽/增删/撤销只改临时控制点，`Enter`/✓ 提交时才 `applyWorldTransform`（内部复用 `solveImageAffine` + `migrateObjectsByAffine`） |
-| `applyWorldTransform(M, opts) / siteShapeByAffine(shape, M) / scaleWorldAround(center, factor)` | `js/core/geometry.js`（世界变换唯一入口；对象、底图仿射/米每像素一次迁移，场地默认不动、可 `{site:true}` 显式迁移；`scaleWorldAround` 为兼容旧签名的包装） | `interaction.js` 的比例尺/仿射校准提交；任何「整体缩放/纠偏」不得再直接遍历对象，必须走该入口 |
-| `imageHandleList / imageHandleDragTo / affTranslate / affRotateAbout / affScaleAbout / affShearX / siteCornerPoints` | `js/core/geometry.js`（图片整体变换唯一实现） | `render.js` 手柄绘制、`interaction.js` 拖拽、`selftest.mjs` 变换断言 |
+| `applyWorldTransform(M, opts) / siteShapeByAffine(shape, M)` | `js/core/geometry-coverage.js`（世界变换唯一入口；对象、底图仿射/米每像素一次迁移，场地默认不动、可 `{site:true}` 显式迁移） | `interaction.js` 的比例尺/仿射校准提交；任何「整体缩放/纠偏」不得再直接遍历对象，必须走该入口 |
+| `imageHandleList / imageHandleDragTo / siteCornerPoints` | `js/core/geometry-site.js`（图片整体变换手柄唯一实现） | `render.js` 手柄绘制、`interaction.js` 拖拽、`selftest.mjs` 变换断言 |
+| `affTranslate / affRotateAbout / affScaleAbout / affShearX / affApply / affMul / affInv / solveImageAffine / validImageTransform` | `js/core/geometry-coverage.js`（仿射矩阵与求解入口） | 图片变换手柄、`applyWorldTransform`、`migrateObjectsByAffine`、`selftest.mjs` |
 | `collectSnapCandidates` 内的场地角点追加 | `js/core/geometry.js` | 场地不在 objects，单独追加折点→端点 / 圆心→center；图层隐藏时不参与 |
 | `applyVectorSite / siteDxfEntities` | `js/features/io-import.js` / `js/features/io-export.js` | 仅功能域内部 |
 | `annotToggleGroupHTML(items, opts) / bindAnnotToggleInputs(box, spec)` | `js/features/props.js`（标注开关渲染与事件绑定的唯一实现） | 点设备/区域/折线的属性面板与场地属性面板共用；新增开关组只需传 `items` 与 `attr` |
@@ -67,7 +74,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：42 个 classic 
 | `titleBlockSpec(W,H,ppu,format) / titleBlockEffective / titleBlockRatio / niceScaleBarMeters / titleBlockLegendData / exportTitleBlockSvg / drawTitleBlockOnCanvas` | `js/features/io-export.js`（图框叠加层唯一布局源：未启用返回 `null`，调用方直接跳过以保证默认产物零字节差异；标题栏 4×2 单元格、比例尺 1/2/5×10ⁿ 米、图例按可见对象类型聚合；SVG 全部文本走 `esc()`，Canvas 版供 PNG/PDF 位图页共用） | `renderToDataURL`（PNG）、`renderPdfDrawingPage`（PDF）、`buildSceneSvg`（SVG）、`openTitleBlockDialog`、`selftest` §75.10、`e2e title-block`；三种格式几何/文案不得各自复制 |
 | `Dxf.inspect(text) / Dxf.parseDxf(text,opt)` | `js/common/dxf.js`（DXF 适配层，不改 `ngm.vendor`：版本/单位审计与公共模块未覆盖的 SOLID / 3DFACE / LEADER / ATTRIB(ATTDEF) 补充解析；`parseDxf` 返回公共模块结果 + `inspect/supplemental`，`opt.forceUnit` 支持单位改判，原实体、`unit` 与字段映射不变） | `io-import.js`（DXF 预检、单位确认、二进制拦截）、`selftest` 的 8 版本矩阵、`e2e dxf-version`；任何 DXF 导入必须走该适配层，禁止在功能域另写组码解析 |
 | `objectIndexById(list?)` | `js/core/model.js`（id → 对象索引；缺省索引当前楼层 `state.objects`，重复 id 保留首个） | `interaction.js` 拖拽起点、批量移动、位移判定、Esc 回滚：把 N 次 `find` 收敛为一次建索引 |
-| `coverageGridPlan(items,opt) / analyzeCoverage(st,opt) / regionPolygons(st)` | `js/core/geometry.js`（覆盖率口径 v2 唯一实现：固定目标格数按可见区域面积分配、格边夹取与总格数上限；`regionPolygons` 过滤隐藏对象/隐藏图层；`spec` 元数据随结果返回） | `runCoverageAnalysis`（弹窗报告）、`exportBlindSpotsGeoJson`（报告内置 `coverageSpec`）、`optimizeCameraPlacement`（固定低分辨率规划网格）、`selftest.mjs`；影响：报告数值与 v1 不再可比，分母只含可见区域 |
+| `coverageGridPlan(items,opt) / analyzeCoverage(st,opt) / regionPolygons(st)` | `js/core/geometry-coverage.js`（覆盖率口径 v2 唯一实现：固定目标格数按可见区域面积分配、格边夹取与总格数上限；`regionPolygons` 过滤隐藏对象/隐藏图层；`spec` 元数据随结果返回） | `runCoverageAnalysis`（弹窗报告）、`exportBlindSpotsGeoJson`（报告内置 `coverageSpec`）、`optimizeCameraPlacement`（固定低分辨率规划网格）、`selftest.mjs`；影响：报告数值与 v1 不再可比，分母只含可见区域 |
 | `objectNameScopeFor / beginObjectNameScope / withObjectNameScope` | `js/core/model.js`（批量取号作用域：一次聚集已占用编号，作用域内 `reserve()` 为集合查找；起点与旧 `nextObjectId` 一致＝“已占用数量+1”后跳号） | `buildProject`（JSON 导入/打开工程）、`importDxfFile`、`importPdfFile`、`rowsToObjectsPlan`/`applyTableImport`、`duplicateSelected`/`pasteClipboard`、覆盖率建议批量落点；影响：编号唯一性与起始号语义不变，已有工程内导入从 O(N²) 降为线性；单次交互创建仍走一次全量扫描（O(N)，可接受） |
 | `ensureVendor(name)` | `js/core/config.js`（第三方公共模块可用性唯一检查点；缺失抛「公共模块未加载：<中文名>」） | `io-export.js`（Dxf/Xlsx/Pdf/Qr）、`io-import.js`（Xlsx/Dxf/PdfRead） |
 | `siteAnnotToggleKeys(site) / renderSiteAnnotToggles(site)` | `js/features/props.js`（按场地形状筛选有效开关） | 场地属性面板；无场地返回空串，锁定（含图层锁定）时 `disabled` |
