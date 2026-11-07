@@ -5,9 +5,9 @@
   "description": "PlotPin 对插件的承诺面。这里的每个键都是「有人可以依赖」的；不在表里的键，插件不该用，用了我也不保证下次还在。加一个键就要加到这里；删一个键就要在 README 的插件章节写迁移说明。",
   "api": {
     "version": "应用版本号（与 package.json 一致），不是插件 API 版本",
-    "apiVersion": "插件 API 版本（当前 1.1.0）；loadPlugin 按 1.x 协商，1.0 插件仍可加载",
-    "capabilities": "能力白名单表（state:read/state:write/annotate/types/icons/export/import/rules）",
-    "checkPlugin": "加载前自检：校验 id / apiVersion / capabilities，返回 {ok,reason}（同步、不执行代码）",
+    "apiVersion": "插件 API 版本（当前 1.1.0）；loadPlugin 按 1.x 协商，1.0 插件仍可加载；兼容矩阵由 selftest/e2e 与 npm run api 门禁固化",
+    "capabilities": "能力白名单表（state:read/state:write/annotate/types/icons/export/import/rules）；未知能力拒绝而非降级，能力集合为封闭白名单",
+    "checkPlugin": "加载前自检：校验 id / apiVersion / capabilities，返回 {ok,reason} 或 {ok,caps,major,minor}（同步、不执行代码；1.0 插件回传 major=1/minor=0）",
     "validatePluginManifest": "校验 plotpin.plugin/v1 清单（必填/长度上限/能力），返回规范化 spec 或 {ok:false,reason}；纯函数不改注册表",
     "loadPlugin": "隔离加载：在 Worker 中执行 code，按能力白名单消息通信；返回 {ok,id,reason}",
     "unloadPlugin": "卸载隔离插件并注销其导出/导入/类型（类型被使用时保留）",

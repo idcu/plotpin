@@ -2,6 +2,41 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 插件：API 兼容矩阵与契约演进门禁（D-06）
+
+- **Commit Hash**：本条提交（`feat(plugin): 插件 API 兼容矩阵与契约演进门禁`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `js/features/plugins.js`：`checkPluginApiVersion(v)` 返回值扩展为 `{ok, reason, major, minor}`——解析成功回传 `major/minor`，缺失/畸形回传 `null`；`checkPlugin` 成功时透传 `major/minor`。旧调用只读 `ok/reason`，签名与判定结果不变。
+  - `scripts/check-plugin-api.mjs`：除既有 23 键双向比对外，新增**契约描述与代码同源**门禁——`contracts/plugin-api.json` 的 `apiVersion` 描述必须含 `PLUGIN_API_VERSION`，`capabilities` 描述的括号清单必须与 `PLUGIN_CAPABILITIES` 键集合双向一致；漂移即退出码 1。`--selftest` 补充版本/能力解析与契约描述解析两组负例自检。
+  - 新增 `tests/e2e/plugin-compat.spec.mjs` 3 条：公开预检矩阵（1.0/1.0.0/1.1 通过并回传 major/minor；1.2 次版本、2.0 主版本、`1.x` 畸形、缺失均拒绝且原因可读、解析失败字段为 `null`）；1.0 清单装 1.1 宿主可导入/导出/卸载；越界与畸形清单在面板被拒、无确认弹窗、注册表不变，随后 1.1 清单可导入。
+  - `scripts/selftest.mjs` §57.1 新增 6 条兼容矩阵断言。
+  - 同步 `contracts/plugin-api.json`（`apiVersion`/`capabilities`/`checkPlugin` 描述）、`docs/engineering.md`（§4.1 矩阵段、§5 向后兼容行、体积/SHA/断言）、`docs/modules.md`、`docs/testing.md`、`docs/manual-acceptance.md`、`README.md`（矩阵说明与体积/断言）。
+- **口径修正（非放宽门禁）**：计划 D-06 曾写「未知能力只警告不拒绝」，与 D-05 已固化的 `checkPlugin` / `validatePluginManifest` 未知能力拒绝用例互斥。本次保持**封闭白名单 + 拒绝**：放行未知能力会让「已声明即被支持」的契约失真，且属于放宽既有门禁；矩阵只守「主版本 + 次版本 + 能力集合」三条不变量，与计划的风险降级项一致。该决定已写入 `docs/engineering.md` §4.1 与本条。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/selftest.mjs` | **2706 通过 / 0 失败**（D-05 基线 2700，新增 6 条；加载 42 个脚本） | 0 |
+| `node scripts/e2e.mjs` | **85 passed / 1 skipped / 86 total**（D-05 基线 82/1/83，新增 plugin-compat 3 条；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **767,341 B（749.4 KB）**，gzip **237,854 B（232.3 KB）**；D-05 767,211 B → 净增 **+130 B（预算 ≤3,000 B）**；上限 839,680 B，余量 **72,339 B**；SHA256 `acd6770d4dfd…`；二次构建确定性一致 | 0 |
+| `node scripts/check-plugin-api.mjs` | **23 个键 / 清单 23 条 / 0 泄漏 / 0 落空；API 1.1.0 / 8 项能力 / 契约描述漂移 0** | 0 |
+| `node scripts/check-plugin-api.mjs --selftest` | 键解析 + 版本/能力解析 + 契约描述解析自检通过 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4；最大文档 `engineering.md` 49.9 KB / 552 行） | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg **0.37 ms** / P95 **0.45 ms**（≤8/≤3）；重建 **34.19 ms**（≤60）；heapUsed **31.45 MB**（≤64）；裁剪 **99.4%**（≥60）；覆盖率 9.2 ms / 大场地 15.8 ms（≤300）；缩放差异 0pp；规则检查 18.7 ms（≤500）；符号直接帧 3.74 ms（≤60） | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **31.16%**（与 D-05 持平，未回退；本任务未新增业务中文文案，按约束不动 i18n，欠账留 D-11）；字面量 1271、硬编码 810；PHRASES 818 / TEMPLATES 104 | 0 |
+| 8 种导出 golden | 未改导出实现：`git diff` 未触及 `io-export.js` / `io-fields.js` / `dxf.js` / `pdf.js`；`tests/golden/*` 在 selftest 内逐字节通过 | 0 |
+
+- **新增/调整公共抽象**
+  - 扩展 `checkPluginApiVersion(v)` 返回结构（新增 `major/minor`，旧字段保留）；`checkPlugin` 成功结果透传同名两字段，`PlotPin` 未新增键（仍 23 键）。
+  - `check-plugin-api.mjs` 新增 `apiFacts(source)` / `contractFacts(api)` 两个脚本内解析器（仅门禁脚本复用，不进运行时）。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。
+- **遗留 / 风险**
+  - 矩阵只证明**版本号与能力集合**的兼容判定；键的语义/行为兼容仍靠评审（如导出器 `ctx` 结构变更无法由键集合发现）。
+  - 契约同源校验基于描述文本的约定格式（`apiVersion` 描述含版本串、`capabilities` 描述括号内 `/` 分隔），描述改写若破坏格式会被判红，需要按格式维护。
+  - 未知能力仍为拒绝而非降级：老插件若声明宿主不认识的未来能力，会被整份拒绝并给出可用能力清单，这是有意的严格口径。
+  - 体积余量 72,339 B；未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 插件：清单导入与管理面板（D-05，会话内）
 
 - **Commit Hash**：本条提交（`feat(plugin): 插件清单导入与管理面板`）；完整哈希见 `git log HEAD` 与本次汇报。

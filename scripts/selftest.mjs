@@ -3993,6 +3993,14 @@ asyncSuites.push((async()=>{
   ok('插件-拒绝未知能力', (()=>{const r=PP.checkPlugin({apiVersion:'1.0',capabilities:['network']});return !r.ok&&/未知能力/.test(r.reason);})());
   ok('插件-拒绝缺失能力声明', (()=>{const r=PP.checkPlugin({apiVersion:'1.0'});return !r.ok&&/capabilities/.test(r.reason);})());
   ok('插件-拒绝非法 id', !PP.checkPlugin({id:'bad id!',apiVersion:'1.0',capabilities:[]}).ok);
+  /* D-06 兼容矩阵：返回值带 major/minor，旧调用只读 ok/reason 不受影响 */
+  const V=v=>PP.checkPlugin({apiVersion:v,capabilities:[]});
+  ok('插件-1.0.0 兼容并回传 major/minor', (()=>{const r=V('1.0.0');return r.ok&&r.major===1&&r.minor===0;})());
+  ok('插件-1.1 兼容并回传 major/minor', (()=>{const r=V('1.1');return r.ok&&r.major===1&&r.minor===1;})());
+  ok('插件-1.2 拒绝次版本并回传声明版本', (()=>{const r=V('1.2');return !r.ok&&/次版本/.test(r.reason)&&r.major===1&&r.minor===2;})());
+  ok('插件-2.0 拒绝主版本并回传声明版本', (()=>{const r=V('2.0');return !r.ok&&/主版本/.test(r.reason)&&r.major===2&&r.minor===0;})());
+  ok('插件-畸形版本拒绝且不回传版本', (()=>{const r=V('1.x');return !r.ok&&/格式非法/.test(r.reason)&&r.major===null&&r.minor===null;})());
+  ok('插件-缺失版本拒绝且不回传版本', (()=>{const r=V('');return !r.ok&&/apiVersion/.test(r.reason)&&r.major===null&&r.minor===null;})());
   eq('插件-初始沙箱插件列表为空', PP.listPlugins().length, 0);
 
   /* D-05 清单校验：纯函数、事务化（失败不改注册表） */

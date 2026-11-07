@@ -48,17 +48,21 @@
   const API_MAJOR = 1;
   const API_MINOR = 1;
 
-  /** 版本协商：只接受 1.x 且次版本不高于宿主；失败必须给出可读原因，绝不抛异常 */
+  /**
+   * 版本协商：只接受 1.x 且次版本不高于宿主；失败必须给出可读原因，绝不抛异常。
+   * 解析成功的声明额外回传 major/minor（缺失/畸形为 null），供兼容矩阵与诊断复用；
+   * 旧调用方只读 ok/reason 不受影响。
+   */
   function checkPluginApiVersion(v) {
     const raw = String(v == null ? '' : v).trim();
-    if (!raw) return { ok: false, reason: '未声明 apiVersion（本宿主兼容 1.1，示例：apiVersion: "1.0"）' };
+    if (!raw) return { ok: false, reason: '未声明 apiVersion（本宿主兼容 1.1，示例：apiVersion: "1.0"）', major: null, minor: null };
     const m = raw.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-[0-9A-Za-z.-]+)?$/);
-    if (!m) return { ok: false, reason: 'apiVersion 格式非法：' + raw + '（示例：1.0）' };
+    if (!m) return { ok: false, reason: 'apiVersion 格式非法：' + raw + '（示例：1.0）', major: null, minor: null };
     const major = Number(m[1]);
     const minor = Number(m[2] || 0);
-    if (major !== API_MAJOR) return { ok: false, reason: '插件声明 API ' + raw + '，本宿主为 ' + PLUGIN_API_VERSION + '：主版本不兼容' };
-    if (minor > API_MINOR) return { ok: false, reason: '插件声明 API ' + raw + '，本宿主最高 ' + PLUGIN_API_VERSION + '：次版本高于宿主' };
-    return { ok: true };
+    if (major !== API_MAJOR) return { ok: false, reason: '插件声明 API ' + raw + '，本宿主为 ' + PLUGIN_API_VERSION + '：主版本不兼容', major, minor };
+    if (minor > API_MINOR) return { ok: false, reason: '插件声明 API ' + raw + '，本宿主最高 ' + PLUGIN_API_VERSION + '：次版本高于宿主', major, minor };
+    return { ok: true, major, minor };
   }
   /** 能力声明校验：未知能力直接拒绝；空数组合法（等于什么都做不了） */
   function checkPluginCapabilities(v) {
@@ -83,7 +87,7 @@
     if (!ver.ok) return ver;
     const caps = checkPluginCapabilities(s.capabilities);
     if (!caps.ok) return caps;
-    return { ok: true, caps: caps.caps };
+    return { ok: true, caps: caps.caps, major: ver.major, minor: ver.minor };
   }
 
   /**

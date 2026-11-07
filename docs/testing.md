@@ -39,6 +39,7 @@
 | `load-audit.spec.mjs` | D-07：损坏 `current` → 横幅「工程加载异常」；救援保持期间触发 `markDirty` 后 2 秒原记录未被覆盖；救援导出字节等于注入文本，导出后横幅移除；IDB 不可用但 localStorage 正常 → 从备份恢复并提示来源、无救援按钮；两者皆坏 → 空工程 + error 横幅 + 不弹首启引导 |
 | `tab-lease.spec.mjs` | D-09：同工程双标签 **6s 内**出现「另一标签页正在编辑（最后心跳 HH:MM:SS）」横幅；冲突期间 `markDirty` 不进入保存（`saveHealth.state='ok'`）、状态栏提示「已暂停自动保存」；「仍以本页为准」经 `confirm()` 确认后本页横幅消失、`leaseStatus().confirmed=true`，对端继续显示冲突；离开页面触发 `pagehide` 释放，对端 **6s 内**解除；不同 `projectId` 双标签等待 6s 互不触发 |
 | `save-failure.spec.mjs` | D-08：注入 `IDBObjectStore.put` 抛 `QuotaExceededError` → 2 秒内横幅 + 状态「保存失败」、`saveHealth.retry=0`、内存编辑保留、手动导出 JSON 含当前编辑，恢复后横幅清除；注入瞬时 IO 错误 → 按 1s/3s/9s 三次退避后停止（`retry=3`、`state=degraded`，e2e 实测 14.9s），横幅含「自动重试 3 次」，恢复后下一次保存回到 `ok` |
+| `plugin-compat.spec.mjs` | D-06：`PlotPin.checkPlugin` 矩阵回传 `major/minor`（1.0 / 1.0.0 / 1.1 通过，1.2 次版本、2.0 主版本、`1.x` 畸形、缺失均拒绝且原因是中文可读，解析失败 `major/minor=null`）；1.0 清单装 1.1 宿主可导入、导出可执行、卸载撤销；1.2 / 2.0 / 畸形 / 缺失版本清单在面板被拒且无确认弹窗、`listPlugins()` 与导出器集合不变，随后 1.1 清单可正常导入 |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
 `/Catalog → /Pages → /Kids` 递归恢复文档页序（缺失/损坏时退回扫描顺序并追加未覆盖页，不静默丢内容）。
