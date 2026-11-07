@@ -64,7 +64,8 @@ pointer/keyboard
   `zoom` 是"每米多少屏幕像素"，上下限来自 `APP_LIMITS.ZOOM_MIN/ZOOM_MAX`（0.02–200）。
 - **取景框**：`computeWorldFrame()` 取"图片四角轴对齐包围盒 ∪ 可见场地包围盒"；两者都没有时回退 100×70。结果缓存在 `_frameRef`，场地几何变化后必须 `syncFramePan()`（用 pan 差值补偿）或 `resetFrameRef()`，否则同一帧内坐标映射会漂移。
 - **图片像素 → 世界**：`bgPixelToWorld()` 把 y 向下翻转为 y 向上；校准点对经 `solveImageAffine()`（最小二乘）求 2×3 仿射。
-- **世界整体变换**：`applyWorldTransform(M, opts)` 默认 `{objects:true, site:false, background:true}`。**场地默认不迁移**，这是"场地优先"的校准基准；需要迁移场地时必须显式传 `site:true`。
+- **世界整体变换**：`applyWorldTransform(M, opts)` 默认 `{objects:true, site:false, background:true}`。**场地默认不迁移**，这是"场地优先"的校准基准；需要迁移场地时必须显式传 `site:true`。返回摘要含 `degraded`（降级形状列表）。
+- **形状随仿射迁移（N-12）**：`affineShapeTransform(M, shape, opts)` 是对象与场地共用的唯一实现，内部用 `affineLinearSummary()` 做 2×2 SVD/极分解。圆/椭圆按精确主轴成像（共轭直径正交时保留 `rx/ry` 约定，否则取 SVD 主轴）；平行四边形用映射后的两条边向量重算宽/高/倾角/朝向；扇形仅正向相似精确，其余按面积保真近似并返回 `degraded:'sector-affine'`；`opts.allowRotatedBox=false`（场地）把旋转/切变的矩形退化为精确多边形。已存坐标不回溯迁移。
 - **图片自身变换**：只支持 2×3 仿射（平移/绕点旋转/等比缩放/切变），由 `affTranslate / affRotateAbout / affScaleAbout / affShearX` 组合。四角自由透视需要 3×3 单应，超出当前数据结构，因此不提供——这是设计取舍，不是遗漏。
 
 ## 4. 双槽位：图片底图 + 矢量场地

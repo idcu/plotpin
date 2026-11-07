@@ -48,19 +48,108 @@ function imageWorldFrame(bg){
   }
   return {minX,minY,maxX,maxY,w:maxX-minX,h:maxY-minY};
 }
+/* ==================== 一般仿射下的形状变换（N-12 公共实现） ====================
+ * 圆/椭圆按精确主轴成像（正交共轭直径优先，否则 SVD）；平行四边形按映射后的两条边向量
+ * 重算 w/h/skew/angle；扇形仅在正向相似变换下精确，其余情况按面积保真降级并标记。
+ * 对象与场地共用本段数学，各自只做「参数结构 ↔ 规范形状」适配。 */
+/** 2×2 线性部分摘要：s1≥s2 奇异值、最大奇异方向 axisDeg、极分解旋转角 rotationDeg、是否相似 */
+function affineLinearSummary(M){
+  const a=M[0],b=M[1],d=M[3],e=M[4];
+  const E11=a*a+b*b, E22=d*d+e*e, E12=a*d+b*e;
+  const tr=E11+E22, dif=E11-E22, disc=Math.sqrt(Math.max(0,dif*dif+4*E12*E12));
+  const l1=(tr+disc)/2, l2=(tr-disc)/2;
+  const s1=Math.sqrt(Math.max(0,l1)), s2=Math.sqrt(Math.max(0,l2));
+  const axis=Math.abs(E12)>1e-12*Math.max(1,E11,E22)?Math.atan2(l1-E11,E12):(E11>=E22?0:Math.PI/2);
+  return {s1,s2,det:a*e-b*d,axisDeg:normalizeAngle(axis*180/Math.PI),
+    rotationDeg:Math.atan2(d-b,a+e)*180/Math.PI,
+    isSimilarity:Math.abs(s1-s2)<=1e-9*Math.max(s1,s2,1e-9)};
+}
+/** 圆/椭圆（中心在原点、角度 angleDeg）经线性部分 A 的精确像：返回半轴与朝向 */
+function affineEllipseImage(M,angleDeg,rx,ry){
+  const r=angleDeg*Math.PI/180, co=Math.cos(r), si=Math.sin(r);
+  const ux=Math.max(EPS,rx), uy=Math.max(EPS,ry);
+  /* B 的两列 = A·(cos,sin)·rx 与 A·(-sin,cos)·ry */
+  const X=[(M[0]*co+M[1]*si)*ux,(M[3]*co+M[4]*si)*ux];
+  const Y=[(-M[0]*si+M[1]*co)*uy,(-M[3]*si+M[4]*co)*uy];
+  const lx=Math.hypot(X[0],X[1]), ly=Math.hypot(Y[0],Y[1]);
+  let ax=lx, ay=ly, ang;
+  if(Math.abs(X[0]*Y[0]+X[1]*Y[1])<=1e-9*Math.max(lx*ly,EPS)){
+    /* 共轭直径正交时即为椭圆主轴：保持 rx/ry 与旋转轴约定，不做大小排序 */
+    ang=Math.atan2(X[1],X[0])*180/Math.PI;
+  }else{
+    const E11=X[0]*X[0]+Y[0]*Y[0], E22=X[1]*X[1]+Y[1]*Y[1], E12=X[0]*X[1]+Y[0]*Y[1];
+    const tr=E11+E22, dif=E11-E22, disc=Math.sqrt(Math.max(0,dif*dif+4*E12*E12));
+    const l1=(tr+disc)/2;
+    ax=Math.sqrt(Math.max(0,l1)); ay=Math.sqrt(Math.max(0,(tr-disc)/2));
+    ang=Math.abs(E12)>1e-12*Math.max(1,E11,E22)?Math.atan2(l1-E11,E12)*180/Math.PI:(E11>=E22?0:90);
+  }
+  return {rx:Math.max(.05,ax),ry:Math.max(.05,ay),angle:normalizeAngle(ang),
+    circle:Math.abs(ax-ay)<=1e-9*Math.max(ax,ay,EPS)};
+}
+/**
+ * 规范形状（世界坐标）经仿射 M 的像。type: circle/ellipse(cx,cy[,angle])、sector(cx,cy,r,a0,a1)、
+ * polygon(points)、rect/parallelogram(x,y,w,h,skew[,angle])。返回同构形状 + degraded 标记；
+ * opts.allowRotatedBox=false（场地）时旋转/切变的矩形退化为精确多边形。
+ */
+function affineShapeTransform(M,shape,opts){
+  const sh=shape||{}, o=Object.assign({allowRotatedBox:true},opts||{});
+  const mapP=p=>affApply(M,p), lin=affineLinearSummary(M), type=sh.type||'rect';
+  if(type==='circle'||type==='ellipse'){
+    const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]);
+    const rx=positiveNum(type==='circle'?sh.r:sh.rx,50), ry=positiveNum(type==='circle'?sh.r:sh.ry,35);
+    const im=affineEllipseImage(M,Number(sh.angle)||0,rx,ry);
+    if(type==='circle'&&im.circle) return {type:'circle',cx:c[0],cy:c[1],r:im.rx,degraded:null};
+    return {type:'ellipse',cx:c[0],cy:c[1],rx:im.rx,ry:im.ry,angle:im.angle,degraded:null};
+  }
+  if(type==='sector'){
+    const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]), r0=positiveNum(sh.r,50);
+    const exact=lin.isSimilarity&&lin.det>0;
+    const rr=exact?r0*lin.s1:r0*Math.sqrt(Math.abs(lin.det));
+    return {type:'sector',cx:c[0],cy:c[1],r:Math.max(.05,rr),
+      a0:normalizeAngle((Number(sh.a0)||0)+lin.rotationDeg),
+      a1:normalizeAngle((Number(sh.a1)||0)+lin.rotationDeg),
+      degraded:exact?null:'sector-affine'};
+  }
+  if(type==='polygon') return {type:'polygon',
+    points:(Array.isArray(sh.points)?sh.points:[]).map(p=>mapP([Number(p&&p[0])||0,Number(p&&p[1])||0])),degraded:null};
+  /* 矩形/平行四边形：底边 U、侧边 V 一起映射，再以 U 单位向量为基准重算高/倾角/朝向 */
+  const w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
+  const skew=type==='parallelogram'?parallelogramSkew(sh):0;
+  const a=(Number(sh.angle)||0)*Math.PI/180, co=Math.cos(a), si=Math.sin(a);
+  const off=hh*Math.tan(skew*Math.PI/180);
+  const lx=co*w, ly=si*w, mx=co*off-si*hh, my=si*off+co*hh;
+  const U=[M[0]*lx+M[1]*ly,M[3]*lx+M[4]*ly];
+  const V=[M[0]*mx+M[1]*my,M[3]*mx+M[4]*my];
+  const base=mapP([Number(sh.x)||0,Number(sh.y)||0]);
+  const lenU=Math.hypot(U[0],U[1]), lenV=Math.hypot(V[0],V[1]);
+  const corners=[base,[base[0]+U[0],base[1]+U[1]],[base[0]+U[0]+V[0],base[1]+U[1]+V[1]],[base[0]+V[0],base[1]+V[1]]];
+  if(lenU<EPS||lenV<EPS) return {type:'polygon',points:corners,degraded:'degenerate'};
+  const e1=[U[0]/lenU,U[1]/lenU], n=[-e1[1],e1[0]];
+  let hhOut=V[0]*n[0]+V[1]*n[1], offOut=V[0]*e1[0]+V[1]*e1[1], bp=base;
+  if(hhOut<0){ bp=[base[0]+V[0],base[1]+V[1]]; offOut=-offOut; hhOut=-hhOut; }  /* 反射：换基点保持高为正 */
+  if(hhOut<EPS) return {type:'polygon',points:corners,degraded:'degenerate'};
+  const ang=normalizeAngle(Math.atan2(e1[1],e1[0])*180/Math.PI);
+  if(o.allowRotatedBox===false&&Math.abs(Math.sin(ang*Math.PI/180))>1e-9)
+    return {type:'polygon',points:corners,degraded:null};
+  const skewOut=Math.atan2(offOut,hhOut)*180/Math.PI;
+  const clamped=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,skewOut));
+  const isRect=type!=='parallelogram'&&Math.abs(skewOut)<1e-9;
+  return {type:isRect?'rect':'parallelogram',x:bp[0],y:bp[1],w:lenU,h:hhOut,skew:clamped,angle:ang,
+    degraded:Math.abs(clamped-skewOut)>1e-9?'skew-clamped':null};
+}
 /**
  * 旧世界坐标→新世界坐标仿射 M（2x3 长度 6 数组）下迁移既有对象。
- * 点位精确映射；相似（旋转+等比缩放+平移）时形状参数精确同步；
- * 一般仿射含非等比/切变时：圆按两轴伸缩升级为椭圆，矩形按变换后的两条主边取旋转外接矩形
- * （切变无法用旋转矩形表示，予以舍弃），扇形角度随基矢旋转。
+ * 点位精确映射；圆/椭圆/平行四边形/扇形统一走 affineShapeTransform；
+ * 矩形保留旋转外接矩形近似（切变无法用旋转矩形表示）；out.degraded 收集降级项。
  */
-function migrateObjectsByAffine(objects,M){
+function migrateObjectsByAffine(objects,M,out){
   const theta=Math.atan2(M[3],M[0])*180/Math.PI;
-  const sx=Math.hypot(M[0],M[3]), sy=Math.hypot(M[1],M[4]);
+  const sx=Math.hypot(M[0],M[3]);
   const mapP=p=>affApply(M,p);
   const mapVec=v=>[M[0]*v[0]+M[1]*v[1], M[3]*v[0]+M[4]*v[1]];
+  const note=(o,r)=>{ if(r&&r.degraded&&out) (out.degraded=out.degraded||[]).push({id:o.id,code:r.degraded}); };
   objects.forEach(o=>{
-    const origAng=Number(o.angle)||0;
+    const origAng=Number(o.angle)||0, ox=Number(o.x)||0, oy=Number(o.y)||0;
     if(Array.isArray(o.points)&&o.points.length) o.points=o.points.map(mapP);
     if(Number.isFinite(Number(o.x))&&Number.isFinite(Number(o.y))){
       const q=mapP([o.x,o.y]); o.x=q[0]; o.y=q[1];
@@ -78,31 +167,23 @@ function migrateObjectsByAffine(objects,M){
         o.width=Math.max(.05,(Number(o.width)||0)*Math.hypot(ex[0],ex[1]));
         o.height=Math.max(.05,(Number(o.height)||0)*Math.hypot(ey[0],ey[1]));
         o.angle=normalizeAngle(Math.atan2(ex[1],ex[0])*180/Math.PI);
-      }else if(o.shape.type==='circle'){
-        const r=Number(o.shape.r)||0;
-        if(Math.abs(sx-sy)>1e-7*Math.max(sx,sy,1e-9)){
-          o.shape={type:'ellipse',rx:Math.max(.05,r*sx),ry:Math.max(.05,r*sy)};
-          o.angle=normalizeAngle(theta);
-        }else o.shape.r=Math.max(.05,r*sx);
-      }else if(o.shape.type==='ellipse'){
-        const rx=Number(o.shape.rx)||0, ry=Number(o.shape.ry)||0, rad=origAng*Math.PI/180;
-        const u=mapVec([Math.cos(rad)*rx,Math.sin(rad)*rx]);
-        const v=mapVec([-Math.sin(rad)*ry,Math.cos(rad)*ry]);
-        o.shape.rx=Math.max(.05,Math.hypot(u[0],u[1]));
-        o.shape.ry=Math.max(.05,Math.hypot(v[0],v[1]));
-        o.angle=normalizeAngle(Math.atan2(u[1],u[0])*180/Math.PI);
+      }else if(o.shape.type==='circle'||o.shape.type==='ellipse'){
+        const r=affineShapeTransform(M,{type:o.shape.type,cx:ox,cy:oy,angle:origAng,
+          r:o.shape.r,rx:o.shape.rx,ry:o.shape.ry});
+        o.x=r.cx; o.y=r.cy;
+        if(r.type==='circle') o.shape={type:'circle',r:r.r};
+        else { o.shape={type:'ellipse',rx:r.rx,ry:r.ry}; o.angle=r.angle; }
       }else if(o.shape.type==='sector'){
-        o.shape.r=Math.max(.05,(Number(o.shape.r)||0)*sx);
-        o.shape.a0=(Number(o.shape.a0)||0)+theta;
-        o.shape.a1=(Number(o.shape.a1)||0)+theta;
+        const r=affineShapeTransform(M,{type:'sector',cx:ox,cy:oy,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
+        o.x=r.cx; o.y=r.cy; o.shape={type:'sector',r:r.r,a0:r.a0,a1:r.a1}; note(o,r);
       }else if(o.shape.type==='parallelogram'){
-        /* 平行四边形的底/高按变换后的两条主矢长度缩放；相似变换下倾角不变 */
-        const rad=origAng*Math.PI/180;
-        const ex=mapVec([Math.cos(rad),Math.sin(rad)]);
-        const ey=mapVec([-Math.sin(rad),Math.cos(rad)]);
-        o.width=Math.max(.05,(Number(o.width)||0)*Math.hypot(ex[0],ex[1]));
-        o.height=Math.max(.05,(Number(o.height)||0)*Math.hypot(ey[0],ey[1]));
-        o.angle=normalizeAngle(Math.atan2(ex[1],ex[0])*180/Math.PI);
+        const r=affineShapeTransform(M,{type:'parallelogram',x:ox,y:oy,w:o.width,h:o.height,
+          skew:o.shape.skew,angle:origAng});
+        if(r.type==='parallelogram'){
+          o.x=r.x; o.y=r.y; o.width=r.w; o.height=r.h; o.angle=r.angle;
+          o.shape={type:'parallelogram',skew:r.skew};
+        }
+        note(o,r);
       }
     }
     if(o.style&&o.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,Number(o.style.strokeWidth)*sx);
@@ -113,51 +194,29 @@ function migrateObjectsByAffine(objects,M){
 
 /**
  * 场地形状随世界仿射 M 迁移（纯函数，返回新 shape，不改入参）。
- * 轴对齐变换（b=d=0）保留原类型并精确缩放参数；含旋转/切变时：
- * 圆按两轴伸缩升级为椭圆，矩形/平行四边形按真实外轮廓转为多边形，确保与对象/底图不错位。
+ * 圆/椭圆/扇形走 affineShapeTransform 的同一数学；轴对齐变换保留矩形/平行四边形参数，
+ * 含旋转/切变时矩形/平行四边形转为精确多边形轮廓，确保与对象/底图不错位。out.degraded 收集降级项。
  */
-function siteShapeByAffine(shape,M){
+function siteShapeByAffine(shape,M,out){
   const sh=shape||{type:'rect',x:0,y:0,w:100,h:70};
-  const theta=Math.atan2(M[3],M[0])*180/Math.PI;
-  const sx=Math.hypot(M[0],M[3]), sy=Math.hypot(M[1],M[4]);
-  const mapP=p=>affApply(M,p);
-  const mapVec=v=>[M[0]*v[0]+M[1]*v[1], M[3]*v[0]+M[4]*v[1]];
   const type=sh.type||'rect';
-  if(type==='polygon'){
-    return {type:'polygon',points:(Array.isArray(sh.points)?sh.points:[]).map(p=>mapP([Number(p&&p[0])||0,Number(p&&p[1])||0]))};
-  }
-  if(type==='circle'){
-    const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]), r=positiveNum(sh.r,50);
-    if(Math.abs(sx-sy)>1e-7*Math.max(sx,sy,1e-9)){
-      return {type:'ellipse',cx:c[0],cy:c[1],rx:Math.max(.05,r*sx),ry:Math.max(.05,r*sy),angle:theta};
-    }
-    return {type:'circle',cx:c[0],cy:c[1],r:Math.max(.05,r*sx)};
-  }
-  if(type==='ellipse'){
-    const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]);
-    const rx=positiveNum(sh.rx,50), ry=positiveNum(sh.ry,35), rad=(Number(sh.angle)||0)*Math.PI/180;
-    const u=mapVec([Math.cos(rad)*rx,Math.sin(rad)*rx]);
-    const v=mapVec([-Math.sin(rad)*ry,Math.cos(rad)*ry]);
-    return {type:'ellipse',cx:c[0],cy:c[1],
-      rx:Math.max(.05,Math.hypot(u[0],u[1])),ry:Math.max(.05,Math.hypot(v[0],v[1])),
-      angle:Math.atan2(u[1],u[0])*180/Math.PI};
+  const note=r=>{ if(r&&r.degraded&&out) (out.degraded=out.degraded||[]).push({code:r.degraded}); };
+  if(type==='circle'||type==='ellipse'){
+    const r=affineShapeTransform(M,{type,cx:sh.cx,cy:sh.cy,angle:sh.angle,r:sh.r,rx:sh.rx,ry:sh.ry});
+    return r.type==='circle'?{type:'circle',cx:r.cx,cy:r.cy,r:r.r}
+      :{type:'ellipse',cx:r.cx,cy:r.cy,rx:r.rx,ry:r.ry,angle:r.angle};
   }
   if(type==='sector'){
-    const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]);
-    return {type:'sector',cx:c[0],cy:c[1],r:Math.max(.05,positiveNum(sh.r,50)*sx),
-      a0:(Number(sh.a0)||0)+theta,a1:(Number(sh.a1)||0)+theta};
+    const r=affineShapeTransform(M,{type:'sector',cx:sh.cx,cy:sh.cy,r:sh.r,a0:sh.a0,a1:sh.a1});
+    note(r);
+    return {type:'sector',cx:r.cx,cy:r.cy,r:r.r,a0:r.a0,a1:r.a1};
   }
-  if(Math.abs(M[1])<1e-12&&Math.abs(M[3])<1e-12){
-    const base=mapP([Number(sh.x)||0,Number(sh.y)||0]);
-    const out={type,x:base[0],y:base[1],
-      w:Math.max(.05,positiveNum(sh.w,100)*sx),h:Math.max(.05,positiveNum(sh.h,70)*sy)};
-    if(type==='parallelogram'){
-      /* 错切位移 = 高×tan(倾角)；非等比缩放后重算倾角，保持角点位置一致 */
-      out.skew=Math.atan(Math.tan((Number(sh.skew)||0)*Math.PI/180)*sx/sy)*180/Math.PI;
-    }
-    return out;
-  }
-  return {type:'polygon',points:siteOutlinePoints({shape:sh}).map(p=>mapP([Number(p&&p[0])||0,Number(p&&p[1])||0]))};
+  const r=affineShapeTransform(M,{type,x:Number(sh.x)||0,y:Number(sh.y)||0,w:sh.w,h:sh.h,skew:sh.skew,angle:0},
+    {allowRotatedBox:false});
+  if(r.type==='polygon') return {type:'polygon',points:r.points};
+  return r.type==='parallelogram'
+    ?{type:'parallelogram',x:r.x,y:r.y,w:r.w,h:r.h,skew:r.skew}
+    :{type:'rect',x:r.x,y:r.y,w:r.w,h:r.h};
 }
 
 /**
@@ -179,12 +238,13 @@ function applyWorldTransform(M,opts){
   if(!arr||!Number.isFinite(det)||Math.abs(det)<1e-18) return {ok:false,objects:0,site:false,background:false,metersPerPixel:null};
   const sx=Math.hypot(arr[0],arr[3]);
   let objects=0, site=false, background=false;
+  const out={degraded:[]};
   if(o.objects&&Array.isArray(state.objects)){
-    migrateObjectsByAffine(state.objects,arr);
+    migrateObjectsByAffine(state.objects,arr,out);
     objects=state.objects.length;
   }
   if(o.site&&state.site&&state.site.kind!=='image'){
-    const next=siteShapeByAffine(siteShapeOf(state.site),arr);
+    const next=siteShapeByAffine(siteShapeOf(state.site),arr,out);
     state.site.shape=next; state.site.kind=next.type;
     site=true;
   }
@@ -205,5 +265,5 @@ function applyWorldTransform(M,opts){
     if(mpp>0) bg.metersPerPixel=mpp;
     background=true;
   }
-  return {ok:true,objects,site,background,metersPerPixel:background?bg.metersPerPixel:null};
+  return {ok:true,objects,site,background,metersPerPixel:background?bg.metersPerPixel:null,degraded:out.degraded};
 }

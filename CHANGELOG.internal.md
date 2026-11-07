@@ -2,6 +2,20 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-12 一般仿射下圆/椭圆/平行四边形/扇形的系统性失真
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/core/geometry-transform.js`：新增公共 `affineLinearSummary()`（2×2 SVD + 极分解旋转角）、`affineEllipseImage()`、`affineShapeTransform(M, shape, opts)`；`migrateObjectsByAffine()` 与 `siteShapeByAffine()` 改为调用同一实现。
+  - 圆/椭圆：按精确主轴成像。共轭直径正交时保留 `rx/ry` 与旋转轴约定（兼容既有 `diag(2,3)` 用例），否则取 SVD 主轴；剪切下面积严格为 `rx·ry = |det A|·rx₀·ry₀`。
+  - 平行四边形：按映射后的两条边向量重算宽/高/倾角/朝向，四角与逐点映射完全一致；反射时换基点保持高为正。
+  - 扇形：仅正向相似变换精确（半径 ×s、起止角 +θ）；非相似按面积保真（半径 ×√|det|）近似并返回 `degraded:'sector-affine'`；`applyWorldTransform` 摘要新增 `degraded` 列表（返回字段，不改序列化结构）。
+  - `scripts/selftest.mjs`：api 新增三个导出；39.9 节 34 项断言覆盖奇异值/极分解角、圆与椭圆主轴与朝向、对象/场地同参数一致、剪切面积保真、平行四边形四角一致、场地 skew 重算、扇形相似精确/非相似降级。
+  - `sw.js`：`VERSION` 20 → 21；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步（49 个预缓存输入一致）。
+  - 文档：`docs/features.md` 校准段新增「形状迁移（N-12）」并移除 CORE-P1-6 失真限制；`docs/ARCHITECTURE.md` 补充 `affineShapeTransform` 口径。
+- **验证数据**：selftest 2853 通过 / 0 失败（较上批 +34）；e2e 98 passed / 1 skipped（soak）；单文件产物 794,992 B（gzip 247,414 B，上限 839,680 B，余量 44,688 B）；`check.mjs --selftest` 通过；`check-gates` 基线 6/6 + 9/9 破坏场景；`check-discipline --strict` 13/13。
+- **遗留风险**：扇形在非相似变换下仍是近似（面积保真、角度按极分解旋转），仅以 `degraded` 标记并写入文档，未改为多边形以免破坏区域编辑语义；既有已校准工程坐标不回溯迁移。
+
 ## 2026-11-08 · N-11 JSON 导入事务顺序与资产回收
 
 - **Commit Hash**：`627471a`（N-11 JSON 导入事务顺序与资产回收）。

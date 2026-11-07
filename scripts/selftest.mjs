@@ -183,6 +183,7 @@ code += `\n;globalThis.__api = {
   imageCornerWorld, imageWorldFrame, validImageTransform, imageHandleList, imageHandleDragTo,
   solveImageAffine, affApply, affMul, affInv, migrateObjectsByAffine,
   applyWorldTransform, siteShapeByAffine, scaleWorldAround,
+  affineLinearSummary, affineEllipseImage, affineShapeTransform,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s,
   siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
@@ -2756,6 +2757,82 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     approx('B-12-旧签名围绕中心缩放', a1.x, 7, 1e-9);
     api.migrateObjectsByAffine([a2],[2,0,-5,0,2,-5]);
     approx('B-12-旧签名等价于统一仿射', a2.x, 7, 1e-9);
+  }
+
+  /* 39.9 N-12：一般仿射下圆/椭圆/平行四边形/扇形（SVD/极分解公共实现） */
+  {
+    const C=Math.cos(Math.PI/6), S=Math.sin(Math.PI/6);
+    const M=[2*C,-S,0,2*S,C,0];          /* R(30°)·diag(2,1) */
+    const lin=api.affineLinearSummary(M);
+    approx('N-12-奇异值s1', lin.s1, 2, 1e-9);
+    approx('N-12-奇异值s2', lin.s2, 1, 1e-9);
+    approx('N-12-极分解旋转角', lin.rotationDeg, 30, 1e-9);
+    ok('N-12-非相似判定', !lin.isSimilarity);
+    /* 圆：精确主轴（2,1）+ 朝向 30°，对象与场地同参数 */
+    const im=api.affineEllipseImage(M,0,3,3);
+    approx('N-12-圆→椭圆rx', im.rx, 6, 1e-9);
+    approx('N-12-圆→椭圆ry', im.ry, 3, 1e-9);
+    approx('N-12-圆→椭圆朝向', im.angle, 30, 1e-9);
+    const oc=api.baseObject('rect','rect.area',{x:10,y:5,shape:{type:'circle',r:3}});
+    api.migrateObjectsByAffine([oc],M);
+    eq('N-12-对象圆升级椭圆', oc.shape.type, 'ellipse');
+    approx('N-12-对象椭圆rx', oc.shape.rx, 6, 1e-9);
+    approx('N-12-对象椭圆ry', oc.shape.ry, 3, 1e-9);
+    approx('N-12-对象椭圆角度', oc.angle, 30, 1e-9);
+    approx('N-12-对象圆中心x映射', oc.x, M[0]*10+M[1]*5, 1e-9);
+    approx('N-12-对象圆中心y映射', oc.y, M[3]*10+M[4]*5, 1e-9);
+    const sc=api.siteShapeByAffine({type:'circle',cx:10,cy:5,r:3},M);
+    eq('N-12-场地与对象形状类型一致', sc.type, oc.shape.type);
+    approx('N-12-场地椭圆rx与对象一致', sc.rx, oc.shape.rx, 1e-9);
+    approx('N-12-场地椭圆ry与对象一致', sc.ry, oc.shape.ry, 1e-9);
+    approx('N-12-场地椭圆角度与对象一致', sc.angle, oc.angle, 1e-9);
+    /* 椭圆：0°+4×2 → 8×2 朝向 30° */
+    const ie=api.affineEllipseImage(M,0,4,2);
+    approx('N-12-椭圆rx', ie.rx, 8, 1e-9);
+    approx('N-12-椭圆ry', ie.ry, 2, 1e-9);
+    approx('N-12-椭圆朝向', ie.angle, 30, 1e-9);
+    /* 剪切下椭圆仍按 SVD 精确：面积=rx·ry 保持 |det| 倍 */
+    const sh=api.affineEllipseImage([1,0.5,0,0,1,0],0,1,1);
+    approx('N-12-剪切椭圆面积保真', sh.rx*sh.ry, 1, 1e-9);
+    /* 平行四边形：迁移后四角与逐点映射完全一致（含 skew 重算） */
+    const po=api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:5,angle:0,shape:{type:'parallelogram',skew:30}});
+    const want=api.parallelogramPoints(0,0,10,5,30).map(p=>api.affApply(M,p));
+    api.migrateObjectsByAffine([po],M);
+    eq('N-12-平行四边形仍为平行四边形', po.shape.type, 'parallelogram');
+    ok('N-12-平行四边形重算倾角', Math.abs(po.shape.skew-30)>1e-6);
+    {
+      const got=api.shapeWorldPoints(po).map(p=>p.map(n=>Math.round(n*1e6)/1e6));
+      const exp=want.map(p=>p.map(n=>Math.round(n*1e6)/1e6));
+      const key=p=>p[0]+','+p[1];
+      const gs=got.map(key).sort(), es=exp.map(key).sort();
+      eq('N-12-平行四边形四角与映射一致', gs, es);
+    }
+    /* 场地平行四边形：轴对齐非等比 sx=2,sy=3 下重算 skew=atan(tan30×2/3) */
+    {
+      const r=api.siteShapeByAffine({type:'parallelogram',x:0,y:0,w:10,h:5,skew:30},[2,0,0,0,3,0]);
+      eq('N-12-场地平行四边形类型保持', r.type, 'parallelogram');
+      approx('N-12-场地平行四边形skew', r.skew, Math.atan(Math.tan(Math.PI/6)*2/3)*180/Math.PI, 1e-9);
+      const got=api.parallelogramPoints(r.x,r.y,r.w,r.h,r.skew).map(p=>p.map(n=>Math.round(n*1e6)/1e6));
+      const exp=api.parallelogramPoints(0,0,10,5,30).map(p=>[p[0]*2,p[1]*3]).map(p=>p.map(n=>Math.round(n*1e6)/1e6));
+      const key=p=>p[0]+','+p[1];
+      eq('N-12-场地平行四边形四角一致', got.map(key).sort(), exp.map(key).sort());
+    }
+    /* 扇形：正向相似精确；非相似按面积保真降级并标记 */
+    const sim=[2*C,-2*S,0,2*S,2*C,0];
+    const ss=api.affineShapeTransform(sim,{type:'sector',cx:0,cy:0,r:4,a0:10,a1:80});
+    eq('N-12-相似扇形无降级', ss.degraded, null);
+    approx('N-12-相似扇形半径×2', ss.r, 8, 1e-9);
+    approx('N-12-相似扇形a0+30', ss.a0, 40, 1e-9);
+    approx('N-12-相似扇形a1+30', ss.a1, 110, 1e-9);
+    const so=api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'sector',r:4,a0:10,a1:80}});
+    const out={degraded:[]};
+    api.migrateObjectsByAffine([so],[2,0,0,0,3,0],out);
+    approx('N-12-非相似扇形面积保真半径', so.shape.r, 4*Math.sqrt(6), 1e-9);
+    eq('N-12-非相似扇形降级标记', out.degraded.length===1?out.degraded[0].code:null, 'sector-affine');
+    const stDeg=api.resetState();
+    stDeg.objects.push(api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'sector',r:4,a0:10,a1:80}}));
+    const sumDeg=api.applyWorldTransform([2,0,0,0,3,0]);
+    eq('N-12-变换摘要暴露降级项', sumDeg.degraded.length===1?sumDeg.degraded[0].code:null, 'sector-affine');
   }
 }
 
