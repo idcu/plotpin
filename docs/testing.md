@@ -35,6 +35,7 @@
 | `onboarding.spec.mjs` | D-01：首次访问展示三步引导；「空白开始」写入 `completed/blank` 后刷新不再展示且对象数 0；示例工程场地 `rect 100×70`、6 个对象（2 点设备 / 1 区域 / 1 折线 / 1 文字 / 1 标注）、背景空槽且资产库无新增、刷新后 6 对象恢复；Esc 只写 `skipped/later`，下次启动仍展示 |
 | `help-center.spec.mjs` | D-03：`?` 打开三页签（快捷键 20 行 / 概念词典 6 条 / 导出清单 8 种）；页签点击切换并同步 `aria-selected`；`Esc` 关闭后 `document.activeElement` 回到画布；导出清单含 PDF 位图页、DXF SITE 图层、公式注入说明 |
 | `load-audit.spec.mjs` | D-07：损坏 `current` → 横幅「工程加载异常」；救援保持期间触发 `markDirty` 后 2 秒原记录未被覆盖；救援导出字节等于注入文本，导出后横幅移除；IDB 不可用但 localStorage 正常 → 从备份恢复并提示来源、无救援按钮；两者皆坏 → 空工程 + error 横幅 + 不弹首启引导 |
+| `tab-lease.spec.mjs` | D-09：同工程双标签 **6s 内**出现「另一标签页正在编辑（最后心跳 HH:MM:SS）」横幅；冲突期间 `markDirty` 不进入保存（`saveHealth.state='ok'`）、状态栏提示「已暂停自动保存」；「仍以本页为准」经 `confirm()` 确认后本页横幅消失、`leaseStatus().confirmed=true`，对端继续显示冲突；离开页面触发 `pagehide` 释放，对端 **6s 内**解除；不同 `projectId` 双标签等待 6s 互不触发 |
 | `save-failure.spec.mjs` | D-08：注入 `IDBObjectStore.put` 抛 `QuotaExceededError` → 2 秒内横幅 + 状态「保存失败」、`saveHealth.retry=0`、内存编辑保留、手动导出 JSON 含当前编辑，恢复后横幅清除；注入瞬时 IO 错误 → 按 1s/3s/9s 三次退避后停止（`retry=3`、`state=degraded`，e2e 实测 14.9s），横幅含「自动重试 3 次」，恢复后下一次保存回到 `ok` |
 
 **B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从

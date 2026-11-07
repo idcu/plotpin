@@ -4,7 +4,7 @@
 
 ## 为什么是分目录，不是可插拔模块
 
-PlotPin 是**双击 `index.html` 即用**的离线单页工具：41 个 classic `<script>`（`js/` 31 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
+PlotPin 是**双击 `index.html` 即用**的离线单页工具：42 个 classic `<script>`（`js/` 32 个 + `ngm.vendor/` 10 个）共享同一个全局词法作用域，
 `const SCHEMA`、`state`、`I18N` 都是裸标识符，文件之间直接引用。改 `<script type="module">`
 在 `file://` 下会被 CORS 拦掉，等于放弃核心产品承诺。
 
@@ -89,6 +89,7 @@ PlotPin 是**双击 `index.html` 即用**的离线单页工具：41 个 classic 
 | `setRescueHold(v)` | `js/core/persistence.js`（救援保持开关：true 时 `scheduleSave` 直接返回并提示「原记录未被覆盖」） | `showLoadAuditBanner`（error 置 true，导出/关闭横幅置 false）；只在加载审计 error 路径使用 |
 | `classifySaveError(err) / reportSaveFailure(err, phase)` | `js/core/persistence.js`（D-08 保存失败唯一分类与出口：`quota` / `idb` / `io` 三分类；配额不重试，瞬时错误按 1s/3s/9s 三次退避；返回下次延迟（0=停止）；`phase='project'` 表示工程库副本失败，仅降级提示不计重试） | `runSave`、`ui-shell.js` 的 `showSaveFailureBanner`、`selftest.mjs` / `e2e save-failure`；保存失败文案与重试策略只允许在此处维护，禁止在别处静默 `catch` |
 | `runSave() / writeLocalDraft(snapshot)` | `js/core/persistence.js`（D-08 自动保存唯一执行体与 localStorage 兜底唯一写法：`runSave` 负责快照、IDB 草稿/工程库副本、设置写入、保存健康与横幅清理；`writeLocalDraft` 返回是否写入成功） | `scheduleSave`、`flushBeforeUnload`、`reportSaveFailure`；新增保存路径必须复用，不得重复 `localStorage.setItem(LS_KEY…)` |
+| `acquireEditorLease / releaseEditorLease / onLeaseConflict / leaseClaim / leaseSyncProject / leaseIngest / leaseConflictAt / leaseStatus` | `js/core/tab-lease.js`（D-09 多标签租约唯一实现：BroadcastChannel 心跳 5s / 租约 15s，`storage` 事件降级，两者皆不可用时 toast 提示但仍可编辑；只做同工程冲突提示与保存前拦截，**不做实时互斥、不改写者覆盖语义**） | `app.js` 启动与横幅回调、`persistence.js` 的 `scheduleSave`（`leaseSaveBlocked()`）、`ui-shell.js` 的 `showLeaseConflictBanner`、`selftest.mjs` / `e2e tab-lease`；工程切换经 `leaseSyncProject` 清空对端快照 |
 | `firstRunGuideState(hasContent, storage?) / markFirstRunGuide(status, choice, storage?) / savedProjectHasContent(saved)` | `js/features/ui-shell.js`（D-01 首次启动引导资格与状态唯一实现：localStorage `plotpin:firstRunGuide:v1`，仅 `v===1 && status==='completed'` 永久抑制；`skipped` 下次仍展示，未知版本/损坏记录按未完成；`savedProjectHasContent` 只认项目 id / 对象 / 图片底图 / 多楼层 / 非默认场地，纯净空白自动保存不算老工程） | `app.js` 启动判定、引导弹窗、`selftest.mjs` D-01、`e2e onboarding`；老工程不得触发引导，存储写入失败仅本次会话生效 |
 | `projectObjectLists(st)` | `js/core/persistence.js`（工程级遍历对象的唯一入口：当前楼层 + 其余楼层） | `ensureObjectPhotoAssets`（全楼层照片转存）、`countProjectObjects`、JSON 导出（全楼层照片内嵌）；禁止工程级逻辑只扫 `state.objects` |
 | `importLimitErrors(spec) / importLimitMessage(errs)` | `js/core/config.js`（导入限值唯一校验入口与中文提示） | JSON/CSV/TSV/XLSX/DXF/PDF/图片/合并导入；限值来自 `APP_LIMITS` |

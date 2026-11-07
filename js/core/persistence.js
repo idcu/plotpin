@@ -555,6 +555,7 @@ async function runSave(){
 }
 function scheduleSave(){
   if(rescueHold){ saveStatus('救援模式：原记录未被覆盖'); return; }
+  if(leaseSaveBlocked()){ saveStatus(L('另一标签页正在编辑，已暂停自动保存')); return; }
   saveStatus(L('待保存…'));
   clearTimeout(saveTimer);
   clearTimeout(saveRetryTimer); saveRetryTimer=null;

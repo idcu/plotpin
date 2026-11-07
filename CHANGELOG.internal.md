@@ -2,6 +2,46 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 持久化：同工程多标签编辑租约（D-09）
+
+- **Commit Hash**：本条提交（`feat(persist): 同工程多标签编辑租约`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - 新增 `js/core/tab-lease.js`（layer 1，`index.html` 紧随 `persistence.js` 加载）：`BroadcastChannel('plotpin:editor-lease')` 广播心跳 5s、租约 15s；`leaseSend` 1.5s 内合并重复发送，`release` / `claim` 复用同一出口。
+  - `acquireEditorLease()` 先尝试 BroadcastChannel；构造失败则降级 `storage` 事件（同一 `plotpin:editor-lease` 键）；两者均不可用置 `mode='none'`，toast「无法检测多标签页，编辑仍可用」，不阻塞编辑。`pagehide` 调 `releaseEditorLease()` 广播释放并清理定时器。
+  - 收到同工程新鲜心跳即 `leaseEmit` 通知 `app.js` 注册的横幅回调：`ui-shell.js` 的 `showLeaseConflictBanner(info)` 渲染「另一标签页正在编辑（最后心跳 HH:MM:SS）」+「重新载入」/「仍以本页为准」；后者走 `confirm()` 后 `leaseClaim()` 取得租约并广播 claim，对端收到 claim 后转为冲突方。
+  - `scheduleSave()` 在救援保持检查之后、`待保存…` 之前调用 `leaseSaveBlocked()`：冲突未解除时直接返回并 `saveStatus(L('另一标签页正在编辑，已暂停自动保存'))`，**不进入保存流程**；内存编辑与撤销栈不受影响，用户仍可手动导出。
+  - 工程切换由 `leaseSyncProject()` 清空对端快照并广播新工程；心跳周期与保存前检查均复算，避免切换后残留旧冲突。
+  - 新增 `tests/e2e/tab-lease.spec.mjs` 2 条（同工程冲突/确认/释放、不同工程互不触发）；`scripts/selftest.mjs` 新增 5 条假时钟断言（5s/15s 常量、同工程冲突、不同工程、心跳过期、claim 解除）。
+  - 同步 `docs/modules.md`（脚本 41→42、js 31→32、公共抽象表新增租约行）、`docs/features.md`、`docs/testing.md`、`docs/engineering.md`（体积/SHA/断言/CSP 哈希数）、`docs/manual-acceptance.md`、`README.md`（功能条目与产物体积）。
+  - `scripts/bench.mjs` 的沙箱 `setInterval` 改为返回带 `unref()` 的句柄：D-09 心跳定时器在生产侧常驻，Node 基准跑完断言后进程不再退出；该修正只影响测试夹具，断言与阈值未改。
+- **体积收敛（实测）**：首版产物 763,395 B（较 D-08 净增 **+6,439 B**，超 6,000 B 预算 439 B）。在**不删功能、不降验收**前提下做实现内无损收敛：合并 `leaseLastBeat`/`leaseConflictAt` 为单一 `leaseFreshTs`、`release`/`claim` 复用 `leaseSend` 出口、提取 `leaseEmit` 统一回调、`leaseStatus` 去掉未使用的 `tabId/active` 字段，回收 **452 B**；最终净增 **+5,987 B（预算 ≤6,000 B，余 13 B）**。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/check.mjs --selftest` | **2683 通过 / 0 失败**（D-08 基线 2678，新增 5 条；加载 **42** 个脚本） | 0 |
+| `node scripts/e2e.mjs` | **79 passed / 1 skipped / 80 total**（D-08 基线 77/1/78，新增 `tab-lease` 2 条；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs --check` | **762,943 B（745.1 KB）**，gzip **236,462 B（230.9 KB）**；D-08 756,956 B → 净增 **+5,987 B（+0.79%，预算 ≤6,000 B）**；上限 839,680 B，余量 **76,737 B**；SHA256 `82c20b65d79f…`；二次构建确定性一致 | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg **0.38 ms** / P95 **0.52 ms**（≤8/≤3）；重建 **26.65 ms**（≤60）；heapUsed **31.74 MB**（≤64）；裁剪 **99.4%**（≥60）；覆盖率 9.8 ms / 大场地 16.3 ms（≤300）；缩放差异 0pp；规则检查 17.1 ms（≤500） | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **31.94%**（D-11 基线 29.82% 未回退；D-08 31.6% → +0.34pp，新增 6 条文案全部入字典）；字面量 1240、走翻译入口 457（字典化 396 / 缺口 61）、硬编码 783；PHRASES 818 / TEMPLATES 104 | 0 |
+| 8 种导出 golden | 未改导出实现：`git diff` 未触及 `io-export.js` / `io-fields.js` / `dxf.js` / `pdf.js`；`tests/golden/*` 在 selftest 内逐字节通过。8 格式整体比对未重跑，夹具固化留 D-13 | 0 |
+
+- **新增/调整公共抽象**
+  - 新增 `LEASE_CHANNEL`、`LEASE_STORAGE_KEY`、`LEASE_TTL_MS`、`LEASE_HEARTBEAT_MS`、`acquireEditorLease()`、`releaseEditorLease()`、`leaseSend()`、`leaseFreshTs()`、`leaseConflictAt()`、`leaseEmit()`、`leaseSyncProject()`、`leaseApply()`、`leaseIngest()`、`leaseClaim()`、`leaseSaveBlocked()`、`leaseStatus()`、`onLeaseConflict(fn)`、`leaseTick()`（`js/core/tab-lease.js`）。
+  - 新增 `showLeaseConflictBanner(info)` / `hideLeaseConflictBanner()`（`js/features/ui-shell.js`）；CSS `#leaseBanner{top:44px}` 复用 `.load-banner`，与顶部加载横幅错位、与底部保存横幅分离。
+  - `scheduleSave()` 签名不变，仅在开头新增租约阻断分支；`app.js` 仅新增回调注册与 `acquireEditorLease()` 调用。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。仅 storage 降级模式会写 `localStorage['plotpin:editor-lease']`，不进入工程 schema。
+- **遗留 / 风险**
+  - 冲突期间**暂停自动保存**：若用户忽略横幅并关闭标签页，内存编辑会丢失（`pagehide` 只释放租约、不强制落盘）；需在横幅可见时手动导出或取得租约。
+  - 检测依赖 5s 心跳：后台标签页定时器可能被浏览器节流，极端情况下超过 6s 才提示；租约 15s 也意味着对端崩溃后冲突提示最长保留 15s。
+  - `claim` 只改变本页提示并广播，不阻止对端继续写入；写入仍为最后写者覆盖，真正的互斥/合并留待后续。
+  - `storage` 降级共用单一键，多标签各自覆盖写；三标签以上只能读到最近一次写入，检测为部分覆盖（2 标签场景完整）。
+  - 体积距 D-09 预算仅剩 **13 B**，后续任何新增文案/样式都需先回收；总产物余量仍有 76,737 B。
+  - 另存/切换工程后租约在下一个 5s 心跳或首次保存检查时同步，极端竞态下可能最多 5s 窗口内仍按旧工程判断。
+  - 未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 持久化：保存失败可见性与有限退避（D-08）
 
 - **Commit Hash**：本条提交（`fix(persist): 保存失败可见性与有限退避`）；完整哈希见 `git log HEAD` 与本次汇报。

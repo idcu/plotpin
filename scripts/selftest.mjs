@@ -200,6 +200,8 @@ code += `\n;globalThis.__api = {
   classifySaveError, reportSaveFailure, writeLocalDraft, SAVE_RETRY_MS,
   get saveHealth(){ return saveHealth; },
   resetSaveHealth(){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0}; },
+  LEASE_CHANNEL, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, acquireEditorLease, releaseEditorLease, leaseIngest,
+  leaseConflictAt, leaseClaim, leaseSyncProject, leaseStatus, onLeaseConflict,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
@@ -6173,6 +6175,28 @@ asyncSuites.push((async()=>{
   eq('D-08 重试上限 3', api.saveHealth.retry, 3);
   eq('D-08 瞬时最终状态 failed', api.saveHealth.state, 'failed');
   api.resetSaveHealth();
+}
+
+/* ---------------- D-09 多标签同工程编辑租约（假时钟） ---------------- */
+{
+  const prevId=api.state.meta.projectId, P='D09-P';
+  api.state.meta.projectId=P;
+  api.acquireEditorLease();
+  api.leaseSyncProject(1000);
+  eq('D-09 心跳 5s / 租约 15s', [api.LEASE_HEARTBEAT_MS,api.LEASE_TTL_MS], [5000,15000]);
+  eq('D-09 同工程新鲜心跳视为冲突',
+    api.leaseIngest({type:'lease',tabId:'PEER1',projectId:P,ts:1000},1000), true);
+  api.leaseIngest({type:'release',tabId:'PEER1'},1000);
+  eq('D-09 不同工程互不触发',
+    api.leaseIngest({type:'lease',tabId:'PEER2',projectId:'OTHER',ts:1000},1000), false);
+  api.leaseIngest({type:'lease',tabId:'PEER3',projectId:P,ts:1000},1000);
+  eq('D-09 心跳超过 15s 失效', api.leaseConflictAt(16000), false);
+  api.leaseIngest({type:'release',tabId:'PEER3'},16000);
+  api.leaseIngest({type:'lease',tabId:'PEER4',projectId:P,ts:20000},20000);
+  eq('D-09 确认后取得租约并解除冲突',
+    api.leaseClaim(20000)&&api.leaseStatus().confirmed&&!api.leaseStatus().conflict, true);
+  api.releaseEditorLease();
+  api.state.meta.projectId=prevId;
 }
 
 /* ---------------- D-03 帮助中心：三页签与 i18n ---------------- */

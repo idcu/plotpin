@@ -5,6 +5,9 @@
   const loaded=await loadSavedProject();
   if(loaded&&loaded.state) state=loaded.state;
   showLoadAuditBanner(loaded);
+  /* D-09 同工程多标签租约：先注册横幅回调，再开始心跳；不阻塞编辑 */
+  onLeaseConflict(info=>{ if(info&&info.active) showLeaseConflictBanner(info); else hideLeaseConflictBanner(); });
+  acquireEditorLease();
   try{ const ss=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); Object.assign(state.settings,ss); }catch(e){}
   await catalogLoad();
   /* 界面语言先于首屏渲染：动态面板/ARIA 标签也按当前语言生成 */

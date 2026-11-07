@@ -60,7 +60,8 @@ const sandbox = {
   Float32Array, Float64Array, Int8Array, Int32Array, Array, Object, String, Number,
   Boolean, Error, TypeError, isFinite, isNaN, parseInt, parseFloat, encodeURIComponent,
   decodeURIComponent, escape, unescape, TextEncoder, TextDecoder, Blob, atob, btoa,
-  setTimeout, clearTimeout, setInterval, clearInterval,
+  setTimeout, clearTimeout, clearInterval,
+  setInterval: (...a) => { const h = setInterval(...a); h.unref?.(); return h; },
   document: {
     getElementById: id => elStub(id),
     createElement: () => makeUniversal(),

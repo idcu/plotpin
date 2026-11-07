@@ -569,7 +569,8 @@
     '比例尺 2/2：拖动调整控制点，Enter/✓ 应用': 'Scale 2/2: drag to adjust control points, then Enter/✓ to apply',
     '仿射 ≥3：已记录 {n} 点，Enter/✓ 求解（≥3 点为完整仿射）': 'Affine ≥3: {n} points recorded, Enter/✓ to solve (≥3 points for full affine)',
     '仿射 2/2：再记录 1 点即完整仿射；当前 2 点可按相似求解': 'Affine 2/2: record 1 more point for full affine; 2 points can be solved as similarity',
-    '仿射 {n}/2：点击第 {k} 个已知点并输入实地坐标': 'Affine {n}/2: click known point {k} and enter its ground coordinates'
+    '仿射 {n}/2：点击第 {k} 个已知点并输入实地坐标': 'Affine {n}/2: click known point {k} and enter its ground coordinates',
+    '另一标签页正在编辑（最后心跳 {time}）': 'Another tab is editing this project (last heartbeat {time})'
   };
   /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
   function fillTemplate(text, params) {
@@ -580,6 +581,10 @@
   /** 动态短语补充（整句精确匹配即可翻译的常用提示） */
   const MORE = {
     '请先导入图片底图':'Import a base image first',
+    '重新载入':'Reload', '仍以本页为准':'Keep this tab',
+    '另一标签页可能正在编辑，仍以本页为准会覆盖对方最近的修改。':'Another tab may be editing; keeping this tab will overwrite its recent changes.',
+    '另一标签页正在编辑，已暂停自动保存':'Another tab is editing this project; autosave paused',
+    '无法检测多标签页，编辑仍可用':'Multi-tab detection unavailable; editing still works',
     '场地按米绘制，无需校准':'The site is drawn in metres; calibration is not required',
     '图片变换仅适用于图片底图':'Image transform only applies to image base maps',
     '未知的校准工具':'Unknown calibration tool',

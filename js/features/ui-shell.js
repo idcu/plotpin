@@ -195,6 +195,24 @@ function showLoadAuditBanner(result){
   });
 }
 function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }
+function hideLeaseConflictBanner(){ const bar=$('leaseBanner'); if(bar) bar.remove(); }
+/** D-09 同工程多标签冲突横幅：最后心跳时刻 + 重新载入 / 确认取得租约 */
+function showLeaseConflictBanner(info){
+  let bar=$('leaseBanner');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='leaseBanner'; bar.className='load-banner warn';
+    bar.innerHTML='<span></span><button id="leaseReloadBtn">'+esc(L('重新载入'))+'</button><button id="leaseClaimBtn">'+esc(L('仍以本页为准'))+'</button>';
+    document.body.insertBefore(bar,document.body.firstChild);
+    $('leaseReloadBtn').addEventListener('click',()=>location.reload());
+    $('leaseClaimBtn').addEventListener('click',()=>{
+      if(!confirm(L('另一标签页可能正在编辑，仍以本页为准会覆盖对方最近的修改。'))) return;
+      leaseClaim(); hideLeaseConflictBanner();
+    });
+  }
+  const t=info&&info.lastBeat?new Date(info.lastBeat).toLocaleTimeString('zh-CN',{hour12:false}):'';
+  bar.querySelector('span').textContent=L('另一标签页正在编辑（最后心跳 {time}）',{time:t});
+}
 const SAVE_FAIL_TEXT={
   quota:'保存失败：存储空间不足，请导出 JSON 并清理空间',
   idb:'保存失败：IndexedDB 不可用，已降级 localStorage（容量有限）',
