@@ -86,6 +86,32 @@
     return { ok: true, caps: caps.caps };
   }
 
+  /**
+   * 清单校验（plotpin.plugin/v1）：纯函数，不执行代码、不改注册表。
+   * 通过时返回规范化 spec，导入方可先确认能力再调用 loadPlugin；失败不产生任何副作用。
+   */
+  function validatePluginManifest(raw) {
+    let m = raw;
+    if (typeof raw === 'string') {
+      try { m = JSON.parse(raw); } catch (_) { return { ok: false, reason: '清单不是合法 JSON' }; }
+    }
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return { ok: false, reason: '清单必须是 JSON 对象' };
+    if (JSON.stringify(m).length > 196608) return { ok: false, reason: '清单超过 192 KB 上限' };
+    if (m.schema !== 'plotpin.plugin/v1') return { ok: false, reason: 'schema 必须为 plotpin.plugin/v1' };
+    const id = String(m.id == null ? '' : m.id).trim();
+    if (!PLUGIN_ID_RE.test(id)) return { ok: false, reason: 'id 需为 2–64 位字母、数字、点、下划线或短横线' };
+    const name = String(m.name == null ? '' : m.name).trim();
+    if (!name || name.length > 80) return { ok: false, reason: 'name 必填且不超过 80 字符' };
+    const version = String(m.version == null ? '' : m.version).trim();
+    if (!/^\d+\.\d+\.\d+$/.test(version)) return { ok: false, reason: 'version 需为 x.y.z' };
+    const check = checkPlugin({ id, apiVersion: m.apiVersion, capabilities: m.capabilities });
+    if (!check.ok) return check;
+    const code = String(m.code == null ? '' : m.code);
+    if (!code.trim()) return { ok: false, reason: 'code 必填' };
+    if (code.length > 65536) return { ok: false, reason: 'code 超过 64 KB 上限' };
+    return { ok: true, spec: { id, name, version, apiVersion: String(m.apiVersion), capabilities: check.caps.slice(), code } };
+  }
+
   /* -------------------- 注册表（旧路径与沙箱共用） ------------------------- */
   function builtinTypes() {
     try { return Array.isArray(BUILTIN_TYPES) ? BUILTIN_TYPES : null; } catch (_) { return null; }
@@ -613,6 +639,7 @@
     apiVersion: PLUGIN_API_VERSION,
     capabilities: PLUGIN_CAPABILITIES,
     checkPlugin: checkPlugin,
+    validatePluginManifest: validatePluginManifest,
     loadPlugin: loadPlugin,
     unloadPlugin: unloadPlugin,
     listPlugins: listPlugins,

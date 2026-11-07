@@ -8,6 +8,7 @@
     "apiVersion": "插件 API 版本（当前 1.1.0）；loadPlugin 按 1.x 协商，1.0 插件仍可加载",
     "capabilities": "能力白名单表（state:read/state:write/annotate/types/icons/export/import/rules）",
     "checkPlugin": "加载前自检：校验 id / apiVersion / capabilities，返回 {ok,reason}（同步、不执行代码）",
+    "validatePluginManifest": "校验 plotpin.plugin/v1 清单（必填/长度上限/能力），返回规范化 spec 或 {ok:false,reason}；纯函数不改注册表",
     "loadPlugin": "隔离加载：在 Worker 中执行 code，按能力白名单消息通信；返回 {ok,id,reason}",
     "unloadPlugin": "卸载隔离插件并注销其导出/导入/类型（类型被使用时保留）",
     "listPlugins": "列出隔离插件状态（loading/active/disabled）与禁用原因",

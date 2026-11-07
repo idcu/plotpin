@@ -3994,6 +3994,24 @@ asyncSuites.push((async()=>{
   ok('插件-拒绝缺失能力声明', (()=>{const r=PP.checkPlugin({apiVersion:'1.0'});return !r.ok&&/capabilities/.test(r.reason);})());
   ok('插件-拒绝非法 id', !PP.checkPlugin({id:'bad id!',apiVersion:'1.0',capabilities:[]}).ok);
   eq('插件-初始沙箱插件列表为空', PP.listPlugins().length, 0);
+
+  /* D-05 清单校验：纯函数、事务化（失败不改注册表） */
+  const mo = { schema:'plotpin.plugin/v1', id:'demo.manifest', name:'示例清单', version:'1.0.0',
+    apiVersion:'1.0', capabilities:['export','export'], code:'PlotPin.registerExporter({id:"m"});' };
+  const vm = PP.validatePluginManifest(JSON.stringify(mo));
+  ok('清单-合法字符串通过', vm.ok===true);
+  eq('清单-能力规范化去重', vm.spec.capabilities.join(','), 'export');
+  eq('清单-规范化 id/name/version', vm.spec.id+'|'+vm.spec.name+'|'+vm.spec.version, 'demo.manifest|示例清单|1.0.0');
+  eq('清单-校验不产生插件', PP.listPlugins().length, 0);
+  ok('清单-非 JSON 拒绝', (()=>{const r=PP.validatePluginManifest('{');return !r.ok&&/JSON/.test(r.reason);})());
+  ok('清单-非对象拒绝', !PP.validatePluginManifest([]).ok);
+  ok('清单-schema 错误拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{schema:'v2'}));return !r.ok&&/schema/.test(r.reason);})());
+  ok('清单-缺 name 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{name:' '}));return !r.ok&&/name/.test(r.reason);})());
+  ok('清单-version 非 x.y.z 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{version:'1.0'}));return !r.ok&&/version/.test(r.reason);})());
+  ok('清单-未知能力拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{capabilities:['network']}));return !r.ok&&/未知能力/.test(r.reason);})());
+  ok('清单-code 空拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{code:'  '}));return !r.ok&&/code/.test(r.reason);})());
+  ok('清单-code 超 64 KB 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{code:'x'.repeat(65537)}));return !r.ok&&/64 KB/.test(r.reason);})());
+  ok('清单-超过 192 KB 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{filler:'x'.repeat(200000)}));return !r.ok&&/192 KB/.test(r.reason);})());
 }
 
 /* 57.2 C-05 几何规则检查：配置 / 框架 / 三条规则 / CSV / 定位 --------------- */

@@ -118,7 +118,7 @@ PWA 安装、Service Worker、IndexedDB 在**非安全上下文**下会被浏览
 以下人工项全部通过，也只说明"这些场景在当次设备/语料上可用"，**不能**替代：
 
 - `npm run ci`：`check.mjs --selftest`、`bench.mjs`、`build.mjs --check`、`check-gates.mjs`；
-- `node scripts/selftest.mjs`（当前 **2687** 条断言）与 `tests/golden/*` 逐字节比对；
+- `node scripts/selftest.mjs`（当前 **2700** 条断言）与 `tests/golden/*` 逐字节比对；
 - `node scripts/e2e.mjs`（Chromium 自动化 e2e）；
 - `node scripts/perf-browser.mjs` 的既有基线（默认不在 `ci` 内，但仍是可重复数据保留）；
 - A1 的路径哈希与 `legacy-symbols.svg` golden（人工抽检不能替代）。

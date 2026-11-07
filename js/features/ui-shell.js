@@ -15,6 +15,7 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="极轴追踪的角度步长">${[15,30,45,90].map(x=>`<option value="${x}" ${Number(state.settings.polarStep)===x?'selected':''}>${x}°</option>`).join('')}</select>
       <label>${esc(T('precisionSetting'))}</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>${esc(T('languageLabel'))}</label><select id="setLang"><option value="zh" ${state.settings.lang!=='en'?'selected':''}>中文</option><option value="en" ${state.settings.lang==='en'?'selected':''}>English</option></select>
+      <label>插件（仅本会话）</label><div id="pluginPanel">${pluginPanelHTML()}</div>
       <label>${esc(T('runtimeSetting'))}</label><div class="hint-text">${esc(capabilitySummary())}</div>
       <label>${esc(T('siteBgSetting'))}</label><div class="hint-text">${esc(siteDescription())}<br>可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/平行四边形/多边形</div>
     </div>`,[
@@ -38,7 +39,42 @@ $('settingsBtn').onclick=()=>{
       closeModal(); commitChange('设置已保存');
     }}
   ]);
+  bindPluginPanel();
 };
+
+/** D-05 插件面板：列表（id/版本/能力/状态/原因）+ 清单导入 + 卸载；仅会话内，不持久化 */
+function pluginPanelHTML(){
+  const zh={active:'可用',loading:'加载中',disabled:'已禁用',unloaded:'已卸载'};
+  const list=PlotPin.listPlugins();
+  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(zh[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||'无能力')+(p.reason?' · '+esc(p.reason):'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">卸载</button></div>').join(''):'<div class="hint-text">尚未导入插件</div>')+
+    '<button type="button" id="pluginImportBtn">导入清单（.json）</button><input type="file" id="pluginFile" accept=".json,application/json" hidden>'+
+    '<div class="hint-text">格式 plotpin.plugin/v1；code ≤64 KB、清单 ≤192 KB；刷新后需重新导入。</div>';
+}
+function bindPluginPanel(){
+  const panel=$('pluginPanel'); if(!panel) return;
+  const refresh=()=>{ panel.innerHTML=pluginPanelHTML(); bindPluginPanel(); };
+  const btn=$('pluginImportBtn'), file=$('pluginFile');
+  if(btn&&file) btn.onclick=()=>file.click();
+  if(file) file.onchange=async()=>{
+    const f=file.files&&file.files[0]; if(!f) return;
+    let raw='';
+    try{ raw=await f.text(); }catch(_){ toast('插件清单读取失败','error'); return; }
+    const r=PlotPin.validatePluginManifest(raw);
+    if(!r.ok){ toast('插件清单被拒：'+r.reason,'error'); file.value=''; return; }
+    if(!confirm('加载插件 '+r.spec.id+' ？\n能力：'+(r.spec.capabilities.join(' / ')||'无'))){ file.value=''; return; }
+    const res=await PlotPin.loadPlugin(r.spec);
+    if(res&&res.ok) toast('插件已加载：'+r.spec.id,'success');
+    file.value='';
+    refresh();
+  };
+  Array.from(panel.querySelectorAll('[data-plugin-unload]')).forEach(b=>{
+    b.onclick=()=>{
+      const id=b.getAttribute('data-plugin-unload');
+      if(!confirm('卸载插件 '+id+' ？')) return;
+      PlotPin.unloadPlugin(id); toast('插件已卸载：'+id); refresh();
+    };
+  });
+}
 
 /* -------------------- 通用弹窗 / Toast -------------------- */
 let modalReturnFocus=null;

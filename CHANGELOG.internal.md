@@ -2,6 +2,40 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-07 · 插件：清单导入与管理面板（D-05，会话内）
+
+- **Commit Hash**：本条提交（`feat(plugin): 插件清单导入与管理面板`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **核心改动点**
+  - `js/features/plugins.js`：新增 `validatePluginManifest(raw)` 纯函数（接受 JSON 字符串或对象）：校验 `schema === 'plotpin.plugin/v1'`、`id`（2–64 位）、`name`（≤80）、`version`（`x.y.z`）、`apiVersion` / `capabilities`（复用 `checkPlugin`），清单 ≤192 KB、`code` ≤64 KB；通过返回规范化 `spec`（能力去重），失败返回 `{ok:false,reason}`，**不执行代码、不改注册表**。`PlotPin` 新增同名键。
+  - `js/features/ui-shell.js`：设置弹窗新增「插件（仅本会话）」面板（`#pluginPanel`）：列出 `listPlugins()` 的 id / API 版本 / 状态 / 能力 / 禁用原因，逐条卸载；`#pluginImportBtn` + 隐藏 `#pluginFile` 读取 `.json`，校验通过后经 `confirm()` 展示能力再 `loadPlugin`；面板明确提示刷新后需重新导入。
+  - `contracts/plugin-api.json`：键 22 → **23**（`validatePluginManifest`）；`npm run api` 双向比对 23 键、0 泄漏、0 落空。
+  - 新增 `tests/e2e/plugin-manifest.spec.mjs` 2 条（合法导入/卸载、非法清单拒绝且状态不变）；`scripts/selftest.mjs` 新增 13 条清单校验断言。
+  - 同步 `docs/modules.md`（新增 `checkPlugin / validatePluginManifest` 唯一校验入口行）、`docs/features.md`（D-05 清单导入与面板）、`docs/engineering.md`（§4.1 清单校验与限制、体积/SHA/断言）、`docs/testing.md`、`docs/manual-acceptance.md`、`README.md`（23 键、2700 断言、体积）。
+- **实测验证（本机，退出码均为 0）**
+
+| 命令 | 结果 | 退出码 |
+|---|---|---|
+| `node scripts/selftest.mjs` | **2700 通过 / 0 失败**（D-04 基线 2687，新增 13 条；加载 42 个脚本） | 0 |
+| `node scripts/e2e.mjs` | **82 passed / 1 skipped / 83 total**（D-04 基线 80/1/81，新增 plugin-manifest 2 条；skip 仍为需 `COLLAB_SOAK=1` 的 5 分钟浸泡） | 0 |
+| `node scripts/build.mjs` | **767,211 B（749.2 KB）**，gzip **237,829 B（232.3 KB）**；D-04 763,709 B → 净增 **+3,502 B（预算 ≤8,000 B）**；上限 839,680 B，余量 **72,469 B**；SHA256 `3687a09bc666…` | 0 |
+| `node scripts/check-plugin-api.mjs` | **23 个键 / 清单 23 条 / 0 泄漏 / 0 落空** | 0 |
+| `node scripts/check-gates.mjs` | 5/5 人为破坏均被拦截 | 0 |
+| `node scripts/check-discipline.mjs` | 13/13（L4） | 0 |
+| `node scripts/bench.mjs` | 缓存帧 avg **0.38 ms** / P95 **0.49 ms**（≤8/≤3）；重建 **27.55 ms**（≤60）；heapUsed **33.26 MB**（≤64）；裁剪 **99.4%**（≥60）；覆盖率 9.2 ms / 大场地 16.2 ms（≤300）；缩放差异 0pp；规则检查 16.4 ms（≤500） | 0 |
+| `node scripts/i18n-scan.mjs` | 覆盖率 **31.16%**（D-11 基线 29.82% 未回退；D-04 31.81% → **−0.65pp**，因插件面板与清单校验新增中文未入字典，留 D-11）；字面量 1271、硬编码 810；PHRASES 818 / TEMPLATES 104 | 0 |
+| 8 种导出 golden | 未改导出实现：`git diff` 未触及 `io-export.js` / `io-fields.js` / `dxf.js` / `pdf.js`；`tests/golden/*` 在 selftest 内逐字节通过。8 格式整体比对未重跑，夹具固化留 D-13 | 0 |
+
+- **新增/调整公共抽象**
+  - 新增 `validatePluginManifest(raw)`（`js/features/plugins.js`）并被 UI 导入与 selftest 共用；`loadPlugin(spec)` 签名与语义不变。
+  - 新增 `PlotPin.validatePluginManifest`（契约 22 → 23 键）。
+  - 未新增运行时依赖；既有公共 API 与调用方签名不变。
+- **遗留 / 风险**
+  - 插件仅**本会话有效**：不持久化 `code`（避免未经安全评审的代码长期驻留），刷新后需重新导入；持久化留待独立任务。
+  - 「清单被拒」的 `reason` 与面板文案为中文硬编码，i18n 覆盖率小幅回落；按计划留 D-11 统一收敛，不用英文凑数。
+  - 清单校验只保证字段/长度/能力合法，**不承诺代码安全**：仍需 `loadPlugin` 的 Worker 隔离与 2 s 超时；不设内存配额（延续 K9）。
+  - 卸载行为沿用 `unloadPlugin`：导出/导入立即撤销，类型仅在未被对象使用时移除（既有图纸外观不被破坏）。
+  - 体积余量 72,469 B；未 push；未读取/修改根目录 `camera-*`。
+
 ## 2026-11-07 · 插件：规则注册进入公共 API 与来源标识（D-04）
 
 - **Commit Hash**：本条提交（`feat(plugin): 规则注册进入公共 API 与来源标识`）；完整哈希见 `git log HEAD` 与本次汇报。
