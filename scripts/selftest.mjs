@@ -147,6 +147,7 @@ code += `\n;globalThis.__api = {
   formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
+  normalizeExportColor, dxfSanitizeName,
   outlineOf, objectIndexById, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
@@ -1660,6 +1661,38 @@ await section("28.7 N-08 楼层名唯一化与跨楼层引用检查", async () =
   ok('N08-导入重名楼层整批拒绝', plan.errors.some(e=>e.includes('楼层名称')&&e.includes('重复')));
   eq('N08-拒绝时无更新', plan.updates.length, 0);
   eq('N08-拒绝时无新增', plan.creates.length, 0);
+  api.resetState();
+}
+});
+
+/* 28.8 N-10 导出层转义与结构注入加固 ---- */
+await section("28.8 N-10 导出层转义与结构注入加固", async () => {
+{
+  const st=api.resetState();
+  eq('N10-颜色白名单-非法回退', api.normalizeExportColor('red" onload="alert(1)','#111827'), '#111827');
+  eq('N10-颜色白名单-十六进制', api.normalizeExportColor('#abc','#000'), '#abc');
+  eq('N10-颜色白名单-rgba', api.normalizeExportColor('rgba(1,2,3,.5)','#000'), 'rgba(1,2,3,.5)');
+  eq('N10-颜色白名单-关键字', api.normalizeExportColor('red','#000'), 'red');
+  st.site=null;
+  st.layers[0].name='A\r\nB\tC';
+  const o=api.baseObject('rect','rect.area',{name:'X'});
+  o.style.color='red" onload="alert(1)';
+  st.objects.push(o);
+  const svg=api.buildSceneSvg();
+  ok('N10-SVG 颜色属性被中和', svg.includes('fill="#111827"')&&!svg.includes('onload=')&&!svg.includes('red"'));
+  const dx=api.dxfEntitiesForExport();
+  eq('N10-DXF 图层名无 CR/LF', /[\r\n\t]/.test(dx.layers[0].name), false);
+  eq('N10-DXF 图层名清洗值', dx.layers[0].name, 'A B C');
+  eq('N10-DXF 实体图层与图层表一致', dx.entities[0].layer, dx.layers[0].name);
+  const dxf=api.Dxf.buildDxf(dx.entities,dx.layers);
+  ok('N10-DXF 结构完整（EOF 结尾）', /EOF\s*$/.test(dxf));
+  ok('N10-DXF 图层名按组码单行写入', dxf.includes('A B C'));
+  /* 符号路径：A 起始被拒；裸 A 路径不抛异常；合法 M+A 正常离散 */
+  eq('N10-符号路径 A 起始被拒', api.symbolPathsFor({symbol:[{d:'A10,10 0 0 0 20,20'}]}).length, 0);
+  let threw=false;
+  try{ api.pathToPolylines('A10,10 0 0 0 20,20'); }catch(e){ threw=true; }
+  eq('N10-A 起始裸路径不抛异常', threw, false);
+  eq('N10-合法 M+A 路径可离散', api.pathToPolylines('M0,0 A5,5 0 0 1 10,0').length, 1);
   api.resetState();
 }
 });

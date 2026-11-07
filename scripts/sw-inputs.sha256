@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=18
+version=19
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -13,7 +13,7 @@ dce45a0958562a1a7714645a1b13f7ae8bddf91d429d581c6ec7b77def4a5fed  js/common/i18n
 4df813717856383f877d6552aeb8529ebf7f2adbbc52cf0c62ca40c4e7db60d2  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
 2b64520f255a3e712eec295380877150b9193988ad29b35914cf75480685fc7c  js/common/qr.js
-50b982851a3813c40aa4cd5293330d645a3d4c95af6ef9120e57041da532d46c  js/common/symbols.js
+bcddea9a431948fae2f237f8eeb8c6d4b897697356fe11f5ba26eb2d460edbcc  js/common/symbols.js
 3165d3846f6c1d29bc3aab8d8412079f67a9b3f82bf19e84edeff6bd0da582ad  js/core/app.js
 2e27843c6aac91c20e4ea2e07ec1c669103d73ab682a98d368bb17e9c6c86581  js/core/config.js
 504647c8ffc10b05c68c282e5a5f9d8611cb05532cbd634c011df979aa962591  js/core/geometry-coverage.js
@@ -29,7 +29,7 @@ e98cbef1afc8b1de258beb4775d0d1ec6f67f6a13e83d130d25653160659015e  js/core/snapsh
 6cdcb4eb2acc55866dc22ad0d4e40a0178f4245aa6f7c76426bd9f93deca3518  js/core/viewport.js
 2c8807de25dc960165b8dc7123c408f83f2927ea9294c924a863875c3bce9717  js/features/catalog.js
 96d38476772eabc577d9548579e3d9d5723ded596b26275f8eb21d6378ed3e77  js/features/collab.js
-2bacde17772ca42bc5e69c6120a0e68ed86e455641d4e354620a9dc16abfb088  js/features/io-export.js
+18777f08799c7ff577076235e6928de7a92d9e17c587c765b25ddeda9b402a29  js/features/io-export.js
 c15a33387f12004084f19bdd9b04ccf9fde78633033926c8fb5f0f572803e872  js/features/io-fields.js
 7ab6ba5afa3c72216c8b8e1dda6dcff5db6c2fa4da7d1bd8f4ecf3f9e69a051c  js/features/io-import.js
 ecf35b8e125e22079aff8eb9d52680df2584bd07570bf82e0c38f16d3dff91e7  js/features/io-table.js

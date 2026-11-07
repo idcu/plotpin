@@ -95,6 +95,8 @@
       const text = d.trim();
       if (text.length > LIMITS.PATH_CHARS) throw new Error('单条 path 过长（最多 ' + LIMITS.PATH_CHARS + ' 字符）');
       if (!/^[MmZzLlHhVvCcSsQqTtAa0-9.,+\-eE\s]+$/.test(text)) throw new Error('path 含非法字符');
+      /* N-10：首命令必须是 M/m，避免 A/S/Q/T 起始时没有当前点而抛错或画出伪路径 */
+      if (!/^[Mm]/.test(text)) throw new Error('path 必须以 M/m 起始');
       out.push({ d: text, fill: !!(item && item.fill) });
     }
     if (!out.length) throw new Error('符号缺少可渲染路径');
@@ -350,6 +352,8 @@
         const ex = rel ? cx + vals[0] : vals[0], ey = rel ? cy + vals[1] : vals[1];
         quad(qx, qy, ex, ey);
       } else if (C === 'A') {
+        /* N-10：A 分支缺省当前点时先落到 (cx,cy)，避免 cur 为空导致 TypeError（S/Q/T 已由 cubic/quad 兜底） */
+        if (!cur) move(cx, cy);
         const ex = rel ? cx + vals[5] : vals[5], ey = rel ? cy + vals[6] : vals[6];
         for (const p of arcPoints(cx, cy, vals[0], vals[1], vals[2], !!vals[3], !!vals[4], ex, ey)) cur.points.push(p);
         cx = ex; cy = ey;

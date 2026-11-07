@@ -338,7 +338,7 @@ function exportTitleBlockSvg(spec){
     out.push(`<text x="${lg.x+6}" y="${lg.y+16}" font-size="11" font-weight="bold" fill="#111827">${esc(L('图例'))}</text>`);
     let y=lg.y+34;
     lg.items.forEach(it=>{
-      out.push(`<rect x="${lg.x+7}" y="${y-8}" width="8" height="8" fill="${esc(it.color)}" stroke="#111827" stroke-width="1"/>`);
+      out.push(`<rect x="${lg.x+7}" y="${y-8}" width="8" height="8" fill="${normalizeExportColor(it.color,'#111827')}" stroke="#111827" stroke-width="1"/>`);
       out.push(`<text x="${lg.x+20}" y="${y}" font-size="11" fill="#111827">${esc(it.name+' ×'+it.count)}</text>`);
       y+=lg.lineH;
     });
@@ -366,6 +366,22 @@ function exportPNG(){
 function exportSVG(){
   downloadBlob(new Blob([buildSceneSvg()],{type:'image/svg+xml;charset=utf-8'}),safeName()+'.svg');
   toast('SVG 已导出','success');
+}
+/** 导出层颜色白名单：拒绝引号/空白/分号等可逃逸 SVG 属性的取值，非法回退 fb */
+function normalizeExportColor(v, fb){
+  const s=String(v==null?'':v).trim();
+  if(/^#[0-9a-f]{3,8}$/i.test(s)) return s;
+  if(/^rgba?\([\d.,%\s/]+\)$/i.test(s)) return s;
+  if(/^[a-z]{3,20}$/i.test(s)) return s;
+  return fb;
+}
+/** DXF 图层名清洗：去控制字符（CR/LF/制表）与 vendor 会替换的保留字符，保证组码结构不被截断 */
+function dxfSanitizeName(name){
+  const s=String(name==null?'':name)
+    .replace(/[\r\n\t\u0000-\u001f\u007f]+/g,' ')
+    .replace(/[<>/\\":;?*|=`]/g,'_')
+    .trim().slice(0,60);
+  return s||'LAYER';
 }
 /** 纯函数：按当前工程生成 SVG 文本（导出与自测共用，不触发下载） */
 function buildSceneSvg(){
@@ -475,7 +491,7 @@ function buildSceneSvg(){
     return body;
   };
   state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
-    const t=getType(o.typeId), color=o.style.color||t.color;
+    const t=getType(o.typeId), color=normalizeExportColor(o.style.color||t.color,'#111827');
     if(o.kind==='rect'){
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       shapes.push(`<polygon points="${pts}" fill="${color}" fill-opacity="${styleVal(o,'fillAlpha',.15)}" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
@@ -538,7 +554,7 @@ function buildSceneSvg(){
       }
       markers.push(annotItemsSvg(o));
     }else if(o.kind==='text'){
-      markers.push(`<text x="${X(o.x)}" y="${Y(o.y)}" transform="rotate(${-o.angle} ${X(o.x)} ${Y(o.y)})" text-anchor="middle" font-size="${Math.max(10,o.height*ppu*.55)}" fill="${o.style.color||'#111'}">${esc(o.text||'文字')}</text>`);
+      markers.push(`<text x="${X(o.x)}" y="${Y(o.y)}" transform="rotate(${-o.angle} ${X(o.x)} ${Y(o.y)})" text-anchor="middle" font-size="${Math.max(10,o.height*ppu*.55)}" fill="${normalizeExportColor(o.style.color,'#111')}">${esc(o.text||'文字')}</text>`);
     }else if(o.kind==='dimension'&&o.points.length>=2){
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`).join(' ');
       const dash=o.subtype==='ruler'?' stroke-dasharray="7,4"':'';
@@ -587,7 +603,14 @@ function siteDxfEntities(){
  *  对象顶点统一走 outlineOf（A-15），保证 SVG/DXF 顶点源一致。 */
 function dxfEntitiesForExport(){
   const entities=[];
-  const layers=state.layers.map(l=>({name:l.name,color:'#7c3aed'}));
+  /* N-10：图层名在调用侧清洗（不改 vendor）；SITE 保留，清洗后重名追加 _2 后缀 */
+  const usedNames=new Set(['SITE']), nameMap=new Map();
+  state.layers.forEach(l=>{
+    let nm=dxfSanitizeName(l.name);
+    if(usedNames.has(nm)){ let k=2; while(usedNames.has(nm+'_'+k)) k++; nm=nm+'_'+k; }
+    usedNames.add(nm); nameMap.set(l.id,nm);
+  });
+  const layers=state.layers.map(l=>({name:nameMap.get(l.id),color:'#7c3aed'}));
   /* DXF 明确降级报告：符号点保留 POINT 锚点，形状以折线近似（不静默丢失） */
   const report={symbolPoints:0, approxPolylines:0, degraded:false,
     note:'符号图元在 DXF 中以 LWPOLYLINE 折线近似（曲线/圆弧离散），不可再编辑为符号；真实尺寸按对象 phys，phys=0 时用 0.6 m 名义尺寸。'};
@@ -598,7 +621,7 @@ function dxfEntitiesForExport(){
   state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
     const t=getType(o.typeId);
     const color=o.style.color||t.color||'#111827';
-    const layer=layerOf(o).name;
+    const layer=nameMap.get(o.layerId)||dxfSanitizeName(layerOf(o).name);
     if(o.kind==='point'){
       entities.push({type:'POINT',layer,color,x:o.x,y:o.y});
       if(t.symbol&&t.symbol.length){

@@ -2,6 +2,29 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-10 导出层转义与结构注入加固
+
+- **Commit Hash**：N-10 提交（哈希由 N-05~N-11 阶段末统一回填）。
+- **核心改动**
+  - `js/features/io-export.js`：新增 `normalizeExportColor(v, fb)` 白名单（`#hex` / `rgb()/rgba()` / 纯字母 CSS 关键字），拒绝含引号、空白、分号、等号的取值并回退默认色；SVG 对象 `fill/stroke`、文字 `fill`、图例色块统一走该函数。此前 `o.style.color` 直接拼进属性，可经非沙箱插件路径逃逸属性。
+  - `js/features/io-export.js`：新增 `dxfSanitizeName(name)`，将 CR/LF/制表等控制字符折叠为空格，并按 vendor 的保留字符集替换为 `_`、截断 60 字符、空名回退 `LAYER`；`dxfEntitiesForExport` 预生成 `nameMap`（`SITE` 保留，清洗后重名追加 `_2`），图层表与实体 `layer` 共用同一映射，避免组码被换行截断。
+  - `js/common/symbols.js`：`normalizeSymbolPaths` 要求 path 以 `M/m` 起始；`pathToPolylines` 的 `A` 分支在 `cur` 为空时先 `move(cx,cy)`（`S/Q/T` 原有 `cubic/quad` 兜底），恶意/畸形 path 不再抛 `TypeError`。
+  - `scripts/selftest.mjs`：api 新增 `normalizeExportColor`、`dxfSanitizeName`；新增 28.8 节 13 项断言（颜色白名单 4 项、SVG 注入中和、DXF 图层名清洗/唯一/组码单行与 EOF 结构、符号 A 起始拒绝/裸路径不抛/合法 M+A 可离散）。
+  - `sw.js`：`VERSION` 18 → 19；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步（49 个预缓存输入一致）。
+  - 文档：`docs/features.md` §14/§19 更新导出限制与安全边界；`docs/known-issues.md` 关闭 IO-P1-3（已修复 18 → 19，P1 17 → 16）；`docs/testing.md` 115 分区 / 2810 断言；`README.md` 数字口径。
+- **实测验证（2026-11-08 本机）**
+  - **负向先证**：同时临时跳过颜色白名单、DXF 图层名映射与符号首命令/A 空点保护 → selftest **2804 通过 / 6 失败**（SVG 注入、DXF 无 CR/LF、清洗值、组码单行、A 起始拒绝、A 裸路径不抛）；Edit 还原后 2810/0。
+  - `node scripts/check.mjs --selftest`：**2810 通过 / 0 失败**（115 分区，较 N-09 +13）；契约 7/0；插件 API 23/0；i18n 45.6%；SW `VERSION=19`。
+  - `node scripts/e2e.mjs`：**99 tests → 98 passed / 1 skipped / 0 failed**（2.2m），SVG/DXF/符号既有用例不回退。
+  - `node scripts/build.mjs --check`：**791,803 B（773.2 KB）/ gzip 245,857 B（240.4 KB）**，SHA256 `7b3e9f4f…`，较 N-09 **+872 B**，余量 **47,877 B**。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 9/9；`check-discipline --strict`：**13/13 L4**。
+- **未执行 / 未验证**
+  - 未构造“图层名为 `SITE` 且含 CR/LF”的端到端 DXF 导入回归；判据为 `dxfEntitiesForExport` + `buildDxf` 字符串断言。
+  - 未覆盖 DXF 实体文本（TEXT）中的 CR/LF 注入；本条只处理图层名。
+- **遗留风险**
+  - CSS 命名色采用 `[a-z]{3,20}` 宽松放行，非法关键字会作为无效颜色被浏览器忽略，但不会逃逸属性。
+  - `dxfSanitizeName` 与 vendor `safeLayer` 的保留字符集需同步维护；vendor 升级后若字符集变化，需更新本函数。
+
 ## 2026-11-08 · N-09 修正 PDF 导入 CTM
 
 - **Commit Hash**：N-09 提交（哈希由 N-05~N-11 阶段末统一回填）。
