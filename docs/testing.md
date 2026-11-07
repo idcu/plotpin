@@ -77,6 +77,17 @@ showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK
 硬编码 655 → 631）。未迁移项集中在 `js/common` 适配层内部错误串、DXF 单位名、DWG 入口整段 HTML
 指引与多行组合提示（见 `CHANGELOG.internal.md` 的 B-14 条目）。
 
+**i18n 覆盖率门禁（D-11，2026-11）**：`scripts/i18n-scan.mjs` 新增 `--check`（不达标退出 1）与 `--json`，
+并明确统计口径：覆盖率 = 已字典化 ÷（已字典化 + 缺口 + 硬编码）；分母只计去重中文文案，
+不含注释、HTML/CSS 标记模板与含 `${...}` 的拼接壳。UI 文件为 `js/core/app.js`、`js/core/interaction.js`
+与 `js/features/*.js`，适配器/格式模块（`io-import` / `io-export` / `io-table` / `io-fields` /
+`plugins` / `rules`）的数据标签与诊断串单列豁免。门禁只统计**未字典化**的 UI 文案（`uiCopy`）；
+已在字典、但由消费端统一 `L()`（如内置类型名经 `typeDisplayName`）的记为 `uiInDict`，不重复计门槛。
+门槛：覆盖率 ≥40%、缺口 ≤10、UI 文案硬编码 ≤20；`node scripts/check.mjs --selftest` 已接入该步。
+实测：重构口径后基线 **31.23%** → 本提交 **40.06%**（字面量 1271、走入口 511 = 已字典化 508 / 缺口 0、
+硬编码 760 其中未字典化 613、`uiCopy` 1 / `uiInDict` 90；PHRASES 924 / TEMPLATES 112）。
+口径调整原因与「不是放宽门禁」的论证见 `CHANGELOG.internal.md` 的 D-11 条目。
+
 **移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v3`），
 `activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本清单从 `index.html` 解析，新增脚本无需手工维护。
 安装用 `Promise.allSettled` 逐项 `cache.add`，单个 404 不会让新版本永远装不上；安装/激活失败时旧版本继续

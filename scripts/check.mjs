@@ -12,6 +12,7 @@
  * 8) 删除记录：docs/deletions.md 字段齐全、无假删除
  * 9) 模块分层：js/ 下只允许 common/core/features，且加载顺序按层非递减（docs/modules.md）
  * 10) --selftest：显式执行逻辑层自测并把退出码纳入本门禁（CI 必须传）
+ * 11) --selftest：i18n 覆盖率门禁（scripts/i18n-scan.mjs --check，D-11）
  *
  * 用法：node scripts/check.mjs [--selftest]
  */
@@ -122,6 +123,11 @@ if (withSelftest) {
   const tail = (st.stdout || '').trim().split('\n').pop() || (st.stderr || '').trim().split('\n').pop() || '';
   if (st.status !== 0) errors.push('逻辑层自测失败（--selftest）：\n' + (st.stdout || st.stderr || '').trim());
   else console.log(`  [门禁] --selftest 已执行：${tail}`);
+  /* 11. i18n 覆盖率门禁（D-11）：阈值与口径写在 i18n-scan.mjs 文件头 */
+  const i18n = spawnSync(process.execPath, [join(root, 'scripts', 'i18n-scan.mjs'), '--check'], { encoding: 'utf8' });
+  const i18nTail = (i18n.stdout || '').trim().split('\n').pop() || (i18n.stderr || '').trim().split('\n').pop() || '';
+  if (i18n.status !== 0) errors.push('i18n 门禁未通过：\n' + (i18n.stdout || i18n.stderr || '').trim());
+  else console.log(`  [门禁] i18n 已执行：${i18nTail}`);
 }
 
 if (errors.length) {
@@ -129,4 +135,4 @@ if (errors.length) {
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、i18n 覆盖率守约`);
