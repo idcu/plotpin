@@ -1,142 +1,199 @@
-# 测试体系（浏览器级 e2e）
+# 测试体系（Testing）
 
-> 本文承接原 `engineering.md` §5.2 的浏览器级测试内容；门禁阈值、断言数、golden 与 Node 桩 bench 见 [engineering.md](engineering.md) §5.1，真实浏览器性能基线见 [performance.md](performance.md) §5.4。
+> 本文描述**当前真实存在**的测试结构、判据与空白；不把「计划要加」写成「已有」。
+> 工程门禁与阈值的唯一事实来源是 [engineering.md](engineering.md)，性能数据见 [performance.md](performance.md)。
+>
+> 本轮核对：2026-11-08，`node scripts/selftest.mjs`、`node scripts/selftest.mjs --list`、
+> `node node_modules/@playwright/test/cli.js test --list`。数量类指标均标注了采集命令，不写「大约」。
 
-## 5.2 浏览器级测试（A-14，可选）
+---
 
-`tests/e2e/*.spec.mjs` 经本地静态服务器（`scripts/serve.mjs`，零依赖）在真实 Chromium 中执行，
-覆盖 Node 桩无法证明的部分：
+## 1. 四层结构
 
-| 文件 | 守什么 |
+| 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
+|---|---|---|---|---|
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **108 个分区 / 2,706 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **33 个 spec / 90 个用例**（默认 89 跑 + 1 条件跳过） | **否** |
+| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 7 种人为破坏 | 是 |
+
+三层职责不同，**数据不可互换**：
+
+- selftest 证明「函数/数据/导出字节」正确，但 DOM/Canvas 是桩，不能证明真实渲染；
+- e2e 证明「用户路径能走通」，但不能替代逐字节 golden 与大对象性能；
+- perf-browser 只采真实浏览器读数，不证明业务正确性；SwiftShader 数据不能当真实 GPU 结论。
+
+缺依赖时的退出码约定：`e2e.mjs` / `perf-browser.mjs` 打印 `[SKIP]` 并 **退 2**（不是 0），因此「跳过」不会伪装成「通过」。
+
+---
+
+## 2. 逻辑自测（selftest）
+
+### 2.1 组织方式
+
+- 单文件 `scripts/selftest.mjs`，按 `section('编号. 主题', async () => { … })` 顺序执行；任一断言失败即计数 + 最后退 1。
+- 两种断言原语：`eq(说明, 实际, 期望)`（严格相等/深比较）与 `ok(说明, 条件)`；失败信息包含实际值与期望值。
+- 每个分区直接对真实模块调用，不启动浏览器；DOM/Canvas 用最小桩替换，**桩不得改写业务分支**。
+- `--list` 只列分区名；`--filter "正则"` 只跑匹配分区；两者都不改变断言语义。
+- 分区编号存在复用（实测重复：8、28、32、36、48、53、56、57、63、64、65、66、67、75；其中 57 有 10 个子分区），
+  另有未编号的 D-01/D-02 等；**以 `--list` 的输出顺序为准，不要按编号排序**。
+
+新增分区时：先确认没有可复用的既有分区；同一场景的正反例放在同一分区；跨用例公共样本抽到独立辅助模块，避免多份样本漂移。
+
+### 2.2 分区地图（按功能域归组）
+
+| 功能域 | 代表分区（编号） |
 |---|---|
-| `smoke.spec.mjs` | 页面加载无脚本错误 / 入口无远程引用 / CSP 声明；点工具落点与选择命中；JSON 导出真实下载可解析；CSV/XLSX 表头与行值来自同一字段表，台账列与公式防护不回退 |
-| `persistence.spec.mjs` | IndexedDB 真实 v1→v2 回写；资产回收按命名空间并集（跨工程不误删）；非法 JSON 导入失败后现场不变；跨楼层照片导出/导入不丢 |
-| `csp.spec.mjs` | 4 条注入路径（导入 JSON / 旧存档 / 插件注册 / 类型列表渲染）在浏览器中确实无法执行 JS |
-| `history.spec.mjs` | 撤销/重做、新增楼层、删除当前楼层、切换楼层后刷新与操作后状态一致 |
-| `history-increment.spec.mjs` | B-10：CDP 实测 20 条含照片历史堆增量（基线 28.26MB vs 1.03MB，下降 96.4%）；共享快照不被 live 编辑污染、undo/redo 语义与 20 条上限不变、普通条目兼容；历史引用的底图/照片保活与清空历史后可回收；1000 对象单次 undo <100ms |
-| `interaction.spec.mjs` | 单击对象不落盘/不清覆盖率/不留空撤销快照；拖拽中 Esc 回滚到原位 |
-| `snapshot.spec.mjs` | 1000 对象快照 < 2s、体积实测；内嵌照片转为 `photoId` 引用；删除快照不影响工程；回滚进入撤销栈且可撤销/重做、回滚后可继续编辑；构造样本六类差异分类与 0 误报；叠加开关与关闭清理；**快照资产保活/删除后可回收**；20 快照（7.64MB）可达集扫描 41.5–42.6ms |
-| `collab.spec.mjs` | B-06：双标签等待→已连接→对端断开可见；消息层 TTL/key 上限/重复 hello 去重/`send` 抛错不冒泡/异常断开进 `error`；LWW 覆盖写撤销栈且 `Ctrl+Z` 恢复本地值、冲突行可见；离线短间隔重连不丢本地修改；邀请串三步建连 + 邀请串超 42 字节时只提示不渲染二维码（**同机双标签，不代表双设备 WebRTC**）；`COLLAB_SOAK=1` 时额外跑 5 分钟离线浸泡 |
-| `catalog.spec.mjs` | B-05：目录 JSON 导入 → 型号/数量绑定 → F2 同型号 → CSV/XLSX 报价导出（7 列表头、数值、合计、目录版本/导出时间）→ 替换目录后重导仍为冻结单价、改数量后按新目录重算 → 非法目录导入事务化失败且现有目录与 IndexedDB 不变 → 刷新后目录恢复、BOM 跨楼层数量正确 → 跨厂商重名未填厂商不带价、填厂商后按精确键计价 |
-| `batch-annot.spec.mjs` | 清单页勾选 2 个点设备 → 「隐藏标注」后 `annotOn(name/coord)` 全为 false 且 SVG 不含对象名 → 撤销按钮（`Ctrl+Z`）恢复默认 → 「显示标注」后显式 true；无选中时不写入历史 |
-| `batch-layout.spec.mjs` | 清单页批量行布局：1280×800 桌面下平移/旋转数值框最小宽度 ≥92px、步进控件不被挤压、行与侧栏无横向溢出；切英文后按钮文案 `Show labels / Hide labels` 不截断；390×844 触控视口下输入框与按钮高度 ≥44px、`#batchAngle` 仍可正常回读 |
-| `table-batch.spec.mjs` | B-08 原义：CSV 条件替换命中 2 台并改写业务类型/台账、批量新增落点 (10,20) 可复算；严格模式下非法更新行整批拒绝（无「合并导入」按钮），现有对象数量与文本不变 |
-| `world-transform.spec.mjs` | B-12：已仿射校准底图 + 矩形场地 + 点位做 2× 世界缩放后，对象世界坐标 ×2、与底图同一像素屏幕偏差 < 0.5 px，`metersPerPixel` 0.05→0.1、`transform.a` 同步 ×2，设备物理尺寸 ×2；场地默认保持 100×70（场地优先校准）。退化变换 `ok=false` 且对象/mp 不变；`scaleWorldAround` 旧签名可用、无 transform 时只缩放 m/p；显式 `{site:true}` 时圆场地等比放大仍为圆 |
-| `calibration-precheck.spec.mjs` | D-02：无底图无场地时比例尺/仿射/图片变换三入口 `disabled` 且 `aria-describedby` 指向原因，程序化点击不改变 `currentTool`；仅矢量场地时提示「场地按米绘制，无需校准」，图片变换提示仅适用图片底图；图片资产缺失时提示「资产缺失」、模拟解码态提示「解码中」，导入真实 PNG 解码后三入口自动恢复，比例尺状态位 `1/2 → 2/2 → 可应用` |
-| `perf-render.spec.mjs` | B-11：真实 Chromium 1600×900 离屏渲染基线（A 基础场景 / B 标注+图元，均 2000 对象）。输出重建 / 缓存命中 / 直接全量的 avg·P50·P95·P99、`staticKey`、`filter+sort`、`measureText` 与 `Path2D` 单帧调用、heapDelta、zoom=6 裁剪率；断言为宽松上限（重建 P95 <160ms、缓存帧 P50 <8ms / P95 <12ms、直接 P95 <160ms、裁剪 >60%）只作防回归，不作为性能承诺 |
-| `pdf-multipage.spec.mjs` | B-13：两页矢量 PDF（`/Kids` 顺序与对象编号相反，页宽 200/300）导入后按页序生成 2 线 + 2 文字，第一页线尾 190pt 可复算、第二页整体右移且与第一页水平区间不重叠（独立原点）、场地覆盖 524pt 总宽、提示含「2 页（独立原点）」；单页 PDF 保持旧行为（原点归零、无多页提示） |
-| `title-block.spec.mjs` | B-07：导出下拉「图框模板…」配置 8 字段并启用 → `state.meta.titleBlock` 落值 → SVG 导出回读工程名/图号/比例/日期与 `>图例<`、且不含 `<script>`（统一转义）→ PNG 校验 PNG 签名与体积 >10KB → PDF 校验 `%PDF-` 与体积 >10KB，同一配置贯通三格式 |
-| `i18n-template.spec.mjs` | B-14：切换英文后顶栏导出按钮为 `Export`；`L('已粘贴 {n} 个对象',{n:3})` 经 `toast` 输出 `Pasted 3 objects`、表格导入整句输出英文；把 `<img src=x onerror=...>` 作为文件名参数注入，toast 内 `childTags=0` 且 `window.__xss` 未触发（`textContent` 边界不引入注入面） |
-| `sw.spec.mjs` | B-15：在不加载业务脚本的同源空页注册 SW → 当前缓存名 `plotpin-v6` 且预缓存 50 条（实测输出 `entries:50`，旧文档的 46 为陈旧计数） → 预置的 `plotpin-v1` 在 activate 时被清理 → `context.setOffline(true)` 后直接打开 `index.html` 仍渲染画布（缓存回退，非白屏） |
-| `mobile.spec.mjs` | B-15：390×844 / DPR3 / touch 移动模拟下 `viewport-fit=cover`、画布 `touch-action:none`、工具栏命中区 ≥44px、☰ 侧栏开合并可点空白关闭、点工具轻触画布落点；同一次运行输出 2000 对象的移动与桌面重建/缓存帧/首屏数据，断言仅作宽松防回归 |
-| `dxf-version.spec.mjs` | B-03：AC1032 混合 DXF（LINE/SOLID/3DFACE/LEADER/TEXT/ATTRIB/DIMENSION）导入后 4 线 + 2 文字、2 个闭合区域、图层齐全，提示含版本与补充解析；二进制 DXF 明确提示另存 ASCII 且不产生对象。B-02：预检模态确认后导入；单位改判「按米」+ 只读参考层落点后坐标 ×1000、图层名含 `DXF参考` 且 `locked=true`、提示含「只读参考层」；`.dwg` 入口显示 AC1032（2018）与转 DXF/PDF 指引、`accept` 含 `.dwg`、不产生对象且不报「不支持的文件类型」 |
-| `coverage.spec.mjs` | A-11：覆盖率 v2 固定格数口径跨 zoom 0.25/1/4/16 差异 ≤1pp、隐藏对象/图层退出分母、盲区 GeoJSON 下载、布点优化应用后重跑闭环 |
-| `plugin-sandbox.spec.mjs` | C-01：Worker 隔离执行、`capabilities` 未声明能力拒绝、超时 2s 由主线程 terminate、插件异常只禁用该插件；`symbol` 未声明 `icons` 被拒；带 `"><img onerror=…>` 的类型名/图标经 `esc` 后不产生 DOM 注入 |
-| `rules.spec.mjs` | C-05：规则页签配置容差与类型阈值 → 重叠/间距/越界违规清单（规则名/对象/关联对象/楼层/坐标/实测值）→ 单击行跨楼层定位并选中主/关联对象 → CSV 导出含表头与转义；恰好等于阈值不报违规 |
-| `rule-plugin.spec.mjs` | D-04：`PlotPin.registerRule(def, owner)` 受信任路径注册 → `listRules()` 含 `owner`、规则页签显示「插件: demo.plugin」→ 运行检查产出该规则违规 → `unregisterRule` 后来源与违规均消失 |
-| `plugin-manifest.spec.mjs` | D-05：设置面板导入合法 `plotpin.plugin/v1` 清单 → 插件 `active`、导出器进入 `#exportKind` 且可执行 → 面板可见 → 卸载后注册项与下拉项消失；非 JSON / 缺 `name` / 错 `schema` / 非 `x.y.z` / 未知能力 / `code`>64 KB / 清单>192 KB 均被拒（toast「插件清单被拒」、无确认弹窗），`listPlugins()` 与导出器集合不变、面板仍显示「尚未导入插件」 |
-| `symbols.spec.mjs` | C-04：别名搜索（烟感 / NVR）与分类筛选、放置后角度与物理尺寸写回对象、5 例恶意 SVG（script / onload / 外部 href / 超深嵌套 / 超大字节）逐条 toast 原因且类型数不变、自有符号 JSON 导出仅含当前工程符号且内存重置后导入只写入当前工程 |
-| `onboarding.spec.mjs` | D-01：首次访问展示三步引导；「空白开始」写入 `completed/blank` 后刷新不再展示且对象数 0；示例工程场地 `rect 100×70`、6 个对象（2 点设备 / 1 区域 / 1 折线 / 1 文字 / 1 标注）、背景空槽且资产库无新增、刷新后 6 对象恢复；Esc 只写 `skipped/later`，下次启动仍展示 |
-| `help-center.spec.mjs` | D-03：`?` 打开三页签（快捷键 20 行 / 概念词典 6 条 / 导出清单 8 种）；页签点击切换并同步 `aria-selected`；`Esc` 关闭后 `document.activeElement` 回到画布；导出清单含 PDF 位图页、DXF SITE 图层、公式注入说明 |
-| `load-audit.spec.mjs` | D-07：损坏 `current` → 横幅「工程加载异常」；救援保持期间触发 `markDirty` 后 2 秒原记录未被覆盖；救援导出字节等于注入文本，导出后横幅移除；IDB 不可用但 localStorage 正常 → 从备份恢复并提示来源、无救援按钮；两者皆坏 → 空工程 + error 横幅 + 不弹首启引导 |
-| `tab-lease.spec.mjs` | D-09：同工程双标签 **6s 内**出现「另一标签页正在编辑（最后心跳 HH:MM:SS）」横幅；冲突期间 `markDirty` 不进入保存（`saveHealth.state='ok'`）、状态栏提示「已暂停自动保存」；「仍以本页为准」经 `confirm()` 确认后本页横幅消失、`leaseStatus().confirmed=true`，对端继续显示冲突；离开页面触发 `pagehide` 释放，对端 **6s 内**解除；不同 `projectId` 双标签等待 6s 互不触发 |
-| `save-failure.spec.mjs` | D-08：注入 `IDBObjectStore.put` 抛 `QuotaExceededError` → 2 秒内横幅 + 状态「保存失败」、`saveHealth.retry=0`、内存编辑保留、手动导出 JSON 含当前编辑，恢复后横幅清除；注入瞬时 IO 错误 → 按 1s/3s/9s 三次退避后停止（`retry=3`、`state=degraded`，e2e 实测 14.9s），横幅含「自动重试 3 次」，恢复后下一次保存回到 `ok` |
-| `plugin-compat.spec.mjs` | D-06：`PlotPin.checkPlugin` 矩阵回传 `major/minor`（1.0 / 1.0.0 / 1.1 通过，1.2 次版本、2.0 主版本、`1.x` 畸形、缺失均拒绝且原因是中文可读，解析失败 `major/minor=null`）；1.0 清单装 1.1 宿主可导入、导出可执行、卸载撤销；1.2 / 2.0 / 畸形 / 缺失版本清单在面板被拒且无确认弹窗、`listPlugins()` 与导出器集合不变，随后 1.1 清单可正常导入 |
+| 基础工具/编码 | 0 命名空间、1 几何、2 CRC32、3 ZIP、4 XLSX、5 CSV/TSV、6 XmlLite |
+| 资产与导入 | 7 内容寻址、8/8.1 表格批量、28/28.3/29/30/31 台账往返、50 解析器加固、70 导入限值 |
+| 场地/几何模型 | 9 场地、11 旧工程迁移、12/17 场地形状、14/15/46 区域形状、19 基点 |
+| 编辑与交互 | 20/21 节点、23 精确约束、24/25/33 OSNAP、26 测距、54 方向约束、65 对齐分布、66 编号层级、68 提交判定 |
+| 校准与取景 | 39 仿射校准、D-02 校准前置状态机、41 场地节点编辑、47 分层渲染/裁剪 |
+| 标注与统计 | 27 面积长度、40/43/44/45 标注开关、63 多楼层汇总 |
+| 导出/导入产物 | JSON 往返、导出回导核对、SVG、DXF（含版本审计与高级实体）、PDF（含多页）、单文件发行包、XLSX inlineStr |
+| 覆盖率/规则 | 38/48/48.1 覆盖率、57.2–57.9 规则框架与三条规则、57.7 违规 CSV |
+| 插件 | 57/57.1 注册点、API 版本化与能力白名单 |
+| 协作/存储 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰、存储 v2 + 楼层 updatedAt、`markDirty`/`dragChanged` 提交协议、版本快照、历史栈共享 |
+| 运行环境/安全 | 49 能力探测、56.1 注入路径、69 转义白名单、70 导入事务 |
+| UI 语义 | 58 中英切换与无障碍标记、60 焦点管理、D-01 引导、D-03 帮助中心、D-07 加载审计、D-08 保存失败、D-09 标签租约 |
+| 领域功能 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划、75/BOM、75.10 图框标题栏、75.11 i18n 模板 |
 
-**B-13 多页 PDF（2026-11）**：容器层按对象编号扫描页对象，编号≠页序；适配层 `pageTreeOrder` 从
-`/Catalog → /Pages → /Kids` 递归恢复文档页序（缺失/损坏时退回扫描顺序并追加未覆盖页，不静默丢内容）。
-每页内容先归零到自身 MediaBox，再由 `PdfRead.layoutPdfPages` 沿 +X 依次落位（gap=最大页宽 8%）——
-修复旧行为「所有页叠在同一原点」。导出侧 `pdfPagePlan()` 以楼层顺序生成「图纸页 + 清单页」计划，
-页码全局连续并写入页脚；清单分页数与渲染共用 `pdfListRowsPerPage()`。往返校验覆盖页数、页序、页宽/页高
-（`selftest` §37b，用 `Pdf.buildImagePdf` 生成两页后 `parsePdf` 回读），矢量坐标回读仍受「PDF 导出为位图」限制（见风险）。
+> 完整分区名单以 `node scripts/selftest.mjs --list` 为准；本表只做导航，不作为清单。
 
-**图框 / 标题栏 / 比例尺 / 图例（B-07，2026-11）**：字段 schema 只有 `js/core/model.js` 一处
-（`TITLE_BLOCK_FIELDS` / `createTitleBlock` / `normalizeTitleBlock`），默认 `enabled:false`，
-`frame/scaleBar/legend` 默认开、版本默认 `V1.0`，文本清洗控制字符并截断到 80 字符。
-导出侧 `titleBlockSpec(W,H,ppu,format)` 是**唯一布局源**，未启用返回 `null`，三处调用点（PNG
-`renderToDataURL` / PDF `renderPdfDrawingPage` / SVG `buildSceneSvg`）直接跳过——默认产物零字节差异，
-`selftest` 以 `buildSceneSvg` 视觉快照哈希 `e6ba5542…` 断言。启用后 PNG/PDF 共用
-`drawTitleBlockOnCanvas`、SVG 用 `exportTitleBlockSvg`，两者读同一 spec（几何/文案不各写一套）；
-SVG 所有文本走既有 `esc()`，与底图 `href`、场地 `fill/stroke` 同一道转义防线。
-比例尺取 1/2/5×10ⁿ 米的整齐长度（目标 140px），比例 `1:N` 中 N = dpi /(每米像素 × 0.0254)，
-PNG/SVG 按 96dpi、PDF 按 150dpi 图纸页换算（同一缩放导出 PNG 与 PDF 的比例数不同属预期）。
-图例只统计**可见对象**，按类型聚合名称/颜色/数量，上限 8 类 / 6 层，超出显示 `+N`。
-持久化：字段存 `state.meta.titleBlock`，`buildProject` 归一后随 `meta` 进入撤销/重做快照（B-10 结构共享
-不改语义）；协作/合并走 `mergeProjectData` 的 `meta` **整体本地优先**（`Object.assign(B.meta, A.meta)`），
-不做字段级 LWW，也不单独统计标题栏冲突；旧工程缺 `meta.titleBlock` 时 `normalizeTitleBlock`
-整体降级为「关闭 + 默认字段」，不阻塞载入。
+---
 
-**i18n 插值模板（B-14，2026-11）**：动态整句不再用 `L('前缀：') + 值` 拼接。`js/common/i18n.js`
-新增 `TEMPLATES`（中文整句 → 英文整句，含 `{name}` 占位）与 `fillTemplate`：`p(text, params)`
-在英文下先查 `TEMPLATES`、再查 `PHRASES`，未收录回退中文；最后统一按 `/\{(\w+)\}/g` 替换占位，
-**中文模式直接填充原文模板**，语义不变。对外暴露 `I18N.templates` / `I18N.fmt`（只做占位替换、
-**不转义**），调用方在 DOM/SVG 边界仍走 `textContent` / `esc()` / `xmlEscape`，A-02 注入面不扩大。
-新增可复跑统计 `scripts/i18n-scan.mjs`：逐字符状态机跳过注释与字典文件，收集单/双/反引号字符串字面量
-并去重；识别 `L / I18N.p / I18N.t / I18N.fmt / I18N.tpl / toast / commitChange / openModal /
-showConfirm / collabNotifyThrottled` 为翻译入口；「硬编码」＝含 CJK 且未走入口，「缺口」＝走了入口
-但字典无对应英文，「覆盖率」＝ 已字典化 ÷（已字典化 + 缺口 + 硬编码）。同一脚本对 `HEAD` 基线
-（`git worktree` 旧版本）与改造后各跑一次，**25.64% → 33.79%**（已字典化 269 → 347，缺口 125 → 49，
-硬编码 655 → 631）。未迁移项集中在 `js/common` 适配层内部错误串、DXF 单位名、DWG 入口整段 HTML
-指引与多行组合提示（见 `CHANGELOG.internal.md` 的 B-14 条目）。
+## 3. 浏览器 e2e
 
-**i18n 覆盖率门禁（D-11，2026-11）**：`scripts/i18n-scan.mjs` 新增 `--check`（不达标退出 1）与 `--json`，
-并明确统计口径：覆盖率 = 已字典化 ÷（已字典化 + 缺口 + 硬编码）；分母只计去重中文文案，
-不含注释、HTML/CSS 标记模板与含 `${...}` 的拼接壳。UI 文件为 `js/core/app.js`、`js/core/interaction.js`
-与 `js/features/*.js`，适配器/格式模块（`io-import` / `io-export` / `io-table` / `io-fields` /
-`plugins` / `rules`）的数据标签与诊断串单列豁免。门禁只统计**未字典化**的 UI 文案（`uiCopy`）；
-已在字典、但由消费端统一 `L()`（如内置类型名经 `typeDisplayName`）的记为 `uiInDict`，不重复计门槛。
-门槛：覆盖率 ≥40%、缺口 ≤10、UI 文案硬编码 ≤20；`node scripts/check.mjs --selftest` 已接入该步。
-实测：重构口径后基线 **31.23%** → 本提交 **40.06%**（字面量 1271、走入口 511 = 已字典化 508 / 缺口 0、
-硬编码 760 其中未字典化 613、`uiCopy` 1 / `uiInDict` 90；PHRASES 924 / TEMPLATES 112）。
-口径调整原因与「不是放宽门禁」的论证见 `CHANGELOG.internal.md` 的 D-11 条目。
+### 3.1 运行形态
 
-**模板内中文口径（D-15，2026-11-07）**：D-11 的口径把含 `${...}` 的模板壳整体排除，导致模板里的
-硬编码中文（如 `title="显隐"`、`面积 ${fmt(...)} ㎡`）既不进覆盖率分母、也不进 `uiCopy`，形成漏检。
-D-15 起：含插值的模板串按 `${...}` 拆成静态片段；无插值的 HTML 模板串只取文本节点；两者都额外提取
-`title` / `aria-label` / `placeholder` / `alt` 属性值。片段与普通字面量同权进入覆盖率分母；UI 文件里
-「模板内、未走翻译入口」的片段单列为 `templateCopy`，**门槛为 0**，并在 `check-gates.mjs` 第 7 场景
-（临时副本追加一条 `<span>门禁探针硬编码</span>`）验证会红。白名单仅 1 条：语言选项的母语自称「中文」
-（`English` 为英文 UI 的母语名，切换目标语言需使用者自识别），不是批量豁免入口。
-实测（同一脚本）：覆盖率 **42.02% → 46.16%**（字面量 1146、走入口 529 = 已字典化 529 / 缺口 0、
-硬编码 617 其中未字典化 430、`uiCopy` 1 / `uiInDict` 87、`templateCopy` 0 / 白名单 1；
-PHRASES 998 / TEMPLATES 112 / DICT.zh 200）。新增 7 条 PHRASES 与 4 处模板接入 `L()` 后，
-`ui-shell` / `ui-panels` / `render` 的模板内中文全部转为已字典化。
+- `playwright.config.mjs`：仅 **Chromium**、`workers: 1`、`fullyParallel: false`、`timeout: 30s`、`expect: 5s`、`retries: 0`、
+  headless、`screenshot: only-on-failure`；`webServer` 用 `node scripts/serve.mjs` 起 `http://127.0.0.1:4173`。
+- 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
+- `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
+- 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
+- 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
 
-**字典体积回收（2026-11-07）**：删除未被任何 `js/**` / `index.html` 字面量引用的 31 条 PHRASES、
-1 条 TEMPLATES 与 7 条 DICT 键（`savePending/saveSaved/saveAuto/saveManual/cursorPrefix/toolSelectHint/ariaLabels`）；
-节点/顶点类动态拼接 key（`L('上移'+nodeLabel)` 等）全部保留。实测 PHRASES **967**、TEMPLATES **111**、
-DICT.zh **193**，覆盖率仍为 **46.16%**（缺口 0 / `uiCopy` 1 / `templateCopy` 0），门禁门槛未变。
+### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
 
-**移动端与 PWA（B-15，2026-11）**：`sw.js` 缓存名 `plotpin-v{version}`（当前 `plotpin-v6`），
-`activate` 删除所有非当前版本缓存后 `clients.claim()`；脚本清单从 `index.html` 解析，新增脚本无需手工维护。
-安装用 `Promise.allSettled` 逐项 `cache.add`，单个 404 不会让新版本永远装不上；安装/激活失败时旧版本继续
-服务。`fetch` 网络优先（在线始终取最新，避免旧缓存卡住升级），离线回退缓存，导航请求 `ignoreSearch` 回退
-`./index.html`，缓存也没有时返回内置离线提示页（503，非浏览器白屏错误页）。`js/core/app.js` 监听
-`updatefound → installed`，已有控制器时 `toast('新版本可用：刷新页面后生效')` 并暴露同一 i18n 文案；
-`visibilitychange` 可见时 `reg.update()`，离线失败静默保持旧版本。移动端：`viewport-fit=cover`，
-`.topbar/.hud-bottom/.sidebar` 使用 `env(safe-area-inset-*)`（桌面解析为 0，不改变旧布局），
-`@media(pointer:coarse)` 保证按钮/工具栏 ≥44px，手机横屏压缩顶栏并收窄侧栏，`.tool-rail` 允许纵向滚动；
-窄屏侧栏改为「文档级 pointerdown 关闭 + 遮罩 z-index 19 低于顶栏」——修掉此前遮罩盖住 ☰ 导致触屏无法
-关闭侧栏的问题。手势取消沿用 A-06：`pointercancel / lostpointercapture / Escape` 统一走 `cancelActiveDrag`，
-本轮未新增手势状态。渲染样本提取到 `tests/e2e/helpers/scenes.mjs`（B-11/B-15 共用，避免两套样本漂移）。
-覆盖率为 `viewport-fit`/安全区/触控目标/CSS 横竖屏的检查，另有 `mobile.spec.mjs` 与桌面同机输出的首屏与
-2000 对象帧数据；**真机（iOS Safari / Android 低端机）未测**。
+| 功能域 | spec（用例数） |
+|---|---|
+| 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(3)、world-transform(2) |
+| 持久化/历史/保存 | persistence(4)、history(4)、history-increment(4)、save-failure(2)、tab-lease(2)、snapshot(5) |
+| 协作 | collab(6)（含 1 个 soak 条件跳过） |
+| 导出与图面 | pdf-multipage(2)、title-block(1)、perf-render(1)、coverage(1) |
+| 符号与目录 | symbols(3)、catalog(1) |
+| 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(2) |
+| 插件 | plugin-sandbox(10)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
+| 规则 | rules(1) |
+| 校准前置 | calibration-precheck(3)（只验入口可用性与提示，不拖手柄） |
+| 移动端/离线 | mobile(2)、sw(1) |
+| i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
+| 安全 | csp(5) |
+| DXF 导入 | dxf-version(4) |
 
-**首次启动引导（D-01，2026-11）**：`js/features/ui-shell.js` 的 `firstRunGuideState` / `markFirstRunGuide` /
-`savedProjectHasContent` 是资格与状态的唯一实现，键 `plotpin:firstRunGuide:v1`（`{v:1,status,choice,at}`），
-只有 `v===1 && status==='completed'` 永久抑制；`skipped` 下次仍展示，未知版本/损坏记录按未完成。
-`app.js` 启动时只在「无已保存工程且未完成引导」时展示，老工程判定按实际内容（项目 id / 对象 /
-图片底图 / 多楼层 / 非默认场地），纯净空白自动保存不算老工程。示例工程由
-`persistence.js` 的 `buildDemoProject()` 构造（100×70m 矩形场地 + 6 对象，背景空槽、无资产引用），
-`openDemoProject()` 替换现场后 `scheduleSave()`，因此刷新恢复且资产库不新增孤儿。
-测试隔离：`playwright.config.mjs` 默认注入 `firstRunSeenStorage(baseURL)`（completed/blank），
-既有 e2e 不因新引导改变；`mobile.spec.mjs` 手工 `browser.newContext` 同样注入；
-`onboarding.spec.mjs` 用 `test.use({ storageState: { cookies: [], origins: [] } })` 显式走首次路径。
+合计 **90** 个用例、**33** 个 spec。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
 
-**性能基线单独一套**：`tests/perf/*.perf.mjs` 由 `playwright.perf.config.mjs` 驱动、`npm run perf:browser`
-执行，不混进上面的功能 e2e；指标与阈值见 [performance.md](performance.md) §5.4。
+### 3.3 常用命令
 
-**边界**：`@playwright/test` 只允许出现在 `devDependencies`；`build.mjs` 的单文件产物不引用
-`tests/` 与 `node_modules/`。`npm run ci` 不含 e2e——无浏览器环境不会因此变红，但显式运行
-`npm run test:e2e` 时缺依赖/缺浏览器会以 `[SKIP]` + 退出码 2 明确失败，而不是假绿。
+```text
+node scripts/e2e.mjs                       # 全量
+node scripts/e2e.mjs tests/e2e/smoke.spec.mjs
+node scripts/e2e.mjs --grep "导出"
+$env:COLLAB_SOAK='1'; node scripts/e2e.mjs tests/e2e/collab.spec.mjs
+```
 
+e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人工验收证据不要放这里**，见 [manual-acceptance.md](manual-acceptance.md)。
+
+---
+
+## 4. Golden 基线
+
+逐字节基线位于 `tests/golden/`，由 selftest 读取比较：
+
+| 文件 | 字节（2026-11-08） | 锁定的内容 |
+|---|---|---|
+| `fixed-pages.pdf` | 1,128 | PDF 容器/页对象结构（画布 JPEG 由浏览器编码，不在此判据内） |
+| `plain-scene.svg` | 4,730 | 无符号工程的 SVG 全量字节 |
+| `plain-scene.dxf` | 900 | 无符号工程的 DXF 全量字节 |
+| `symbol-scene.svg` | 5,012 | 含符号工程的 SVG 全量字节 |
+| `symbol-scene.dxf` | 4,753 | 含符号工程的 DXF 全量字节（折线近似） |
+| `legacy-symbols.svg` | 56,839 | 旧符号逐图标 path 几何哈希的汇总输出 |
+
+- PDF 的 `UPDATE_GOLDEN=1` 可重建；SVG/DXF 的 golden 在同一环境变量下重建。
+- **重建 golden 只能用于「确认改动是有意的」**：提交必须说明为什么输出变了、影响哪些导出格式；禁止为了让测试变绿而盲目重建。
+- 未被字节 golden 覆盖的格式（CSV/TSV/XLSX/JSON/GeoJSON/PNG/PDF 实际位图）由 selftest 的结构断言覆盖，见 §2.2 的「导出/导入产物」组。
+- 无符号工程「导出字节不变」是硬回归项：不新增符号功能时不得改动既有 golden。
+
+---
+
+## 5. 门禁自检（破坏性验证）
+
+`node scripts/check-gates.mjs` 在临时目录复制整仓，构造 7 种「应当失败」的改动并断言对应门禁非 0 退出：
+
+| # | 破坏 | 期望变红 |
+|---|---|---|
+| 1 | 渲染入口注入 4 ms 忙等（平均帧仍达标） | `bench.mjs` P95 |
+| 2 | 向 `dist` 产物追加一行 | `build.mjs --check` |
+| 3 | 删除 `ngm.json` | `check-ngm.mjs` |
+| 4 | 删除 README 断言数锚点 | `badge.mjs --check` |
+| 5 | selftest 注入必然失败断言 | `check.mjs --selftest` |
+| 6 | 预缓存输入变更但不递增 `sw.js` VERSION | `check-sw.mjs` |
+| 7 | UI 模板新增硬编码中文 | `i18n-scan.mjs --check` |
+
+场景 6 依赖临时 `git init + commit` 制造基线；这也说明 `check-sw.mjs` **只对未提交的工作区改动有效**，干净检出时恒绿（详见 [engineering.md](engineering.md) §3.5）。
+
+---
+
+## 6. 怎么新增一个用例
+
+### 6.1 逻辑自测
+
+1. 在 `scripts/selftest.mjs` 找到对应功能域的分区；没有合适分区时新建 `section('编号. 主题', …)`，编号接在末尾。
+2. 用 `eq` / `ok` 写断言；失败信息要能直接看出「实际 vs 期望」。
+3. 同时写反例（非法输入、越界、缺字段），只写正例的判据不算完成。
+4. `node scripts/selftest.mjs` 全绿后，断言数会变化 → 跑 `node scripts/badge.mjs --check`，按提示同步 README 三处计数锚点。
+5. 若改了业务输出，先建/更新 golden，并在 commit body 说明输出差异。
+
+### 6.2 浏览器 e2e
+
+1. 在 `tests/e2e/` 新建或追加 `*.spec.mjs`，场景状态放 `helpers/scenes.mjs`。
+2. 只断言用户可见结果（DOM 文本、下载字节、弹窗、错误提示），不要断言内部变量名。
+3. 需要固定数据的用例用 `page.route` 拦截外部请求，禁止真实联网。
+4. `node scripts/e2e.mjs <spec>` 本地全绿；CI 不跑 e2e，所以**不能只依赖 CI 绿**。
+5. 更新本文 §3.2 矩阵。
+
+### 6.3 新增判据
+
+见 [engineering.md](engineering.md) §8：必须能单独跑、有读数、配负例、进总闸、写明守什么。
+
+---
+
+## 7. 当前明确空白（已核对，未覆盖不等于已通过）
+
+以下条目在本轮逐项检索 `tests/` 与 `scripts/`，确认**没有对应 e2e 覆盖**；有的由 selftest 部分覆盖，已在括号中标明：
+
+| 空白 | 现状 |
+|---|---|
+| 停车规划 | 只有 selftest 分区 61（布局/净宽/旋转）；**无 e2e**，无真实图纸样本 |
+| 打印 / 二维码 | 无 `window.print` 打印链路 e2e；二维码只有 selftest 编码器与协作邀请串容量提示，**导出二维码图片未被 e2e 校验** |
+| 无障碍 | 无 axe/可访问性扫描；只有 selftest 58 的 `aria-*` 标记断言与 e2e 零散 `toHaveAttribute('aria-…')` |
+| 多工程库 | `persistence.spec` 覆盖单工程保存/载入；**工程列表的批量管理、跨工程资产隔离无 e2e**（隔离由 selftest 32.1 覆盖） |
+| 图片变换手柄 | `calibration-precheck.spec` 只验入口禁用/提示；**拖拽平移/旋转/缩放/切变手柄没有 e2e** |
+| TSV / DXF 导出 | TSV 仅在 selftest 解析/往返；DXF **导出**只有 golden 与 selftest，e2e 只覆盖 DXF **导入**（`dxf-version.spec`） |
+| Firefox / WebKit / Safari | Playwright 仅配 Chromium；Firefox 159 / WebKit 27 只做过 2026-11-07 的人工脚本验证，无回归自动化；Safari 原生未验证 |
+| 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证（代码固定 `iceServers: []`） |
+| 真实 GPU / 低端真机 | perf-browser 在本机为 SwiftShader；真机帧率、长跑内存未验证 |
+| 真实图纸语料 | 无 50 组真实工程 A/B 样本，快照差异误报率未完成人工验证 |
+| 英文语义质量 | 只有 i18n 覆盖率与「无中文残留」自动扫描，语义正确性需人工审校 |
+
+上表任一空白被补上时，必须同时更新本节、§3.2 矩阵与 [performance.md](performance.md)（如涉及性能读数）。
+
+---
+
+## 8. 测试纪律
+
+- 失败就报失败：禁止放宽断言、删用例、改阈值来变绿；确需调整阈值时按 [engineering.md](engineering.md) §3.3 写旧值/新值/理由/实测。
+- 禁止用 mock / 构造数据冒充真实浏览器或真实语料结果；无法执行的项写「未验证」并说明所需条件。
+- 新功能必须同时有 selftest 与 e2e 覆盖；只有一处覆盖时在本文 §7 明确登记。
+- 测试样本跨用例共享，禁止每个 spec 各造一份不一致的工程状态。
+- 断言数量变化必须同步 README 计数锚点与 `scripts/dist-manifest.json`（若产物受影响）。

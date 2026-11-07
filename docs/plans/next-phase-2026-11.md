@@ -1,319 +1,415 @@
-# PlotPin 下一阶段开发计划（2026-11）
+# PlotPin 下一阶段开发计划（N 系列，2026-11）
 
-> 范围：只读勘察 + 计划文档。本轮不改业务代码、不执行 commit/push。
-> 口径：现状数字均来自本轮实际命令输出；历史性能数据标注来源；无法核实的项标「未验证」。
-> 目标值（体积增量、覆盖率、耗时）是验收预算，不是实测值，完成后必须回填真实数据。
+> 状态：**当前执行计划**（共 27 条任务：止血 4 / 纠错 17 / 提速 3 / 文档与测试 3）。本文件是后续「推进 N-xx」的唯一入口。
+> 输入：`audit-out/audit-core.md`、`audit-io.md`、`audit-runtime.md`、`audit-gates.md`、`audit-docs.md`（五路只读审计，基线 `ebe0f85`），以及旧计划 `next-phase-2026-11.md`（仅作对照，其数字已过期，不再引用）。
+> 本文件只做计划，不改代码/测试/scripts/contracts；不执行任何 git 写操作。
+> 数字纪律：本文每个数字都标注来源与采集日期；未运行过的项一律写「未实测/待验证」，不把审计的静态推断写成实测结论。
 
-## 0. 结论摘要
+## 0. 阅读顺序与执行约定
 
-- 现状：功能密度已很高（`docs/features.md` 29 个顶层特性 / 71 个子项），质量门禁全绿（selftest 2584/0、e2e 65 passed / 1 skipped、build 确定性一致、gates 5/5、discipline 13/13 L4）。下一阶段不追新功能，转向「上手成本、数据信任、扩展边界、结构可维护」。
-- 方向排序：易学易用 → 持久性 → 扩展性 → 可维护性。理由见 §4。
-- 任务：13 个（D-01 ~ D-13），每个任务按单会话、单原子提交设计；新增/调整的公共抽象集中在 §6。
-- 体积预算：当前产物 736,298 B，上限 839,680 B，余量 103,382 B。本计划总增量预算 ≤ 65,000 B，留 ≥38,000 B 缓冲；每阶段结束用 `scripts/dist-manifest.json` 复核。
+1. 先读 §1 基线，再读 §2 阶段纪律，然后按 §3 对应阶段逐条执行。
+2. 每条任务只有一个提交粒度；标题即提交主题，编号用于「推进 N-xx」驱动。
+3. 任务完成必须同时满足：本条验收 + §2 全局硬门禁 + 同 commit 更新受影响文档与 `CHANGELOG.internal.md`。
+4. 同一缺陷被多份审计重复发现的，只保留一条任务，证据位置合并列出（见 §4 去重表）。
+5. 顺序原则：**先止血（安全/数据丢失/假绿门禁），再纠错，再提速，最后补文档与测试**。任何性能项都排在安全与数据丢失项之后。
 
-## 1. 实测基线（本轮命令输出）
+## 1. 实测基线（采集日期 2026-11-07～08）
 
-| 项 | 命令 | 实测结果 |
+| 项 | 值 | 来源 | 备注 |
+|---|---|---|---|
+| 代码基线 | `ebe0f85` | `git rev-parse HEAD`，2026-11-08 | 同批文档重写（`README.md` + `docs/` 下 13 份 Markdown，含本目录 2 份计划）一并提交，不改变代码基线；`audit-out/` 保持未跟踪 |
+| 单文件产物 | 783,226 B（764.9 KB），gzip 243,688 B | `scripts/dist-manifest.json`，读取于 2026-11-08 | `maxBytes=839,680`，余量 **56,454 B** |
+| selftest | 2706 通过 / 0 失败 | `audit-docs.md` 本机实测，2026-11-07；2026-11-08 收口复跑一致 | 执行时以当次输出为准 |
+| e2e | 90 条用例 / 1 skipped（soak） | `audit-docs.md` Playwright `--list`，2026-11-07 | 本计划未复跑；soak 需 `COLLAB_SOAK=1` |
+| selftest 分区 | 108 个 | `audit-docs.md` `--list`，2026-11-07 | 109 行含标题 |
+| e2e spec 文件 | 33 个 | `audit-docs.md`，2026-11-07 | 44 个测试文件含 helpers/golden/fixtures/perf |
+| 门禁总闸 | `check.mjs` 12 步 | `scripts/check.mjs` 源码 + `audit-gates.md` | 第 10 步 selftest、11 i18n、12 SW |
+| 门禁牙齿 | 7 个场景 | `scripts/check-gates.mjs:2-13` | 场景只断言非 0，无正面基线 |
+| i18n 覆盖率 | 46.16%，缺口 0，UI 硬编码 1 | `audit-gates.md` 实跑 `i18n-scan --check`，2026-11-07 | 门禁阈值 ≥40% |
+| Node bench | heapUsed 29.51 MB，静态重建 34.1 ms，缓存帧 P95 0.78 ms | `audit-gates.md` 实跑 `bench.mjs`，2026-11-07 | Node 桩，非浏览器实测 |
+| 浏览器性能 | 未重跑 | — | 既有阈值在 `tests/perf/browser-baseline.perf.mjs`；本计划不引用历史数字 |
+| 脚本数量 | 45 个 classic script（35 项目 + 10 vendor） | `audit-docs.md` + `index.html`，2026-11-07 | |
+| 插件 API | 23 键 | `check-plugin-api.mjs` 实跑，2026-11-07 | `contracts/plugin-api.json` |
+| SW 缓存版本 | `plotpin-v6` | `sw.js` + `audit-docs.md` | |
+| 已知问题口径 | K1 已关闭、SW 门禁存在 | `known-issues.md` 的 K1 条目 + `check-sw.mjs` | 但 CI 中恒绿，见 N-01 |
+
+## 2. 阶段纪律与硬门禁
+
+### 2.1 硬门禁（每个任务提交前必须全绿，沿用现状）
+
+```bash
+node scripts/check.mjs --selftest      # 2706 断言基线不得减少，作为 N-01 之前的暂定基线
+node scripts/e2e.mjs                   # 不低于 90 条 / 1 skipped；跳过项不得增加
+node scripts/build.mjs --check         # 产物 ≤ 839,680 B，当前 783,226 B
+node scripts/check-gates.mjs           # 7/7
+node scripts/check-discipline.mjs --strict  # 13/13 L4
+```
+
+- 性能任务额外跑 `node scripts/bench.mjs` 和真实 Chromium 基线（Playwright），不得用 Node 桩替代浏览器结论。
+- 断言数、e2e 数、体积、门禁数一律以当次命令输出回填；本文基线只是起点，不是完成值。
+- 禁止新增运行时依赖；Playwright 仅开发期；禁止 push；禁止读取/修改仓库根目录 `camera-*`。
+- 失败即停：门禁不绿不得提交；不得为通过而放宽阈值、删断言、加跳过。
+
+### 2.2 里程碑
+
+| 里程碑 | 任务 | 退出条件 |
 |---|---|---|
-| 仓库 | `git status --porcelain` / `git rev-parse HEAD` | 分支 `main`，HEAD `c99eac5`；工作区仅有既存未跟踪文件 `docs/manual-acceptance.md`（21,192 B），非本轮产生 |
-| 逻辑自测 | `node scripts/check.mjs --selftest` | 2584 通过 / 0 失败；加载 41 个脚本（js 31 + vendor 10）；31 个脚本语法、分层、契约、插件 API 面均通过 |
-| 浏览器 e2e | `node scripts/e2e.mjs` | 运行 66 个，65 passed / 1 skipped / 0 failed，59.8s；skip 为「WebRTC 离线 5 分钟真实浸泡」（需 `COLLAB_SOAK=1`） |
-| Node bench | `node scripts/bench.mjs` | 退出码 0，全部场景通过；阈值未改，读数见 [performance.md](../performance.md) |
-| 单文件构建 | `node scripts/build.mjs --check` | 产物 `plotpin-standalone.html` 736,298 B（719.0 KB），gzip 226,912 B（221.6 KB），SHA256 `977a7478…`；上限 839,680 B，余量 103,382 B |
-| 门禁总闸 | `node scripts/check-gates.mjs` | 5/5 实际执行并通过 |
-| 方法论看板 | `node scripts/check-discipline.mjs` | 13/13 项具备 → L4；最大文档 `engineering.md` 47.8 KB / 533 行 |
-| i18n 扫描 | `node scripts/i18n-scan.mjs` | 30 个业务脚本；1167 条字面量，407 条进模板（348 命中 + 59 缺口），760 条硬编码；覆盖率 29.82% |
-| 体积组成 | `node scripts/size-report.mjs` | JS 693,337 B（94.2%）；注释 132,765 B；缩进 47,350 B；重复字符串 31,621 B；重复代码行 23,803 B |
-| 契约 | `contracts/` 目录 | 3 份 JSON；`plugin-api.json` 登记 19 个 PlotPin 键；插件能力 7 项，单次调用上限 2000 ms |
-| 缺失文档 | 目录检查 | 无 `docs/ARCHITECTURE.md`、无 `docs/user-guide.md`、无 `docs/plans/`；README 33,159 B 承担用户指南 |
-| 未实现路线 | 代码检索 | `js/**` 与 `index.html` 无「中继/relay/计费/billing/license」命中，C-02、C-03 均未落地 |
-
-体量最大的业务脚本（按行数）：`geometry.js` 1309 行 / 66,934 B、`interaction.js` 1088 / 60,928、`render.js` 1073 / 56,379、`persistence.js` 1044 / 52,862、`io-export.js` 832 / 53,796、`i18n.js` 759 / 75,759、`rules.js` 703 / 32,043、`plugins.js` 686 / 35,829。
-
-## 2. 四方向现状与证据
-
-### 2.1 易学易用
-
-- 首次启动无引导：`js/core/app.js:3-18` 只在 `loadSavedProject()` 成功后恢复，否则直接进入默认空画布；页面仅有一行 `hintText` 提示，无示例工程、无分步引导。
-- 帮助入口偏薄：`js/core/interaction.js:974` 的 `openShortcutsHelp()` 只有 20 行快捷键表；没有「场地 / 图片底图 / 楼层 / 比例尺 / 仿射」概念解释，也没有按导出格式的检查清单。
-- 校准前置条件只在点击后才提示：`js/core/interaction.js:236-249` 与 `js/features/ui-panels.js:47-49` 用 toast 拦截「无图片底图」，按钮本身不禁用、不说明原因；仿射「2 点相似 / ≥3 点完整仿射」也只在长提示文案里。
-- 英文可用性受文案覆盖拖累：实测覆盖率 29.82%，760 条硬编码，英文用户会看到中文错误与面板文案。
-
-### 2.2 扩展性
-
-- 插件 API 面已成型但不完整：`js/features/plugins.js:34-47` 定义 `apiVersion 1.0.0`、7 项能力、2000 ms 超时；`PlotPin` 暴露 19 个键（`contracts/plugin-api.json`）。
-- 规则注册已有实现却不在公共面：`js/features/rules.js:16` 的 `registerRule(def)` 未进入 `PlotPin`，契约也没有登记；插件无法稳定声明规则，规则来源也无法识别。
-- 没有插件安装形态与管理界面：`js/features/plugins.js:529` 的 `loadPlugin(spec)` 只接受调用方直接传入代码；`ui-panels.js` / `index.html` 无「插件」入口，用户无法导入、查看禁用原因或卸载。
-- 兼容性只靠单点判断：`checkPluginApiVersion()` 只校验 1.x 次版本，没有「1.0 插件装到 1.1 宿主」的矩阵用例；`docs/engineering.md` §5 明确「插件 API 向后兼容未设门禁」。
-
-### 2.3 持久性
-
-- 保存失败不可见且无重试：`js/core/persistence.js:500-517` 的 `scheduleSave()` 450 ms 防抖；失败时只尝试一次 `localStorage`、调用 `notifyIdbFallback()`、把状态文字改成「请手动导出」，不区分配额/IO/IDB 不可用，不重试。
-- 工程库写入静默失败：同文件 `:507-508` 对 `proj:<id>` 的写入显式 `.catch(()=>{})`，工程库可能落后于草稿而无人知晓。
-- 加载损坏会静默退化：`js/core/persistence.js:518-535` 吞掉 IDB 与 localStorage 的异常；两者都不可读时 `app.js` 以默认空工程启动，不给恢复提示，也不保留原始数据。
-- 多标签同工程无冲突检测：草稿写入固定键，IDB 语义为最后写者覆盖；`js/features/collab.js` 的 `BroadcastChannel` 只服务协作通道，编辑态没有 lease/心跳或 `storage` 事件保护。
-- 已有基础不错：容量估算在 `js/features/ui-panels.js:406`；快照 20 条/16 MB；资产可达集覆盖草稿/历史/剪贴板/工程库/快照。
-
-### 2.4 可维护性
-
-- 大文件集中：见 §1 体量表；`geometry.js` 1309 行混合场地几何、覆盖率网格、轮廓与变换。
-- 文档事实漂移：`docs/testing.md` 记录 i18n 33.79%，本轮实测 29.82%（新增 C-04/C-05 文案未回填），说明文档缺少「可复算锚点」。
-- 追溯文件过大：`CHANGELOG.internal.md` 214,476 B / 1390 行，无索引；`scripts/selftest.mjs` 383,395 B 单文件，2584 条断言无分区/过滤入口。
-- 文档入口缺失：无 `ARCHITECTURE.md`、`user-guide.md`；README 同时承担介绍、安装、操作手册与命令参考。
-- 体积仍有回收线索：重复字符串 31,621 B、重复代码行 23,803 B，但当前余量足够，暂不启动二次压缩。
+| M0 止血 | N-01 ～ N-04 | 假绿门禁可被真实破坏并变红；沙箱逃逸恶意用例全被阻断；PDF 底图自动保存后 reload 仍在；场地删除/清空可见、可撤销；以上均有 selftest 或 e2e 证据 |
+| M1 纠错 | N-05 ～ N-21 | 导出/导入口径一致，重复 id/楼层名/CTM/仿射/扇形/边界防护均有断言；协作断线与冲突可见；瞬时态不残留；快照差异覆盖场景级；覆盖率口径统一 |
+| M2 提速 | N-22 ～ N-24 | 真实 Chromium 采集 before/after：拖动/选中/快照内存 P95 与 heapUsed 达标，数据写入 commit body 与 CHANGELOG |
+| M3 收口 | N-25 ～ N-27 | 文档同一事实只有一个权威源；modules 45 文件全覆盖；写测试矩阵；缺失 golden 补齐；公共抽象收敛且体积只减不增 |
 
 ## 3. 任务清单
 
-通用验收门禁（每个任务都必须满足）：`node scripts/check.mjs --selftest` 0 失败且断言数不减少；`node scripts/e2e.mjs` 不低于 65 passed / 1 skipped；`node scripts/build.mjs --check` 通过且产物 ≤ 839,680 B；同一 commit 更新受影响文档与 `CHANGELOG.internal.md`；禁止 push。
+> 每条任务的「数据属性」只有两种：**静态可判定**（可由 selftest/脚本/静态断言证明）或**必须实测**（必须真实浏览器/真实命令输出，且写明采集方法）。
+> 工作量单位：人时（1 人时≈1 个连续工作小时）；按单会话 4～6 小时折算。
 
-### D-01 首次启动引导与可复现示例工程
+### Phase 0 · 止血（4 条，必须最先做）
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `app.js:3-18` 无首次引导；页面仅 `hintText`；仓库无示例工程生成器（检索 `demo`/`sample` 无业务命中） |
-| 目标与验收 | 首次访问显示 3 步引导（底图/场地 → 放置对象 → 导出）；提供「打开示例工程 / 空白开始」；选择结果写入 `localStorage`，刷新后不再弹。示例含 100×70 m 矩形场地 + 6 个对象（点×2、矩形×1、折线×1、文字×1、尺寸×1），无需图片资产。e2e 新增 2 例：首次显示且可关闭、示例对象数与场地可导出；产物增量 ≤ 8,000 B |
-| 技术方案 | 在 `persistence.js` 增加纯函数 `buildDemoProject()`（复用 `buildProject`、`baseObject`，不新增脚本）；`ui-shell.js` 用现有 modal 渲染引导卡；`app.js` 读取引导标记并决定是否展示 |
-| 影响面 | 新增 `buildDemoProject()`、`firstRunGuideState()`；调用方 `app.js`、`ui-shell.js`、selftest/e2e。不改既有 API 与默认空工程行为 |
-| 依赖与并行 | 无依赖；与 D-02 可并行（文件不重叠）；与 D-03 共享 `ui-shell.js`，需串行 |
-| 预估工作量 | 1 个会话；改动约 4 文件、+250 行 |
-| 风险与降级 | 新文案进入 i18n 字典会增大产物；若超预算，引导文案复用现有句柄。示例对象类型不存在时降级为空白工程 + 明确 toast |
-| 公共抽象 | 新增 `buildDemoProject()`（示例唯一源，e2e/selftest 复用）；新增 `firstRunGuideState()` |
+#### N-01 修复假绿门禁：CI 契约/插件 API 真实判据 + SW 版本门禁脱离 `git diff HEAD`
 
-### D-02 校准/底图工具的前置状态机
+- 问题与证据：`check.mjs` 把 `--selftest` 透传给契约/API 脚本（`scripts/check.mjs:74-82`），二者在该模式下只跑解析器自检并退出（`scripts/check-contracts.mjs:228-229`、`scripts/check-plugin-api.mjs:114-133`），汇总行却打印「契约守约、插件 API 面守约」（`scripts/check.mjs:145`）；CI 唯一总检就是 `check --selftest`（`.github/workflows/ci.yml:16-17`）。SW 门禁以 `git diff HEAD` 取变更集（`scripts/check-sw.mjs:50`），CI 干净 checkout 恒为空；非 git 直接 `exit 0`（`:33-37,42-45`）。`check-gates` 只断言退出码非 0，没有「未破坏副本必须全绿」的正面基线（`scripts/check-gates.mjs:55-60,160-165`）。来源：audit-gates P0-1/P0-2/P1-5、audit-docs S1/D03/D22。
+- 目标：CI 必须执行真实契约与 API 判据；SW 版本门禁以**提交进仓库的预缓存输入哈希清单**为基线，不再依赖工作区 diff；`check-gates` 增加正面基线 + 两个负向场景（加私有键必红、版本漂移必红）。
+- 涉及文件：`scripts/check.mjs`、`scripts/check-contracts.mjs`、`scripts/check-plugin-api.mjs`、`scripts/check-sw.mjs`、`scripts/check-gates.mjs`、`scripts/sw-inputs.sha256`（新增）、`.github/workflows/ci.yml`、`contracts/conventions.json`、`docs/engineering.md`、`docs/testing.md`。
+- 验收：① 给 `PlotPin` 加一个私有键，`check.mjs --selftest` 必须 exit 1；② 改一处预缓存输入但不升 `sw.js` VERSION，门禁必须 exit 1；③ CI 显式列出 `check-contracts` / `check-plugin-api` 真实步骤；④ `check-gates` 在未破坏副本上先要求 0，再要求目标场景非 0 且输出含目标错误关键字；⑤ 7→9 场景，文档同步。
+- 依赖：无。是本计划所有后续任务的前置门禁修复。
+- 风险：哈希清单会在协作/合并时产生冲突；备选是构建期由内容哈希生成清单，但需保持 `sw.js` 运行时版本号可读。此取舍需拍板（见 §6）。
+- 预估：4～6 人时。数据属性：静态可判定（脚本退出码 + 人为破坏场景）。
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `interaction.js:236-249`、`ui-panels.js:47-49` 均为点击后 toast；按钮不禁用，无原因说明；仿射 2 点/≥3 点差异只在 `interaction.js:20` 长文案 |
-| 目标与验收 | 按 `background.kind`、`bgImage`、场地是否存在、工具模式生成状态矩阵：不可用按钮 `disabled` 且带 `aria-describedby` 原因；可用时显示步骤指示（比例尺 1/2；仿射 1/2/≥3）。e2e 覆盖：无底图时比例尺/仿射/图片变换禁用且无可点击路径；有场地无图片时提示「场地按米绘制，无需校准」；8 种导出 golden 字节不变 |
-| 技术方案 | 在 `interaction.js` 增加 `calibPrecheck(tool)` 返回 `{ok, reason, step}`；`ui-panels.js` 与属性面板统一消费；复用 `isImageBackground()` 与现有 i18n 模板 |
-| 影响面 | 新增 `calibPrecheck()`；调用方 `ui-panels.js`、`props.js`、工具栏状态刷新、selftest。不改校准算法与输出 |
-| 依赖与并行 | 无依赖；与 D-01 并行；与 D-03 共用 `interaction.js`，需串行 |
-| 预估工作量 | 1 个会话；约 3 文件、+180 行、+5,000 B |
-| 风险与降级 | 禁用按钮可能挡住「先点按钮再导入底图」的旧习惯；降级为按钮可点但显示原因徽标，并保留原 toast |
-| 公共抽象 | 新增 `calibPrecheck(tool)`（UI 与测试的唯一判断源） |
+#### N-02 封堵插件沙箱逃逸：`BroadcastChannel` / `MessageChannel` / `MessagePort` 与 `onmessage`/`onerror`
 
-### D-03 帮助中心：快捷键 + 概念词典 + 导出检查清单
+- 问题与证据：沙箱硬化列表只删 `fetch/indexedDB/.../close`（`js/features/plugins.js:338-340`），`BroadcastChannel`、`MessageChannel`、`MessagePort` 均未删除且原型链未清；`onmessage`/`onerror` 未冻结；协作频道名为 `plotpin-collab-<name>`（`js/features/collab.js:2`），插件可绕过 token/能力门直接收发协作消息。来源：audit-runtime P0-02/P2-20、audit-runtime §3/§6.1。
+- 目标：从全局与原型链删除 BC/MC/MP；冻结 `onmessage`/`onerror`；Worker RPC 校验 `event.source` 与 token；插件加入协作频道后既收不到也发不出消息；恶意插件被禁用并显示原因，主工程仍可操作。
+- 涉及文件：`js/features/plugins.js`、`tests/e2e/plugin-sandbox.spec.mjs`、`docs/features.md`、`docs/known-issues.md`。
+- 验收：① e2e 恶意插件 `new BroadcastChannel('plotpin-collab-<pid>')` 收不到消息、发送被主工程拒绝；② `MessageChannel`/`MessagePort` 构造被阻断；③ 覆写 `onerror` 后仍能走禁用路径；④ 主工程后续操作正常；⑤ 插件列表显示禁用原因；⑥ 现有 10 条沙箱用例不回退。
+- 依赖：N-01（门禁修复后，e2e/门禁证据可信）。
+- 风险：`MessageChannel` 被部分合法插件用于内部并发；本产品契约未承诺该能力，一律封堵并在文档说明。
+- 预估：4～6 人时。数据属性：静态可判定 + 真实 Chromium e2e（必须运行）。
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `interaction.js:974` 的 `openShortcutsHelp()` 仅 20 行快捷键；README 表格未进应用；无「场地/图片/楼层/校准」概念解释 |
-| 目标与验收 | `?` 打开三页签：快捷键（保留 20 行）、概念词典（6 条：图片底图、矢量场地、楼层、比例尺、仿射、覆盖率口径）、导出检查清单（8 种格式，标注 PDF 位图页、DXF 场地 SITE 层、CSV/TSV/XLSX 公式防护）。e2e：`?` 打开、页签切换、Esc 关闭后焦点回到画布；新增文案 i18n 100% 入字典；增量 ≤ 6,000 B |
-| 技术方案 | 扩展现有 modal；内容常量集中在 `ui-shell.js`/`interaction.js`，复用 `modalBody` 与 `L()` 模板；不新增脚本 |
-| 影响面 | 仅扩展 `openShortcutsHelp()`；无公共 API 变更 |
-| 依赖与并行 | 依赖 D-01 的 modal 样式；与 D-02 串行（同文件） |
-| 预估工作量 | 1 个会话；约 2 文件、+200 行 |
-| 风险与降级 | 文案增长快；若超预算，概念词典压缩为 4 条、导出清单只保留差异项 |
-| 公共抽象 | 无新增；复用现有 modal 与 i18n |
+#### N-03 修复 PDF 导入底图在自动保存后永久丢失
 
-### D-04 规则注册进入公共 API 与插件来源标识
+- 问题与证据：PDF 分支把底图写成 `kind:'image'`、`assetId=''`、只写 `dataUrl`（`js/features/io-import.js:300-308`）；`persistableState()` 无条件删除 `dataUrl`（`js/core/persistence.js:325-334`）；`runSave()` 直接写该副本且未调用 `ensureBackgroundAsset()`（`js/core/persistence.js:538-550`）；reload 后判定既无资产也无内嵌数据，底图永久消失。非当前楼层底图走同一删除逻辑。另外解压炸弹上限在 `arrayBuffer()` 完成后才检查（`js/common/pdf-read.js:24-27`），大流会先完整展开再拒绝。来源：audit-core P0-1、audit-io P0-1、audit-core T-1、audit-gates P1-3。
+- 目标：PDF 底图与普通图片导入同路径入库（`dataUrlToBytes → assetIdFor → assetPut → bg.assetId`）；保存前统一资产化；无 assetId 但有 dataUrl 时**禁止静默删除最后一份数据**；解压上限前移到流式累计阶段。
+- 涉及文件：`js/features/io-import.js`、`js/core/persistence.js`、`js/common/pdf-read.js`、`tests/e2e/pdf-multipage.spec.mjs` 或新增 PDF 底图 e2e、`tests/fixtures/`（如需最小 PDF 夹具）、`docs/features.md`。
+- 验收：① e2e：导入含内嵌图 PDF → 等自动保存 → `page.reload()` → `background.assetId` 非空且渲染非 missing；② selftest：`persistableState()` 对无 assetId 且无 dataUrl 的底图不得产出空底图，且对 dataUrl 兜底路径有断言；③ 非当前楼层 PDF 导入同样不丢；④ 8 种导出 golden 字节不变（除新增 PDF 夹具场景）；⑤ 伪造超限解压流在累计阶段被拒，不出现「先完整展开再报错」。
+- 依赖：无（可与 N-02 并行，文件不重叠）。
+- 风险：保存改成 async 资产化会改变 `runSave` 时序；资产写入失败必须保留 dataUrl 并显式告警，不能回退为静默删除。
+- 预估：4～5 人时。数据属性：静态可判定 + 真实 Chromium e2e（必须运行）。
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `rules.js:16` 已有 `registerRule(def)`，`rules.js:39` 有 `listRules()`；`plugins.js:607` 的 `PlotPin` 未暴露规则；`contracts/plugin-api.json` 仅 19 键；7 项能力无 `rules` |
-| 目标与验收 | 新增能力 `rules` 与 `PlotPin.registerRule / unregisterRule / listRules`（契约 19 → 22 键）；`apiVersion` 升到 1.1.0，1.0 插件仍可加载；规则列表显示来源「插件: <id>」；e2e：示例插件注册规则 → 出现在规则页签 → 检查产出违规 → 卸载后规则消失；8 种导出 golden 不变 |
-| 技术方案 | `registerRule(def, owner)` 增加可选第二参（向后兼容）；规则定义统一走现有 `normalizeRuleDef`；插件侧只允许受信任同源路径调用（沙箱 Worker 不能直接注册规则，原因写入能力说明） |
-| 影响面 | `PlotPin` 新增 3 键；`registerRule` 增加可选参数；调用方 `rules.js`、`plugins.js`、`check-plugin-api.mjs`、规则 UI。既有调用签名不变 |
-| 依赖与并行 | 与 D-05/D-06 共用 `plugins.js`/契约，需串行；与持久性任务可并行 |
-| 预估工作量 | 1–2 个会话；约 5 文件、+300 行、+6,000 B |
-| 风险与降级 | 暴露主线程规则会削弱沙箱边界；降级为「仅 legacy 受信任路径」并在契约与文档显著标注，沙箱不承诺规则能力（延续 K9） |
-| 公共抽象 | 调整 `registerRule(def, owner?)`；新增 `PLUGIN_CAPABILITIES['rules']`；契约新增 3 键 |
+#### N-04 修复场地静默删除与本地清空失效
 
-### D-05 插件清单导入与管理面板（会话内）
+- 问题与证据：`mergeFloorMeta` 的 `siteWon` 要求远端仍有 site 才计数（`js/common/merge.js:255`），输出 `site: siteNewer ? fb.site : (fa.site || fb.site)`（`:262`）会把较新的 `null` 应用掉但统计为 0；`mergeHistoryNeeded` 与 `collabQueueApply.changed` 不含场地删除（`js/core/persistence.js:825-855`、`js/features/collab.js:299-303`），因此不入撤销栈且显示「无变化」；`mergeFloorWrite` 不读 `site.updatedAt`（`js/common/merge.js:224-232`）；场地节点/属性编辑只改时间戳并 `scheduleSave`，没有 `pushHistory`/`touchFloor`/`markDirty`/`collabOnLocalChange`（`js/features/props.js:229-245`）。来源：audit-runtime P0-01/P0-03/P1-10。
+- 目标：场地「存在→不存在」独立计数（`siteDeleted`/`siteCleared`）；较新 `null` 获胜；场地编辑进入提交/广播/撤销/落盘链路；远端清空显示明确横幅且 Ctrl+Z 可恢复；楼层墓碑判定纳入 `site.updatedAt`。
+- 涉及文件：`js/common/merge.js`、`js/core/persistence.js`、`js/features/collab.js`、`js/features/props.js`、`scripts/selftest.mjs`、`tests/e2e/collab.spec.mjs`、`docs/features.md`、`docs/user-guide.md`。
+- 验收：① selftest：`mergeFloorMeta(fb.site=null)` 计数与输出均为清空，且 `siteNewer` 时本地 null 获胜；② e2e 双页面：对端清空场地 → 本地横幅提示 → Ctrl+Z 恢复；③ 本地清空后合并不复活；④ 场地拖点后对端可收到并合并；⑤ 楼层墓碑不吞掉较新场地编辑。
+- 依赖：N-01（证据可信）；与 N-03 可并行。
+- 风险：`site:null` 与旧档 `mergeSiteFromBackground` 兼容路径冲突；需保留旧档迁移语义并补 selftest。
+- 预估：6～8 人时。数据属性：静态可判定 + 真实 Chromium 双页面 e2e（必须运行）。
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `plugins.js:529` 只接受代码串；`ui-panels.js`/`index.html` 无「插件」入口；无清单 schema 与体积/字段校验 |
-| 目标与验收 | 设置区新增插件面板：列表（id、版本、能力、状态、禁用原因）、导入 `.json` 清单、卸载。清单 `plotpin.plugin/v1` 必填 `id/name/version/apiVersion/capabilities/code`；`code` ≤ 64 KB、清单 ≤ 192 KB；校验失败事务化（不注册、不改现有插件）。导入前展示能力确认。e2e：合法清单导入后导出器可用；缺字段/超限/恶意清单被拒且原状态不变；卸载后注册项消失；增量 ≤ 8,000 B |
-| 技术方案 | `plugins.js` 增加 `validatePluginManifest(raw)` 纯函数，复用 `checkPluginApiVersion`；UI 复用现有文件选择与 modal；本轮不持久化插件代码，刷新需重新导入（在面板说明） |
-| 影响面 | 新增 `validatePluginManifest()`；`loadPlugin(spec)` 签名不变；调用方 插件面板、selftest。无存储 schema 变更 |
-| 依赖与并行 | 依赖 D-04（能力集合与 API 版本）；与 D-06 串行（同文件/契约） |
-| 预估工作量 | 1 个会话；约 4 文件、+350 行、+8,000 B |
-| 风险与降级 | 不持久化会被认为「装了又没装」；降级为仅会话内，并在面板显著提示；持久化留待后续独立任务（需安全评审） |
-| 公共抽象 | 新增 `validatePluginManifest(raw)`（UI 与测试共用） |
+### Phase 1 · 纠错（17 条）
 
-### D-06 插件 API 兼容矩阵与契约演进门禁
+#### N-05 统一导出可见性口径，并将草稿/校准状态隔离出 PNG/PDF
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `plugins.js:34-47` 版本 1.0.0/次版本比较；`check-plugin-api.mjs` 只比对键集合；`docs/engineering.md` §5 明确向后兼容未设门禁 |
-| 目标与验收 | `checkPluginApiVersion` 返回 `{ok, reason, major, minor}`；矩阵用例固化：1.0 插件装 1.1 宿主通过、1.2 拒绝、2.0 拒绝、缺失/畸形拒绝且给原因、未知能力保留并降级。selftest 新增 6 例、e2e 新增 3 例；契约与文档同步 1.1.0 演进说明；增量 ≤ 3,000 B |
-| 技术方案 | 只在 `check-plugin-api.mjs` 与 `plugins.js` 扩展现有函数，不新增抽象层；未知能力只警告不拒绝，避免破坏旧插件 |
-| 影响面 | `checkPluginApiVersion` 返回值增加字段（旧调用只读 `ok/reason`，兼容）；调用方 `plugins.js`、selftest、e2e |
-| 依赖与并行 | 依赖 D-04 的 1.1.0 版本；与 D-05 串行 |
-| 预估工作量 | 1 个会话；约 4 文件、+150 行 |
-| 风险与降级 | 矩阵用例过度绑定实现细节；降级为只守「主版本 + 次版本 + 能力集合」三条不变量 |
-| 公共抽象 | 扩展 `checkPluginApiVersion` 返回结构；无新键 |
+- 问题与证据：SVG/DXF/图例/标签页走 `isVisible(o)`（`js/features/io-export.js:57,227,472,593`），CSV/TSV/XLSX 走 `objectRowsAll()` 不过滤（`io-export.js:135-146`、`io-fields.js:83-86`），台账「显示」列只反映 `o.visible`（`io-fields.js:35`），PDF 清单与图纸页口径不一致（`io-export.js:682-686,728-736`）。同时 `render.js:193-201` 在 `interactive===false` 时仍无条件执行 `drawDraft/drawCalibration`，导出 PNG/PDF 会把草稿线/校准点烘进产物。来源：audit-io P1-1、audit-core P1-2、audit-core T-3。
+- 目标：新增单一 `exportScope(o, mode)` / `effectiveVisible(o)` 判断源；明确「台账是否含隐藏图层」的产品口径并写入文档；PNG/PDF 默认不绘制草稿与校准（新增显式 `includeDraft/includeCalibration`，默认 false）。
+- 涉及文件：`js/features/io-export.js`、`js/core/render.js`、`js/features/io-fields.js`、`tests/e2e/*export*`、`scripts/selftest.mjs`、`docs/features.md`、`docs/user-guide.md`。
+- 验收：① 同一工程隐藏图层后，CSV/XLSX/PDF 清单与画布/PNG/SVG/DXF 的可见性结论有单一断言源；② 处于矩形工具第一落点/两点校准态导出 PNG/PDF，产物不含草稿线或校准标记（e2e 像素采样或渲染调用计数断言）；③ 8 种导出 golden 字节不变（未进入草稿/校准/隐藏图层场景时）；④ 台账表头不变（若确需新增列，先停下走 §6 拍板）。
+- 依赖：N-01。
+- 风险：产品口径需决定「台账全量 + 有效显示列」还是「台账过滤」；不得静默改表头。
+- 预估：5～7 人时。数据属性：静态可判定 + 真实 Chromium e2e（必须运行）。
 
-### D-07 加载完整性审计与救援导出
+#### N-06 统一对象变更时间戳，修复拖动/旋转/批量属性在协作 LWW 中被旧值覆盖
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `persistence.js:518-535` 吞掉 IDB 与 localStorage 异常；两者损坏时 `app.js` 静默进入空工程，无提示、无原始数据保留 |
-| 目标与验收 | 新增 `auditProject(raw)` 纯函数：校验 schema 可读、`floors` 非空、`activeFloorId` 存在、对象 id 唯一、图层引用有效、`background/site` 形状合法、资产缺失只告警。加载失败时保留原始文本（不落盘覆盖），横幅提示原因并提供「导出救援 JSON」。e2e：损坏 `current` → 横幅 + 救援导出字节等于注入内容 + 2 秒内不覆盖原记录；IDB 坏但 localStorage 好 → 从备份恢复并提示来源；两者皆坏 → 空工程 + 横幅；selftest 8 例；增量 ≤ 4,000 B |
-| 技术方案 | `loadSavedProject()` 返回 `{state, audit}`；`app.js` 根据 `audit.level` 渲染横幅；救援数据只驻内存，首次保存前需用户确认；不修改既有 v1→v2 迁移 |
-| 影响面 | 新增 `auditProject(raw)`；`loadSavedProject()` 返回值内部结构变化（调用方仅 `app.js` 与 selftest，需同步）；不改导出与存储 schema |
-| 依赖与并行 | 与 D-08/D-09 共用 `persistence.js`，需串行；是 D-08/D-09 的前置 |
-| 预估工作量 | 1 个会话；约 4 文件、+300 行 |
-| 风险与降级 | 审计误判会挡住正常工程；只把结构性错误设为阻断，其余降级为告警 |
-| 公共抽象 | 新增 `auditProject(raw)`（加载、selftest、救援导出共用） |
+- 问题与证据：节点拖动、旋转手柄只改几何，`pointerup` 只 `commitChange()`（`js/core/interaction.js:386-397,466-480`）；`commitChange` 只 touch 楼层/工程，不回写对象 `updatedAt`（`js/core/persistence.js:147-158`）；协作按对象 `updatedAt` 做 LWW（`js/common/merge.js:262-280`）。来源：audit-core P1-1、audit-core T-6。
+- 目标：新增 `stampObjects(ids)` 单一助手，`commitChange/commitObjectEdit` 与所有几何/批量属性写入路径共用；只对实际变化的 id 打点。
+- 涉及文件：`js/core/persistence.js`、`js/core/interaction.js`、`js/features/props.js`、`js/common/merge.js`（只读校验）、`scripts/selftest.mjs`、`tests/e2e/collab.spec.mjs`。
+- 验收：① selftest：节点拖动/旋转/批量显隐后对象 `updatedAt` 严格递增；② e2e：A 拖节点、B 改属性，合并后两者都保留；③ 无变化提交不产生新时间戳（幂等）；④ 现有 LWW/墓碑用例不回退。
+- 依赖：N-04（场地链路先接好，避免重复改 props/commit）。
+- 风险：批量路径多，遗漏会导致同类缺陷；需在 selftest 按写入入口逐条覆盖。
+- 预估：5～7 人时。数据属性：静态可判定 + 真实 Chromium e2e（必须运行）。
 
-### D-08 保存失败可见化、错误分类与有限重试
+#### N-07 导入唯一性硬化：重复对象 id、`safeId` 归并冲突与重名
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `persistence.js:500-517` 失败仅改文字 + 一次性 fallback；`:507-508` 工程库写入静默失败；无配额/IO 区分、无重试 |
-| 目标与验收 | `saveHealth = {state: ok/degraded/failed, errorCode, lastOkAt}`；区分 `QuotaExceededError`、IDB 不可用、其它 IO；仅瞬时错误重试 3 次（1s/3s/9s），配额错误不重试并给「导出 JSON / 清理空间」入口；状态栏文字与实际一致，不再出现「已保存」假象。e2e：注入 `IDBObjectStore.put` 抛 `QuotaExceededError` → 2 秒内横幅与「保存失败」、重试计数 3、内存编辑不丢、可手动导出；恢复注入后下一次保存清除横幅；selftest 6 例；增量 ≤ 5,000 B |
-| 技术方案 | `classifySaveError(err)` + `reportSaveFailure(err, phase)` 统一出口；复用 `notifyIdbFallback()` 避免重复 toast；`ui-shell.js` 渲染常驻横幅；不新增存储键 |
-| 影响面 | `scheduleSave()` 内部重写；新增两个纯函数；调用方 `ui-shell.js`。存储 schema 与工程库键不变 |
-| 依赖与并行 | 依赖 D-07（审计/加载状态结构）；与 D-09 串行（同文件 + 横幅） |
-| 预估工作量 | 1 个会话；约 3 文件、+280 行 |
-| 风险与降级 | 重试造成写放大；仅对瞬时错误重试且上限 3 次；配额错误立即降级 |
-| 公共抽象 | 新增 `classifySaveError()`、`saveHealth`；复用 `notifyIdbFallback()` |
+- 问题与证据：`sanitizeObjects` 对 `raw.id` 只做 `safeId()`，不检查同楼层是否已存在；`safeId` 会把 `a:b` 与 `a?b` 归并成 `a_b`；名称只判空不判重（`js/core/persistence.js:1058-1068`）。后果：重复 id 无法独立选中、按 id 删除一次删两个、协作 LWW/墓碑互相覆盖、快照 diff 出现假差异。来源：audit-core P1-3、audit-core T-2。
+- 目标：清洗阶段建 `seenIds`，冲突时重新分配稳定 id 并记录审计告警；名称冲突走现有 `beginObjectNameScope` 统一重编号。
+- 涉及文件：`js/core/persistence.js`、`js/core/model.js`、`scripts/selftest.mjs`、`docs/features.md`。
+- 验收：① selftest：同 id 两对象、`a:b`/`a?b` 冲突、重名对象导入后 id/编号唯一且可独立删除；② 导入不因去重改变对象数量之外的既有字段；③ 重复 id 不再进入协作/快照测试样本。
+- 依赖：无（可与 N-06 并行，文件不重叠）。
+- 风险：重新分配 id 会改变旧工程引用；只对新导入冲突生效，不迁移已存工程。
+- 预估：4～5 人时。数据属性：静态可判定。
 
-### D-09 多标签页写冲突检测（同工程 lease）
+#### N-08 楼层名唯一化与图层/类型跨楼层引用检查
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | 草稿/工程库写入为最后写者覆盖（`persistence.js:211-227`）；无 `storage` 事件或编辑 lease；`collab.js` 的 BroadcastChannel 独立通道，不覆盖同机双标签 |
-| 目标与验收 | 新增 `js/core/tab-lease.js`：`BroadcastChannel('plotpin:editor-lease')`，心跳 5 s、租约 15 s；第二个标签打开同工程 6 s 内出现横幅「另一标签页正在编辑（最后心跳 HH:MM:SS）」+「重新载入 / 仍以本页为准」；选择后者需确认后才取得租约；不同工程不触发；`pagehide` 释放；BC 不可用降级 `storage` 事件，两者都不可用则明确提示「无法检测多标签」并继续可编辑。e2e 双页面 1 例 + 不同工程 1 例；selftest 假时钟 4 例；增量 ≤ 6,000 B |
-| 技术方案 | 新增独立脚本（layer 1，index.html 顺序加入），只做 lease/心跳；`app.js` 启动时获取，`scheduleSave()` 保存前检查；横幅复用 D-08 的状态区 |
-| 影响面 | 新增 3 个全局函数与 1 个脚本（41 → 42，需同步 `modules.md`/README 计数）；调用方 `app.js`、`scheduleSave`、`ui-shell.js`；不改协作通道与合并逻辑 |
-| 依赖与并行 | 依赖 D-08 的状态横幅；与 D-07/D-08 串行；与扩展性任务可并行（文件不同） |
-| 预估工作量 | 1–2 个会话；约 5 文件、+400 行 |
-| 风险与降级 | 多标签测试耗时；降级为仅在保存前检测，不做实时互斥。BC/storage 均不可用时不阻塞编辑，如实提示限制 |
-| 公共抽象 | 新增 `acquireEditorLease/releaseEditorLease/onLeaseConflict`（`tab-lease.js`） |
+- 问题与证据：`addFloor`/`renameFloor` 无唯一性校验（`js/core/persistence.js:456-498`）；导入用 `floorByName` 同名后者覆盖（`js/features/io-table.js:237,272`）；删除图层/类型只检查当前楼层（`js/features/ui-panels.js:170-202`、`js/core/model.js:473`），其他楼层留下悬空 `layerId/typeId`。来源：audit-io P1-2、audit-runtime P1-08。
+- 目标：新增/重命名楼层拒绝重名（或自动加后缀）；导入预览对同名楼层直接报歧义；删除图层/类型前检查全部楼层并提供「迁移到默认/拒绝」明确路径。
+- 涉及文件：`js/core/persistence.js`、`js/features/io-table.js`、`js/features/ui-panels.js`、`js/core/model.js`、`scripts/selftest.mjs`、`tests/e2e/table-batch.spec.mjs`。
+- 验收：① 新建/重命名同名楼层被拒且提示；② 导入含同名楼层的表格在预览阶段整体拒绝（事务化，不污染现有数据）；③ 删除被其他楼层引用的图层/类型时给出引用楼层数与确认；④ 拒绝后无悬空引用。
+- 依赖：N-07（同属导入清洗；可串行合并证据）。
+- 风险：旧工程已存在重名楼层，加载时不能直接报错；只对新操作拒绝，加载时告警。
+- 预估：4～6 人时。数据属性：静态可判定 + 真实 Chromium e2e（导入拒绝路径）。
 
-### D-10 文档入口收口：ARCHITECTURE / user-guide / plans 索引
+#### N-09 修正 PDF 导入 CTM：曲线采样与文本坐标统一到设备空间
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | 无 `docs/ARCHITECTURE.md`、无 `docs/user-guide.md`、无 `docs/plans/`；README 33,159 B 同时承担介绍与操作手册；`docs/manual-acceptance.md` 21,192 B 未跟踪 |
-| 目标与验收 | 新增 `ARCHITECTURE.md`（≤10 KB：分层图、唯一源清单、链接 modules/engineering/contracts）与 `user-guide.md`（≤30 KB：快速上手、导入导出、校准、协作、插件，内容迁自 README 不重复）；新增 `plans/README.md` 索引；`manual-acceptance.md` 入册，作为 M1–M8 发布前清单。验收：README 保留快速开始与链接；标题清单前后对比无丢失；所有相对链接可达；`node scripts/check-discipline.mjs` 仍 13/13；单文件 ≤60 KB / 600 行 |
-| 技术方案 | 只移动/重组文档，不新建业务说明；ARCHITECTURE 只做「入口 + 权威链接 + 唯一源表」，避免与 modules.md 重复 |
-| 影响面 | 无代码与 API 影响；README 结构变化 |
-| 依赖与并行 | 建议在 Phase 3 初执行；与 D-11/D-13 可并行 |
-| 预估工作量 | 1 个会话；文档 +约 35 KB，产物 0 B |
-| 风险与降级 | 拆分造成双份维护；降级为 README 增加目录 + 仅新建 ARCHITECTURE 索引 |
-| 公共抽象 | 无 |
+- 问题与证据：贝塞尔采样把未变换控制点与已变换 `cur` 混合后再 `tx`（`js/common/pdf-read.js:92-105`）；文本定位只取 `Tm/Td`，不乘 CTM（`:135-165`，第 162 行 `x:mat[4]+dx`）。含 `/cm` 的 CAD 打印 PDF 导入后曲线与文字错位。来源：audit-io P1-5、audit-io §6.2。
+- 目标：曲线采样全程在设备空间（先 `tx` 控制点再插值）；文本定位把当前 CTM 与文本矩阵相乘；补含 `/cm` 的最小 PDF 夹具。
+- 涉及文件：`js/common/pdf-read.js`、`tests/fixtures/`、`scripts/selftest.mjs`、`docs/features.md`。
+- 验收：① selftest：构造 `q 2 0 0 2 0 0 cm …` 最小 PDF，断言端点与文字坐标均为恒等 CTM 情形的 2 倍；② 不含 `/cm` 的既有样例坐标不变；③ PDF 导出/导入现有 golden 不回退。
+- 依赖：N-03（同一 PDF 链路，先修数据丢失再修坐标）。
+- 风险：PDF 语义近似解析可能仍有别的偏差；本条只承诺 `/cm` 场景，其他压缩/旋转在文档标注限制。
+- 预估：6～8 人时。数据属性：静态可判定（构造夹具 + 断言）。
 
-### D-11 i18n 覆盖率门禁与字典收敛
+#### N-10 导出层转义与结构注入加固：SVG 颜色、DXF 图层名、符号 `A` 路径
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | 实测 29.82%（407/1167 进模板，348 命中、59 缺口，760 硬编码）；`docs/testing.md` 仍写 33.79%，属事实漂移 |
-| 目标与验收 | `i18n-scan.mjs` 输出按文件明细并支持 `--check`：总体覆盖率 ≥40%、缺口 ≤10、`js/features/*.js` 与 `js/core/{app,interaction,props}.js` 的 UI 文案硬编码 ≤20，否则退出 1；接入 `node scripts/check.mjs --selftest`。补齐 59 条缺口 + 高优 UI 文案；文档回填实测值。验收：改造前后 `i18n-scan` 输出对照表；英文 e2e 通过；产物增量 ≤ 12,000 B |
-| 技术方案 | 复用现有 `L()`/字典与 `I18N.setLang`；阈值常量化在扫描脚本；不引入翻译文件拆分或运行时加载 |
-| 影响面 | `i18n-scan.mjs` 新退出码与统计口径；`check.mjs` 聚合；`i18n.js` 字典增长。业务 API 不变 |
-| 依赖与并行 | 依赖 D-01/D-03 文案落地后执行；与 D-10/D-13 可并行 |
-| 预估工作量 | 1–2 个会话；约 5 文件、+600 行 |
-| 风险与降级 | 覆盖率门禁可能逼出低质量机翻；只守「键存在 + 模板可用」，语义质量仍列为 M4；超预算则先补 UI 路径，非 UI 适配器明确豁免并记录 |
-| 公共抽象 | 新增扫描阈值常量（脚本内）；无运行时公共 API |
+- 问题与证据：SVG 直接把 `o.style.color` 插入 `fill/stroke`（`js/features/io-export.js:477,485,492,525,532,536,595`），靠持久化白名单兜底；DXF `safeLayer` 未过滤 CR/LF（`ngm.vendor/.../dxf/src/core.js:52`、`js/core/persistence.js:1010-1030`）；符号路径白名单允许 `A` 开头，`pathToPolylines` 的 `A` 分支无 `cur` 空值保护，DXF 导出可抛 `TypeError`（`js/common/symbols.js:97,291,354,378`）。来源：audit-io P1-3/P2-26、audit-gates P1-4。
+- 目标：新增 `normalizeExportColor`（白名单）与 `dxfSanitizeName`（CR/LF 清洗）；符号规范化要求首命令 `M/m`，`A/S/Q/T` 分支加空值保护；所有恶意输入在导出层被拒绝而非靠上游兜底。
+- 涉及文件：`js/features/io-export.js`、`js/common/symbols.js`、`ngm.vendor/.../dxf/src/core.js`（仅适配层，不改 vendor 语义时优先在调用侧清洗）、`scripts/selftest.mjs`。
+- 验收：① selftest：恶意颜色 `" onload=…` 导出 SVG 属性被中和；② 含 CR/LF 图层名导出 DXF 结构完整；③ `<path d="A …">` 导入后被拒或安全降级，DXF 导出不抛异常；④ 正常 SVG/DXF golden 字节不变。
+- 依赖：N-05（同属导出层，先定口径再加固）。
+- 风险：改 vendor 会违反“不改 vendor”惯例；优先在调用侧清洗并同步 `docs/engineering.md`。
+- 预估：4～6 人时。数据属性：静态可判定（构造恶意输入断言）。
 
-### D-12 geometry.js 按职责拆分（行为不变）
+#### N-11 修正 JSON 导入事务顺序：先提交成功再回收资产
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `geometry.js` 1309 行 / 66,934 B，混合场地几何、覆盖率网格、轮廓/变换、命中判定；是最大业务脚本 |
-| 目标与验收 | 拆为 3 个脚本（场地几何、覆盖率网格、轮廓/变换），单文件 ≤500 行，全局函数名与调用方式不变；`index.html` 顺序调整；selftest 2584/0 不变；e2e 65/1；8 种导出 golden 字节不变；产物增量 ≤ 2,000 B；脚本数 42 → 44（相对 Phase 2 结束态），同步文档计数 |
-| 技术方案 | 纯移动 + 保留原有注释；不做重命名、不引入模块加载；先建立导出 golden 基线再移动，按「移动 → 跑 selftest/e2e/golden」两批提交确保可回滚 |
-| 影响面 | 无公共 API 变更；影响 `index.html`、`check.mjs` 分层列表、`docs/modules.md`、README 脚本计数 |
-| 依赖与并行 | 必须在 Phase 3 后段、其余代码任务完成后执行；不可与其他改动并行 |
-| 预估工作量 | 1–2 个会话；约 4 文件移动 |
-| 风险与降级 | 经典脚本共享全局作用域，拆分顺序错误会导致初始化顺序问题；任一回归则回滚为单文件，仅补分区注释 |
-| 公共抽象 | 无新增；`outlineOf`、`siteBounds`、`coverageGridPlan` 等唯一源与签名保持不变 |
+- 问题与证据：`importJsonFile` 顺序为「替换 state → `pruneBgAssets()` → `afterStateLoaded()`」，异常时只还原 state/history（`js/features/io-import.js:7-46`，第 34-41 行）；旧工程资产可能在回滚前已被判不可达删除，回滚后 `assetId` 指向已删资产。来源：audit-io P1-4、audit-io §4.3。
+- 目标：回收移到 `afterStateLoaded()` 成功之后，或把 `prevState` 可达资产并入本次 prune 白名单；失败回滚后旧工程资产必须完整。
+- 涉及文件：`js/features/io-import.js`、`js/common/content-assets.js`、`scripts/selftest.mjs`、`tests/e2e/persistence.spec.mjs`。
+- 验收：① selftest：注入 `afterStateLoaded` 抛错，回滚后旧底图 assetId 仍可读；② 成功导入后不可达旧资产正常回收；③ 导入失败不覆盖草稿/工程库。
+- 依赖：N-03（资产写入路径先统一）。
+- 风险：资产回收延后可能短暂增加存储占用；需在文档说明「事务成功后才回收」。
+- 预估：3～4 人时。数据属性：静态可判定 + e2e 失败注入。
 
-### D-13 自测分区、列表与过滤
+#### N-12 修复一般仿射下圆/椭圆/平行四边形/扇形的系统性失真
 
-| 项 | 内容 |
-|---|---|
-| 现状与证据 | `scripts/selftest.mjs` 383,395 B 单文件、2584 条断言；无分区名与过滤入口，失败定位靠行号 |
-| 目标与验收 | 在脚本内建立分区注册（几何/持久化/导出/协作/插件/规则等）；新增 `--list` 与 `--filter=<regex>`；失败输出带分区名；断言总数仍 2584、0 失败；默认执行与 `--selftest` 聚合行为不变；产物 0 B 变化 |
-| 技术方案 | 只改测试脚本：把现有断言块包进 `section(name, fn)`，不移动断言内容；`runAll()` 保持顺序；过滤只跳过不改变统计口径 |
-| 影响面 | 仅 `scripts/selftest.mjs`；`check.mjs --selftest` 调用方式不变 |
-| 依赖与并行 | 与 D-10/D-11 可并行；在 D-12 之前完成，便于拆分回归时按分区定位 |
-| 预估工作量 | 1 个会话；脚本 +约 80 行 |
-| 风险与降级 | 包装可能改变异步顺序；降级为只加分区注释与失败时打印最近分区，不做过滤 |
-| 公共抽象 | 测试脚本内 `section(name, fn)`；无业务代码影响 |
+- 问题与证据：圆直接取 `rx=r*sx, ry=r*sy, angle=theta`（`js/core/geometry-transform.js:83-86`），仅“旋转×轴向缩放”成立；椭圆丢弃剪切分量（`:87-93`）；平行四边形不重算 `skew`（`:98-105`），而场地分支重算（`:156`）；扇形只按 `sx` 缩放半径（`:94-97`）。来源：audit-core P1-6。
+- 目标：抽出公共 `affineShapeTransform(M, shape)`（含 SVD/极分解），对象与场地共用；不可表达形状给出显式降级标记。
+- 涉及文件：`js/core/geometry-transform.js`、`js/core/geometry-site.js`、`scripts/selftest.mjs`、`docs/features.md`、`docs/engineering.md`。
+- 验收：① selftest：旋转 30° + `sx=2,sy=1` 下圆/平行四边形/椭圆断言轴长、朝向、`skew` 与解析值一致；② 场地与对象同一变换规则一致；③ 未使用仿射的既有 golden 不变；④ 降级形状在导出报告/文档明确标注。
+- 依赖：N-09（PDF 坐标先正确，避免混淆来源）。
+- 风险：几何行为改变会影响已校准工程；只对“新应用变换”生效，不迁移已存坐标，并在文档说明。
+- 预估：8～10 人时。数据属性：静态可判定（数学断言 + golden）。
 
-## 4. 优先级排序与阶段排期
+#### N-13 修复跨 0° 扇形：画布与 SVG 外圈方向不一致
 
-### 4.1 四方向排序
+- 问题与证据：画布按 `start,end,ccw` 归一后取 `a0>=a1 ? a0-a1 : a0+2π-a1`（`js/core/render.js:406-411`）；SVG 固定 `a0=start,a1=end`（`js/core/geometry-site.js:165-172`）。`start=350° end=20°` 时画面约 30°、SVG 约 330°，导出与屏幕不一致。来源：audit-core P1-7。
+- 目标：抽出公共 `sectorArcRange(shape)` 单一源，画布/SVG 共用；补跨 0° golden。
+- 涉及文件：`js/core/render.js`、`js/core/geometry-site.js`、`scripts/selftest.mjs`、`tests/golden/`（新增跨 0° SVG）、`docs/features.md`。
+- 验收：① selftest 对 `350°→20°` CW/CCW 两种方向断言起止角与扫角一致；② SVG golden 与画布几何断言同步；③ 不跨 0° 的既有 golden 字节不变。
+- 依赖：N-12（同属几何渲染口径）。
+- 风险：SVG `A` 命令的 sweep 标志与角度方向耦合，需按同一 `ccw` 语义映射。
+- 预估：3～4 人时。数据属性：静态可判定（golden + 角度断言）。
 
-1. **易学易用（最高）**：每个新用户都会遇到，当前只有一行提示与 20 行快捷键；3 个任务都不动公共 API、可快速交付，能直接降低试用流失。
-2. **持久性（次高）**：数据丢失不可逆，且已有「工程库写入静默失败」「损坏静默空工程」「多标签覆盖」三处代码证据；范围是条件触发（配额/坏数据/双标签），所以排在易用之后，但必须先于扩展性。
-3. **扩展性（第三）**：插件生态需要稳定契约；当前 19 键、规则未入册、无安装形态。放在持久性之后，避免插件放大写入风险；兼容矩阵必须在 1.1.0 发布前落地。
-4. **可维护性（最后）**：geometry 拆分、i18n 门禁、文档重组都会产生跨文件大 diff，必须等文案与 API 稳定后再做，否则反复返工；但 D-10 文档索引可提前并行。
+#### N-14 边界防护三合一：图片切变退化、`fitView` 缩放夹取、顶点上限与包围盒循环
 
-### 4.2 阶段划分
+- 问题与证据：`applySiteSnap` 在 θ=90° 写 `Infinity` 进 `background.transform`（`js/core/geometry-site.js:413-416`）；`fitView` 算出的 zoom 可能超出 `[ZOOM_MIN, ZOOM_MAX]`（`js/core/viewport.js:60-73`）；`MAX_SHAPE_POINTS` 未使用（`js/core/geometry.js:223-229`），单对象可无限加点；`siteBounds` 无重入保护，未受控点列可无限递归（`js/core/geometry-site.js:40-52`）。来源：audit-core P1-8/P1-9/P2-3/P2-4。
+- 目标：切变退化前夹取/拒绝；`fitView` 结果按统一常量夹取；顶点上限在模型层生效（超限拒绝并提示）；包围盒循环检测给出安全回退值。
+- 涉及文件：`js/core/geometry-site.js`、`js/core/viewport.js`、`js/core/geometry.js`、`js/core/persistence.js`、`js/features/props.js`、`scripts/selftest.mjs`、`docs/features.md`。
+- 验收：① selftest：θ=90° 切变不产生非有限值；② `fitView` 极端缩放下 `zoom` 落在常量区间；③ 第 `MAX_SHAPE_POINTS+1` 个点被拒且提示；④ 自交/循环点列返回安全值不无限递归；⑤ 正常工程行为与 golden 不变。
+- 依赖：N-12（同一几何内核改造）。
+- 风险：上限值改变既有超限工程的可编辑性；超限工程只读提示，不静默截断。
+- 预估：5～6 人时。数据属性：静态可判定。
 
-| 阶段 | 任务与波次 | 出口判据 | 体积预算 |
-|---|---|---|---|
-| Phase 1 易用止血 | 波次 A：D-01 ∥ D-02；波次 B：D-03 | 首次引导/示例、校准状态矩阵、帮助中心三项 e2e 通过；无 API 变更 | ≤ 19,000 B |
-| Phase 2A 持久 | D-07 → D-08 → D-09（共用 `persistence.js`，串行） | 损坏加载、配额失败、双标签三类 e2e 通过；救援导出字节可比对 | ≤ 15,000 B |
-| Phase 2B 扩展 | D-04 → D-05 → D-06（共用 `plugins.js`/契约，串行） | 契约 22 键；1.0 插件在 1.1 宿主可用；清单导入事务化 | ≤ 17,000 B |
-| Phase 3 维护收口 | 波次 A：D-10 ∥ D-11 ∥ D-13；波次 B：D-12 | i18n ≥40%；文档 13/13；selftest 2584/0 且可分区分过滤；拆分后 golden 不变 | ≤ 14,000 B |
+#### N-15 交互瞬态统一清理：载入、切层、撤销/重做、快照回滚、协作合并
 
-合计预算 65,000 B；每阶段结束记录 `scripts/dist-manifest.json` 的 bytes 增量，超预算在本阶段内回收，不挪用 839,680 B 上限。预计 14–19 个原子提交会话。
+- 问题与证据：`afterStateLoaded` 清 `draft`/`calib`/`trackingDrag`/`diffView`，但不清 `affineDrag`/`historyValueCache`（`js/core/persistence.js:1118-1124`）；快照回滚清 `layeringDiff`/`diffView` 但不清 `affineDrag`（`js/core/snapshot.js:111-118`）；`geometry.js:329-331` 注释要求切换 `calib` 时复位 `trackingDrag`，`afterStateLoaded` 未做。来源：audit-runtime P2-11/P2-12、audit-core T-8。
+- 目标：新增 `resetTransientInteractionState({keepCalib:true})`，上述入口统一调用；`beforeSnapshotRestore` 不得清空校准。
+- 涉及文件：`js/core/persistence.js`、`js/core/snapshot.js`、`js/features/collab.js`、`js/core/geometry.js`、`scripts/selftest.mjs`、`tests/e2e/undo.spec.mjs`。
+- 验收：① selftest：注入 `affineDrag`/`trackingDrag` 后载入工程，二者均为空；② 快照回滚不清校准；③ 快照回滚清 affine；④ 切换楼层后草稿/捕捉热键状态复位；⑤ e2e 撤销/重做后无残留 overlay。
+- 依赖：N-04（撤销链路先修）。
+- 风险：不同入口需要保留的瞬态不同；`keepCalib` 必须显式，不允许“一刀切清空”。
+- 预估：4～5 人时。数据属性：静态可判定 + e2e。
 
-### 4.3 关键依赖
+#### N-16 协作断线补发与自动重连，并把楼层增删/清空纳入广播
 
-- D-07 → D-08 → D-09：共享加载/保存状态结构，后一项复用前一项的横幅与健康状态。
-- D-04 → D-05 → D-06：能力集合 → 清单校验 → 版本矩阵；三者都改契约与 `plugins.js`。
-- D-01 → D-03：帮助中心复用引导卡 modal；D-02 与 D-03 共用 `interaction.js`，串行。
-- D-13 先于 D-12：拆分 `geometry.js` 时可按 selftest 分区快速定位回归。
-- D-11 在 Phase 1/2 文案冻结后执行，避免覆盖率反复波动。
+- 问题与证据：断线时本地修改只置 `pending=true`，重连只 `ensure()` 不重发（`js/features/collab.js:335-342`），文档承诺的「5 分钟后自动重连」实现不可见（`:388-430`）；楼层增删/清空/撤销不广播，中继端无 `floor-add/floor-delete/floor-clear` 分支（`js/core/persistence.js:130-136,456-490`、`collab.js:388-430`）。来源：audit-runtime P1-01/P1-02。
+- 目标：待发修改持久化队列 + 指数退避自动重连（含 5 分钟上限）+ 重连后合并结果可验证；楼层操作新增消息类型并走 merge 助手。
+- 涉及文件：`js/features/collab.js`、`js/core/persistence.js`、`js/common/merge.js`、`tests/e2e/collab.spec.mjs`、`docs/features.md`。
+- 验收：① e2e：A 断网改对象 → 恢复 → 修改自动补发到 B，且 A 的本地修改未丢；② 离线 ≥5 分钟后恢复仍自动重连并补发；③ 楼层新增/删除/清空后 B 在超时内一致；④ 断线期间刷新页面后待发修改不丢（落盘队列）；⑤ 双设备 WebRTC 真机仍标「未验证」。
+- 依赖：N-04（楼层/场地合并先正确）。
+- 风险：离线队列可能膨胀；需设上限并显式提示，不得静默丢弃。
+- 预估：8～10 人时。数据属性：静态可判定（merge/队列）+ 真实 Chromium 双页面 e2e（必须运行）；真机项未实测。
 
-## 5. 遗留项处置
+#### N-17 协作冲突可见性与跨工程隔离
 
-| 遗留项 | 处置 | 理由 |
+- 问题与证据：`changed=0` 时冲突横幅不显示、撤销按钮不启用（`js/features/collab.js:145-160,292-322`）；频道名只有工程名，无 projectId，同名工程会串线；消息无 projectId 校验（`collab.js:2,537-543,256-291`）。来源：audit-runtime P1-03/P1-04、audit-io §4.3。
+- 目标：冲突计数包含元数据/场地删除；频道名与消息体带 `projectId`，不匹配直接丢弃并计数；跨工程串线有 e2e 断言。
+- 涉及文件：`js/features/collab.js`、`js/common/merge.js`、`tests/e2e/collab.spec.mjs`、`docs/features.md`。
+- 验收：① 远端覆盖但 `changed=0` 时仍出现「已覆盖 N 项」横幅且可回滚；② 两个同名工程各自打开，互不收到消息；③ 伪造 projectId 消息被丢弃并计入冲突；④ 现有协作用例不回退。
+- 依赖：N-04、N-16。
+- 风险：`projectId` 进入频道名会改变邀请串兼容性；旧邀请串需明确迁移说明，不静默失效。
+- 预估：6～8 人时。数据属性：静态可判定 + 真实 Chromium 双页面 e2e（必须运行）。
+
+#### N-18 插件写入可撤销，并封堵载入后定时器逃逸
+
+- 问题与证据：`api.addObjects` 直接 `appendObjects` 不 `pushHistory`（`js/features/plugins.js:363-393`）；`installSandboxGlobals` 删除定时器但样例插件在 `loaded` 回调恢复 `setInterval`（`plugins.js:304,481-489,546-560`）。来源：audit-runtime P1-05/P1-06。
+- 目标：插件写入统一走 `pushHistory` + 事务提交；载入后再清一次定时器并冻结 `loaded` 后的全局逃逸面；恶意插件测试覆盖定时器/BC 组合。
+- 涉及文件：`js/features/plugins.js`、`tests/e2e/plugin-sandbox.spec.mjs`、`docs/features.md`。
+- 验收：① 插件 `addObjects` 后 Ctrl+Z 可完全移除且工程状态一致；② 载入后 `setInterval` 逃逸无效；③ 恶意用例不阻塞主线程；④ 现有插件用例不回退。
+- 依赖：N-02（沙箱逃逸先封堵）。
+- 风险：无。
+- 预估：4～5 人时。数据属性：静态可判定 + 真实 Chromium e2e。
+
+#### N-19 属性面板 `focusin` 历史累积改为事件委托
+
+- 问题与证据：每次重建属性面板都 `addEventListener('focusin', pushHistory, {once:true})`（`js/features/props.js:230` 场地与其他字段），历史最多 20 条会被焦点事件挤满，撤销粒度失真。来源：audit-runtime P1-07、audit-core P2-11。
+- 目标：容器一次委托，按「字段获得焦点→首次输入」只入栈一次；场地与对象共用同一实现。
+- 涉及文件：`js/features/props.js`、`js/core/persistence.js`（复用 pushHistory 助手）、`scripts/selftest.mjs`、`tests/e2e/undo.spec.mjs`。
+- 验收：① selftest/e2e：连续切换 5 个字段后一次拖动仍可一次 Ctrl+Z 回到拖动前；② 历史条数不随焦点事件线性增长；③ 对象与场地面板行为一致。
+- 依赖：N-04（场地提交链路先修）。
+- 风险：用户可能期望每次字段编辑都可撤销；保留“每次提交一次撤销”，只在字段首次聚焦时入栈。
+- 预估：3～4 人时。数据属性：静态可判定 + e2e。
+
+#### N-20 统一覆盖率口径：统计积、区域包围盒、优化器分母与盲区面积
+
+- 问题与证据：统计用等经纬网格面积，图表用多边形面积分配（`js/core/geometry-coverage.js:155-160` vs `:181-186`）；覆盖率与优化器两套区域判定/分箱（`:206-250`、`js/features/rules.js:433-459`）；`stats.bounds` 排出 0 面积矩形但 `regionPi` 仍算入（`geometry-coverage.js:65-76,90-97`）；面板区域面积用视口包围盒（`js/features/ui-panels.js:357`）。来源：audit-core P2-5/P2-6/P2-7、audit-io §6.5。
+- 目标：单一 `coverageCellPlan`/`regionMetric` 口径；统计与图表共用多边形面积分配；`regionPi` 与 `stats.bounds` 同源；面板面积随缩放不变。
+- 涉及文件：`js/core/geometry-coverage.js`、`js/features/rules.js`、`js/features/ui-panels.js`、`docs/performance.md`、`scripts/selftest.mjs`。
+- 验收：① selftest：同一工程统计、图表、覆盖率面板三处覆盖率数值一致（容差 ≤0.01%）；② 5000×5000m <300ms 阈值不回退（当次 benchmark 输出）；③ 历史报告数值不改写，文档新增口径版本说明；④ 优化器搜索耗时实测并写入报告（未实测则标「未实测」）。
+- 依赖：N-10（导出报表字段先稳定）。
+- 风险：口径变更会影响历史报告可比性；仅在文档显式标注版本差异，不得静默改历史数值。
+- 预估：6～8 人时。数据属性：静态可判定 + 覆盖率 benchmark 实测（5000×5000）。
+
+#### N-21 快照差异覆盖场景级、恢复守卫与命名空间/字节口径
+
+- 问题与证据：`diffSnapshots` 只比较 `f.objects`（`js/core/snapshot.js:185-209`），场地、底图、名称变化显示「无差异」；恢复只校验 `projectId`（`:101-115`），数据来自同命名空间任意记录；字节统计用 `JSON.stringify().length`（`:11-13`），UTF-8 上限失真；快照键 `snap:<工程>:<快照>` 冒号拼接可能与协作场景冲突（`:51-61`）；`persistableState` 的压缩副本键序变化导致 `mergeStable` 误判（`js/core/persistence.js:958-1015`）；列表每次全量 JSON.parse（`snapshot-ui.js:106-116`）。来源：audit-runtime P1-09/P2-01～P2-05、audit-core P2-8。
+- 目标：差异覆盖场地/底图/楼层元数据；恢复前校验快照归属与版本并二次确认；字节上限按 UTF-8 实际体积并给出截断提示；命名空间编码不可歧义；列表用元数据索引避免全量解析。
+- 涉及文件：`js/core/snapshot.js`、`js/features/snapshot-ui.js`、`js/core/persistence.js`、`scripts/selftest.mjs`、`tests/e2e/snapshot.spec.mjs`、`docs/features.md`。
+- 验收：① selftest：仅改场地顶点/底图/楼层名时差异分类正确（新增/删除/移动/属性修改）；② 跨工程快照 ID 恢复被拒；③ 20 条快照仍受 16 MB 上限，超限淘汰最旧并至少留 1 条；④ 列表 20 条打开耗时不随对象数线性增长（实测写入报告，未实测则标「未实测」）；⑤ 现有快照 golden/回滚用例不回退。
+- 依赖：N-04（场地合并先正确，差异才可信）。
+- 风险：差异分类顺序是既有契约，新增场景级项必须排在「属性修改」之后并文档化。
+- 预估：6～8 人时。数据属性：静态可判定 + e2e；列表性能项必须实测。
+
+### Phase 2 · 提速（3 条，必须真实 Chromium 实测）
+
+> 通用采集方法：Playwright Chromium（非 Node 桩），同一机器、同一夹具、冷启动后预热 3 次、采样 ≥30 次取 P95；内存用 CDP `Runtime.getHeapUsage`/`performance.memory` 前后对比；每次记录夹具规模、视口、commit、命令与原始输出，写入 commit body 与 `CHANGELOG.internal.md`。没有 before/after 数据不得提交。
+
+#### N-22 捕捉热路径：空间预筛、一次包围盒、手势期短路
+
+- 问题与证据：`buildSnapCandidates` 对全量对象扫描并合并 `siteHandleList`，未按指针附近过滤（`js/core/geometry.js:31-97`）；`nearestEdge` 先分配全部边数组再按 bbox 过滤（`:143-190`）；每个候选最多尝试 10 条边、每条两边，10k 对象拖动呈 O(N×10)（`js/core/interaction.js:126-166,360-374`）。来源：audit-core P1-4、audit-core §7。
+- 目标：按指针视口/包围盒先建候选集（复用现有索引能力或按层缓存），一次计算所选对象 bbox，拖动期跳过全量重算；不改变捕捉结果（同输入同输出）。
+- 涉及文件：`js/core/geometry.js`、`js/core/interaction.js`、`js/core/render.js`（仅缓存失效）、`scripts/bench.mjs`、`tests/perf/browser-baseline.perf.mjs`、`docs/performance.md`。
+- 验收：① 同夹具下捕捉结果与改造前逐点一致（selftest/golden）；② 真实 Chromium 10k 对象拖动 P95 帧时间较基线下降 ≥30%，heapUsed 增幅 ≤5%（实测值写入 commit）；③ 现有 bench 的 heapUsed/静态重建/P95 阈值不回退；④ 未实测项不得写成已达成。
+- 依赖：N-14（几何边界先稳定，避免测到错误路径）。
+- 风险：空间预筛若与渲染缓存不同步会漏捕捉；必须先做“候选集与全量结果等价”的 selftest。
+- 预估：10～14 人时。数据属性：**必须实测**（真实 Chromium P95/heapUsed）+ 静态等价断言。
+
+#### N-23 选中与悬停不再重建静态层
+
+- 问题与证据：`drawSceneStatic` 每次把选中/活动对象从静态层剔除再绘制，选中变化触发 `markDirty`（`js/core/render.js:110-121,146-183`）；10k 对象下每次点选都完整重建静态层。来源：audit-core P1-5、audit-core §7。
+- 目标：静态层保留全部可见对象，选中/悬停仅叠加绘制；补充独立脏标 `staticDirty`，选中变化不再置脏。
+- 涉及文件：`js/core/render.js`、`js/core/interaction.js`、`scripts/bench.mjs`、`tests/perf/browser-baseline.perf.mjs`、`docs/performance.md`。
+- 验收：① 选中/悬停变化时静态层重建次数为 0（可注入计数断言）；② 真实 Chromium 10k 对象连续点选 P95 较基线下降 ≥30%，且静态重建耗时不回退；③ 视觉 golden（PNG/SVG）不变；④ 现有 bench 阈值不回退。
+- 依赖：N-22（同一渲染路径，避免重复测量噪声）。
+- 风险：叠加层与静态层叠放顺序需与既有渲染顺序一致（图片→场地→网格→覆盖率→场地标注→坐标轴→对象→手柄）。
+- 预估：6～8 人时。数据属性：**必须实测**（真实 Chromium）+ golden 断言。
+
+#### N-24 历史与快照内存：帧共享、列表索引、避免二次归档
+
+- 问题与证据：`pushHistory` 两次深克隆（`js/core/model.js:362-392`、`js/core/persistence.js:403-410`）；20 条含照片历史导致堆显著上涨；快照列表每次全量读（`snapshot.js:36-49`）。来源：audit-core P1-10、audit-runtime P2-02、audit-core §7。
+- 目标：历史帧共享不可变子树/资产引用，去掉重复克隆；快照列表用轻量元数据索引；保持 20 条上限、撤销/重做语义、`history.past/future` 消费方式不变。
+- 涉及文件：`js/core/model.js`、`js/core/persistence.js`、`js/core/snapshot.js`、`js/features/snapshot-ui.js`、`scripts/bench.mjs`、`tests/perf/browser-baseline.perf.mjs`、`docs/performance.md`。
+- 验收：① 真实 Chromium 20 条含照片历史，heapUsed 较基线下降 ≥50%（沿用既有硬标准），单次撤销 <100 ms；② 10k 对象工程快照列表打开耗时较基线下降；③ selftest 撤销/重做/资产可达集断言不减少；④ 20 帧上限与语义不变；⑤ 原始 before/after 数据写入 commit 与 CHANGELOG。
+- 依赖：N-21（快照元数据先加索引）。
+- 风险：共享不可变结构若被就地修改会污染历史；必须先做写时复制断言。
+- 预估：12～16 人时。数据属性：**必须实测**（真实 Chromium heap/撤销耗时）。
+
+### Phase 3 · 文档与测试收口（3 条）
+
+#### N-25 文档单一事实源与过期数字清理
+
+- 问题与证据：当前值与旧值冲突：selftest 2706 vs 文档 2584；e2e 90 vs 65；体积 783,226 vs 784,371；DXF 已实现 vs「未验证」；plans 写 D01-D15 但旧 README 只列 D01-D13；报告写「10,000 对象 / 7,453 B > 10 KB」自相矛盾；`known-issues.md` 的 K1 条目把 SW 门禁写成已修复而 CI 恒绿。来源：audit-docs S1-S6、D01-D26。
+- 目标：建立 `docs/facts.md` 作为唯一事实源（数值 + 采集命令 + 采集日期），其余文档只引用不复制；旧数字加「历史」标注或删除；计划索引与状态对齐。
+- 涉及文件：`docs/facts.md`（新增）、`README.md`、`docs/testing.md`、`docs/performance.md`、`docs/known-issues.md`、`docs/plans/README.md`、相关功能文档；`CHANGELOG.internal.md` 仅追加。
+- 验收：① 全仓 `rg "2584|65 个 e2e|784,371|784,371 B"` 仅命中历史区且显式标注；② `facts.md` 每个数字有采集命令与日期；③ plans 索引覆盖 D01-D15 与 N-01～N-27；④ known-issues 对 SW 门禁的描述与 CI 实际一致（N-01 结果）；⑤ 链接/锚点校验零断链。
+- 依赖：N-01（门禁结论确定后才能写事实）。
+- 风险：批量替换可能误伤历史 CHANGELOG；历史文件只加标注不重写。
+- 预估：6～8 人时。数据属性：静态可判定（文本检索 + 链接校验）。
+
+#### N-26 补齐 modules 文件目录、写测试功能域矩阵、补缺失 golden
+
+- 问题与证据：7 个文件无模块文档（`features/import-ui.js`、`io-import.js`、`io-table.js`、`plugins.js`、`common/plugins-sandbox.js`、`common/pdf-read.js`、`common/symbols.js`，`docs/modules.md:203-344` 仅 26 个）；testing 只有计数与明细，无功能域覆盖矩阵（`docs/testing.md`）；CSV/TSV/XLSX/GeoJSON/PNG 无 golden 回归（`scripts/check.mjs`/测试目录）；DXF 无直接 e2e、TSV 无独立用例；`@media print` 未闭合无门禁（`css/style.css:213-224`，audit-gates P1-1）；Playwright 清空 `test-results` 会删人工验收证据（audit-docs D08/D18）。
+- 目标：`modules.md` 覆盖全部 45 个 classic script；`testing.md` 增加「功能域 × 层（selftest/e2e/golden）」矩阵；补 5 类缺失 golden 与 DXF/TSV e2e；`check-gates` 增加 CSS 结构场景；人工验收证据移出 Playwright `outputDir`。
+- 涉及文件：`docs/modules.md`、`docs/testing.md`、`tests/golden/`、`tests/e2e/*`、`scripts/check-gates.mjs`、`playwright.config.mjs`、`docs/acceptance/`。
+- 验收：① modules 逐文件表 45 行、`script` 类 35 行全覆盖；② 测试矩阵列出 108 个 selftest 分区与 90 条 e2e 的功能域归属，空白格显式标「无覆盖」；③ 新增 ≥5 类 golden 且 8 种导出各有字节/semantic 对比；④ DXF/TSV 有独立 e2e 通过；⑤ CSS 门禁场景 7→8（N-01 后为 9→10）；⑥ 人工证据目录不被测试清空。
+- 依赖：N-25（事实源先统一；测试计数以 facts.md 为准）。
+- 风险：golden 新增可能暴露既有差异；发现即先报告差异，不擅自改 golden 基线。
+- 预估：10～14 人时。数据属性：静态可判定 + e2e 实跑。
+
+#### N-27 公共抽象收敛（审计高置信项）与剩余 P2 归档
+
+- 问题与证据：审计列出的高置信重复/死代码：`historyValueEqual` 双重序列化（`js/core/geometry.js:374-401`）；`mergeStable` 仅此处使用（`js/common/merge.js:127-136`）；`buildSnapCandidates` 双重分配（`geometry.js:31-97`）；`drawSelection` 无用分配（`render.js:159-166`）；`normalizeColor` 分散；覆盖率口径常量未收敛；门禁脚本 CSS/MJS 解析器两套（`check-discipline.mjs`、`check-ngm.mjs`）；`sanitizeLayers` 多份；`objectIndexById` 调用点未统一。来源：audit-core §6（A-1～A-8）、audit-gates P2。
+- 目标：按审计清单收敛公共抽象，删除确认死代码，不改变任何行为；门禁脚本公共库抽到 `scripts/lib/`。
+- 涉及文件：`js/core/geometry.js`、`js/common/merge.js`、`js/core/render.js`、`js/core/geometry-coverage.js`、`js/features/io-export.js`、`scripts/lib/*`、`scripts/check-discipline.mjs`、`scripts/check-ngm.mjs`、`docs/engineering.md`。
+- 验收：① 公共抽象清单在 commit body 与 §5 更新；② 8 种导出 golden 字节不变；③ selftest 断言数不减少、e2e 全绿；④ 产物体积只减不增（实测体积写入 commit）；⑤ 每条抽象标注影响调用方。
+- 依赖：N-22～N-24（性能重构先落地，避免重复抽象）。
+- 风险：抽公共层可能引入隐式行为变化；必须“纯搬移”提交并保持全局函数名/签名。
+- 预估：8～10 人时。数据属性：静态可判定 + 体积实测。
+
+## 4. 跨审计去重映射
+
+| 缺陷 | 审计来源（重复发现合并） | 任务 |
 |---|---|---|
-| C-02 自托管中继 | **排除** | 需长期运行的中继服务、运维、安全与成本，破坏零依赖/离线单文件定位；当前协作仅承诺同机/局域网（K10、M3）。触发条件：外部客户明确需要跨公网协作并接受部署成本，另立阶段 |
-| C-03 计费 | **排除** | 无定价与授权口径，需要后端许可校验、密钥管理与激活服务，与离线单文件形态冲突；待商业模式确定后单独立项 |
-| M1–M8 | **纳入发布门禁，不作为编码任务** | 均为人工/真机/真实语料项：M1 移动真机、M2 Firefox/Safari、M3 双设备 WebRTC、M4 英文语义、M5 真实 GPU、M6 低端机插件超时、M7 DXF 查看器、M8 50 条真实快照。D-10 将现有 `docs/manual-acceptance.md` 入册，发布前逐条执行并记录，CI 不伪造绿 |
-| A1–A6 | 已关闭，不重复 | 本轮 selftest 2584/0、e2e、build 全绿；保持回归即可 |
-| K1–K12 | **排除，保持已知限制** | K11 已关闭；其余为明确不承诺边界：SW 版本无构建期门禁、缓存策略、PDF 位图、DWG、二维码 42 B、覆盖率采样、规则非规范审图、符号上限、插件无 CPU/内存配额、协作 LWW、硬上限。D-04/D-05 在文档中重申 K9（只保证 2 s 超时，不承诺内存配额） |
-| 体积二次回收 | 暂不排期 | 重复字符串 31,621 B + 重复代码行 23,803 B 有回收空间，但当前余量 103,382 B 足够覆盖本计划；若阶段超预算再启动，避免为压缩牺牲行为 |
-| `docs/manual-acceptance.md` | 纳入 D-10 提交 | 21,192 B 既有未跟踪文件，作为 M 类清单入册；本轮只读不改 |
+| PDF 导入底图丢失 | audit-core P0-1 / T-1；audit-io P0-1 | N-03 |
+| 导出可见性口径 | audit-io P1-1；audit-core P1-2 / T-3 | N-05 |
+| 草稿/校准烘进导出 | audit-core P1-2 / T-3；audit-io P1-1 | N-05 |
+| 场地静默删除 / 本地清空失效 / 楼层墓碑 | audit-runtime P0-01、P0-03、P1-10 | N-04 |
+| 快照差异与恢复 | audit-runtime P1-09、P2-01～P2-05；audit-core P2-8 | N-21 |
+| 协作断线 / 楼层广播 | audit-runtime P1-01、P1-02 | N-16 |
+| 协作冲突不可见 / 跨工程串线 | audit-runtime P1-03、P1-04 | N-17 |
+| 插件沙箱逃逸 | audit-runtime P0-02、P2-20 | N-02 |
+| 插件写入不可撤销 / 定时器逃逸 | audit-runtime P1-05、P1-06 | N-18 |
+| 导出注入（颜色/DXF 图层/符号 A） | audit-io P1-3、P2-26；audit-gates P1-4 | N-10 |
+| 仿射/扇形几何失真 | audit-core P1-6、P1-7 | N-12、N-13 |
+| 边界防护（切变/zoom/顶点/循环） | audit-core P1-8、P1-9、P2-3、P2-4 | N-14 |
+| 覆盖率高口径分裂 | audit-core P2-5～P2-7；audit-io §6.5 | N-20 |
+| 瞬时态泄漏 / focusin 历史累积 | audit-runtime P1-07、P2-11、P2-12；audit-core T-8 | N-15、N-19 |
+| 文档数字冲突 | audit-docs S1-S6、D01-D26 | N-25 |
+| 门禁假绿 | audit-gates P0-1、P0-2、P1-5；audit-docs S1/D03/D22 | N-01 |
+| SW 更新失败删旧缓存 / PDF inflate 炸弹 / CSS 未闭合 | audit-gates P1-2、P1-3、P1-1 | N-01（SW）、N-03（PDF）、N-26（CSS 门禁） |
 
-## 6. 新增/调整的公共抽象
+## 5. 本计划新增/调整的公共抽象（执行时必须在 commit body 标注影响面）
 
-| 抽象 | 归属 | 调用方 | 任务 | 影响面 |
-|---|---|---|---|---|
-| `buildDemoProject()` | `js/core/persistence.js` | `app.js`、`ui-shell.js`、selftest/e2e | D-01 | 新增，不改 `buildProject` |
-| `firstRunGuideState()` | `js/features/ui-shell.js` | `app.js`、selftest/e2e | D-01 | 新增 |
-| `calibPrecheck(tool)` | `js/core/interaction.js` | `ui-panels.js`、`props.js`、selftest | D-02 | 新增；校准算法不变 |
-| `registerRule(def, owner?)` | `js/features/rules.js` | 规则 UI、`PlotPin`、selftest | D-04 | 参数可选，旧调用兼容 |
-| `PlotPin.registerRule/unregisterRule/listRules` | `js/features/plugins.js` + `contracts/plugin-api.json` | 插件、`check-plugin-api.mjs` | D-04 | 契约 19 → 22 键，`apiVersion` 1.0.0 → 1.1.0 |
-| `validatePluginManifest(raw)` | `js/features/plugins.js` | 插件面板、selftest | D-05 | 新增；`loadPlugin` 签名不变 |
-| `checkPluginApiVersion()` 返回扩展 | `js/features/plugins.js` | 插件加载、兼容矩阵 | D-06 | 增加 `major/minor` 字段，旧字段保留 |
-| `auditProject(raw)` | `js/core/persistence.js` | `loadSavedProject`、`app.js`、selftest | D-07 | 新增；`loadSavedProject` 内部返回结构变化，调用方仅 `app.js`/selftest |
-| `classifySaveError(err)` / `saveHealth` | `js/core/persistence.js` | `scheduleSave`、`ui-shell.js` | D-08 | 新增；存储 schema 不变 |
-| `acquireEditorLease/releaseEditorLease/onLeaseConflict` | `js/core/tab-lease.js`（新脚本） | `app.js`、`scheduleSave`、`ui-shell.js` | D-09 | 新增；脚本数 41 → 42，需同步文档计数 |
-| i18n 阈值常量 | `scripts/i18n-scan.mjs` | `check.mjs` | D-11 | 仅脚本，无运行时影响 |
-| `section(name, fn)` | `scripts/selftest.mjs` | 测试脚本 | D-13 | 仅测试，断言数不变 |
+| 抽象 | 归属任务 | 说明 |
+|---|---|---|
+| `stampObjects(ids)` | N-06 | 统一对象 `updatedAt` 打点，覆盖拖动/旋转/批量属性 |
+| `effectiveVisible(o)` / `exportScope(o, mode)` | N-05 | 画布与 8 种导出的唯一可见性判断源 |
+| `normalizeExportColor` / `dxfSanitizeName` | N-10 | 导出层颜色白名单与 DXF 名称清洗 |
+| `affineShapeTransform(M, shape)` | N-12 | 对象与场地共用的仿射形状求解（SVD/极分解） |
+| `sectorArcRange(shape)` | N-13 | 画布/SVG 共用的扇形扫角归一 |
+| `coverageCellPlan` / `regionMetric` | N-20 | 覆盖率统计、图表、优化器共用的格数与面积口径 |
+| `resetTransientInteractionState(opts)` | N-15 | 载入/切层/撤销/回滚/合并统一瞬态复位 |
+| `mergeFloorMeta` 扩充字段 | N-04 | `siteDeleted`/`siteCleared` 计入冲突统计与历史判定 |
+| `scripts/lib/*` | N-27 | CSS/MJS 结构解析、facts 校验、golden 对比的公共门禁库 |
 
-拆分 `geometry.js`（D-12）不新增抽象，`outlineOf`、`siteBounds`、`coverageGridPlan`、`objectIndexById` 等唯一源与签名保持不变；脚本数 42 → 44（Phase 2 后基线）需同步 `docs/modules.md` 与 README。
+约束：新增抽象前先检索现有实现（`objectIndexById`、`outlineOf`、`siteBounds`、`ensureVendor`、`esc/xmlEscape`、`objectNameScopeFor`、`coverageGridPlan` 等），禁止复制粘贴；改变签名必须保留旧重载或显式列出受影响调用方。
 
-## 7. 执行纪律与验收
+## 6. 待拍板取舍（执行到对应任务时必须先停下列出选项，不得自行决定）
 
-- 每个任务一个原子提交，遵循约定式：`feat(ux):`、`fix(persist):`、`feat(plugin):`、`perf(...)`、`test(...)`、`docs(...)`；Body 必须带实测数据（体积增量、断言数、e2e 数、耗时）。
-- 同一 commit 同步更新受影响文档与 `CHANGELOG.internal.md`（Commit Hash、改动点、验证数据、遗留风险）。
-- 禁止新增运行时依赖；Playwright 仅开发期依赖，不进入产物。
-- 禁止 push；禁止读取/修改仓库根目录 `camera-*`。
-- 每个任务提交前运行：
-```bash
-node scripts/check.mjs --selftest
-node scripts/e2e.mjs
-node scripts/build.mjs --check
-node scripts/check-gates.mjs
-node scripts/check-discipline.mjs
-```
-- 性能相关任务（D-07/D-08/D-09/D-12）额外运行 `node scripts/bench.mjs`，并以真实 Chromium e2e 数据为准，不用 Node 桩数据替代。
-- 失败即如实报告：门禁不绿不得提交；若目标未达成，记录「未通过/未验证」与原因，不调低阈值。
+1. **N-01 SW 版本基线形式**：提交入库的 `sw-inputs.sha256`（实现简单、合并易冲突）还是构建期生成（无冲突、但需保持运行时版本号可读）。默认建议前者，需确认。
+2. **N-05 台账隐藏图层口径**：保留全量台账并让「显示」列反映有效可见（不动表头），还是过滤台账（会改变行数语义）。默认建议保留全量、不新增列，需确认。
+3. **N-17 频道隔离位置**：`projectId` 只进消息体（不破坏旧邀请串）还是同时进频道名（隔离更强、旧邀请串失效）。默认建议只进消息体 + 旧串迁移提示，需确认。
+4. **N-24/既有硬标准的适用性**：20 条含照片历史 heapUsed 下降 ≥50%、单次撤销 <100 ms 是否继续作为本期门禁。默认沿用，需确认无异议。
 
-## 8. 未验证与口径声明
+## 7. 未实测 / 未验证与本期不纳入项
 
-- `npm run perf:browser` 本轮未复跑；[performance.md](../performance.md) 中的帧/堆/导入数据为 2026-11-07 收口记录，本计划按「未验证（本轮）」引用，不作为新基线。
-- M1–M8 全部未验证：真机、跨浏览器、双设备 WebRTC、英文语义、真实 GPU、低端机插件、DXF 查看器、50 条真实快照语料。
-- i18n 29.82% 为机器扫描口径（键存在 + 模板可用），翻译语义质量未评审（M4）。
-- 本计划的目标体积、覆盖率、耗时均为预算值；完成后必须用真实命令输出回填，禁止估算回填。
+### 7.1 必须明确标注「未实测/待验证」的项
+
+| 项 | 状态 | 原因与所需条件 |
+|---|---|---|
+| 浏览器性能基线（拖动/选中/快照） | 未实测 | 本轮未跑 Playwright Chromium；须按 §Phase 2 采集方法执行后回填 |
+| 双设备 WebRTC 真机 | 未实测 | 无第二台真机/同网条件；不得用双标签页结果冒充 |
+| 快照差异人工误报率（50 条人工样本） | 未验证 | 无人工标注语料；不得用构造样本冒充 |
+| 真实工程 PDF/大图导入回归 | 未验证 | 仓库内无脱敏真实工程；需用户提供样例 |
+| 低端移动设备真机帧率/首屏 | 未实测 | 仅有 Chromium 移动模拟数据，真机未测 |
+| 英文术语语义质量 | 未验证 | 需母语/业务方评审 |
+| 覆盖率优化器搜索耗时（5000×5000） | 未实测 | 审计为估算（约 90M 次判定）；N-20 必须实测 |
+| 门禁 i18n 46.16% | 审计实测（2026-11-07） | 本计划未复跑；执行时以当次输出为准 |
+
+### 7.2 本期不纳入的 P2 清单（记录归属，避免丢失；不得写成已完成）
+
+- 安全/健壮性：`loadProject` 的 settings 原型键未过滤（`persistence.js:922`）、图片 readback 失败静默（`persistence.js:270-272`）、模态 Promise 挂起（`common.js:474-489`）、`t.color` 直接 innerHTML（`io-import.js:47-115`）、调试全局 `window.PlotPin` 可写。
+- 表格/导出低频项：CSV 表头未按引号规则转义、CSV 换行、TSV 在 Excel 前导零、`guardFormula` 撤销入口、角度格式、`bool`/`trim` 特殊值、PDF 列宽固定、GeoJSON 忽略旋转、PNG 页脚角标、DXF 图层色索引、SITE 碰撞、DXF 单位、bulge 圆判定、DXF trim、XLSX >50,000 行静默截断、JSON 导出中途置 `state.exporting`。
+- 规则/覆盖率高阶项：未配置间距阈值、多边形仅 OBB、边界容差两套、覆盖率画布缓存 OOM。
+- 尺寸/性能上限：单对象合并无上限、XLSX/JSON 大文件上限、`settle` 上限未实测。
+
+以上各条只作为 backlog 登记；排期在 N-27 完成后按「安全 > 数据正确 > 性能 > 体验」重新评估，未经实测不得写进任何完成报告。
+

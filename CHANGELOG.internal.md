@@ -2,6 +2,46 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · 文档全量重写收口与事实对齐
+
+- **Commit Hash**：本条提交（`docs(arch): 全量重写文档体系并对齐代码事实`）；完整哈希见 `git log HEAD` 与本次汇报。
+- **范围**：只改文档，不改 `js/`、`scripts/`、`tests/`、`contracts/`、`index.html`、`sw.js`；`audit-out/` 保持未跟踪。共 14 份 Markdown：`README.md` + `docs/` 下 13 份（含 `docs/plans` 2 份）。
+- **核心改动（19 处一致性修复）**
+  - 事实口径：README 的 e2e 口径由「不在文档固化」改为 2026-11-08 实测 33 spec / 90 用例（1 条件跳过），并注明 `--list` 来源；SW 门禁补注「仅覆盖工作区未提交改动，CI 判据有效性见 N-01」；`performance.md` 将同一次采集中的 24.01 ms 统一为 23.46 ms。
+  - 状态口径：`ARCHITECTURE.md`/`modules.md` 的「自动重连待确认」改为已确认缺口 RT-P1-01，指向计划 N-16；`ARCHITECTURE.md` 插件「不能逃逸」补注 `BroadcastChannel` 未封堵（P0-4）；`known-issues.md` K1 明确「本地工作区有效、CI 干净检出恒绿待 N-01」。
+  - 文档地图：修复 `ARCHITECTURE.md` 对不存在的 known-issues D-07/D-08 引用；`known-issues.md` 的 `../audit-out/*.md` 链接改为「本地过程材料、不入库」文本；计划中 `docs/benchmarks.md` → `docs/performance.md`（5 处）、`js/features/snapshot.js` → `js/core/snapshot.js`（5 处）、`known-issues.md:37,54` → K1 条目（2 处）。
+  - 表述对齐：`features.md` 与计划 N-23 的渲染顺序补上「坐标轴」；`deletions.md` 去掉过时的「四份文档」；计划基线表更新工作区说明与 selftest 复跑状态；N-16 验收补「离线 ≥5 分钟恢复仍自动重连并补发」。
+- **实测验证（2026-11-08 本机）**
+  - `node scripts/check-discipline.mjs`：**13/13 → L4**；README + 13 篇 docs/；最大文档 `docs/plans/next-phase-2026-11.md` 50.7 KB / 416 行；53 条文档命令全部可解析。
+  - `node scripts/badge.mjs --check`：**2706 通过 / 0 失败**（45 个脚本），README 徽章/正文一致。
+  - `node scripts/check-deletions.mjs`：1 条功能级删除记录，199 个受跟踪文件，**0 处违约**。
+  - `node scripts/check.mjs --selftest`：**全绿**；selftest 2706/0；i18n 覆盖率 **46.16%**（≥40%，缺口 0，UI 硬编码 1，模板内 0）；SW `VERSION=6`（预缓存输入变更 0，HEAD=6）。
+  - `node scripts/build.mjs --check`：**783,226 B（764.9 KB）/ gzip 243,688 B**，距 839,680 B 上限余 56,454 B。
+  - 文档体量：14 份合计 **302,035 → 250,951 B（−51,084 B，约 −16.9%）**。
+
+| 文档 | 重写前 B | 收口后 B | Δ B |
+|---|---:|---:|---:|
+| `README.md` | 21,750 | 11,082 | −10,668 |
+| `docs/ARCHITECTURE.md` | 8,045 | 19,061 | +11,016 |
+| `docs/modules.md` | 41,013 | 29,782 | −11,231 |
+| `docs/features.md` | 42,520 | 17,265 | −25,255 |
+| `docs/user-guide.md` | 18,159 | 20,419 | +2,260 |
+| `docs/known-issues.md` | 10,374 | 12,629 | +2,255 |
+| `docs/deletions.md` | 1,446 | 4,319 | +2,873 |
+| `docs/engineering.md` | 52,216 | 22,475 | −29,741 |
+| `docs/testing.md` | 22,275 | 12,767 | −9,508 |
+| `docs/performance.md` | 10,393 | 9,527 | −866 |
+| `docs/manual-acceptance.md` | 21,192 | 15,633 | −5,559 |
+| `docs/manual-acceptance-report-2026-11-07.md` | 16,616 | 17,537 | +921 |
+| `docs/plans/next-phase-2026-11.md` | 33,901 | 51,917 | +18,016 |
+| `docs/plans/README.md` | 2,135 | 6,538 | +4,403 |
+
+- **未执行 / 未验证**
+  - 本轮未运行 Playwright e2e，仅用 `--list` 采集 33 spec / 90 用例；未复跑浏览器性能与 `bench.mjs`，`performance.md` 只做同一次采集的内部口径统一。
+  - `contracts/conventions.json` 中与 `check-sw.mjs` 冲突的「SW 版本无门禁」表述按约束未改，由计划 N-01 处理；K1 的 CI 判据有效性同样待 N-01。
+  - `ARCHITECTURE.md` 的 11 处 `file:///f:/proj/plotpin/...` 源码链接为本机绝对路径，不属于跨文档相对链接，本轮未改。
+- **遗留风险**：`audit-out/` 不入库，文档中的审计编号只能依赖本地过程材料回查；历史 CHANGELOG 中「12 篇 docs/」等旧口径保留不改写（历史区）。
+
 ## 2026-11-07 · 字典体积无损回收
 
 - **Commit Hash**：本条提交（`perf(size): 回收未被引用的字典条目与重复 CSS 规则`）；完整哈希见 `git log HEAD` 与本次汇报。

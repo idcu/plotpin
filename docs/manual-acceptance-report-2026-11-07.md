@@ -1,5 +1,9 @@
 # M 类发布前验收报告（2026-11-07）
 
+> **历史归档：本报告记录 2026-11-07 当次执行结果，结论不作现状依据。**
+> 现状请以 [manual-acceptance.md](manual-acceptance.md)、[testing.md](testing.md)、[performance.md](performance.md) 与脚本实测为准。
+> 本次归档只统一格式、修正明显笔误，**不改写历史结论**；存疑处在行内标注「归档注」。
+>
 > 本报告只记录本次在**当前这台 Windows 机器**上真实执行的结果。
 > 未修改业务逻辑、未新增依赖、未改动任何门禁阈值。
 > 结论只使用 `通过 / 不通过 / 未验证`；`未验证` 包含环境不满足（原矩阵中的 `BLOCKED`）与需人工评审两类，均写明原因与后续条件。
@@ -16,7 +20,7 @@
 | WebKit | 27.2（Playwright 自带，本轮安装成功） | M2 `summary.json` |
 | 页面加载地址 | `http://127.0.0.1:4173/index.html`（`scripts/serve.mjs`） | 端口监听确认 PID 16316 |
 | 手工脚本视口 / DPR | 1280×800 / 1 | M2、M4、M6 脚本 |
-| perf 视口 / DPR | 1472×1028，DPR1 与 DPR2 两组 | `npm run perf:browser` 输出 |
+| perf 画布可视区 / DPR | 1472×1028（`canvasWrap` 实际尺寸；测试配置视口为 1920×1080），DPR1 与 DPR2 两组 | `npm run perf:browser` 输出 |
 | 渲染器（perf） | ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver) | perf 输出 |
 
 证据目录：`acceptance-evidence/`（M2、M4、M6），已加入 `.gitignore`，不进 Git。
@@ -145,7 +149,7 @@ D-14 修复前后，均按真实用户路径切换：设置 → 界面语言 Eng
 
 ### A1（自动化抽检） —— 通过（仅自动化部分）
 
-- `node scripts/selftest.mjs --filter "中英界面|符号库"`：**327 通过 / 0 失败**（加载 44 个脚本）。
+- `node scripts/selftest.mjs --filter "中英界面|符号库"`：**327 通过 / 0 失败**（加载 45 个脚本）。
 - 该结果同时覆盖：符号库 36 图元与 A1/A6 golden、i18n 键与模板自洽。
 - 注意：这不能证明 M4 的文案已翻译；本轮 M4 实测仍发现中文残留。A1 人工抽检因无旧工程 JSON 记 `N/A`。
 
@@ -155,7 +159,7 @@ D-14 修复前后，均按真实用户路径切换：设置 → 界面语言 Eng
 
 | 编号 | 本轮状态 | 依据 / 说明 |
 |---|---|---|
-| K1 | 未验证（发布纪律项） | Service Worker `CACHE` 版本无构建期自动门禁，本轮不重复验证 |
+| K1 | 未验证（发布纪律项） | Service Worker `CACHE` 版本无构建期自动门禁，本轮不重复验证。（归档注：现状已有 `scripts/check-sw.mjs`，对未提交改动生效；其 CI 盲区见 engineering.md §3.5） |
 | K2 | 未验证（不引入项） | 通用 LRU / Path2D 缓存 / 索引等明确不引入；本轮未改代码 |
 | K3 | 已观察到限制表现 | M2 导出的 PDF 为 2 页位图页（404,667 B / 230,778 B），与「PDF 位图页、回读不能还原矢量坐标」一致 |
 | K4 | 未验证（格式边界） | `.dwg` 不支持、DXF 需 ASCII 等边界未在本轮实测；仅确认 ASCII DXF 可导出 |
@@ -229,10 +233,10 @@ Get-ChildItem 'C:\Program Files\...\EXCEL.EXE', 'C:\Program Files\WPS Office\*\o
 | 修复前 M4 扫描 | 6 个区域含中文 / 193 实例 / 89 去重 / 0 占位符 |
 | 修复后 M4 扫描 | 3 个区域含中文 / 3 实例 / 3 去重 / 0 占位符 |
 | 中文界面回归 | 抽查页签、符号库、规则、设置、图框按钮，文案不变（`acceptance-evidence/M4/zh-check.json`） |
-| 体积（源文件） | 7,854 B（预算 8,000 B，余量 146 B） |
-| 体积（构建产物） | 7,453 B（`dist/plotpin-standalone.html`，余量 547 B） |
+| 体积（源文件） | 7,854 B（预算 8,000 B，余量 146 B）。归档注：原文未写明基数，按预算推断为本次 i18n 文案增量口径，非单文件产物 |
+| 体积（构建产物） | 7,453 B（余量 547 B）。归档注：原文将该值标注为 `dist/plotpin-standalone.html`，与事实不符；该产物 2026-11-08 实测为 783,226 B（见 `scripts/dist-manifest.json`），7,453 B 应为文案增量口径，保留原值存疑 |
 | selftest | 2,706 通过 / 0 失败 |
-| e2e | 85 passed / 1 skipped（既有 soak 用例） |
+| e2e | 85 passed / 1 skipped（当日实测；当前用例数见 testing.md，不以此值作为现状） |
 | i18n 覆盖率门禁 | 41.99% ≥ 基线 40%，缺口 0 |
 | 证据目录 | `acceptance-evidence/`（已加入 `.gitignore`，位于 `test-results/` 之外） |
 
