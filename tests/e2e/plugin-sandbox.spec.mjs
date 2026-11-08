@@ -56,6 +56,18 @@ test('版本协商：不兼容主版本 / 缺失 apiVersion 均给出原因且�
   expect(await page.evaluate(() => typeof state)).toBe('object');
 });
 
+test('RT-P2-08：直调 loadPlugin 按 UTF-8 字节拒绝超限 code，不创建 Worker', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(async () => {
+    /* 22000 个中文字符 = 22004 字符 / 66008 字节：字符数未超 64 KB，字节数已超 */
+    const code = '/*' + '中'.repeat(22000) + '*/';
+    return await window.PlotPin.loadPlugin({ id: 'demo.bytes.direct', apiVersion: '1.0', capabilities: [], code });
+  });
+  expect(r.ok).toBe(false);
+  expect(r.reason).toMatch(/64 KB/);
+  expect(await page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(0);
+});
+
 test('能力白名单：未声明 types 时注册类型被拒绝、插件禁用并显示原因', async ({ page }) => {
   await openApp(page);
   const r = await loadPlugin(page, {

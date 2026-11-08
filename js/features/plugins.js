@@ -595,6 +595,9 @@
     if (!check.ok) return fail(check.reason);
     if (s.code !== undefined && typeof s.code !== 'string') return fail('插件 code 需为字符串');
     if (!String(s.code || '').trim()) return fail('插件需提供 code');
+    /* RT-P2-08：直调 loadPlugin 与清单导入共用同一字节上限，避免绕过 UI 走无界代码 */
+    const code = String(s.code);
+    if (utf8Length(code) > PLUGIN_CODE_MAX_BYTES) return fail('code 超过 64 KB（UTF-8 字节）上限');
     if (typeof global.Worker !== 'function' || typeof global.Blob !== 'function' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
       return fail('当前环境不支持 Worker 隔离，拒绝以同源方式执行插件');
     }
@@ -602,7 +605,7 @@
       id,
       apiVersion: String(s.apiVersion),
       caps: check.caps,
-      code: String(s.code),
+      code,
       status: 'loading',
       reason: '',
       token: newPluginToken(),
