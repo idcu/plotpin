@@ -13,9 +13,9 @@
 | 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **127 个分区 / 3,456 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **35 个 spec / 121 个用例**（默认 120 跑 + 1 条件跳过） | **否** |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **35 个 spec / 121 个用例**（默认 120 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 10 种人为破坏 | 是 |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 12 种人为破坏 | 是 |
 
 三层职责不同，**数据不可互换**：
 
@@ -72,6 +72,9 @@
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
+- CI 侧新增 `e2e` job（`npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`，Node 20 / `ubuntu-latest`）。
+  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 121 用例通过，无法复现 runner 的网络、系统库与浏览器下载；
+  首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
 
@@ -173,7 +176,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 1. 在 `tests/e2e/` 新建或追加 `*.spec.mjs`，场景状态放 `helpers/scenes.mjs`。
 2. 只断言用户可见结果（DOM 文本、下载字节、弹窗、错误提示），不要断言内部变量名。
 3. 需要固定数据的用例用 `page.route` 拦截外部请求，禁止真实联网。
-4. `node scripts/e2e.mjs <spec>` 本地全绿；CI 不跑 e2e，所以**不能只依赖 CI 绿**。
+4. `node scripts/e2e.mjs <spec>` 本地全绿；CI 的 `e2e` job 只跑默认全量，且**实际执行未验证**，所以**不能只依赖 CI 绿**。
 5. 更新本文 §3.2 矩阵。
 
 ### 6.3 新增判据

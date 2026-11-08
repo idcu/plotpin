@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P1 批次三（3/4）：e2e 接入 CI（实际执行未验证）
+
+- **Commit Hash**：待收尾 `docs(changelog)` 回填（`test(ci): e2e 接入 GitHub Actions`）
+- **核心改动**：
+  - `.github/workflows/ci.yml` 新增独立 `e2e` job（`ubuntu-latest` / Node 20）：`actions/checkout@v4` → `setup-node@v4`（`cache: npm`）→ `npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`。
+  - `test` job 的 check-gates 步骤描述由「9 种人为破坏」更正为「12 种」。
+  - `docs/engineering.md`（§3.1 命令表、§3.5 边界表）与 `docs/testing.md`（§1 层表、§3.1、§6.2）同步口径：e2e 已在 CI 配置中，但**CI 实际执行未验证**。
+- **验证数据**：
+  - 本地 `node scripts/e2e.mjs`：**120 通过 + 1 条件跳过（121 用例 / 35 spec）**，耗时 2.6 m，退出码 0。
+  - **CI 实际执行未验证**：本机无法启动 GitHub runner，无法验证 `npm ci` 拉包、Playwright 浏览器下载与 `ubuntu-latest` 系统依赖安装。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，并可执行 `apt` 安装依赖；首次运行的实际耗时、稳定性与 runner 专属失败必须以 CI 运行记录为准。
+  - selftest **3456/0**（未变）；check-gates 正面 6/6 + 破坏 12/12；discipline 13/13（CI 命令 12 条中 10 条能在本地命令/文档找到，`npm ci` / `npx playwright install` 为 CI-only）。
+  - dist **824,682 B**（本条 0 B，未触发行产物与 SW 输入）/ 余量 14,998 B；SW `VERSION=88`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 若仓库后续把 `@playwright/test` 升级但未更新 `package-lock.json`，`npm ci` 会直接失败（这是有意的可复现约束，不是缺陷）。
+  - CI e2e 未设置重试（`retries: 0`）；网络/浏览器下载抖动会表现为 job 失败，需按日志区分环境问题与真实用例失败。
+  - 性能场景（`perf-browser`）仍未接入 CI，本机 SwiftShader 读数不作为真实 GPU 结论。
+
 ## 2026-11-08 · 审计 P1 批次三（2/4）：`check-sw --update` 拒绝未 bump 刷新指纹
 
 - **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(sw): 输入变更未 bump VERSION 时拒绝 --update`）

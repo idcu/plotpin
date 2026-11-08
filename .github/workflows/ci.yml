@@ -25,8 +25,28 @@ jobs:
         run: node scripts/bench.mjs
       - name: 单文件发行包校验（源重建 ↔ dist-manifest 登记哈希）
         run: node scripts/build.mjs --check
-      - name: 门禁牙齿自测（正面基线 + 9 种人为破坏）
+      - name: 门禁牙齿自测（正面基线 + 12 种人为破坏）
         run: node scripts/check-gates.mjs
+
+  e2e:
+    # Playwright 需要一个可用的 Chromium 与系统库；本地开发机已装过浏览器，
+    # 首次在 GitHub runner 上执行时由本 job 的 install 步骤安装。
+    # 注意：本地无法验证 runner 上的真实执行（见 docs/engineering.md §3.5），
+    # 该 job 的实际耗时/稳定性以 CI 运行记录为准，不得用本地 e2e 结果代替。
+    name: 浏览器 e2e（Chromium）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: 安装开发期依赖（@playwright/test，不进发行包）
+        run: npm ci
+      - name: 安装 Chromium 与系统依赖
+        run: npx playwright install --with-deps chromium
+      - name: Playwright 功能 e2e（119+ 用例）
+        run: node scripts/e2e.mjs
 
   vendor-check:
     name: vendor 接线自检
