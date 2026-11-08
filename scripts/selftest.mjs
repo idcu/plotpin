@@ -7942,6 +7942,19 @@ await section("P2-CORE 批次 5：schema 与安全", async () => {
 }
 });
 
+/* ---------------- P2 批次 6：快照与协作 ---------------- */
+await section("P2-RT 批次 6：快照与协作", async () => {
+{
+  /* RT-P2-01：快照键两段编码，普通 id 不变，含冒号的组合不再撞键 */
+  eq('RT-P2-01 普通 id 键格式不变', api.snapshotKey('PRJ4321','SNAP1'), 'snap:PRJ4321:SNAP1');
+  eq('RT-P2-01 冒号两段各自编码', api.snapshotKey('A:B','S:1'), 'snap:A%3AB:S%3A1');
+  ok('RT-P2-01 不同组合不再撞键', api.snapshotKey('A:B','X')!==api.snapshotKey('A','B:X'));
+  ok('RT-P2-01 前缀只匹配本工程', api.snapshotKey('A:B','X').startsWith('snap:A%3AB:')&&!api.snapshotKey('A','B:X').startsWith('snap:A%3AB:'));
+  eq('RT-P2-01 索引键同样编码', api.snapshotIndexKey('A:B'), 'snapidx:A%3AB');
+  eq('RT-P2-01 键后缀还原原始快照 id', api.snapshotIdOfKey(api.snapshotKey('P','S:1')), 'S:1');
+}
+});
+
 /* ---------------- 结果汇总 ---------------- */
 if (listOnly) {
   console.log(`共 ${sectionNames.length} 个分区（--filter=<regex> 选择执行）：`);

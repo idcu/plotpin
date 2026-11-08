@@ -10,9 +10,15 @@
  */
 const SNAPSHOT_PREFIX='snap:';
 const SNAPSHOT_INDEX_PREFIX='snapidx:';
-const snapshotKey=(pid,sid)=>SNAPSHOT_PREFIX+pid+':'+sid;
-const snapshotIndexKey=pid=>SNAPSHOT_INDEX_PREFIX+pid;
-const snapshotIdOfKey=key=>{ const i=key.lastIndexOf(':'); return i>=0?key.slice(i+1):''; };
+/* RT-P2-01：工程/快照 id 两段各自 encode，命名空间仍是 `snap:<工程>:<快照>`；
+   含冒号的 id 不再与「前一段+后一段」的另一种组合撞键。普通字母数字 id 结果不变。 */
+const snapshotKey=(pid,sid)=>SNAPSHOT_PREFIX+encodeURIComponent(String(pid))+':'+encodeURIComponent(String(sid));
+const snapshotProjectPrefix=pid=>SNAPSHOT_PREFIX+encodeURIComponent(String(pid))+':';
+const snapshotIndexKey=pid=>SNAPSHOT_INDEX_PREFIX+encodeURIComponent(String(pid));
+function snapshotIdOfKey(key){
+  const i=key.lastIndexOf(':'), raw=i>=0?key.slice(i+1):'';
+  try{ return decodeURIComponent(raw); }catch(_){ return raw; }
+}
 
 /** 快照数据：当前楼层写回后深拷贝；剥离照片内嵌 dataUrl，保留 photoId / 底图 assetId 引用 */
 function snapshotProjectData(){
@@ -37,7 +43,7 @@ function utf8Length(str){
 /** 读取某工程的全部快照记录（含 data），按创建时间升序 */
 async function snapshotRecords(pid){
   let keys=[];
-  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(SNAPSHOT_PREFIX+pid+':')); }catch(_){ return []; }
+  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(snapshotProjectPrefix(pid))); }catch(_){ return []; }
   const recs=[];
   for(const key of keys){
     try{ const r=await idbGetKey(key); if(r&&r.meta){ r.meta.snapshotId=r.meta.snapshotId||snapshotIdOfKey(key); recs.push(r); } }catch(_){}
@@ -116,7 +122,7 @@ async function deleteSnapshot(pid,sid){
 /** 删除某工程的全部快照（删除工程时清理孤儿记录；只扫 `snap:<pid>:`，不影响其它工程） */
 async function deleteSnapshotsForProject(pid){
   let keys=[];
-  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(SNAPSHOT_PREFIX+pid+':')); }catch(_){ return 0; }
+  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(snapshotProjectPrefix(pid))); }catch(_){ return 0; }
   for(const k of keys){ try{ await idbDeleteKey(k); }catch(_){} }
   try{ await idbDeleteKey(snapshotIndexKey(pid)); }catch(_){}
   return keys.length;
