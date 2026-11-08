@@ -175,6 +175,18 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 
 本项只补打点，未改业务代码；对照列是同一 harness 下的量化上限，不作为已修复证据。
 
+#### 4.1.7 快照列表/淘汰的 IDB 读取次数（2026-11-08，CORE-P2-4 打点）
+
+命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-4" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，20 条快照 × 10,000 对象，`idbGetKey` 计数包装）。两次独立复跑。
+
+| 路径 | P50 / P95 (ms) | 每次 `idbGetKey` 次数 | 结论 |
+|---|---|---|---|
+| `listSnapshots()`（元数据索引） | 0.2 / 0.9；0.2 / 0.6 | 1 | 只读 `snapidx:`，不解析快照 data |
+| `pruneSnapshots()`（元数据索引） | 0.2 / 0.3；0.1 / 0.3 | 1 | 淘汰判定不读 data（本次 20 条未触发删除） |
+| `snapshotRecords()`（全量读） | 355.1 / 360.1；345.9 / 349.8 | 20 | 逐条读 20 份快照 data |
+
+结论：CORE-P2-4 指出的「列表/淘汰全量读」已由 N-21 的 `snapidx:<pid>` 索引消除；本次只补读取次数与耗时打点，生产代码未改。全量读仍保留为索引缺失时的回退路径。
+
 #### 4.1.5 历史栈含照片内存与 10k 快照列表（2026-11-08，N-24 复测）
 
 命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-24"`（真实 Chromium，CDP `HeapProfiler.collectGarbage` + `Runtime.getHeapUsage` 测堆）。夹具：1000 对象 + 10 张 100 KB 内嵌 base64 照片；参考组用 `JSON.parse(JSON.stringify(state))` 复刻改造前的整份深拷贝 20 条。

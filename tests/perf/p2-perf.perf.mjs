@@ -162,6 +162,84 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
     expect(data.current.distinctArrays, '两条路径是不同数组实例').toBe(20);
     expect(data.control.dualPathSnapshots, '对照组不复制第二份活动楼层对象').toBe(0);
   });
+
+  test('CORE-P2-4 快照列表/淘汰的 IDB 读取次数与耗时', async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    const CFG = { objCount: 10000, snapshots: 20, bytes: 1000 };
+    const pid = 'PERF_P2_4_' + Date.now();
+
+    await page.evaluate(async cfg => {
+      const objs = [];
+      for (let i = 0; i < cfg.objCount; i++) {
+        objs.push(baseObject('point', 'point.marker', { id: 'S' + i, name: 'S' + i, x: i % 1000, y: Math.floor(i / 1000) }));
+      }
+      const data = { schema: 1, floors: [{ id: 'f', name: '1F', objects: objs }] };
+      const metas = [];
+      for (let i = 0; i < cfg.snapshots; i++) {
+        const sid = 'SNAP' + i;
+        const meta = {
+          snapshotId: sid, projectId: cfg.pid, projectName: 'perf', createdAt: new Date(2026, 0, 1, 0, i).toISOString(),
+          label: 'auto', floorId: 'f', floorName: '1F', objectCount: objs.length, bytes: cfg.bytes, schema: 1
+        };
+        metas.push(meta);
+        await idbPutKey(snapshotKey(cfg.pid, sid), { meta, data });
+      }
+      await snapshotIndexSave(cfg.pid, metas);
+    }, { ...CFG, pid });
+
+    /* 只统计 idbGetKey：列表/淘汰若走元数据索引应各 1 次；全量读为 1 次键扫描 + N 条记录 */
+    await page.evaluate(() => {
+      window.__idbReads = 0;
+      const orig = idbGetKey;
+      window.idbGetKey = async function (key) { window.__idbReads++; return orig(key); };
+    });
+
+    const list = await page.evaluate(async pid => {
+      const time = async (fn, n) => {
+        const arr = [], reads = [];
+        for (let i = 0; i < n; i++) {
+          window.__idbReads = 0;
+          const t0 = performance.now();
+          await fn();
+          arr.push(performance.now() - t0);
+          reads.push(window.__idbReads);
+        }
+        return { ms: arr, reads };
+      };
+      const listRun = await time(() => listSnapshots(pid), 10);
+      const pruneRun = await time(() => pruneSnapshots(pid), 10);
+      const fullRun = await time(() => snapshotRecords(pid), 3);
+      return {
+        list: listRun, prune: pruneRun, full: fullRun,
+        listLen: (await listSnapshots(pid)).length,
+        fullLen: (await snapshotRecords(pid)).length
+      };
+    }, pid);
+
+    const cleanup = await page.evaluate(async pid => {
+      const keys = (await idbAllKeys()).filter(k => k.startsWith(snapshotProjectPrefix(pid)));
+      for (const k of keys) await idbDeleteKey(k);
+      await idbDeleteKey(snapshotIndexKey(pid));
+      return keys.length;
+    }, pid);
+
+    const data = {
+      case: 'CORE-P2-4 快照列表/淘汰读取',
+      fixture: CFG,
+      list: { ...stat(list.list.ms), readsPerCall: list.list.reads },
+      prune: { ...stat(list.prune.ms), readsPerCall: list.prune.reads },
+      full: { ...stat(list.full.ms), readsPerCall: list.full.reads },
+      listLen: list.listLen, fullLen: list.fullLen, cleanedKeys: cleanup
+    };
+    record(data);
+    expect(data.listLen, '快照列表条数').toBe(20);
+    expect(data.fullLen, '全量读条数').toBe(20);
+    expect(data.cleanedKeys, '清理快照键数').toBe(20);
+    expect(Math.max(...data.list.readsPerCall), '列表每次 IDB get 次数（只读索引）').toBeLessThanOrEqual(2);
+    expect(Math.max(...data.prune.readsPerCall), '淘汰每次 IDB get 次数（只读索引）').toBeLessThanOrEqual(2);
+    expect(Math.min(...data.full.readsPerCall), '全量读每次 IDB get 次数（逐条读 data）').toBeGreaterThanOrEqual(20);
+  });
 });
 
 test.afterAll(save);
