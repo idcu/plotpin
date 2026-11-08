@@ -4,6 +4,51 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2 批次 3/4：DXF/PNG 一致性 6 条 + 核心瞬态边界 6 条
+
+- **Commit Hash**：
+  - 批次 3（DXF/PNG，6 笔）：`8c8d7ad` IO-P2-14、`90ed3ae` IO-P2-15、`02cf1d4` IO-P2-16、`21f7185` IO-P2-18、`11d66fa` IO-P2-19、`b807efb` IO-P2-26。
+  - 批次 4（核心瞬态，6 笔）：`fd74f74` CORE-P2-2、`7a5d82a` CORE-P2-7、`64351c5` CORE-P2-9、`0152823` CORE-P2-10、`40542b1` CORE-P2-18、`bc59bca` CORE-P2-19。
+- **核心改动**：
+  - IO-P2-14：新增 `exportFooterText()`（`工程名 · 场地描述`），PNG 在 `renderToDataURL` 页脚位绘制、SVG 改用同一文本；可见性/图层口径未另起筛选，PNG 仍走 `drawScene`→`isVisible`（即 `effectiveVisible`），SVG 仍走 N-05 `exportScope`。PNG 为此与 SVG/PDF 口径同源，但 PNG golden 只锁签名与宽高，不锁编码字节。
+  - IO-P2-15：DXF `LAYER` 表颜色由硬编码默认改为「该层首个导出对象的 ACI 色」，空层回退 `#7c3aed`，保留层 `SITE` 固定 `#16a34a`；实体组码 62 不变（仍各自输出）。属明确的降级近似：同层多色时表色只代表首对象，已在 `docs/features.md` 与导出报告说明中标注。
+  - IO-P2-16：N-10 已实现保留层 `SITE` 冲突改名 `_2`；本批只补 4 条回归断言（业务实体落 `SITE_2`、场地实体仍在 `SITE`、重名可预测、无冲突时不改名）。
+  - IO-P2-18：B-03 已在预检文案统计 R12 VERTEX 42 凸度受影响段数；本批补「有凸度/无凸度」两条文案断言。R12 凸度仍按折线拉直，属明确降级，预检已告知，不静默丢弧。
+  - IO-P2-19：适配层 `dxfPairs()` 组码 1 改为保留原值（不再 trim），vendor `parseDxf` 的 TEXT 去掉尾部 `\s+$` 截断；TEXT/ATTRIB 首尾空格往返保留，其余组码仍 trim 以稳定结构比较。
+  - IO-P2-26：N-10 的 `dxfSanitizeName` 已清洗 CR/LF；本批补单独 LF 与 C0 控制字符两条断言，图层名不再携带控制字符。
+  - CORE-P2-2：N-14 已把 `fitView()` 缩放下限夹到 `ZOOM_MIN`；本批补 1e9 m 超大场地场景，断言 `zoom===ZOOM_MIN` 且 pan 有限。
+  - CORE-P2-7：`convertAreaShape` 的 ellipse→rect 保留 `oldAngle` 与 `2rx×2ry` 本地框；circle→rect 仍归零（角度无意义），parallelogram→rect 保留角度。
+  - CORE-P2-9：新增 `escapeInterrupt()`（先 `cancelActiveDrag()`，否则 `resetTransientInteractionState({keepCoverage:true})` 并清选择回选择工具）与 `handleWindowBlur()`（`keepCalib/keepGuides/keepCoverage:true`，清 `spaceDown` 与 `body.panning`）；`resetTransientInteractionState()` 新增 `keepCoverage`/`keepGuides` 选项，默认行为不变。
+  - CORE-P2-10：N-15 已让快照回滚走 `keepCalib` 复位；本批补覆盖率结果、框选、仿射草稿三条清空断言，未改业务代码。
+  - CORE-P2-18：`drawImage` 抛错不再静默，置 `bgImageState='error'` 并只 toast 一次（`bgImageErrorNotified`）；替换底图后复位，可再次提示。
+  - CORE-P2-19：新增 `clearCoverageResult()`（清 `coverageResult` 同时 `releaseCoverageLayers()` 释放离屏栅格缓存），替换 `persistence.js`（`markDirty`、`switchFloorData`）、`props.js`、`ui-panels.js` 共 5 处直接置 null。
+  - 公共抽象（本批新增/调整，调用方影响面已逐个核对）：
+    - 新增 `exportFooterText()`（`io-export.js` 文件内，PNG/SVG 共用，无跨模块导出）。
+    - 新增 `clearCoverageResult()`（`model.js`，跨模块被 `persistence/props/ui-panels` 调用，替代直接置 null）；新增 `releaseCoverageLayers()`（`render.js`）。
+    - 新增 `escapeInterrupt()`、`handleWindowBlur()`（`interaction.js`，同时注册 `window.blur`；Escape 分支改走 `escapeInterrupt`）。
+    - `resetTransientInteractionState(opts)` 新增 `keepCoverage`/`keepGuides`，默认仍全部清空，既有 6 处调用方无行为变化。
+    - 复用既有公共实现，未新起筛选逻辑：`exportScope`、`effectiveVisible`/`isVisible`、`dxfSanitizeName`、`sectorArcRange` 等。
+- **验证数据**：
+  - `selftest`：3097 通过 / 0 失败（批次前 3048，+49；新增「P2-IO 批次 3」17 条与「P2-CORE 批次 4」32 条，未删断言、未加 skip）。
+  - 四类退出各自独立断言：中断 `escapeInterrupt()`（drag / reset 两分支）、切层 `switchFloor('floor.P2C9')`、撤销 `undo()`、失焦 `handleWindowBlur()`，均断言草稿/拖拽/框选/捕捉高亮全部复位。
+  - `e2e`：111 用例 / 110 通过 / 1 条件跳过（与批次 2 持平，未新增跳过）。
+  - `check-gates`：正面基线 6/6、人为破坏 10/10；`check-discipline --strict`：13/13。
+  - `check.mjs --selftest`：契约 7/0、插件 API 23/0/0、i18n 45.3%（缺口 8 / UI 1 / 模板 0）、SW `VERSION=53`（49 个预缓存输入一致）。
+  - golden 字节变更（逐项说明）：
+    - `tests/golden/plain-scene.dxf`：仅 `LAYER` 默认层组码 62 由 `8` 改为 `5`，文件 900 B 不变（单字符替换）；原因是 IO-P2-15 图层表色改取该层首个导出对象色。
+    - `tests/golden/symbol-scene.dxf`：未变（4,753 B）。
+    - `plain-scene.png.meta.json`：未变（36 B；仅签名 + 2631×1860，页脚不改宽高）。
+    - CSV/TSV/XLSX golden 未动，继续保持批次 2 基线：CRLF 行尾、角度 `30.00` 精度格式，无第三种行尾。
+  - 产物：816,632 B / gzip 253,900 B / 余量 23,048 B；相对批次 2 结束时 815,054 B **+1,578 B / gzip +457 B / 余量 −1,578 B**（余量仍高于 15,000 B 止损线）；二次构建一致。
+- **遗留 TODO / 风险**：
+  - PNG 页脚没有逐字节 golden，只能靠 selftest 断言文本来源与 e2e 语义 golden（签名/宽高），像素级差异不在门禁范围。
+  - DXF 图层表色为「首对象代表色」，同层多色仍只显示一种；这是明确降级，已在导出报告与 `docs/features.md` 标注，未静默。
+  - R12 凸度仍拉直为折线，未做圆弧保真；预检统计受影响段数并提示。
+  - 快照不持久化校准点（沿用 N-15 取舍）；`visibilitychange` 未单独处理，仅由 `window.blur` 兜底，后台驻留切回极端场景未实测。
+  - 覆盖率离屏缓存无 LRU/上限，只在使用方显式清空时释放。
+  - 椭圆→圆仍按面积近似（既有降级），本批未改动。
+  - C 类 4 条（IO-P2-3/17/20、RT-P2-12）未排期、未改动。
+
 ## 2026-11-08 · P2 批次 1/2：B 类文档口径清零 + A 类表格/CSV 往返 9 条
 
 - **Commit Hash**：

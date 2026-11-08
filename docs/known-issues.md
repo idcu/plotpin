@@ -130,7 +130,7 @@
 | 10 | 代码卫生与 i18n | CORE-15/16、RT-18 | `geometry.js`、`persistence.js`、核心默认文案、`collab.js` | 4 文件；删死分支、核心中文走 `L()`、调试全局开关 | 中；CORE-16 会变动 i18n 覆盖率基线，需同步 facts |
 | 11 | 性能（无打点不提交） | CORE-3/4、IO-11 | `model.js`、`snapshot.js`、`io-fields.js` | 3 文件；必须补 heapUsed / 帧时打点与 perf-browser 复跑 | 高；历史结构共享与快照索引改动面大，单独成批 |
 
-**批次状态（2026-11-08）**：批次 1（B 全部 13 条）与批次 2（表格/CSV 往返 9 条）已交付；批次 1 为纯文档口径，结论见 §2.5；批次 2 的修复与验证依据见 §2.6。其余批次未开始。
+**批次状态（2026-11-08）**：批次 1（B 全部 13 条）、批次 2（表格/CSV 往返 9 条）、批次 3（DXF/PNG 一致性 6 条）、批次 4（核心瞬态边界 6 条）已交付；批次 1 为纯文档口径，结论见 §2.5；批次 2 见 §2.6；批次 3/4 见 §2.7。其余批次未开始。
 
 **C 类（4 条）暂不排期**：IO-P2-3 需 Excel 实机确认 TSV 引号行为；IO-P2-17 需 CAD 查看器核对 mm/m 读数；IO-P2-20 需多页 PDF 样本并由产品决定“按页绑定还是限单页”；RT-P2-12 需产品决定未配置阈值类型的默认规则语义。
 
@@ -192,6 +192,28 @@
 
 > 真实往返（不只静态断言）：`4d439dc` 新增 selftest 分区「P2 表格真实往返：列集/列序/取值一致」，固定 1F 点/矩形/折线 + 2F 圆走「导出 → `DSV.parseRows` → `rowsToObjectsPlan` → apply」全链路；e2e 新增浏览器内 `delimitedText(',')` → `#fileInput` → 合并回灌并断言字段不漂移。最终 selftest 3048 通过 / 0 失败，e2e 111 用例（110 通过 + 1 条件跳过）。
 > 仍保留的「未验证」：Excel 实机打开/另存往返、GIS 软件绕向校验、真实 5 万行 XLSX 解析耗时、损坏工程 IndexedDB 恢复路径、预览面板非法形状的视觉提示。
+
+### 2.7 批次 3/4：DXF/PNG 一致性与核心瞬态边界（12 条）
+
+> 「已修复」= 本批改了业务代码并有可复跑断言；「已收敛」= 实现早于本批（N-10/N-14/N-15/B-03），本批补齐专项断言或文档口径，不重复改代码。
+
+| 编号 | 状态 | 修复/收敛要点 | 提交 | 验证依据 |
+|---|---|---|---|---|
+| IO-P2-14 | 已修复 | PNG 补「工程名 · 场地描述」页脚，与 SVG/PDF 共用 `exportFooterText()`；可见性仍走 `drawScene`→`isVisible` | `8c8d7ad` | selftest +2；PNG golden 仅语义（宽高），无逐字节基线 |
+| IO-P2-15 | 已修复 | DXF LAYER 表色改为该层首个导出对象色（最近 ACI），空层回退 `#7c3aed`，SITE 保留 `#16a34a`；实体色不变 | `90ed3ae` | selftest +4；`plain-scene.dxf` 仅 1 字节（62: 8→5），`symbol-scene.dxf` 不变 |
+| IO-P2-16 | 已收敛 | N-10 已实现保留层 SITE 与重名 `_2` 改名；本批补 4 条冲突断言 | `02cf1d4` | selftest +4；业务实体落 SITE_2、场地实体仍在 SITE |
+| IO-P2-18 | 已收敛 | B-03 已统计 VERTEX 42 凸度并在预检文案标注；本批补「有/无凸度」文案断言 | `21f7185` | selftest +2；R12 仍按折线拉直（明确降级） |
+| IO-P2-19 | 已修复 | 组码 1 保留原值（不再 trim），vendor TEXT 去掉尾部 `\s+$` 截断；TEXT/ATTRIB 首尾空格往返保留 | `11d66fa` | selftest +3；文本断言直接读取解析结果 |
+| IO-P2-26 | 已收敛 | N-10 的 `dxfSanitizeName` 已清洗 CR/LF；本批补单独 LF 与 C0 控制字符断言 | `b807efb` | selftest +2；图层名无控制字符 |
+| CORE-P2-2 | 已收敛 | N-14 已把 `fitView()` 夹到 `ZOOM_MIN~ZOOM_MAX`；本批补超大场地下限侧断言 | `fd74f74` | selftest +2；1e9 m 场地 zoom=ZOOM_MIN 且 pan 有限 |
+| CORE-P2-7 | 已修复 | `convertAreaShape` 的 ellipse→rect 保留 `oldAngle`（本地框 2rx×2ry），circle 仍归零 | `7a5d82a` | selftest +4；角度/尺寸/圆归零/平行四边形 |
+| CORE-P2-9 | 已修复 | 新增 `escapeInterrupt()` 与 `handleWindowBlur()`，统一走 `resetTransientInteractionState()`；新增 `keepCoverage/keepGuides` 选项（默认不变） | `64351c5` | selftest +11；中断/切层/撤销/失焦四类退出各自独立断言 |
+| CORE-P2-10 | 已收敛 | N-15 已让快照回滚走 `keepCalib` 复位；本批补覆盖率/框选/仿射草稿清空断言 | `0152823` | selftest +5 |
+| CORE-P2-18 | 已修复 | `drawImage` 抛错置 `bgImageState='error'` 并只 toast 一次，替换底图后可再次提示 | `40542b1` | selftest +3；抛错 ctx 真实触发，toast 计数 1→1 |
+| CORE-P2-19 | 已修复 | 新增 `clearCoverageResult()`，清结果同时 `releaseCoverageLayers()`；替换 5 处直接置 null | `bc59bca` | selftest +7；构建/命中/清空/markDirty 均释放缓存 |
+
+> 本批统一验证：selftest 3097 通过 / 0 失败；e2e 111 用例（110 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 45.3%（缺口 8）；dist 816,632 B / 余量 23,048 B；SW `VERSION=53`。
+> 仍保留的「未验证/限制」：PNG 页脚无逐字节 golden；DXF 多色图层表色只代表首对象；R12 凸度未做圆弧保真；快照不持久化校准点；`visibilitychange` 未单独处理（由 blur 兜底）；覆盖率缓存无 LRU；椭圆→圆仍按面积近似。
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 
