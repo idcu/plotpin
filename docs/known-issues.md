@@ -256,7 +256,7 @@
 | IO-P2-24 | 已修复 | 停车编号改用 `objectNameScopeFor(used,'P'/'A',3,1)` 共享作用域；`used` 在清除前聚合，避开本批墓碑名 | `c994f5b` | selftest +6（P+三位、唯一、P001/A001、清除再生成 P313、总数 312） |
 | IO-P2-25 | 已修复 | `exportJSON` 只改副本时间戳，不再写 `state.meta.updatedAt`；导出键集与取值语义不变 | `1719ce6` | selftest +3（实时时间戳不变、副本为导出时刻、键集与 `persistableState` 一致） |
 | RT-P2-15 | 已修复 | 对象清单类型色 dot 统一走 `normalizeExportColor` + `esc`，脏色值回退 `#666` | `cafc822` | e2e +1（脏色不逃逸 style、`backgroundImage` 为空、合法色保留） |
-| RT-P2-16 | 已修复 | `showConfirm`/`showPrompt` 通过 `openModal` 的 `onClose` 统一结算；Esc/遮罩按取消语义返回，按钮路径不变 | `7afeb45` | e2e +1（Esc→false、遮罩→null、按钮→true/输入值） |
+| RT-P2-16 | 已修复 | `showConfirm`/`showPrompt` 通过 `openModal` 的 `onClose` 统一结算；Esc/遮罩按取消语义返回，按钮路径不变 | `7afeb45`（e2e/清单）+`61932b2`（源码） | e2e +1（Esc→false、遮罩→null、按钮→true/输入值） |
 | CORE-P2-15 | 已修复 | 删除 3 处恒不可达分支（扇形角度覆盖、活动层补楼层、affine 的 `site.kind!=='image'`）；`geometry-site` 图片/空场地分支保留并说明 | `b33a89a` | selftest +3（缺省角度扇形=整圆、活动层缺失回退首层且不新增楼层）；图片底图无手柄断言仍覆盖保留分支 |
 | CORE-P2-16 | 已修复 | 核心层默认名、撤销提示、面积/周长前缀、快照默认标签与 A/B 差异字段统一走 `L()`，补 23 条 en 词条 | `48fcaf4` | i18n 46.2%（+1.05pp）；selftest +5（英文默认工程名/图层名/场地名/字段名/布尔值） |
 | RT-P2-18 | 已修复 | 5 个 `__collab*` 观测全局仅在 `?debug=1` 下暴露；e2e 统一走调试 URL，原 13 处断言保留 | `73a1b33` | e2e +1（生产 URL 三全局 undefined、调试 URL 可读）；collab 11 passed / 1 skip |

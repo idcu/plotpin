@@ -7,7 +7,7 @@
 ## 2026-11-08 · P2 批次 9/10：目录/停车/UI 6 条 + 代码卫生/i18n 3 条
 
 - **Commit Hash**：
-  - 批次 9（目录/停车/UI，6 笔）：`4ec211f` IO-P2-22、`d02e8f8` IO-P2-23、`c994f5b` IO-P2-24、`1719ce6` IO-P2-25、`cafc822` RT-P2-15、`7afeb45` RT-P2-16。
+  - 批次 9（目录/停车/UI，6 条 + 1 笔补提交）：`4ec211f` IO-P2-22、`d02e8f8` IO-P2-23、`c994f5b` IO-P2-24、`1719ce6` IO-P2-25、`cafc822` RT-P2-15、`7afeb45` RT-P2-16（e2e/构建清单）、`61932b2` RT-P2-16（源码补提交，`7afeb45` 遗漏 `ui-shell.js`）。
   - 批次 10（代码卫生/i18n，3 笔）：`b33a89a` CORE-P2-15、`48fcaf4` CORE-P2-16、`73a1b33` RT-P2-18。
 - **核心改动**：
   - IO-P2-22：`catalogLoad` 拆分为「IDB 读取」与「schema 校验」两段；损坏/非法记录不再把 `currentCatalog` 置空，而是保留原目录并记录 `catalogLoadError`，`app.init` 启动后 toast 说明原因；IDB 不可用按降级路径处理，不误报损坏。
