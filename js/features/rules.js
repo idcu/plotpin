@@ -371,6 +371,15 @@ function ruleCandidatePairs(items,windowLimit,mode){
   return {pairs:out,theoretical};
 }
 /* -------------------- 三条内建规则 -------------------- */
+/** RT-P2-13：重叠取全部轮廓对的最大交面积，避免只看 polygons[0] 漏掉多轮廓对象 */
+function ruleMaxPolygonIntersection(polyA,polyB){
+  let best={area:0,degenerate:false};
+  for(const a of polyA||[]) for(const b of polyB||[]){
+    const hit=rulePolygonIntersection(a,b);
+    if(hit.area>best.area) best=hit;
+  }
+  return best;
+}
 function ruleOverlapCheck(ctx){
   const tol=ctx.config.tolerance;
   const items=[];
@@ -386,7 +395,7 @@ function ruleOverlapCheck(ctx){
     const ox=Math.min(a.bbox.maxX,b.bbox.maxX)-Math.max(a.bbox.minX,b.bbox.minX);
     const oy=Math.min(a.bbox.maxY,b.bbox.maxY)-Math.max(a.bbox.minY,b.bbox.minY);
     if(ox<=tol||oy<=tol) continue;
-    const hit=rulePolygonIntersection(a.g.polygons[0],b.g.polygons[0]);
+    const hit=ruleMaxPolygonIntersection(a.g.polygons,b.g.polygons);
     if(!(hit.area>minArea)) continue;
     const c=objectCenter(a.o);
     violations.push({

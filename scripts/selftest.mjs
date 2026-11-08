@@ -241,7 +241,7 @@ code += `\n;globalThis.__api = {
   get currentCatalog(){ return currentCatalog; }, setCurrentCatalog(v){ currentCatalog=v; },
   createRuleConfig, normalizeRuleConfig, RULE_MAX_VIOLATIONS,
   registerRule, unregisterRule, listRules, runRuleCheck, ruleViolations,
-  ruleObjectFootprint, ruleGapGeometry, rulePolygonIntersectionArea,
+  ruleObjectFootprint, ruleGapGeometry, rulePolygonIntersectionArea, ruleMaxPolygonIntersection,
   rulePointOutsideSite, ruleViolationsCsv, ruleFloorContexts,
   locateRuleViolation, normalizeRuleTypes, mergeRuleSide, ruleExportName,
 };`;
@@ -5266,6 +5266,11 @@ await section("57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨
   eq('重叠-凹多边形与矩形相交报 1 条', cnt(rc,'overlap'), 1);
   approx('重叠-凹多边形交面积 20m²', rc.violations.find(v=>v.ruleId==='overlap').value, 20);
   approx('重叠-凹多边形交面积直接计算', api.rulePolygonIntersectionArea(L.points,[[2,2],[8,2],[8,8],[2,8]]), 20, 1e-6);
+  /* RT-P2-13：多轮廓对象取全部轮廓对的最大交面积，不再只看 polygons[0] */
+  const multiA=[[[0,0],[10,0],[10,10],[0,10]],[[20,20],[30,20],[30,30],[20,30]]];
+  const multiB=[[[20,20],[30,20],[30,30],[20,30]]];
+  approx('重叠-多轮廓取最大交面积 100m²', api.ruleMaxPolygonIntersection(multiA,multiB).area, 100, 1e-6);
+  eq('重叠-首轮廓无交时旧算法为 0', api.rulePolygonIntersectionArea(multiA[0],multiB[0]), 0);
   eq('重叠-纯图标点无面积跳过', cnt(run([
     api.baseObject('point','point.marker',{x:5,y:5}),api.baseObject('point','point.marker',{x:5,y:5})
   ]),'overlap'), 0);
