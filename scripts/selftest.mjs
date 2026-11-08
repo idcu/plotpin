@@ -222,7 +222,7 @@ code += `\n;globalThis.__api = {
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
-  clearCurrentFloor, loadSavedProject,
+  clearCurrentFloor, loadSavedProject, applyImageBackground,
   get idbGet(){ return idbGet; }, set idbGet(fn){ idbGet=fn; },
   get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
   get affinePairs(){ return affinePairs; }, set affinePairs(v){ affinePairs=v; },
@@ -2120,6 +2120,21 @@ await section("28.12 P2-A4 加载丢对象计数可见 + 审计 layerId 修正",
     ok('P2-A4 加载审计含对象丢弃计数', r.audit.warnings.includes('对象丢弃 1'));
     eq('P2-A4 合法对象仍载入', r.state.objects.length, baseCount);
   }finally{ api.idbGet=prevIdb; api.resetState(); }
+}
+});
+
+/* 28.13 P2-A5 替换底图重置旧校准 ---------------------------------------- */
+await section("28.13 P2-A5 替换底图重置旧校准", async () => {
+{
+  const bg={kind:'image',fileName:'old.png',assetId:'old-id',width:1200,height:900,
+    calibrated:true,metersPerPixel:0.2,transform:{a:0.2,b:0,c:0,d:0.2,e:30,f:40}};
+  api.applyImageBackground(bg,{fileName:'new.png',assetId:'new-id',width:800,height:600});
+  eq('P2-A5 新底图文件名', bg.fileName, 'new.png');
+  eq('P2-A5 新底图资产', bg.assetId, 'new-id');
+  eq('P2-A5 新底图宽高', bg.width+'x'+bg.height, '800x600');
+  eq('P2-A5 旧仿射已清除', bg.transform, null);
+  eq('P2-A5 旧校准标记已重置', bg.calibrated, false);
+  approx('P2-A5 比例回退默认值', bg.metersPerPixel, 0.05, 1e-9);
 }
 });
 

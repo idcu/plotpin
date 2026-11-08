@@ -483,6 +483,14 @@ async function prepareBackgroundBytes(f){
   }
   return {bytes:raw,mime,width:img.naturalWidth,height:img.naturalHeight};
 }
+/** 替换底图时写入新图元数据，并强制重置旧图的校准与仿射：新图像素坐标不同，
+ *  沿用旧 metersPerPixel 会让新图按错误比例测量（P2-A5）。 */
+function applyImageBackground(bg,meta){
+  bg.kind='image'; bg.fileName=meta.fileName; bg.assetId=meta.assetId;
+  bg.width=meta.width; bg.height=meta.height;
+  bg.transform=null; bg.calibrated=false; bg.metersPerPixel=0.05;
+  return bg;
+}
 async function importBackgroundFile(f){
   if(!f || !(/^image\//.test(f.type||'')||['png','jpg','jpeg','gif','webp','bmp','svg'].includes(extOfFile(f.name)))){
     return toast('请选择图片文件（PNG/JPG/WebP/BMP/GIF/SVG）','error');
@@ -502,13 +510,7 @@ async function importBackgroundFile(f){
   try{ await assetPut(id,{bytes:prepared.bytes,mime:prepared.mime}); }
   catch(e){ stored=false; }   // IndexedDB 不可用时降级：底图仅本次会话保留
   pushHistory();
-  const calibrated=state.background.calibrated;
-  state.background.kind='image';
-  state.background.fileName=f.name;
-  state.background.assetId=stored?id:'';
-  state.background.width=prepared.width; state.background.height=prepared.height;
-  state.background.transform=null;   /* 新图像素坐标改变，清除旧仿射校准 */
-  if(!calibrated) state.background.metersPerPixel=0.05;
+  applyImageBackground(state.background,{fileName:f.name,assetId:stored?id:'',width:prepared.width,height:prepared.height});
   /* 不立即删除旧资产：pushHistory 的撤销快照仍引用它，立即删会导致撤销后底图无法恢复；
      待历史栈不再可达时由 pruneBgAssets 统一回收（评估报告 5.2） */
   bgDataUrl=dataUrl;

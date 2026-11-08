@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P2 批次 A（5/5）：替换底图重置旧校准
+
+- **Commit Hash**：待批次末回填（`fix(import): 替换底图重置旧校准与仿射`）
+- **核心改动**：
+  - `js/features/io-import.js` 抽出 `applyImageBackground(bg,meta)`：写入新图 kind/fileName/assetId/宽高，并统一 `transform=null`、`calibrated=false`、`metersPerPixel=0.05`。
+  - `importBackgroundFile` 原逻辑在旧图已校准（`calibrated===true`）时保留 `metersPerPixel`，新图像素坐标与比例不同却沿用旧值，测量结果错误；现在任何替换都先清校准，要求重新校准。
+- **验证数据**：
+  - selftest **3484 通过 / 0 失败**（基线 3478，+6）：旧底图 `calibrated:true / mpp:0.2 / transform:{…}` 经 `applyImageBackground` 后 transform=null、calibrated=false、mpp=0.05，且新文件名/资产/宽高正确写入。
+  - e2e **120 通过 + 1 条件跳过（121）**；check-gates 6/6 + 12/12；discipline 13/13（54 条命令可解析）。
+  - dist **825,663 B**（本条 **+36 B**）/ gzip 256,278 B / 余量 **14,017 B**；SW `VERSION=93`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 替换底图后用户必须重新校准；旧校准点/仿射草稿由既有 `resetTransientInteractionState()` 清理，不在本条重复处理。
+  - 撤销到旧底图时依赖历史快照恢复旧 `metersPerPixel`，未新增独立断言（既有撤销测试覆盖底图恢复）。
+
 ## 2026-11-08 · 审计 P2 批次 A（4/5）：加载丢对象计数可见 + 审计字段修正
 
 - **Commit Hash**：待批次末回填（`fix(load): 加载审计按 layerId 判定并统计丢弃对象`）
