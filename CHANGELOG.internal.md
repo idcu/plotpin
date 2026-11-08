@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · N-24 历史草案含照片内存与 10k 快照列表复测
 
-- **Commit Hash**：`待回填`（docs(perf)：N-24 真机复测数据与门禁口径）。
+- **Commit Hash**：`5605ef4`（docs(perf)：N-24 真机复测数据与门禁口径）。
 - **核心改动**：无业务代码改动。N-24 的内存问题由 B-10（`snapshotHistoryState` 结构共享）修复、10k 快照列表由 N-21（`snapidx:` 元数据索引）修复；本次用 `tests/perf/speed.perf.mjs` 的 N-24 用例在真实 Chromium 复测并把数据固化到 `docs/performance.md` §4.1.5。
 - **性能数据**（真实 Chromium；CDP `HeapProfiler.collectGarbage` + `Runtime.getHeapUsage`；1000 对象 + 10 张 100 KB 内嵌 base64 照片）
   - 20 条含照片历史 heapUsed 增量：整份深拷贝 28.01 MB（29,365,720 B）→ 结构共享 **1.00 MB（1,049,336 B）**，**−96.43%**（门禁 ≥50%）。
@@ -16,7 +16,7 @@
 
 ## 2026-11-08 · N-23 选中/悬停不再重建静态层
 
-- **Commit Hash**：`待回填`（perf(render)：选中与悬停只叠加动态层）。
+- **Commit Hash**：`d44a8e1`（perf(render)：选中与悬停只叠加动态层）。
 - **核心改动**
   - `js/core/render.js`
     - 静态层改为包含**全部可见对象**，仅排除 `staticDragIds()` 返回的「逐帧改形对象」；`sceneStaticKey()` 用拖拽排除集替换 `selectedIds`，选择集变化不再使缓存失效。
@@ -41,7 +41,7 @@
 
 ## 2026-11-08 · N-22 捕捉热路径包围盒预筛与单趟收集
 
-- **Commit Hash**：`待回填`（perf(snap)：捕捉候选改为单趟扫描并按指针邻域预筛）。
+- **Commit Hash**：`556c205`（perf(snap)：捕捉候选改为单趟扫描并按指针邻域预筛）。
 - **核心改动**
   - `js/core/geometry.js`
     - 新增 `collectSnap(st, vis, box, parts)`：一次遍历同时收集特征点 / 可垂足边 / 正圆，`SNAP_CAND|SNAP_EDGE|SNAP_CIRCLE` 位掩码选择类别；`collectSnapCandidates/Edges/Circles` 改为薄包装，外部签名与语义不变。
