@@ -207,7 +207,7 @@ function createInitialState(){
   const now = new Date().toISOString();
   return {
     schema: SCHEMA,
-    meta: { id: uid('PRJ'), name: '未命名图纸工程', createdAt: now, updatedAt: now, titleBlock: createTitleBlock() },
+    meta: { id: uid('PRJ'), name: L('未命名图纸工程'), createdAt: now, updatedAt: now, titleBlock: createTitleBlock() },
     settings: { unit:'m', precision:2, gridVisible:true, gridSize:1, snap:true, showLabels:true, markerScale:1,
       showCursor:true,   /* 鼠标十字准星与实时世界坐标 */
       showSegLen:true,   /* 全局缺省：未单独配置「段长」的对象显示段长与总长 */
@@ -229,7 +229,7 @@ function createInitialState(){
        两者互不覆盖，每层最多 1 图 + 1 场地；场地不进 objects，不占编号/表格行。 */
     background: createEmptyBackground(),
     site: createSiteSlot(defaultSiteShape()),
-    layers: [{ id:'layer.default', name:'默认图层', visible:true, locked:false }],
+    layers: [{ id:'layer.default', name:L('默认图层'), visible:true, locked:false }],
     objectTypes: deepClone(BUILTIN_TYPES),
     objects: [],
     /* 多楼层/多底图：floors 保存全部楼层元数据；非当前楼层额外持有 background/site/objects/viewport。
@@ -452,7 +452,7 @@ function defaultSiteShape(){ return { type:'rect', w:100, h:70 }; }
  */
 function createSiteSlot(shape){
   const sh = shape || defaultSiteShape();
-  return { type:'site', id:'site.default', name:'场地', layerId:'layer.default', visible:true, locked:false,
+  return { type:'site', id:'site.default', name:L('场地'), layerId:'layer.default', visible:true, locked:false,
     annot:{}, style:{}, updatedAt:nowISO(), kind: sh.type || 'rect', shape: deepClone(sh) };
 }
 /** 图片底图判定：只有 kind==='image' 的槽才承载栅格 */
@@ -501,7 +501,7 @@ function baseObject(kind, typeId, patch={}){
 /* -------------------- 类型 / 图层 / 样式 -------------------- */
 /** @param {string} typeId @returns {ObjectType} */
 function getType(typeId){
-  return state.objectTypes.find(t => t.id === typeId) || state.objectTypes.find(t => t.kind === 'point') || {name:'未知',color:'#666',icon:'marker'};
+  return state.objectTypes.find(t => t.id === typeId) || state.objectTypes.find(t => t.kind === 'point') || {name:L('未知'),color:'#666',icon:'marker'};
 }
 /** 是否为内置类型：载入工程时清洗会把 builtin 标成 false，需按 id 回到内置表判断 */
 /** @param {ObjectType} t @returns {boolean} */

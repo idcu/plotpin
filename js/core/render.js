@@ -844,8 +844,8 @@ function drawText(c,o,color,toS,v,markerScale){
   c.save(); c.translate(s[0],s[1]); c.rotate(screenAngle(o));
   const fs=Math.max(8*markerScale,(o.height||2.2)*v.zoom);
   c.font='bold '+fs+'px "Microsoft YaHei",sans-serif'; c.textAlign='center'; c.textBaseline='middle';
-  c.lineWidth=4; c.strokeStyle='rgba(255,255,255,.85)'; c.strokeText(o.text||'文字',0,0);
-  c.fillStyle=color; c.fillText(o.text||'文字',0,0); c.restore();
+  c.lineWidth=4; c.strokeStyle='rgba(255,255,255,.85)'; c.strokeText(o.text||L('文字'),0,0);
+  c.fillStyle=color; c.fillText(o.text||L('文字'),0,0); c.restore();
 }
 function drawDimension(c,o,toS){
   const ps=o.points.map(toS), color=o.style.color||'#111827';
@@ -869,8 +869,8 @@ function drawDimension(c,o,toS){
   }else if(o.subtype==='area' && o.points.length>=3){
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath();
     c.setLineDash([6,4]); c.stroke(); c.setLineDash([]);
-    const cen=centroidScreen(ps); c.fillText('面积 '+fmt(polygonArea(o.points))+' ㎡',cen[0]+8,cen[1]);
-    c.fillText('周长 '+fmt(polylineLength(o.points.concat([o.points[0]])))+' m',cen[0]+8,cen[1]+16);
+    const cen=centroidScreen(ps); c.fillText(L('面积')+' '+fmt(polygonArea(o.points))+' ㎡',cen[0]+8,cen[1]);
+    c.fillText(L('周长')+' '+fmt(polylineLength(o.points.concat([o.points[0]])))+' m',cen[0]+8,cen[1]+16);
   }else if(o.subtype==='angle' && ps.length>=3){
     const v0=o.points[0], v1=o.points[1], v2=o.points[2];
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke();

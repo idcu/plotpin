@@ -2,13 +2,13 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=76
+version=77
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
 a4122a38c0ac51ba7ea5ba1287a91ee2dc9a640891144470649390192df9a226  js/common/dxf.js
-37387c02ef4486eb91c5064b5fc032fc9d5c694ccfedda9fdd24d631626cbbfd  js/common/i18n.js
+0787f827cd8c16ea1d5428614f3607c904c5384372088fc7b3f7bbd0b74f87bd  js/common/i18n.js
 99aa5e3d60c02d924805468660f3616b4a8f6f2c0b2bc2d41fa71b91bc721890  js/common/merge.js
 4df813717856383f877d6552aeb8529ebf7f2adbbc52cf0c62ca40c4e7db60d2  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
@@ -21,10 +21,10 @@ cb00476756b06976ddced3932677c7a74ac608c44b1e2ea23a7b9bd4dd22608f  js/core/geomet
 4fbe234ecbc18d2313dedc7346efc8a8e5254c557305d55b37e7271b758dec58  js/core/geometry-transform.js
 14d83ba46281e1f54be27f878fb8d66aeffdc4ba9f997be932d16031bd46bb60  js/core/geometry.js
 6e1d3855a5291e4acb3e7d2231ca2c1ecf4d7ba98129c2683919dd1db9bad6be  js/core/interaction.js
-e22cd9afab0ad19b7e1ab00d8804db3c70b990e078cb17d58ed6866365d3a0a1  js/core/model.js
-a7ad2bdfe9ac8dc3bad944c1af4cb3e185eb446f60c56e0e8daed43402dbe652  js/core/persistence.js
-cedc2cb51a232713a3841a4a6a74d1a5e53f1c671efd12d78a3209ca867a13fe  js/core/render.js
-e4c70490a1acc37f16d8c10f94b9359459208544f03de4fece8aace5c90d5f36  js/core/snapshot.js
+24381f56ea95edfd2f79413fd12aecad67c3ee76b4ca404ae6144dc87e13529a  js/core/model.js
+73d70e543cfb8752c799040ab2c284b1230d0e07ae66c4be65f63682c059e4a2  js/core/persistence.js
+79428e5a2b10b93790552f6fa909bafeb2990acf8b33cc652e1e2c9f216843ec  js/core/render.js
+e53e627ff6efba9f96543892f7ebacfe02eaf0e4bae4c58a90cc3c804418d97e  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
 90b47b297c7348093e760d4aa501ad6e71e524db8fe3b599cee4eedc40cba1fe  js/core/viewport.js
 c717628ed256a4372b9851cafadbf55689c13fd118729943725b587528f87169  js/features/catalog.js

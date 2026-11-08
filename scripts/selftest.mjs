@@ -5575,6 +5575,15 @@ await section("58. 中英界面切换与无障碍标记", async () => {
   eq('i18n-英文文案', I.t('new'), 'New');
   eq('i18n-未知键回退键名', I.t('__missing__'), '__missing__');
   eq('i18n-非法语言回退中文', I.setLang('fr'), 'zh');
+  /* CORE-P2-16：核心默认名与快照差异字段随语言切换，不再硬编码中文 */
+  I.setLang('en');
+  const enInit=api.createInitialState();
+  eq('i18n-默认工程名英文', enInit.meta.name, 'Untitled drawing project');
+  eq('i18n-默认图层名英文', enInit.layers[0].name, 'Default layer');
+  eq('i18n-默认场地名英文', enInit.site.name, 'Site');
+  eq('i18n-快照字段名英文', api.diffFieldLabel('width'), 'Width');
+  eq('i18n-快照布尔值英文', api.diffValueText(false), 'No');
+  I.setLang('zh');
   ok('i18n-中英键集合一致', Object.keys(I.dict.zh).sort().join(',')===Object.keys(I.dict.en).sort().join(','));
   ok('i18n-关键键英文齐全', ['new','projects','floors','import','export','settings','select','guide','exportLabels'].every(k=>I.dict.en[k]));
   let applyOk=true; try{ I.apply(); }catch(e){ applyOk=false; }

@@ -449,6 +449,12 @@
     '已记录 1 个点，继续点击下一已知点':'Recorded 1 point; click the next known point',
     /* 常用操作反馈（toast 自动按整句匹配翻译） */
     '已撤销':'Undone', '已重做':'Redone', '已删除对象':'Objects deleted', '已复制对象':'Objects duplicated',
+    /* 核心层默认名与快照差异字段（CORE-P2-16） */
+    '默认图层':'Default layer', '未命名工程':'Untitled project', '自定义类型':'Custom type', ' 副本':' copy',
+    '对象类别':'Object kind', '可见':'Visible', '宽':'Width', '高':'Height', '属性':'Properties', '样式':'Style',
+    '标注':'Annotations', '图标倍率':'Icon scale', '子类型':'Subtype', '场地形状':'Site shape', '场地名称':'Site name',
+    '底图':'Background image', '楼层名':'Floor name', '图层名':'Layer name', '类型定义':'Type definition',
+    '是':'Yes', '否':'No', '未知':'Unknown',
     '已新增图层':'Layer added', '已删除图层':'Layer deleted', '已修改图层':'Layer updated',
     '已批量平移':'Batch moved', '已隐藏对象':'Objects hidden', '已锁定对象':'Objects locked',
     '对齐 / 分布':'Align / distribute', '左对齐':'Align left', '水平居中':'Center horizontally', '右对齐':'Align right',

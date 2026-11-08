@@ -100,8 +100,8 @@ async function createSnapshot(opts={}){
   const data=await snapshotProjectData();        /* RT-P2-03：资产化与剥离都只作用于副本 */
   const json=JSON.stringify(data);
   const meta={
-    snapshotId:uid('SNAP'), projectId:pid, projectName:state.meta.name||'未命名工程',
-    createdAt:nowISO(), label:String(opts.label||'').trim().slice(0,80)||'自动快照',
+    snapshotId:uid('SNAP'), projectId:pid, projectName:state.meta.name||L('未命名工程'),
+    createdAt:nowISO(), label:String(opts.label||'').trim().slice(0,80)||L('自动快照'),
     floorId:state.activeFloorId||'', floorName:currentFloorName(),
     objectCount:countProjectObjects(data), bytes:utf8Length(json), schema:data.schema
   };
@@ -164,13 +164,13 @@ const DIFF_FIELD_LABELS={
   siteShape:'场地形状', siteName:'场地名称', background:'底图', floorName:'楼层名',
   layerName:'图层名', typeDef:'类型定义'
 };
-function diffFieldLabel(key){ return DIFF_FIELD_LABELS[key]||key; }
+function diffFieldLabel(key){ return L(DIFF_FIELD_LABELS[key]||key); }
 function diffValueText(v){
   if(v===undefined) return '—';
   if(v===null) return 'null';
   if(typeof v==='number') return String(Math.round(v*1000)/1000);
   if(typeof v==='string') return v.length>40?v.slice(0,40)+'…':v;
-  if(typeof v==='boolean') return v?'是':'否';
+  if(typeof v==='boolean') return L(v?'是':'否');
   try{ const s=JSON.stringify(v); return s&&s.length>60?s.slice(0,60)+'…':String(s); }catch(_){ return String(v); }
 }
 function snapshotObjectIndex(p){

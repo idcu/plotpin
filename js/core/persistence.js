@@ -90,7 +90,7 @@ function undo(){
   selectedIds.clear();
   afterStateLoaded(false); pruneBgAssets();
   markDirty('restore');            /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
-  toast('已撤销');
+  toast(L('已撤销'));
 }
 function redo(){
   if(!history.future.length) return;
@@ -100,7 +100,7 @@ function redo(){
   selectedIds.clear();
   afterStateLoaded(false); pruneBgAssets();
   markDirty('restore');            /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
-  toast('已重做');
+  toast(L('已重做'));
 }
 /**
  * 记录楼层最后写入时间（协作 LWW 的**楼层级**时间戳）。
@@ -260,7 +260,7 @@ async function listProjects(){
     let p=null; try{ p=await idbGetKey(key); }catch(e){}
     if(p&&isReadableSchema(p.schema)){
       out.push({key,id:key.slice(PROJECT_PREFIX.length),
-        name:p.meta?.name||'未命名工程',updatedAt:p.meta?.updatedAt||'',
+        name:p.meta?.name||L('未命名工程'),updatedAt:p.meta?.updatedAt||'',
         objectCount:Array.isArray(p.objects)?p.objects.length:0,
         bgKind:p.site?.kind||p.background?.kind||'rect', bound:state.meta?.projectId===p.meta?.projectId});
     }
@@ -310,7 +310,7 @@ async function openProjectById(id){
 async function renameProjectById(id,name){
   const raw=await idbGetKey(projectKey(id));
   if(!raw) throw new Error('工程不存在');
-  raw.meta=raw.meta||{}; raw.meta.name=String(name||'未命名工程').trim().slice(0,80)||'未命名工程';
+  raw.meta=raw.meta||{}; raw.meta.name=String(name||L('未命名工程')).trim().slice(0,80)||L('未命名工程');
   raw.meta.updatedAt=nowISO();
   await idbPutKey(projectKey(id),raw);
   if(state.meta?.projectId===id){ state.meta.name=raw.meta.name; refreshUI(); scheduleSave(); }
@@ -321,7 +321,7 @@ async function duplicateProjectById(id){
   /* 非当前楼层的副本：只构建候选对象，不触碰当前 state */
   const p=buildProject(raw);
   p.meta.projectId=uid('PRJ');
-  p.meta.name=(p.meta.name||'未命名工程')+' 副本';
+  p.meta.name=(p.meta.name||L('未命名工程'))+L(' 副本');
   p.meta.createdAt=nowISO(); p.meta.updatedAt=nowISO();
   await idbPutKey(projectKey(p.meta.projectId),deepClone(p));
   return p.meta.projectId;
@@ -1014,7 +1014,7 @@ function sanitizeSite(rawSite,layers){
   const shape=sanitizeShape(rawSite.shape,kind,legacyW,legacyH);
   const site=createSiteSlot(shape);
   site.id=safeId(rawSite.id||site.id,'SITE');
-  site.name=String(rawSite.name||'场地').slice(0,40);
+  site.name=String(rawSite.name||L('场地')).slice(0,40);
   site.layerId=Array.isArray(layers)&&layers.some(l=>l.id===rawSite.layerId)?rawSite.layerId:'layer.default';
   site.visible=rawSite.visible!==false;
   site.locked=!!rawSite.locked;
@@ -1102,9 +1102,9 @@ function sanitizeLayers(arr){
     /* CORE-P2-11：重复 id 保留首个，避免图层面板重复与对象归属二义；对象引用同一 id 不受影响 */
     if(seen.has(id)) return;
     seen.add(id);
-    out.push({id,name:String(raw.name||'图层').slice(0,40),visible:raw.visible!==false,locked:!!raw.locked});
+    out.push({id,name:String(raw.name||L('图层')).slice(0,40),visible:raw.visible!==false,locked:!!raw.locked});
   });
-  if(!out.some(l=>l.id==='layer.default')) out.unshift({id:'layer.default',name:'默认图层',visible:true,locked:false});
+  if(!out.some(l=>l.id==='layer.default')) out.unshift({id:'layer.default',name:L('默认图层'),visible:true,locked:false});
   return out;
 }
 function mergeTypes(saved){
@@ -1112,7 +1112,7 @@ function mergeTypes(saved){
   deepClone(BUILTIN_TYPES).forEach(t=>map.set(t.id,t));
   (Array.isArray(saved)?saved:[]).forEach(t=>{
     if(!t||typeof t!=='object'||!['point','rect','line'].includes(t.kind)) return;
-    const id=safeId(t.id,'type'), name=String(t.name||'自定义类型').slice(0,30);
+    const id=safeId(t.id,'type'), name=String(t.name||L('自定义类型')).slice(0,30);
     const color=/^#[0-9a-fA-F]{6}$/.test(t.color)?t.color:'#7c3aed';
     const savedType={id,name,kind:t.kind,color,icon:normalizeIcon(t.icon,t.kind),builtin:false};
     if(t.kind==='point'){
