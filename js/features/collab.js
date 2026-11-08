@@ -327,6 +327,7 @@ function collabRefreshConflictInfo(){
     (m.conflicts&&!overwritten?`（${L('已保留较新值')}）`:'')+
     (m.siteCleared?` · ${L('场地已清空')}`:'')+
     (overwritten?` · ${L('已写入撤销栈，可 Ctrl+Z 回滚')}`:'')+
+    (m.clockClamped?` · ${L('时间戳异常 {n} 条已置空',{n:m.clockClamped})}`:'')+
     foreignNote;
   el.className='hint-text'+((overwritten||foreign)?' warn':'');
 }

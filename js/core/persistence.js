@@ -968,10 +968,14 @@ async function mergeProjectJSON(raw,opts={}){
   const currentRaw=persistableState();
   const cur=state;
   const incomingRaw=mergeBlankMissingTimestamps(deepClone(raw));
+  /* B8：入站时间戳校验/钳制，未来时间戳不得永久压制本地编辑 */
+  const clockClamped=mergeClampTimestamps(incomingRaw);
   let incoming;
   try{ incoming=migrateProject(incomingRaw); }
   finally{ state=cur; }
   const {project,stats}=mergeProjectData(currentRaw,deepClone(incoming));
+  if(clockClamped) stats.clockClamped=clockClamped;
+  if(clockClamped) console.warn(`合并：${clockClamped} 个时间戳非法或超前，已置空`);
   assertProjectWithinLimits(project,'合并结果');      /* 两侧各自未超限、并集仍可能超限 */
   /* 对象/楼层之外（图层、类型、墓碑）也可能有变化：用规范化序列化判断是否需要落盘 */
   if(mergeStable(project)===mergeStable(currentRaw)) return stats;

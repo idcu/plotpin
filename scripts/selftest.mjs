@@ -6380,6 +6380,29 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   eq('合并入口-旧对象不计更新', legacyStats.updated, 0);
   eq('合并入口-旧对象计冲突', legacyStats.conflicts, 1);
 
+  /* B8：入站未来/非法时间戳置空，避免永久压制本地编辑 */
+  const FUT='2999-01-01T00:00:00.000Z';
+  api.resetState();
+  const b8Stats=await api.mergeProjectJSON(P([O('OBJ_FUT',FUT,9)], {
+    meta: { name:'未来工程', updatedAt:FUT },
+    tombstones:[{ id:'OBJ_GHOST', deletedAt:FUT, kind:'object' }]
+  }));
+  const futObj=api.state.objects.find(o=>o.id==='OBJ_FUT');
+  eq('B8-未来对象时间戳置空', futObj.updatedAt, '');
+  ok('B8-异常时间戳计数', (b8Stats.clockClamped||0)>=3);
+  ok('B8-未来墓碑被清除', !api.state.tombstones.some(t=>t.id==='OBJ_GHOST'));
+  eq('B8-无本地冲突时对象仍可加入', futObj.x, 9);
+  futObj.updatedAt=new Date().toISOString(); futObj.x=3;
+  const b8Again=await api.mergeProjectJSON(P([O('OBJ_FUT',FUT,9)], { meta:{ name:'未来工程', updatedAt:FUT } }));
+  eq('B8-未来时间戳不压制本地编辑', api.state.objects.find(o=>o.id==='OBJ_FUT').x, 3);
+  ok('B8-二次接收仍计异常', (b8Again.clockClamped||0)>=2);
+  const badObj=O('OBJ_BAD','not-a-date',4);
+  const b8Bad=await api.mergeProjectJSON(P([badObj], { meta:{ name:'非法时间', updatedAt:T1 } }));
+  eq('B8-非法时间戳置空', api.state.objects.find(o=>o.id==='OBJ_BAD').updatedAt, '');
+  ok('B8-非法时间戳计数', (b8Bad.clockClamped||0)>=1);
+  /* 恢复既有删除墓碑用例所需的本地对象 */
+  api.resetState(); api.state.objects.push(O('OBJ_MERGE', T2));
+
   const delStats = await api.mergeProjectJSON(P([], {
     meta: { name: '他人工程', updatedAt: T1 },
     tombstones: [{ id: 'OBJ_MERGE', deletedAt: T3, kind: 'object' }]

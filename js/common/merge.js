@@ -218,6 +218,34 @@ function mergeBlankMissingTimestamps(raw){
 }
 
 function mergeTime(v){ return v && typeof v.updatedAt === 'string' ? v.updatedAt : ''; }
+/** B8：入站时间戳合法性校验。无法解析或晚于本机 now+5s 的视为异常，置空（LWW 中必然输给本地），
+ *  防止远端 2999 年时间戳永久压制正常编辑；返回清理数量供合并日志展示。 */
+const MERGE_FUTURE_TOLERANCE_MS=5000;
+function mergeClampTimestamps(raw,nowMs){
+  const now=Number.isFinite(nowMs)?nowMs:Date.now();
+  const max=now+MERGE_FUTURE_TOLERANCE_MS;
+  let clamped=0;
+  const fix=o=>{
+    if(!o||typeof o!=='object'||typeof o.updatedAt!=='string') return;
+    const t=Date.parse(o.updatedAt);
+    if(!Number.isFinite(t)||t>max){ o.updatedAt=''; clamped++; }
+  };
+  if(raw&&typeof raw==='object'){
+    fix(raw.meta);
+    (Array.isArray(raw.objects)?raw.objects:[]).forEach(fix);
+    (Array.isArray(raw.floors)?raw.floors:[]).forEach(f=>{
+      if(!f||typeof f!=='object') return;
+      fix(f); fix(f.site);
+      (Array.isArray(f.objects)?f.objects:[]).forEach(fix);
+    });
+    (Array.isArray(raw.tombstones)?raw.tombstones:[]).forEach(t=>{
+      if(!t||typeof t!=='object'||typeof t.deletedAt!=='string') return;
+      const ts=Date.parse(t.deletedAt);
+      if(!Number.isFinite(ts)||ts>max){ t.deletedAt=''; clamped++; }
+    });
+  }
+  return clamped;
+}
 function mergeLater(a, b){ const x = mergeTime(a), y = mergeTime(b); return x > y ? x : y; }
 
 /** 楼层最后写入时间：楼层自身、场地、该层全部对象 updatedAt 的最大值。

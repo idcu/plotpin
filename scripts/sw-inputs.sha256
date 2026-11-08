@@ -2,14 +2,14 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=96
+version=97
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
 a4122a38c0ac51ba7ea5ba1287a91ee2dc9a640891144470649390192df9a226  js/common/dxf.js
-b7ec9840b071adb6c7313e11cb23efabf57ec2eb47b5990da99d05f4bc68c4c0  js/common/i18n.js
-99aa5e3d60c02d924805468660f3616b4a8f6f2c0b2bc2d41fa71b91bc721890  js/common/merge.js
+7856c9f73d4ea7419fbe7fbf11e5af5989921ea30805b762f8cb5eadd67fe509  js/common/i18n.js
+5cc3adc014fcfb35c0b2b29b2c5f4dc8991ca6deea2a00747cef2f867342a319  js/common/merge.js
 884b70dd99ebe2b47ed86126b57bd9a1343d8606c4b44368ac5fa4a8745bc2ac  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
 2b64520f255a3e712eec295380877150b9193988ad29b35914cf75480685fc7c  js/common/qr.js
@@ -22,13 +22,13 @@ cb00476756b06976ddced3932677c7a74ac608c44b1e2ea23a7b9bd4dd22608f  js/core/geomet
 e1adf61f04f0f1315ed94c5772135ef15809ca60599c48a101933fbec5f3df92  js/core/geometry.js
 d458118b6153cb37aabe02c83527132133ee9720959592ee392d7f5061ad9d98  js/core/interaction.js
 050f7238d8602958cdf3b2ad0676fa6be4539302d3422a1c66ffd74fc01b0b5f  js/core/model.js
-957cb37baa707cc794346737249a32c9bcf1013812cab0a6346d09cfceb2f205  js/core/persistence.js
+03f5a66277d46260fd85cea2115f5fcd4a3eca3ab6974b9ec798961c845bcc40  js/core/persistence.js
 d4029e65497430f962c1c422fc769e092f366e6a805cb59b778f0cb65f8b9e73  js/core/render.js
 15b8367adf844d671a44bc5fa31e871ec69f533a96c0093d25cd1999d1b44366  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
 90b47b297c7348093e760d4aa501ad6e71e524db8fe3b599cee4eedc40cba1fe  js/core/viewport.js
 c717628ed256a4372b9851cafadbf55689c13fd118729943725b587528f87169  js/features/catalog.js
-fe76835fbaa12f355f9535da69e8c950eeb5a7e79438dde589547704c81e3364  js/features/collab.js
+cd2006b307d76dd4b3292dd281e17fa7e19d3a961feec41086a24a727609a0a4  js/features/collab.js
 49d47ed2569bd74cbac72bc4a46d54f2cf5e55ea12fb3cf197c62376e4e4ebe1  js/features/io-export.js
 f15890d6d877ba8be5cc2c7a86d86e645c9eb0c1140c37fdae35c4bf9166c2d2  js/features/io-fields.js
 046814ae5ab6346be36eeb99ed3914ac1df55500486a4aa4999a3e7930ecabea  js/features/io-import.js

@@ -176,12 +176,13 @@ Schema 为 `offline-drawing-annotation/v2`；`v1` 只读兼容，读取时迁移
 
 - `A = 本地`，`B = 远端`。对象按 id 取并集，内容签名忽略 `z`（叠放顺序不传播）。
 - 冲突判定：内容不同即 `conflicts++`；时间戳较新者胜；时间相同则按稳定 JSON 字典序取较大者，保证两端结果一致。
+- 入站时钟校验（B8）：`mergeProjectJSON()` 在清洗前调用 `mergeClampTimestamps()`，无法 `Date.parse` 或晚于本机 `now+5s` 的 `updatedAt`/`deletedAt` 一律置空（LWW 中必然输给本地有效时间），并在 `stats.clockClamped` 计数、`console.warn` 与协作信息栏提示；远端 2999 年时间戳不再永久压制本地编辑。
 - 删除墓碑按 `(kind, id)` 保留最晚 `deletedAt`；`deletedAt >= 对象时间` 时删除生效，且会清理已过期的墓碑。墓碑硬上限 `TOMBSTONE_MAX` 与 `OBJECTS_MAX` 同量级（100,000），保证「先删 N 个对象、再与仍持有这些对象的离线端合并」时 N ≤ 对象上限不会因截断而复活。
 - 楼层墓碑：`deletedAt >= max(两侧楼层写入时间)` 时整层删除，胜过该层所有较早编辑；合并结果至少保留一层。
 - 场地 LWW：`site.updatedAt` 优先，缺失时退回楼层 `updatedAt`；时间相同且本地无场地、远端有场地时保留远端。
 - 图层与对象类型按 id 并集，同 id 以本地为准；规则配置本地优先；设置项本地覆盖远端；`meta` 本地覆盖远端但 `updatedAt` 取较晚者。
 - 对象 `updatedAt` 打点：`persistence.js` 的 `stampObjects(ids)` 是唯一助手，`commitChange(message, ids)` / `commitObjectEdit(ids)` 只对实际变化的 id 打点；批量显隐/图层/对齐/重编号与节点增删都传入变化 id，无变化提交（无 id）不产生新时间戳。几何拖拽在 `interaction.js` 内对单个对象直接更新时间戳（`dragChangedIds` 判定是否真实变化）。同一毫秒内连续提交按 +1ms 单调递增，避免后一次编辑被 LWW 判旧。
-- 合并只产出一个工程对象与统计 `{added, updated, deleted, siteDeleted, siteCleared, conflicts, floorsAdded, floorMetaUpdated, floorsDeleted}`；落地由调用方决定是否入撤销栈。
+- 合并只产出一个工程对象与统计 `{added, updated, deleted, siteDeleted, siteCleared, conflicts, floorsAdded, floorMetaUpdated, floorsDeleted}`（存在时间戳异常时额外带 `clockClamped`）；落地由调用方决定是否入撤销栈。
 
 实时通道在 [collab.js](file:///f:/proj/plotpin/js/features/collab.js)：
 

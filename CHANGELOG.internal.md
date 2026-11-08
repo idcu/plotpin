@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 B（3/6）：入站时间戳校验，未来时间不再永久压制本地编辑
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/common/merge.js` 新增 `mergeClampTimestamps(raw, nowMs)`：遍历 `meta` / 顶层对象 / 楼层 / 场地 / 楼层对象 / 墓碑，`Date.parse` 失败或晚于本机 `now+5s` 的 `updatedAt`/`deletedAt` 一律置空（置空在 LWW 中必然输给本地有效时间）。
+  - `js/core/persistence.js` `mergeProjectJSON()` 在 `mergeBlankMissingTimestamps` 之后、迁移之前调用，异常条数写入 `stats.clockClamped` 并 `console.warn`；协作信息栏新增「时间戳异常 N 条已置空」。
+  - i18n 新增对应文案；同步 `docs/features.md` 与 `docs/ARCHITECTURE.md` §8。
+- **验证数据**：
+  - selftest **3511 通过 / 0 失败**（基线 3503，+8）：未来对象/元数据/墓碑共 3 条置空、未来墓碑不生效、未来快照不覆盖本地正常编辑、二次接收仍计数、非法时间戳置空并计数。
+  - 同批既有合并用例全部保持通过（删除墓碑用例在 B8 断言后显式恢复本地对象）。
+  - dist **828,295 B**（本条 **+1,254 B**）/ gzip 257,065 B / 余量 **11,385 B**；SW `VERSION=97`；8 种 golden 与导出字段未变。
+  - e2e / build --check / check-gates / discipline 见提交前完整门禁记录。
+- **遗留 TODO / 风险**：
+  - 仅检查**超前**与不可解析；合法但很旧的时间戳（离线端）原样保留，避免把落后时钟的正常离线编辑误判为异常。
+  - 阈值为本机 `now+5s`，未做可配置；主机时钟本身错误时判定随之偏移。
+  - `stats.clockClamped` 只在存在异常时出现，消费方需按可选字段处理。
+
 ## 2026-11-08 · 批次 B（2/6）：对端在线表心跳 TTL，异常关闭不再残留幽灵成员
 
 - **Commit Hash**：`待回填`
