@@ -827,6 +827,7 @@ await section("14. 区域参数形状：面积/命中/采样/标签中心", asyn
   approx('周长-椭圆(a=b=10)退化圆', api.shapePerimeter({kind:'rect',x:0,y:0,shape:{type:'ellipse',rx:10,ry:10}}), 20*Math.PI, 1e-6);
   approx('周长-90°扇形 20+5π', api.shapePerimeter(sector), 20+5*Math.PI, 1e-9);
   approx('周长-整圆扇=20π', api.shapePerimeter({kind:'rect',x:0,y:0,shape:{type:'sector',r:10,a0:0,a1:360}}), 20*Math.PI, 1e-9);
+  approx('周长-缺省角度扇形=整圆', api.shapePerimeter({kind:'rect',x:0,y:0,shape:{type:'sector',r:10}}), 20*Math.PI, 1e-9);
   approx('周长-零尺寸矩形为0', api.shapePerimeter({kind:'rect',x:0,y:0,width:0,height:0,shape:null}), 0, 1e-9);
 
   eq('扇形张角-普通 90', api.sectorSweep({a0:0,a1:90}), 90);
@@ -4543,6 +4544,11 @@ await section("53. 多楼层 / 多底图：数据切换、持久化裁剪、迁�
   eq('楼层-默认一层', st.floors.length, 1);
   eq('楼层-默认活动层', st.activeFloorId, 'floor.default');
   eq('楼层-默认名称', api.currentFloorName(), '1F');
+  /* CORE-P2-15：活动楼层缺失只回退首层，不得再注入同名楼层条目（原分支恒不可达） */
+  const noActive=api.buildProject({schema:api.SCHEMA,meta:{},settings:{},viewport:{},background:{kind:'empty'},site:null,
+    layers:[],objectTypes:[],objects:[],floors:[{id:'F1',name:'1F'}],activeFloorId:'NOPE',tombstones:[]});
+  eq('楼层-活动层缺失回退首层', noActive.activeFloorId, 'F1');
+  eq('楼层-活动层缺失不新增楼层', noActive.floors.length, 1);
 
   st.objects.push(api.baseObject('point','point.marker',{name:'A',x:1,y:1}));
   api.syncActiveFloor();

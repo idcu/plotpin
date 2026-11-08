@@ -849,8 +849,8 @@ function buildProject(p){
       floors.push(entry);
     });
     if(!floors.length) floors.push({id:'floor.default',name:'1F',updatedAt:''});
-    let activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
-    if(!floors.some(f=>f.id===activeFloorId)) floors.push({id:activeFloorId,name:'1F',updatedAt:''});
+    /* floors 非空时 activeFloorId 必然命中：匹配则保留，否则回退首层（首层由上面的补默认层保证存在） */
+    const activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
     if(report.duplicateIds||report.normalizedIds||report.duplicateNames){
       if(typeof console!=='undefined'&&console.warn) console.warn('[sanitize] 对象唯一性修正',report);
     }

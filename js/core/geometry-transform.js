@@ -243,7 +243,7 @@ function applyWorldTransform(M,opts){
     migrateObjectsByAffine(state.objects,arr,out);
     objects=state.objects.length;
   }
-  if(o.site&&state.site&&state.site.kind!=='image'){
+  if(o.site&&state.site){
     const next=siteShapeByAffine(siteShapeOf(state.site),arr,out);
     state.site.shape=next; state.site.kind=next.type;
     site=true;

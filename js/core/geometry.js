@@ -429,7 +429,7 @@ function shapePerimeter(o){
   if(tt==='circle') return 2*Math.PI*sh.r;
   if(tt==='ellipse') return __geo.ellipsePerimeter(sh.rx,sh.ry);
   const r=Math.max(0,sh.r);
-  let sweep=sectorSweep(sh); if(!sh.a0&&!sh.a1) sweep=360;
+  const sweep=sectorSweep(sh);
   /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
   return __geo.sectorPerimeter(r,sweep);
 }
