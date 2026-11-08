@@ -7716,6 +7716,19 @@ await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
   api.state.site={id:'site.t3',name:'',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',kind:'rect',shape:{type:'rect',x:0,y:0,w:40,h:20}};
   const dxSite=api.dxfEntitiesForExport();
   eq('IO-P2-15 SITE 层保持场地色', dxSite.layers.find(l=>l.name==='SITE').color, '#16a34a');
+
+  /* IO-P2-16：用户层与保留层 SITE 重名时改名，场地层不被业务实体侵占 */
+  api.resetState();
+  api.state.layers[0].name='SITE';
+  const sp=api.baseObject('point','point.marker',{name:'S1',x:1,y:1});
+  api.state.objects=[sp];
+  api.syncActiveFloor();
+  api.state.site={id:'site.t4',name:'',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',kind:'rect',shape:{type:'rect',x:0,y:0,w:40,h:20}};
+  const dxs=api.dxfEntitiesForExport();
+  eq('IO-P2-16 重名用户层改名 SITE_2', dxs.layers.filter(l=>l.name==='SITE_2').length, 1);
+  eq('IO-P2-16 场地层 SITE 唯一', dxs.layers.filter(l=>l.name==='SITE').length, 1);
+  ok('IO-P2-16 业务实体落在 SITE_2', dxs.entities.some(e=>e.layer==='SITE_2'&&e.type==='POINT'));
+  ok('IO-P2-16 场地实体仍在 SITE', dxs.entities.some(e=>e.layer==='SITE'&&e.type==='LWPOLYLINE'));
 }
 
 });
