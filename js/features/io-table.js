@@ -26,7 +26,7 @@ function parseNodeCoords(text){
   });
   return out;
 }
-/** 按表格行数据设置区域形状（基点为矩形左下角/圆·椭圆·扇形圆心）；参数不足返回 false */
+/** 按表格行数据设置区域形状（基点为矩形左下角/圆·椭圆·扇形圆心）；先校验后写入，失败不留部分修改 */
 function applyRowShape(o,label,v){
   const tt=AREA_SHAPE_BY_LABEL[label];
   if(!tt||!Number.isFinite(v.x)||!Number.isFinite(v.y)) return false;
@@ -35,21 +35,20 @@ function applyRowShape(o,label,v){
     o.shape=null; o.width=v.w; o.height=v.h; o.x=v.x; o.y=v.y; o.angle=normalizeAngle(v.angle);
     return true;
   }
-  o.x=v.x; o.y=v.y;
   if(tt==='circle'){
     if(!(v.w>0)) return false;
-    o.shape={type:'circle',r:v.w/2}; o.width=0; o.height=0; o.angle=0; return true;
+    o.shape={type:'circle',r:v.w/2}; o.width=0; o.height=0; o.angle=0; o.x=v.x; o.y=v.y; return true;
   }
   if(tt==='ellipse'){
     if(!(v.w>0)||!(v.h>0)) return false;
-    o.shape={type:'ellipse',rx:v.w/2,ry:v.h/2}; o.width=0; o.height=0; o.angle=normalizeAngle(v.angle); return true;
+    o.shape={type:'ellipse',rx:v.w/2,ry:v.h/2}; o.width=0; o.height=0; o.angle=normalizeAngle(v.angle); o.x=v.x; o.y=v.y; return true;
   }
   if(tt==='sector'){
     if(!(v.w>0)) return false;
-    let a0=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:0);
-    let a1=Number.isFinite(v.params[1])?v.params[1]:a0+90;
+    const a0=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:0);
+    const a1=Number.isFinite(v.params[1])?v.params[1]:a0+90;
     let sweep=((a1-a0)%360+360)%360; if(sweep===0) sweep=360;
-    o.shape={type:'sector',r:v.w/2,a0,a1:a0+sweep}; o.width=0; o.height=0; o.angle=0; return true;
+    o.shape={type:'sector',r:v.w/2,a0,a1:a0+sweep}; o.width=0; o.height=0; o.angle=0; o.x=v.x; o.y=v.y; return true;
   }
   if(tt==='parallelogram'){
     if(!(v.w>0)||!(v.h>0)) return false;
@@ -331,6 +330,15 @@ function rowsToObjectsPlan(rows){
         return;
       }
       const obj=floorCodes.get(code);
+      /* IO-P2-8：形状列参数非法时提前告警；applyRowShape 先校验后写入，失败不会留下半套几何 */
+      const shapeLabel=c('形状');
+      if(obj.kind==='rect'&&shapeLabel){
+        const sx=tableNum(c('X')), sy=tableNum(c('Y')), sa=tableNum(c('角度'));
+        const probe=deepClone(obj);
+        if(!applyRowShape(probe,shapeLabel,{x:Number.isFinite(sx)?sx:obj.x,y:Number.isFinite(sy)?sy:obj.y,
+            w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(sa)?sa:obj.angle,params:parseShapeParams(c('形状参数'))}))
+          warnings.push(where+'：形状「'+shapeLabel+'」参数非法（宽度/高度需>0），已保留原几何');
+      }
       check(where,c,previewGeomCandidate(obj,c));
       checkTargets(where,c,[obj]);
       updates.push({obj,cell:c,floorId:ctx.id});

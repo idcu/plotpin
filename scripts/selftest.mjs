@@ -540,6 +540,16 @@ await section("8.1 B-08 原义：批量布点 + 条件批量替换（严格模�
   api.applyTableImport(api.rowsToObjectsPlan([['操作','匹配编号','名称'], ['替换','O0200',"'=cmd|calc"]]));
   eq('B-08-公式文本往返不变形', api.state.objects[0].text, '=cmd|calc');
 
+  /* IO-P2-8：形状参数非法时保留原几何（X/Y/宽高都不动），不再半套更新 */
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect', 'rect.area', { name: 'O0300', x: 1, y: 2, width: 5, height: 6, angle: 0 }));
+  const badShapeRow = api.TABLE_COLUMNS.map(k => ({ 编号: 'O0300', 对象类型: '矩形/区域', 形状: '圆形', X: '99', Y: '98', 宽度: '0' }[k] ?? ''));
+  const badShapePlan = api.rowsToObjectsPlan([api.TABLE_COLUMNS.slice(), badShapeRow]);
+  ok('非法形状-规划告警', badShapePlan.warnings.some(w => w.includes('O0300') && w.includes('保留原几何')));
+  api.applyTableImport(badShapePlan);
+  const keepGeom = api.state.objects.find(o => o.name === 'O0300');
+  eq('非法形状-几何不变', [keepGeom.x, keepGeom.y, keepGeom.width, keepGeom.height], [1, 2, 5, 6]);
+
   /* 大表（≥500 行）实测 */
   api.resetState();
   const big = [['对象类型','X','Y']];
