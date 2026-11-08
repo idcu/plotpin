@@ -111,13 +111,15 @@ function renderList(){
   $('headSelectChk').checked=rows.length>0&&rows.every(o=>selectedIds.has(o.id));
   $('objectTbody').innerHTML=rows.map(o=>{
     const t=getType(o.typeId), l=layerOf(o);
+    /* RT-P2-15：类型色与类型管理页同源，统一走导出层颜色白名单再转义，避免脏色值逃逸 style 属性 */
+    const dotColor=esc(normalizeExportColor(t.color,'#666'));
     const param=o.kind==='rect'?areaParamText(o):
       o.kind==='point'?`${Math.round(o.angle)}°${(o.phys||0)>0?' / '+fmt(o.phys)+'m':''}`:
       o.kind==='line'?`${o.points.length} ${L('点')} / ${fmt(objectLength(o))}m${o.closed&&o.points.length>=3?' / '+fmt(polygonArea(o.points))+'㎡':''}`:
       o.kind==='text'?esc(o.text):(o.kind==='dimension'&&o.subtype==='ruler'?`${o.points.length} ${L('点')} / Σ ${fmt(objectLength(o))}m`:o.subtype||'');
     return `<tr data-id="${esc(o.id)}" class="${selectedIds.has(o.id)?'selected':''} ${o.locked?'locked':''} ${!o.visible?'hidden-row':''}">
       <td><input type="checkbox" data-row-select="${esc(o.id)}" ${selectedIds.has(o.id)?'checked':''}></td>
-      <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${t.color}"></span>${esc(typeDisplayName(t))}</td>
+      <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${dotColor}"></span>${esc(typeDisplayName(t))}</td>
       <td>${esc(l.name)}</td><td>${fmt(o.x)}</td><td>${fmt(o.y)}</td><td>${param}</td>
       <td><button class="icon-btn" data-toggle-visible="${o.id}" aria-label="${esc(I18N.t('ariaObjVisible')+'：'+o.name)}">${o.visible?'👁':'–'}</button></td>
       <td><button class="icon-btn" data-toggle-lock="${o.id}" aria-label="${esc(I18N.t('ariaObjLock')+'：'+o.name)}">${o.locked?'🔒':'○'}</button></td>
@@ -215,7 +217,7 @@ function renderTypes(){
   $('typeList').innerHTML=Object.entries(groups).map(([kind,label])=>`
     <h3>${label}</h3>
     ${typesOfKind(kind).map(t=>`<div class="type-row">
-      <div class="meta"><div class="name"><span class="dot" style="background:${esc(t.color)}"></span>${esc(typeDisplayName(t))}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${esc(normalizeIcon(t.icon,t.kind))}${kind==='point'?' · '+esc(L(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none))+' · '+esc(L('图标'))+' '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
+      <div class="meta"><div class="name"><span class="dot" style="background:${esc(normalizeExportColor(t.color,'#666'))}"></span>${esc(typeDisplayName(t))}</div><div class="sub">${esc(I18N.t(t.builtin?'builtinType':'customType'))} · ${esc(normalizeIcon(t.icon,t.kind))}${kind==='point'?' · '+esc(L(POINT_SCALE_SHAPES[t.scaleShape]||POINT_SCALE_SHAPES.none))+' · '+esc(L('图标'))+' '+(Number(t.iconSize)||1).toFixed(2)+'×':''}</div></div>
       ${kind==='point'&&!t.builtin?`<input type="number" min=".5" max="5" step=".1" title="${esc(L('默认图标大小（屏幕倍率）'))}" value="${Number(t.iconSize)||1}" data-type-iconsize="${esc(t.id)}" style="width:52px" aria-label="${esc(I18N.t('iconSizeLabel')+'：'+t.name)}">`:''}
       <input type="color" value="${esc(t.color)}" data-type-color="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeColor')+'：'+typeDisplayName(t))}">
       <button class="icon-btn" data-type-rename="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+typeDisplayName(t))}">✎</button>
