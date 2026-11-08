@@ -14,6 +14,14 @@ function cameraFootprint(o){
   if(shape==='square') return {kind:'square',id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2,angle:Number(o.angle)||0};
   return null;
 }
+/** 覆盖率预筛包围盒：方形按旋转后的真实外接范围（半边长 r 的正方形旋转后
+ *  半宽 = r·(|cos|+|sin|)），扇形/圆形仍为半径 r。预筛只允许偏大，不允许偏小。 */
+function cameraPrefilterBox(c,cosA,sinA){
+  const ca=cosA===undefined?Math.cos((Number(c.angle)||0)*Math.PI/180):cosA;
+  const sa=sinA===undefined?Math.sin((Number(c.angle)||0)*Math.PI/180):sinA;
+  const ext=c.kind==='square'?c.r*(Math.abs(ca)+Math.abs(sa)):c.r;
+  return {minX:c.x-ext-EPS, maxX:c.x+ext+EPS, minY:c.y-ext-EPS, maxY:c.y+ext+EPS};
+}
 /** 世界点是否落在覆盖域内（角度约定与 hitPhysicalPoint 一致：0°=+X，Y 向上） */
 function pointInFootprint(p,cam){
   const dx=p[0]-cam.x, dy=p[1]-cam.y, d=Math.hypot(dx,dy);
@@ -88,10 +96,11 @@ function analyzeCoverage(st,opt){
      包围盒用于廉价预筛，绝大多数格心离所有设备都很远 */
   const cams=cameras.map(c=>{
     const ang=(Number(c.angle)||0)*Math.PI/180, half=(c.fov?c.fov/2:0)*Math.PI/180;
-    return {cam:c, r2:c.r*c.r, cosA:Math.cos(ang), sinA:Math.sin(ang),
+    const cosA=Math.cos(ang), sinA=Math.sin(ang);
+    return {cam:c, r2:c.r*c.r, cosA, sinA,
       cosHalf:Math.cos(half), cosHalf2:Math.cos(half)*Math.cos(half),
       half:c.fov?c.fov/2:180,
-      minX:c.x-c.r-EPS, maxX:c.x+c.r+EPS, minY:c.y-c.r-EPS, maxY:c.y+c.r+EPS};
+      ...cameraPrefilterBox(c,cosA,sinA)};
   });
   const ignored=st.objects.filter(o=>o.kind==='point'&&isVisible(o)&&!(Number(o.phys)>0)).length;
   const raw=regionPolygons(st).map(r=>{

@@ -200,7 +200,7 @@ code += `\n;globalThis.__api = {
   csvCell: (v,d)=>csvCell(v,d),
   formulaGuard, delimitedText, exportJSON,
   TABLE_COLUMNS,
-  cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
+  cameraFootprint, cameraPrefilterBox, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
   optimizeCameraPlacement,
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform, imageHandleList, imageHandleDragTo,
@@ -3141,6 +3141,35 @@ await section("38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆
   ctype.fov=oldFov;
   /* 纯位置图标点（phys=0）不计入覆盖 */
   eq('覆盖-图标点无footprint', api.cameraFootprint(api.baseObject('point','point.marker',{x:0,y:0,phys:0})), null);
+
+  /* E1 旋转方形设备的预筛包围盒必须覆盖旋转后四角 */
+  const charger=(angle)=>api.cameraFootprint(api.baseObject('point','point.charger',{x:0,y:0,phys:10,angle}));
+  const bx0=api.cameraPrefilterBox(charger(0)), bx30=api.cameraPrefilterBox(charger(30)),
+        bx45=api.cameraPrefilterBox(charger(45)), bx90=api.cameraPrefilterBox(charger(90));
+  approx('E1-0度外扩=半径', bx0.maxX, 5, 1e-6);
+  approx('E1-90度外扩=半径', bx90.maxY, 5, 1e-6);
+  approx('E1-45度外扩=半径√2', bx45.maxX, 5*Math.SQRT2, 1e-6);
+  approx('E1-30度外扩=r(cos+sin)', bx30.maxX, 5*(Math.cos(Math.PI/6)+Math.sin(Math.PI/6)), 1e-6);
+  const boxHas=(b,u,v,deg)=>{ const a=deg*Math.PI/180;
+    const p=[u*Math.cos(a)-v*Math.sin(a), u*Math.sin(a)+v*Math.cos(a)];
+    return p[0]>=b.minX-1e-9&&p[0]<=b.maxX+1e-9&&p[1]>=b.minY-1e-9&&p[1]<=b.maxY+1e-9; };
+  ok('E1-45度四角均在预筛盒内', [[5,5],[-5,5],[5,-5],[-5,-5]].every(([u,v])=>boxHas(bx45,u,v,45)));
+  ok('E1-30度四角均在预筛盒内', [[5,5],[-5,5],[5,-5],[-5,-5]].every(([u,v])=>boxHas(bx30,u,v,30)));
+  /* 集成：栅格命中数必须与权威 pointInFootprint 逐格一致（45° 是旧预筛漏格最大处） */
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'E1区',x:0,y:0,width:20,height:20}));
+  api.state.objects.push(api.baseObject('point','point.charger',{name:'E1方',x:10,y:10,phys:10,angle:45}));
+  const e1res=api.analyzeCoverage(api.state,{targetCells:400});
+  const e1cam=api.cameraFootprint(api.state.objects[1]);
+  let e1expect=0, e1got=0;
+  for(const r of e1res.regions) for(let j=0;j<r.ny;j++) for(let i=0;i<r.nx;i++){
+    const g=r.grid[j*r.nx+i]; if(g===2) continue;
+    const x=r.minX+(i+.5)*r.cell, y=r.minY+(j+.5)*r.cell;
+    if(api.pointInFootprint([x,y],e1cam)) e1expect++;
+    if(g===1) e1got++;
+  }
+  eq('E1-45度栅格命中=逐格footprint', e1got, e1expect);
+  ok('E1-45度确实有覆盖', e1got>0);
 
   /* 统计区域来源：闭合折线计入，开放折线不计入 */
   api.resetState();
