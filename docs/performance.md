@@ -182,21 +182,6 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 selftest 74b 覆盖「双楼层 + F1 编辑 → 切 F2 编辑 → 两次撤销 → 重做」与资产可达集（21 项断言）。
 
 
-#### 4.1.8 导出字段「长度/面积」逐行重复计算（2026-11-08，IO-P2-11 打点）
-
-命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "IO-P2-11" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，10,000 行 = 3,334 point + 3,333 rect + 3,333 line，`buildExportRow` 3 次取中位；探针包装 `objectLength`/`objectArea` 计数）。两次独立复跑。
-
-| 指标 | 第 1 次 | 第 2 次 | 说明 |
-|---|---|---|---|
-| 10k 行构建 P50 / P95 | 18.9 / 33.9 ms | 17.4 / 19.6 ms | 逐行 1.74~1.89 µs；P95 抖动来自机器负载 |
-| `objectLength` 调用 | 13,333 次（1.33 次/行） | 同左 | 仅 line 的首次结果非零，`x?fmt(x):''` 触发第二次 |
-| `objectArea` 调用 | 13,333 次（1.33 次/行） | 同左 | 仅 rect 的面积非零，同上 |
-| 单次 `objectLength` 10k 次耗时 | 0.3 ms | 0.3 ms | 实测 |
-| 单次 `objectArea` 10k 次耗时 | 1.3 ms | 0.9 ms | 实测 |
-| 去重后可回收耗时 | 1.6 ms | 1.2 ms | 占 10k 行构建 6.9%~8.5%，实测值相减 |
-
-结论：审计 P2-11 的「每行算两次」成立，但只在结果非零时才发生第二次；10k 行规模下可回收 1.2~1.6 ms。本批只补打点，未改业务代码。
-
 #### 4.1.7 快照列表/淘汰的 IDB 读取次数（2026-11-08，CORE-P2-4 打点）
 
 命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-4" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，20 条快照 × 10,000 对象，`idbGetKey` 计数包装）。两次独立复跑。
@@ -208,6 +193,20 @@ selftest 74b 覆盖「双楼层 + F1 编辑 → 切 F2 编辑 → 两次撤销 �
 | `snapshotRecords()`（全量读） | 355.1 / 360.1；345.9 / 349.8 | 20 | 逐条读 20 份快照 data |
 
 结论：CORE-P2-4 指出的「列表/淘汰全量读」已由 N-21 的 `snapidx:<pid>` 索引消除；本次只补读取次数与耗时打点，生产代码未改。全量读仍保留为索引缺失时的回退路径。
+
+#### 4.1.8 导出字段「长度/面积」去重（2026-11-08，IO-P2-11 修复）
+
+命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "IO-P2-11" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，10,000 行 = 3,334 point + 3,333 rect + 3,333 line，`buildExportRow` 3 次取中位；探针包装 `objectLength`/`objectArea` 计数）。
+
+| 指标 | 改造前（`987f594` 实测） | 改造后（本次） | 变化 |
+|---|---|---|---|
+| `objectLength` 调用 | 13,333 次（1.33 次/行） | **10,000 次（1.00 次/行）** | −25% |
+| `objectArea` 调用 | 13,333 次（1.33 次/行） | **10,000 次（1.00 次/行）** | −25% |
+| 10k 行构建 P50 | 18.9 / 17.4 ms | 15.6 / 18.4 ms | 差异在机器抖动内，不判定为提速 |
+| 8 种 golden | — | 逐字节不变 | e2e 全绿（117 通过 +1 条件跳过） |
+
+修法：`buildExportRow` 在行上下文里各算一次 `objectLength` / `objectArea`，字段 getter 只读取；导出字段集合、列顺序与数值格式未动。
+结论：重复计算已消除，调用数确定下降 25%；10k 行规模的墙钟收益小于本机抖动（改造前实测可回收 1.2~1.6 ms），不宣称提速。
 
 #### 4.1.5 历史栈含照片内存与 10k 快照列表（2026-11-08，N-24 复测）
 

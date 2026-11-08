@@ -244,7 +244,7 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
     expect(Math.min(...data.full.readsPerCall), '全量读每次 IDB get 次数（逐条读 data）').toBeGreaterThanOrEqual(20);
   });
 
-  test('IO-P2-11 导出字段「长度/面积」逐行重复计算', async ({ page }) => {
+  test('IO-P2-11 导出字段「长度/面积」每行只计算一次', async ({ page }) => {
     test.setTimeout(240000);
     await openApp(page);
     await page.evaluate(installScene, 10000);
@@ -264,7 +264,7 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
       return { samples: samples.map(x => x.ms), rows: samples[0].rows };
     }, CFG);
 
-    /* ---- 探针：包装 objectLength / objectArea 统计每行调用次数与总耗时 ---- */
+    /* ---- 探针：包装 objectLength / objectArea，验证每行各只调用一次 ---- */
     const probe = await page.evaluate(cfg => {
       const origLen = objectLength, origArea = objectArea;
       let lenCalls = 0, areaCalls = 0;
@@ -277,17 +277,16 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
       window.objectLength = origLen;
       window.objectArea = origArea;
 
-      /* 同一批量下单独计时：实际调用次数 vs 每对象一次（理论去重后的一半） */
+      /* 同一批量下单独计时：改造前会多算一次（非零时短路） */
       const measure = (fn, n) => {
         const t = performance.now();
         for (let i = 0; i < n; i++) fn(state.objects[i % state.objects.length]);
         return performance.now() - t;
       };
-      const len2 = measure(origLen, cfg.rows * 2), len1 = measure(origLen, cfg.rows);
-      const area2 = measure(origArea, cfg.rows * 2), area1 = measure(origArea, cfg.rows);
+      const len1 = measure(origLen, cfg.rows), area1 = measure(origArea, cfg.rows);
       return {
         rows, buildMs, lenCalls, areaCalls,
-        lenMs: { twice: len2, once: len1 }, areaMs: { twice: area2, once: area1 }
+        lenMs: { once: len1 }, areaMs: { once: area1 }
       };
     }, CFG);
 
@@ -300,19 +299,15 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
         lenCalls: probe.lenCalls, areaCalls: probe.areaCalls,
         lenCallsPerRow: round(probe.lenCalls / probe.rows, 2),
         areaCallsPerRow: round(probe.areaCalls / probe.rows, 2),
-        lenMsTwice: round(probe.lenMs.twice), lenMsOnce: round(probe.lenMs.once),
-        areaMsTwice: round(probe.areaMs.twice), areaMsOnce: round(probe.areaMs.once)
-      },
-      reclaimableMs: round(probe.lenMs.once + probe.areaMs.once)
+        lenMsOnce: round(probe.lenMs.once), areaMsOnce: round(probe.areaMs.once)
+      }
     };
     record(data);
     expect(data.baseline.rows, '构建行数').toBe(10000);
     expect(data.probe.rows, '探针构建行数').toBe(10000);
-    /* 打点目标：证明非零长度/面积的对象每行被计算两次（字段表 41/42 行的 `x?fmt(x):''` 短路）
-       installScene 10k = 3334 point + 3333 rect + 3333 line；line 长度非零、rect 面积非零，
-       故 objectLength / objectArea 各被调用 3333×2 + 6667×1 = 13333 次。 */
-    expect(data.probe.lenCalls, 'objectLength 调用次数').toBe(13333);
-    expect(data.probe.areaCalls, 'objectArea 调用次数').toBe(13333);
+    /* 去重判据：每个对象长度/面积各只算一次（改造前为 13,333 次，见 performance.md §4.1.8） */
+    expect(data.probe.lenCalls, 'objectLength 调用次数').toBe(10000);
+    expect(data.probe.areaCalls, 'objectArea 调用次数').toBe(10000);
     expect(data.baseline.total.p50, '10k 行构建耗时必须可测').toBeGreaterThan(0);
   });
 });

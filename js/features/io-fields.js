@@ -38,8 +38,8 @@ const EXPORT_FIELD_DEFS=[
   {key:'标注类型',table:true,get:c=>c.o.kind==='dimension'?(DIM_SUB_LABELS[c.o.subtype]||c.o.subtype||''):''},
   {key:'节点坐标',table:true,get:c=>(c.o.kind==='line'||c.o.kind==='dimension')&&c.o.points?.length?formatNodeCoords(c.o.points):''},
   {key:'节点数',table:true,get:c=>c.o.points?.length||0},
-  {key:'长度',table:true,get:c=>objectLength(c.o)?fmt(objectLength(c.o)):''},
-  {key:'面积',table:true,get:c=>objectArea(c.o)?fmt(objectArea(c.o)):''},
+  {key:'长度',table:true,get:c=>c.len?fmt(c.len):''},
+  {key:'面积',table:true,get:c=>c.area?fmt(c.area):''},
   /* 有效可见（对象 visible 且图层 visible）：与画布/图纸导出共用 effectiveVisible，口径单一 */
   {key:'显示',table:true,get:c=>effectiveVisible(c.o)?'是':'否'},
   {key:'锁定',table:true,get:c=>c.o.locked?'是':'否'},
@@ -68,9 +68,11 @@ function exportShapeSummary(o){
   }
   return {w,h,angle,label,param};
 }
-/** 单一对象行渲染器：所有表格型导出都从这里取一行 */
+/** 单一对象行渲染器：所有表格型导出都从这里取一行。
+ *  长度/面积在此各算一次并挂到行上下文，字段 getter 只读取，避免非零值时短路求值两次（IO-P2-11）。 */
 function buildExportRow(o,floorName){
-  const c={o,floorName,type:getType(o.typeId),layer:layerOf(o),shape:exportShapeSummary(o)};
+  const c={o,floorName,type:getType(o.typeId),layer:layerOf(o),shape:exportShapeSummary(o),
+    len:objectLength(o),area:objectArea(o)};
   const row={};
   EXPORT_FIELD_DEFS.forEach(f=>{ row[f.key]=f.get(c); });
   return row;
