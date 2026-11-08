@@ -458,6 +458,13 @@ await section("8. 表格导入规划与应用", async () => {
   ok('表格规划-零高矩形告警', plan.warnings.some(w => w.includes('O0011')));
   ok('表格规划-折线不可重建告警', plan.warnings.some(w => w.includes('O0012')));
   ok('表格规划-未知类型告警', plan.warnings.some(w => w.includes('飞船')));
+  /* IO-P2-7：非严格模式布尔列未知值保留原值并告警，不再静默当“否” */
+  const boolRow = row({ 编号: 'O0001', 对象类型: '点设备', X: '0', Y: '0', 显示: 'maybe', 锁定: '??? ' });
+  const boolPlan = api.rowsToObjectsPlan([header, boolRow]);
+  eq('布尔未知值-两条告警', boolPlan.warnings.filter(w => w.includes('无法识别')).length, 2);
+  const visBefore = api.state.objects.find(o => o.name === 'O0001').visible;
+  api.applyTableImport(boolPlan);
+  eq('布尔未知值-显示保留原值', api.state.objects.find(o => o.name === 'O0001').visible, visBefore);
   api.applyTableImport(plan);
   const after = api.state;
   eq('应用后对象总数（原1+新增2）', after.objects.length, 3);

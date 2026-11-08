@@ -75,7 +75,15 @@ function applyLedgerCells(o,c){
     }else o.props[key]=raw;
   });
 }
-function tableBool(v){ return /^(是|true|1|y|yes)$/i.test(String(v??'').trim()); }
+/** 三态布尔：true / false / undefined（无法识别或空）。导入时未知值保留原值并告警（IO-P2-7） */
+function tableBoolValue(v){
+  const t=String(v??'').trim();
+  if(!t) return undefined;
+  if(/^(是|true|1|y|yes)$/i.test(t)) return true;
+  if(/^(否|false|0|n|no)$/i.test(t)) return false;
+  return undefined;
+}
+function tableBool(v){ const b=tableBoolValue(v); return b===undefined?false:b; }
 /* 严格模式布尔列合法取值（是/否/true/false/1/0/y/n/yes/no） */
 const TABLE_BOOL_RE=/^(是|否|true|false|1|0|y|n|yes|no)$/i;
 /** 条件列命中数：批量替换行至少要有一个非空匹配条件，避免误改全部对象 */
@@ -102,8 +110,8 @@ function applyTableCommonCells(o,c){
   if(tn){ const t=state.objectTypes.find(x=>x.kind===o.kind&&x.name===tn); if(t) o.typeId=t.id; }
   const ln=c('图层');
   if(ln){ const l=state.layers.find(x=>x.name===ln); if(l) o.layerId=l.id; }
-  const vis=c('显示'); if(vis!=='') o.visible=tableBool(vis);
-  const lk=c('锁定'); if(lk!=='') o.locked=tableBool(lk);
+  const vis=tableBoolValue(c('显示')); if(vis!==undefined) o.visible=vis;
+  const lk=tableBoolValue(c('锁定')); if(lk!==undefined) o.locked=lk;
   const note=c('备注'); if(note!==''){ o.props=o.props||{}; o.props.note=note; }
   applyLedgerCells(o,c);
 }
@@ -249,6 +257,15 @@ function rowsToObjectsPlan(rows){
   const updates=[],creates=[],replaces=[];
   const problem=msg=>{ (strict?errors:warnings).push(msg); };
   const check=(where,c,cnd)=>checkRowGeom(where,c,cnd).forEach(w=>warnings.push(w));
+  /* 非严格模式：布尔列未知值不再静默当“否”，保留原值并告警（严格模式由 checkLedger 报错） */
+  const checkBool=(where,c)=>{
+    if(strict) return;
+    [['显示'],['锁定'],['闭合']].forEach(([k])=>{
+      const v=c(k);
+      if(v!==''&&tableBoolValue(v)===undefined)
+        warnings.push(where+'：'+k+'「'+v+'」无法识别（可用 是/否），已保留原值');
+    });
+  };
   const objectsOf=f=>f.id===state.activeFloorId?state.objects:(f.objects||[]);
   /* 严格模式（存在「操作」列）才校验目标字段，旧表头行为保持只告警/静默忽略 */
   const checkLedger=(where,c)=>{
@@ -284,6 +301,7 @@ function rowsToObjectsPlan(rows){
       ctx=f;
     }
     const where='第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+(rowFloor?'［楼层 '+rowFloor+'］':'');
+    checkBool(where,c);
     const floorCodes=codeMaps.get(ctx.id);
     let op=TABLE_OP_BY_LABEL[opRaw]||'';
     if(opRaw&&!op){ problem(where+'：操作「'+opRaw+'」无法识别（可用：新增 / 更新 / 替换）'); return; }
