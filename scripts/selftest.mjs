@@ -7652,6 +7652,43 @@ await section("N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节基线", async
 }
 });
 
+/* P2 表格真实往返：导出 → DSV 回读 → 规划 → 应用，锁列集/列序/取值 ---------- */
+await section("P2 表格真实往返：列集/列序/取值一致", async () => {
+{
+  api.resetState();
+  const p1 = api.baseObject('point', 'point.marker', { name: 'P1', x: 12, y: 14, angle: 30 });
+  p1.text = '入口';
+  const r1 = api.baseObject('rect', 'rect.area', { name: 'R1', x: 30, y: 22, width: 18, height: 12, angle: 15 });
+  const l1 = api.baseObject('line', 'line.boundary', { name: 'L1', points: [[55, 10], [72, 14], [68, 40]], closed: false });
+  api.state.objects = [p1, r1, l1];
+  api.syncActiveFloor();
+  const c1 = api.baseObject('rect', 'rect.area', { name: 'C1', x: 5, y: 6, shape: { type: 'circle', r: 3 }, width: 0, height: 0, angle: 0 });
+  api.state.floors.push({ id: 'floor.F2', name: '2F', objects: [c1], background: api.state.background,
+    viewport: { zoom: 1, panX: 0, panY: 0 } });
+
+  const exported = api.objectRowsAll();
+  const expected = exported.map(row => api.TABLE_COLUMNS.map(c => String(row[c] ?? '')));
+  const rows = api.DSV.parseRows(api.delimitedText(',').replace(/^\ufeff/, ''), ',');
+  eq('往返-列集列序与 TABLE_COLUMNS 一致', rows[0], api.TABLE_COLUMNS.slice());
+  eq('往返-行数与对象数一致', rows.length - 1, exported.length);
+  eq('往返-逐格取值一致', rows.slice(1), expected);
+
+  const plan = api.rowsToObjectsPlan(rows);
+  eq('往返-规划无错误', plan.errors.length, 0);
+  eq('往返-全部命中更新', plan.updates.length, exported.length);
+  api.applyTableImport(plan);
+  const pAfter = api.state.objects.find(o => o.name === 'P1');
+  const rAfter = api.state.objects.find(o => o.name === 'R1');
+  const lAfter = api.state.objects.find(o => o.name === 'L1');
+  const cAfter = api.state.floors.find(f => f.id === 'floor.F2').objects.find(o => o.name === 'C1');
+  eq('往返-点几何不变', [pAfter.x, pAfter.y, pAfter.angle], [12, 14, 30]);
+  eq('往返-矩形几何不变', [rAfter.x, rAfter.y, rAfter.width, rAfter.height, rAfter.angle], [30, 22, 18, 12, 15]);
+  eq('往返-折线节点不变', lAfter.points, [[55, 10], [72, 14], [68, 40]]);
+  eq('往返-圆半径不变', [cAfter.x, cAfter.y, cAfter.shape.r], [5, 6, 3]);
+  api.resetState();
+}
+});
+
 /* ---------------- 结果汇总 ---------------- */
 if (listOnly) {
   console.log(`共 ${sectionNames.length} 个分区（--filter=<regex> 选择执行）：`);

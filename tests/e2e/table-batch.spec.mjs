@@ -118,3 +118,36 @@ test('N-08：楼层重名时表格导入整批拒绝，现有数据不变', asyn
   expect(after).toEqual(before);
   expect(errors).toEqual([]);
 });
+
+test('P2：导出 CSV 原样回灌不漂移（浏览器内往返）', async ({ page }) => {
+  const errors = await openApp(page);
+  await page.evaluate(() => {
+    state.objects.length = 0;
+    const p = baseObject('point', 'point.marker');
+    p.name = 'P1'; p.text = '入口'; p.x = 12.34; p.y = 5.67; p.angle = 30;
+    const r = baseObject('rect', 'rect.area');
+    r.name = 'R1'; r.x = 1.5; r.y = 2.5; r.width = 6; r.height = 4; r.angle = 15;
+    state.objects.push(p, r);
+    requestRender();
+  });
+
+  const text = await page.evaluate(() => delimitedText(','));
+  const header = text.replace(/^\ufeff/, '').split(/\r?\n/)[0].split(',');
+  expect(header).toEqual(await page.evaluate(() => TABLE_COLUMNS.slice()));
+
+  await page.setInputFiles('#fileInput', {
+    name: 'roundtrip.csv', mimeType: 'text/csv', buffer: Buffer.from(text, 'utf8')
+  });
+  await expect(page.locator('#modalBackdrop')).toHaveClass(/show/);
+  await expect(page.locator('#modalBody')).toContainText('更新');
+  await page.locator('#modalFooter button', { hasText: '合并导入' }).click();
+
+  const after = await page.evaluate(() => state.objects.map(o => ({
+    name: o.name, x: o.x, y: o.y, angle: o.angle, width: o.width, height: o.height
+  })));
+  expect(after).toEqual([
+    { name: 'P1', x: 12.34, y: 5.67, angle: 30, width: 0, height: 0 },
+    { name: 'R1', x: 1.5, y: 2.5, angle: 15, width: 6, height: 4 }
+  ]);
+  expect(errors).toEqual([]);
+});
