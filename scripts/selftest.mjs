@@ -7756,6 +7756,19 @@ await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
 
 });
 
+/* ---------------- P2 批次 4：核心瞬态边界 ---------------- */
+await section("P2-CORE 批次 4：核心瞬态边界", async () => {
+{
+  /* CORE-P2-2：超大场地 fitView 也必须夹到 ZOOM_MIN，且 pan/zoom 有限 */
+  api.resetState();
+  api.state.site={kind:'rect',layerId:'layer.default',visible:true,locked:false,shape:{type:'rect',x:0,y:0,w:1e9,h:1e9}};
+  api.resetFrameRef(); api.fitView();
+  eq('CORE-P2-2 超大场地缩放夹到 ZOOM_MIN', api.state.viewport.zoom, api.APP_LIMITS.ZOOM_MIN);
+  ok('CORE-P2-2 缩放/平移均为有限值', [api.state.viewport.zoom,api.state.viewport.panX,api.state.viewport.panY].every(Number.isFinite));
+}
+
+});
+
 /* ---------------- 结果汇总 ---------------- */
 if (listOnly) {
   console.log(`共 ${sectionNames.length} 个分区（--filter=<regex> 选择执行）：`);
