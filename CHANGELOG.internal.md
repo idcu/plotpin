@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2 批次 11：性能打点 3 条
+
+- **Commit Hash**：
+  - CORE-P2-3：`待回填`
+  - CORE-P2-4：`待回填`
+  - IO-P2-11：`待回填`
+  - 本批收尾 `docs(changelog)`：`待回填`
+- **核心改动**：
+  - CORE-P2-3：新增 `tests/perf/p2-perf.perf.mjs` 真实 Chromium 用例，量化「历史快照按 `objects` 与 `floors[active].objects` 两条路径各复制一份」的堆占用；对照组仅测试内临时移除活动楼层别名，生产代码未改。
+- **验证数据**：
+  - CORE-P2-3：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs --repeat-each=2`（1920×1080@DPR1，10k 对象，20 次 pushHistory，CDP 强制 GC ×2）：当前 19.657 MB / 826.1~840.5 ms；对照布局 9.788 MB / 420.5~423.1 ms；比值 2.01×；快照对象实例 400,000 vs 200,000。两次复跑堆读数一致到 0.01 MB。
+- **遗留 TODO / 风险**：
+  - CORE-P2-3 缺陷仍存在（每条历史快照多存一份活动楼层对象），本批按约束只打点不改业务逻辑；修复需在快照前按引用/对象 id 归一化活动楼层别名。
+
 ## 2026-11-08 · P2 批次 9/10：目录/停车/UI 6 条 + 代码卫生/i18n 3 条
 
 - **Commit Hash**：

@@ -158,6 +158,23 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 
 基准代价：每次**拖拽开始/结束**各触发一次静态层重建（选中/悬停为零次）。10k 对象时约 0.2 s，与改造前「选中即重建」的总次数相同，只是把成本从点选移到了真正开始改形时。
 
+#### 4.1.6 历史快照活动楼层别名复制（2026-11-08，CORE-P2-3 打点）
+
+命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs --repeat-each=2`（真实 Chromium 1920×1080@DPR1，headless/SwiftShader，10,000 对象，20 次 `pushHistory`；堆读数经 CDP `HeapProfiler.collectGarbage` 强制 GC 两次后取 `Runtime.getHeapUsage`）。两次独立复跑读数一致到 0.01 MB。
+
+| 指标 | 当前实现 | 对照布局（快照前临时去掉活动楼层别名，仅测试内构造） | 变化 | 结论 |
+|---|---|---|---|---|
+| 20 条历史堆增量 | 19.657 MB（20,611,612 B） | 9.788 MB（10,263,472 B） | **2.01×** | 活动楼层对象被存两份 |
+| 20 次 `pushHistory` 同步耗时 | 826.1 / 840.5 ms | 420.5 / 423.1 ms | 2.00× | 与堆增量同比例 |
+| 每条快照对象实例数 | 400,000（顶层 200,000 + 楼层 200,000） | 200,000 | 2× | 两条路径是不同数组实例 |
+| 单条快照堆占用 | 1,006.43 KB | — | — | 仅记录 |
+
+根因：`state.objects` 与 `state.floors[activeFloorId].objects` 指向同一数组（`syncActiveFloor()` 建立），
+`snapshotHistoryState` 按 `src.objects` 与 `src.floors[*].objects` 两条路径分别遍历，未按对象 id / 引用去重，
+因此每条历史快照保留两份内容相同的对象实例。N-24 的结构共享只消除了「跨快照复制」与照片 base64 复制，未消除这条路径重复。
+
+本项只补打点，未改业务代码；对照列是同一 harness 下的量化上限，不作为已修复证据。
+
 #### 4.1.5 历史栈含照片内存与 10k 快照列表（2026-11-08，N-24 复测）
 
 命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-24"`（真实 Chromium，CDP `HeapProfiler.collectGarbage` + `Runtime.getHeapUsage` 测堆）。夹具：1000 对象 + 10 张 100 KB 内嵌 base64 照片；参考组用 `JSON.parse(JSON.stringify(state))` 复刻改造前的整份深拷贝 20 条。
