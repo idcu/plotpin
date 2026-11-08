@@ -176,6 +176,36 @@ test('导出器抛异常：主工程不回退，插件禁用并带上异常原�
   await drawPoint(page);
 });
 
+test('RT-P2-09：卸载后仍被使用的类型保留，同一插件重载可覆盖旧定义', async ({ page }) => {
+  await openApp(page);
+  const spec = {
+    id: 'demo.reload',
+    apiVersion: '1.0',
+    capabilities: ['types', 'state:write'],
+    code: [
+      'PlotPin.registerObjectType({id:"type.reload",kind:"point",name:"RELOAD-1",icon:"circle"});',
+      'PlotPin.addObjects([{kind:"point",typeId:"type.reload",x:10,y:10}]);'
+    ].join('\n')
+  };
+  expect((await loadPlugin(page, spec)).ok).toBe(true);
+  await expect.poll(() => page.evaluate(() => state.objects.some(o => o.typeId === 'type.reload'))).toBe(true);
+  await page.evaluate(() => window.PlotPin.unloadPlugin('demo.reload'));
+  expect(await page.evaluate(() => state.objectTypes.filter(t => t.id === 'type.reload').length)).toBe(1);
+
+  const reload = Object.assign({}, spec, {
+    code: 'PlotPin.registerObjectType({id:"type.reload",kind:"point",name:"RELOAD-2",icon:"circle"});'
+  });
+  const again = await loadPlugin(page, reload);
+  expect(again.ok).toBe(true);
+  const after = await page.evaluate(() => ({
+    count: state.objectTypes.filter(t => t.id === 'type.reload').length,
+    name: (state.objectTypes.find(t => t.id === 'type.reload') || {}).name,
+    inUse: state.objects.filter(o => o.typeId === 'type.reload').length
+  }));
+  expect(after).toEqual({ count: 1, name: 'RELOAD-2', inUse: 1 });
+  await page.evaluate(() => window.PlotPin.unloadPlugin('demo.reload'));
+});
+
 test('原型污染：Worker 域内改原型不影响主工程', async ({ page }) => {
   await openApp(page);
   const r = await loadPlugin(page, {

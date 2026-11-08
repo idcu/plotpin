@@ -134,11 +134,13 @@
     if (typeof global.renderTypes === 'function') global.renderTypes();
     if (typeof global.requestRender === 'function') global.requestRender();
   }
-  /** 注册类型进入当前工程（若不存在）；同时已写入内置类型表，后续新建/载入工程都会带上 */
+  /** 注册类型进入当前工程（若不存在则追加；同 id 覆盖时替换定义）；后续新建/载入工程都会带上 */
   function installType(t) {
     const st = appState();
-    if (st && Array.isArray(st.objectTypes) && !st.objectTypes.some(x => x && x.id === t.id)) {
-      st.objectTypes.push(cloneJSON(t));
+    if (st && Array.isArray(st.objectTypes)) {
+      const i = st.objectTypes.findIndex(x => x && x.id === t.id);
+      if (i >= 0) st.objectTypes[i] = cloneJSON(t);
+      else st.objectTypes.push(cloneJSON(t));
     }
     refreshTypeUI();
   }
@@ -271,10 +273,21 @@
   function addType(def, ownerId) {
     const t = normalizeObjectType(def);
     const list = builtinTypes();
-    if (pluginTypes.has(t.id) || (list && list.some(x => x && x.id === t.id))) throw new Error('类型 id 已存在：' + t.id);
+    const prev = pluginTypes.get(t.id);
+    const prevOwner = typeOwners.get(t.id) || '';
+    /* RT-P2-09：卸载时仍被对象引用的类型会保留注册（否则对象丢失外观）。
+       同一插件重载需允许覆盖自己的旧定义，否则会被「类型 id 已存在」永久拒绝；
+       其它插件或可信调用方仍不可抢占。 */
+    const sameOwner = !!prev && !!ownerId && prevOwner === ownerId;
+    if (prev && !sameOwner) throw new Error('类型 id 已存在：' + t.id);
+    if (!prev && list && list.some(x => x && x.id === t.id)) throw new Error('类型 id 已存在：' + t.id);
     pluginTypes.set(t.id, t);
     if (ownerId) typeOwners.set(t.id, ownerId);
-    if (list) list.push(t);
+    if (list) {
+      const i = list.findIndex(x => x && x.id === t.id);
+      if (i >= 0) list[i] = t;
+      else list.push(t);
+    }
     installType(t);
     return true;
   }
@@ -549,6 +562,8 @@
   function removePluginRegistrations(rec) {
     for (let i = exporters.length - 1; i >= 0; i--) if (exporters[i].pluginId === rec.id) exporters.splice(i, 1);
     for (let i = importers.length - 1; i >= 0; i--) if (importers[i].pluginId === rec.id) importers.splice(i, 1);
+    /* RT-P2-09：仍被对象引用的类型必须保留（面板/渲染/存盘需要），
+       同 id 插件重载由 addType 的同 owner 覆盖分支放行；未被引用的类型照常清理。 */
     Array.from(rec.types).forEach(id => { if (!typeInUse(id)) removeType(id); });
     rec.types.clear();
     syncExportOptions();
