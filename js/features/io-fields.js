@@ -61,10 +61,10 @@ function exportShapeSummary(o){
     const tt=areaShapeType(o), sh=o.shape||{};
     label=AREA_SHAPE_LABELS[tt]||'';
     if(tt==='rect'){ w=o.width; h=o.height; }
-    else if(tt==='parallelogram'){ w=o.width; h=o.height; param=String(Math.round(parallelogramSkew(sh))); }
+    else if(tt==='parallelogram'){ w=o.width; h=o.height; param=fmt(parallelogramSkew(sh)); }
     else if(tt==='circle'){ w=h=2*sh.r; }
     else if(tt==='ellipse'){ w=2*sh.rx; h=2*sh.ry; }
-    else { w=h=2*sh.r; param=Math.round(Number(sh.a0)||0)+','+Math.round(Number(sh.a1)||0); }
+    else { w=h=2*sh.r; param=fmt(Number(sh.a0)||0)+','+fmt(Number(sh.a1)||0); }
   }
   return {w,h,angle,label,param};
 }

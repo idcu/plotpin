@@ -1679,7 +1679,7 @@ await section("28. 表格导入导出往返：节点坐标/闭合/形状/标注�
   eq('导出-圆形形状列', byCode['C1']['形状'], '圆形');
   eq('导出-圆形直径列', byCode['C1']['宽度'], '10.00');
   eq('导出-扇形形状列', byCode['S1']['形状'], '扇形');
-  eq('导出-扇形起止角', byCode['S1']['形状参数'], '30,120');
+  eq('导出-扇形起止角按精度格式化', byCode['S1']['形状参数'], '30.00,120.00');
   eq('导出-点设备无闭合列', byCode['P1']['闭合'], '');
   eq('导出-点设备无节点坐标列', byCode['P1']['节点坐标'], '');
   ok('导出-列头含全部新列', ['形状','形状参数','闭合','标注类型','节点坐标'].every(k=>api.TABLE_COLUMNS.includes(k)));
@@ -1718,8 +1718,8 @@ await section("28.3 导出字段表 + 行渲染器单一来源（B-08）：列/�
   eq('字段表-矩形参数', rows['R1']['参数'], '矩形');
   eq('字段表-圆形参数', rows['C1']['参数'], '圆形');
   eq('字段表-圆形宽度取外接盒', rows['C1']['宽度'], '10.00');
-  eq('字段表-扇形参数', rows['S1']['参数'], '扇形 30,120');
-  eq('字段表-平行四边形参数', rows['G1']['参数'], '平行四边形 30');
+  eq('字段表-扇形参数按精度格式化', rows['S1']['参数'], '扇形 30.00,120.00');
+  eq('字段表-平行四边形参数按精度格式化', rows['G1']['参数'], '平行四边形 30.00');
   eq('字段表-闭合折线参数', rows['L1']['参数'], '闭合');
   eq('字段表-开放折线参数', rows['L2']['参数'], '');
   eq('字段表-测距参数', rows['D1']['参数'], ' 测距');
@@ -4101,7 +4101,7 @@ await section("46. 平行四边形：区域与矢量场地共用的参数形状"
   /* 表格导出/导入：形状列 + 倾角参数往返 */
   const row=api.objectRows().find(r=>r['编号']==='PAR');
   eq('表格-平行四边形形状列', row['形状'], '平行四边形');
-  eq('表格-平行四边形倾角参数', row['形状参数'], '30');
+  eq('表格-平行四边形倾角参数按精度格式化', row['形状参数'], '30.00');
   eq('表格-平行四边形宽度', row['宽度'], '10.00');
   const imp=api.baseObject('rect','rect.area',{x:0,y:0});
   ok('表格导入-平行四边形成功', api.applyRowShape(imp,'平行四边形',{x:2,y:3,w:8,h:4,angle:45,params:[20]}));
@@ -4109,6 +4109,15 @@ await section("46. 平行四边形：区域与矢量场地共用的参数形状"
   approx('表格导入-倾角20°', api.parallelogramSkew(imp.shape), 20, 1e-9);
   eq('表格导入-面积32', api.shapeArea(imp), 32);
   approx('表格导入-旋转角45°', imp.angle, 45, 1e-9);
+
+  /* P2-A2：形状参数不再 Math.round 成整数，按 settings.precision 输出，导入保留小数 */
+  const parFrac=api.baseObject('rect','rect.area',{x:0,y:0,width:10,height:4,shape:{type:'parallelogram',skew:30.5}});
+  eq('表格-平行四边形小数倾角导出不取整', api.exportShapeSummary(parFrac).param, '30.50');
+  const secFrac=api.baseObject('rect','rect.area',{x:0,y:0,shape:{type:'sector',r:5,a0:12.5,a1:150.25}});
+  eq('导出-扇形小数起止角不取整', api.exportShapeSummary(secFrac).param, '12.50,150.25');
+  const impFrac=api.baseObject('rect','rect.area',{x:0,y:0});
+  api.applyRowShape(impFrac,'平行四边形',{x:2,y:3,w:8,h:4,angle:0,params:[30.5]});
+  approx('表格导入-倾角小数保留', api.parallelogramSkew(impFrac.shape), 30.5, 1e-9);
 
   /* 工程迁移：尺寸保留（平行四边形尺寸存于 width/height）、倾角钳制 */
   const m=api.migrateProject({schema:'offline-drawing-annotation/v1',objects:[
