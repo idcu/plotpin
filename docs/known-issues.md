@@ -130,6 +130,8 @@
 | 10 | 代码卫生与 i18n | CORE-15/16、RT-18 | `geometry.js`、`persistence.js`、核心默认文案、`collab.js` | 4 文件；删死分支、核心中文走 `L()`、调试全局开关 | 中；CORE-16 会变动 i18n 覆盖率基线，需同步 facts |
 | 11 | 性能（无打点不提交） | CORE-3/4、IO-11 | `model.js`、`snapshot.js`、`io-fields.js` | 3 文件；必须补 heapUsed / 帧时打点与 perf-browser 复跑 | 高；历史结构共享与快照索引改动面大，单独成批 |
 
+**批次状态（2026-11-08）**：批次 1（B 全部 13 条）与批次 2（表格/CSV 往返 9 条）已交付；批次 1 为纯文档口径，结论见 §2.5；批次 2 的修复与验证依据见 §2.6。其余批次未开始。
+
 **C 类（4 条）暂不排期**：IO-P2-3 需 Excel 实机确认 TSV 引号行为；IO-P2-17 需 CAD 查看器核对 mm/m 读数；IO-P2-20 需多页 PDF 样本并由产品决定“按页绑定还是限单页”；RT-P2-12 需产品决定未配置阈值类型的默认规则语义。
 
 **B 类补充**：CORE-P2-13/14 已在 N-27 收敛（§2.4），RT-P2-20 的 `onmessage/onerror` 已在 N-02 沙箱硬化中封堵；这三条只需在文档/归档口径中标注，不再改代码。
@@ -170,6 +172,26 @@
 | RT-P2-17 | 已说明：`MARK_DIRTY_PROFILES` 五种粒度中 `clear`/`floor` 不广播，其余广播；ARCHITECTURE 已列明，代码注释本轮未改 | [ARCHITECTURE.md](ARCHITECTURE.md) §一次编辑的数据流 |
 | RT-P2-19 | 已降级为限制：协作入站分片 TTL 淘汰仅由“收到新消息”驱动，无空闲定时器，最长残留 30 s | [ARCHITECTURE.md](ARCHITECTURE.md) §协作合并 |
 | RT-P2-20 | 已收敛（归档）：沙箱 Worker 的 `onmessage`/`onerror` 已在 N-02 封堵，见 §1 P0-4；端口通道不在契约内 | [known-issues.md](known-issues.md) §1 P0-4 |
+
+### 2.6 A 类表格/CSV 往返批次（9 条已修复）
+
+> 本表只覆盖批次 2 的 9 条；其余 A 类条目仍在各自批次排期，状态不变；C 类 4 条未动。
+> 「已修复」= 代码已改且断言可复跑；条目内的「未验证」保留在 commit body 与 §2.6 末行，不因修复而降级为已验证。
+
+| 编号 | 状态 | 修复要点 | 提交 | 验证依据 |
+|---|---|---|---|---|
+| IO-P2-1 | 已修复 | CSV/TSV 表头改走 `DSV.formatRows/quoteCell`，与数据行共用分隔符/引号/公式前缀策略 | `3d936f8` | selftest +1 表头转义断言（3024 通过）；字段表/表头未变 |
+| IO-P2-2 | 已修复 | 台账 CSV/TSV 行尾统一 CRLF；`.gitattributes` 对 golden 标记 `-text` 保字节 | `94bff73`、`75b040c` | selftest +1（3025）；golden csv/tsv 各 +12 B，仅 LF→CRLF，`--ignore-cr-at-eol` 为空 |
+| IO-P2-4 | 已修复 | 公式防护对字面单引号可逆：`''`→`'`，仅危险前缀去引号 | `292dffe` | selftest +2（3027）；`'=SUM(A1)` 往返保持原文；XLSX inlineStr 仍会丢一层（未变） |
+| IO-P2-5 | 已修复 | 角度列改用 `fmt(shape.angle)`，与 X/Y/宽高/长度/面积同精度 | `605d65b` | selftest +1（3028）；golden 仅 3 格 `30/15/0`→`30.00/15.00/0.00`，字段/列序未变 |
+| IO-P2-7 | 已修复 | 布尔改三态：未知「显示/锁定」保留原值并告警，「闭合」仍按否；严格模式行为不变 | `79a8d7e` | selftest +2（3030） |
+| IO-P2-8 | 已修复 | `applyRowShape` 先校验后写入；参数非法时保留原几何并在规划阶段告警 | `bbbfc22` | selftest +2（3032）；B-08 500 行规划 3 ms/应用 8 ms |
+| IO-P2-9 | 已修复 | 目标楼层 `objects` 非数组时规划阶段拒绝该行，不再静默回退当前层 | `a6264b3` | selftest +2（3034） |
+| IO-P2-13 | 已修复 | 盲区 GeoJSON 按 `settings.precision` 取整、去相邻重复点、退化面跳过、外环统一逆时针、index 连续 | `560259c` | selftest +3（3037）；golden 未变（原值已为整数且逆时针） |
+| IO-P2-21 | 已修复 | XLSX 逐表 try/catch，单表超 5 万行只跳过并计数（`skippedSheets`），全部超限仍报错 | `3ea90f8` | selftest +2（3039，多工作表构造）；真实 5 万行解析耗时未测 |
+
+> 真实往返（不只静态断言）：`4d439dc` 新增 selftest 分区「P2 表格真实往返：列集/列序/取值一致」，固定 1F 点/矩形/折线 + 2F 圆走「导出 → `DSV.parseRows` → `rowsToObjectsPlan` → apply」全链路；e2e 新增浏览器内 `delimitedText(',')` → `#fileInput` → 合并回灌并断言字段不漂移。最终 selftest 3048 通过 / 0 失败，e2e 111 用例（110 通过 + 1 条件跳过）。
+> 仍保留的「未验证」：Excel 实机打开/另存往返、GIS 软件绕向校验、真实 5 万行 XLSX 解析耗时、损坏工程 IndexedDB 恢复路径、预览面板非法形状的视觉提示。
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 

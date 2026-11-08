@@ -4,6 +4,38 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2 批次 1/2：B 类文档口径清零 + A 类表格/CSV 往返 9 条
+
+- **Commit Hash**：
+  - B 组 13 笔（纯文档）：`d126194` IO-P2-6、`1c8e302` IO-P2-10、`9067316` IO-P2-12、`3b9cbb8` CORE-P2-5、`dcc2227` CORE-P2-6、`bf93b17` CORE-P2-13、`4e6c0ea` CORE-P2-14、`a2e4b58` RT-P2-02、`f2e0d6d` RT-P2-06、`0185dea` RT-P2-10、`a6c8243` RT-P2-17、`ef9e9d4` RT-P2-19、`a0e59c4` RT-P2-20。
+  - A 组 9 笔（代码）：`3d936f8` IO-P2-1、`94bff73` IO-P2-2、`292dffe` IO-P2-4、`605d65b` IO-P2-5、`79a8d7e` IO-P2-7、`bbbfc22` IO-P2-8、`a6264b3` IO-P2-9、`560259c` IO-P2-13、`3ea90f8` IO-P2-21。
+  - 测试 2 笔：`4d439dc` 真实往返 selftest 分区 + e2e 回灌，`75b040c` CRLF 行尾适配。
+- **核心改动**：
+  - B 组只改文档与归档表述，未动业务代码；`docs/known-issues.md` 新增 §2.5，逐条标注「已降级为限制 / 已收敛（归档）/ 已确认（静态核对）」，未把任何已知限制写成「已修复」，「未验证」原样保留。
+  - IO-P2-1：`delimitedFromTable` 表头改走 `DSV.formatRows/quoteCell`，与数据行共用分隔符、引号、公式前缀策略。
+  - IO-P2-2：台账 CSV/TSV `eol` 统一 CRLF；`.gitattributes` 对 `tests/golden/*.csv|*.tsv` 标记 `-text`，避免 Git 归一化改写 golden 字节。
+  - IO-P2-4：`formulaGuard` 对字面单引号加层、`formulaUnguard` 先还原 `''`→`'` 再仅对危险前缀去引号，`'=SUM(A1)` 往返保持原文。
+  - IO-P2-5：`EXPORT_FIELD_DEFS` 角度列由裸值改为 `fmt(c.shape.angle)`，与 X/Y/宽高同精度。
+  - IO-P2-7：新增 `tableBoolValue` 三态（`tableBool` 薄包装）；未知「显示/锁定」保留原值并在非严格模式告警，「闭合」未知值仍按否。
+  - IO-P2-8：`applyRowShape` 重写为「先校验后写入」；更新路径形状参数非法时规划阶段告警并保留原几何。
+  - IO-P2-9：`rowsToObjectsPlan` 不再把非数组 `objects` 静默转 `[]`，目标楼层数据异常时拒绝该行；`codeMaps` 同步置 null。
+  - IO-P2-13：`buildBlindSpotGeoJson` 按 `settings.precision` 取整、去相邻重复点、退化面跳过、外环 shoelace<0 时 reverse、`index` 按输出顺序连续编号。
+  - IO-P2-21：`xlsxReadRows` 逐表 try/catch，单表 >5 万行跳过并计数（`rows.skippedSheets`），主表继续导入；全部超限仍走原报错；`io-import` 弹警告。
+  - 公共抽象：复用 `TABLE_COLUMNS`、`DSV.formatRows/quoteCell`、`formulaGuard/formulaUnguard`、`tableNum/parseShapeParams`；新增文件内 `tableBoolValue`（`io-table.js`）与 `skippedSheets` 非枚举属性，无跨模块新 API、无调用方签名变更。
+- **验证数据**：
+  - `selftest`：3048 通过 / 0 失败（批次前 3023，+25，未删断言、未加 skip）；新增末尾分区「P2 表格真实往返：列集/列序/取值一致」，固定 1F 点/矩形/折线 + 2F 圆走「导出 → `DSV.parseRows` → `rowsToObjectsPlan` → apply」全链路并逐格比对。
+  - `e2e`：111 用例 / 110 通过 / 1 条件跳过（批次前 110 / 109 + 1）；新增 `table-batch.spec.mjs` 浏览器内 `delimitedText(',')` → `#fileInput` → 合并回灌，断言表头=`TABLE_COLUMNS`、对象字段不漂移；`export-scope`、`smoke` 行切分改 `/\r?\n/` 适配 CRLF。
+  - `check-gates`：正面基线 6/6、人为破坏 10/10；`check-discipline --strict`：13/13。
+  - `check.mjs --selftest`：契约 7/0、插件 API 23/0/0、i18n 45.34%（缺口 7 / UI 1 / 模板 0）、SW `VERSION=46`（49 个预缓存输入一致）。
+  - golden 字节变更（均为口径修正，字段/表头/列序未变）：`plain-scene.csv` 619→631 B（仅 LF→CRLF，`--ignore-cr-at-eol` 为空）、`plain-scene.tsv` 617→629 B（同上）、`plain-scene.xlsx` 9,795→9,804 B（3 个角度单元格 `30/15/0`→`30.00/15.00/0.00`）；`blindspots.geojson` 769 B 未变（原值已整数且逆时针）。
+  - 产物：815,054 B / gzip 253,443 B / 余量 24,626 B；相对批次前 812,836 B **+2,218 B / gzip +775 B / 余量 −2,218 B**（余量仍高于 15,000 B 止损线）；SHA256 `d82e3718…`，二次构建一致。
+- **遗留 TODO / 风险**：
+  - 保留「未验证」：Excel 实机打开/另存往返、GIS 软件绕向校验、真实 5 万行 XLSX 解析耗时、损坏工程 IndexedDB 恢复路径、预览面板非法形状的视觉提示。
+  - IO-P2-4 仅让 CSV/TSV 可逆；XLSX inlineStr 不加引号，字面单引号经 XLSX 往返仍会丢一层（未变）。
+  - IO-P2-7 只接受 `true/false/1/0/y/n/yes/no` 等已知变体，外部 Excel 的 `TRUE/FALSE` 大小写变体未逐一覆盖。
+  - CRLF golden 依赖 `.gitattributes` 的 `-text`；若未来改动该规则，golden 会被归一化并导致逐字节断言失败。
+  - C 类 4 条（IO-P2-3/17/20、RT-P2-12）未排期、未改动，与本次 A 类修复无耦合。
+
 ## 2026-11-08 · RT-P1-09 快照差异纳入图层名称与类型表结构
 
 - **Commit Hash**：`f9a5843`（feat(snapshot)：场景差异补图层名与类型表结构，保持既有分类优先级）。
