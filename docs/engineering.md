@@ -21,6 +21,7 @@ js/core/              第 1 层：状态、模型、渲染、交互、持久化
 js/features/          第 2 层：页面级功能（导出、面板、规则、插件…）
 js/core/app.js        第 3 层：入口装配（最后加载）
 scripts/              开发期工具与门禁（零运行时依赖）
+scripts/lib/          门禁共享工具（walkFiles / readJson）
 tests/e2e/            Playwright 功能用例（devDependency）
 tests/perf/           Playwright 真实浏览器性能采集
 tests/golden/         逐字节 golden 基线

@@ -20,6 +20,20 @@
   - `positiveNum` 与 `finiteNumber` 仍是同文件相邻的小工具，语义不同（>0 与有限数），未合并。
   - 两套切变上限的交互（图片切变与平行四边形倾角同时使用）仍无交叉断言。
 
+## 2026-11-08 · 减字节专项：门禁脚本 walk/readJson 收敛
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - 新增 `scripts/lib/fs-utils.mjs`：`walkFiles(dir,{ext,skip,out})` 与 `readJson(file)`。
+  - 替换四处 walk 实现：`check.mjs`、`i18n-scan.mjs`、`check-contracts.mjs`（`walkJs`）、`check-discipline.mjs`（相对路径适配）；`check-contracts.mjs` 的 `readJson` 改用共享实现。
+  - **未合并的两处**：`check-ngm.mjs#walkFiles` 的 skip 规则依赖目录位置（`vendor` 仅在 `public` 下跳过），`check-sw.mjs#fail` 是立即 `process.exit(1)` 而 `check-ngm.mjs#fail` 是累积 errors，两者行为不同，保留原实现。
+- **验证数据**：
+  - 脚本层（不计入 dist，dist 仍 **833,497 B / 余量 6,183 B**）；`scripts/` 下 walk 定义 5 处 → 2 处，readJson 定义 2 处 → 1 处（不含 ngm 的容错包装）。
+  - i18n 覆盖率复测 **46.04%**（缺口 9）；check 总闸 35 个脚本语法正确；e2e 123 通过 + 1 跳过；五道门禁全绿；selftest 3598 不变。
+- **遗留 TODO / 风险**：
+  - `check-ngm.mjs` 与 `check-sw.mjs` 的 walk/fail 仍各自维护；若后续 skip 规则统一，可再收敛。
+  - 新增 `scripts/lib/` 目录不参与 `check.mjs` 的入口引用检查（只扫 `scripts/*.mjs` 顶层），语法由各门禁运行时实际加载覆盖。
+
 ## 2026-11-08 · 批次 E（3/3）：显示网格步长对齐吸附步长
 
 - **Commit Hash**：`04a653c`

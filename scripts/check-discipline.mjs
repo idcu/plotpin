@@ -16,22 +16,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { walkFiles } from './lib/fs-utils.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STRICT = process.argv.includes('--strict');
 const read = (p) => { try { return fs.readFileSync(path.join(ROOT, p), 'utf8'); } catch { return ''; } };
 const exists = (p) => fs.existsSync(path.join(ROOT, p));
 const list = (dir) => { try { return fs.readdirSync(path.join(ROOT, dir)); } catch { return []; } };
-const walk = (dir, out = []) => {
-  for (const e of list(dir).length ? fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }) : []) {
-    const rel = path.posix.join(dir, e.name);
-    if (e.isDirectory()) {
-      if (['node_modules', '.git', 'ngm.vendor', 'dist', '.tmp'].includes(e.name)) continue;
-      walk(rel, out);
-    } else out.push(rel);
-  }
-  return out;
-};
+const walk = (dir) => walkFiles(path.join(ROOT, dir), {
+  skip: ['node_modules', '.git', 'ngm.vendor', 'dist', '.tmp']
+}).map((f) => path.relative(ROOT, f).split(path.sep).join('/'));
 
 const pkg = (() => { try { return JSON.parse(read('package.json')); } catch { return null; } })();
 const scripts = (pkg && pkg.scripts) || {};

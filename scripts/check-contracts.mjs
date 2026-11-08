@@ -20,12 +20,13 @@
  *   node scripts/check-contracts.mjs --selftest   用临时树证明判据会红（牙齿）
  */
 
-import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import vm from 'node:vm';
+import { walkFiles, readJson } from './lib/fs-utils.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..');
@@ -33,20 +34,6 @@ const repoRoot = join(here, '..');
 function argValue(name) {
   const hit = process.argv.find(a => a.startsWith(`--${name}=`));
   return hit ? hit.slice(name.length + 3) : null;
-}
-
-function walkJs(dir, out = []) {
-  if (!existsSync(dir)) return out;
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) walkJs(p, out);
-    else if (p.endsWith('.js')) out.push(p);
-  }
-  return out;
-}
-
-function readJson(file) {
-  return JSON.parse(readFileSync(file, 'utf8'));
 }
 
 /** 按点分路径取值（契约里用 `version` 这种浅路径，不引入 JSONPath）。 */
@@ -142,7 +129,7 @@ function check(root) {
 
   /* 3. 文件头唯一且与文件名一致 */
   if (contract.headers) {
-    const files = walkJs(join(root, contract.headers.root));
+    const files = walkFiles(join(root, contract.headers.root), { ext: '.js' });
     readings++;
     const offenders = [];
     for (const f of files) {

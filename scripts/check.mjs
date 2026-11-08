@@ -19,10 +19,11 @@
  *
  * 用法：node scripts/check.mjs [--selftest]
  */
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
+import { walkFiles } from './lib/fs-utils.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -30,13 +31,7 @@ const errors = [];
 const html = readFileSync(join(root, 'index.html'), 'utf8');
 
 /* 1. 语法校验 */
-function walk(dir) {
-  return readdirSync(dir).flatMap(name => {
-    const p = join(dir, name);
-    return statSync(p).isDirectory() ? walk(p) : (p.endsWith('.js') ? [p] : []);
-  });
-}
-const jsFiles = walk(join(root, 'js'));
+const jsFiles = walkFiles(join(root, 'js'), { ext: '.js' });
 /* 工程脚本（开发工具）只需语法校验，不参与入口引用检查 */
 const toolFiles = readdirSync(join(root, 'scripts')).filter(n => n.endsWith('.mjs')).map(n => join(root, 'scripts', n));
 /* Service Worker 必须在站点根目录：放在 js/ 下默认 scope 仅 /js/，无法接管 index.html 与全站离线缓存 */

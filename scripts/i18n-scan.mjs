@@ -30,10 +30,11 @@
  *
  * 用法：node scripts/i18n-scan.mjs [--json|--check]
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 import vm from 'node:vm';
+import { walkFiles } from './lib/fs-utils.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -46,13 +47,6 @@ const ADAPTER_FILES = new Set([
   'js/features/plugins.js',
   'js/features/rules.js'
 ]);
-
-function walk(dir) {
-  return readdirSync(dir).flatMap(name => {
-    const p = join(dir, name);
-    return statSync(p).isDirectory() ? walk(p) : (p.endsWith('.js') ? [p] : []);
-  });
-}
 
 /** 逐字符扫描：跳过注释，收集字符串字面量与其起始偏移 */
 function literalsOf(src) {
@@ -180,7 +174,7 @@ function templateTexts(seg) {
 }
 
 const TRANSLATED_CALL = /(?:\bL|\bI18N\.p|\bI18N\.t|\bI18N\.fmt|\bI18N\.tpl|\btoast|\bcommitChange|\bopenModal|\bshowConfirm|\bcollabNotifyThrottled)\s*\(\s*$/;
-const files = walk(join(root, 'js')).filter(f => !f.endsWith(join('js', 'common', 'i18n.js')));
+const files = walkFiles(join(root, 'js'), { ext: '.js' }).filter(f => !f.endsWith(join('js', 'common', 'i18n.js')));
 const byValue = new Map();
 for (const f of files) {
   const src = readFileSync(f, 'utf8');
