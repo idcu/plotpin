@@ -7571,6 +7571,10 @@ await section("N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节基线", async
   }
   fixture();
   const csv = api.delimitedText(',');
+  /* IO-P2-5：角度列与 X/Y 同精度（fmt），不再输出裸整数 */
+  const csvRows = api.DSV.parseRows(csv.replace(/^\ufeff/, ''), ',');
+  const angleIdx = csvRows[0].indexOf('角度');
+  eq('角度列按精度格式化', csvRows.slice(1).map(r => r[angleIdx]).join('|'), '30.00|15.00|0.00');
   const tsv = api.delimitedText('\t');
   const xlsxTable = api.xlsxExportTable();
   const xlsx = api.Xlsx.build(xlsxTable, '图纸标注');
