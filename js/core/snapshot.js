@@ -108,8 +108,8 @@ async function restoreSnapshotById(pid,sid){
   await ensureBackgroundAsset(next);
   if(typeof ensureFloorBackgroundAssets==='function') await ensureFloorBackgroundAssets(next);
   pushHistory();                               /* 回滚前的当前状态进入撤销栈 */
-  state=next; selectedIds.clear(); draft=null; coverageResult=null;
-  await afterStateLoaded(false);
+  state=next; selectedIds.clear();
+  await afterStateLoaded(false,{keepCalib:true});  /* 瞬态统一清理；比例尺校准点保留，仿射草稿清空 */
   markDirty('restore');                        /* 立即落盘，刷新后保持回滚结果 */
   return true;
 }

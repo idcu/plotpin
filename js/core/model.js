@@ -236,6 +236,23 @@ function uid(prefix='O'){
 }
 /** 当前生效的编号作用域（批量创建时由 beginObjectNameScope 建立） */
 let objectNameScope = null;
+
+/**
+ * 统一清理交互瞬态（N-15）：草稿、拖拽、框选、捕捉高亮、参考线、覆盖率叠加。
+ * 载入工程 / 撤销 / 重做 / 切层 / 快照回滚 / 协作合并都走这里，避免各入口漏清。
+ * keepCalib=true 时保留比例尺校准点（快照回滚不应打断校准）；仿射校准草稿始终清空。
+ * 只清内存瞬态，不改 state/history，也不触发落盘。
+ */
+function resetTransientInteractionState(opts){
+  const keepCalib=!!(opts&&opts.keepCalib);
+  draft=null; drag=null; rubber=null;
+  activeOsnap=null; trackLine=null; refEdge=null; osnapMode=null;
+  coverageResult=null;
+  if(typeof clearGuides==='function') clearGuides();
+  if(!keepCalib) calibPoints=[];
+  affinePairs=[]; calibSelection=null; calibUndoStack=[];
+  if(typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.remove('panning');
+}
 /**
  * 编号作用域：一次性聚集合法的已占用编号，作用域内 reserve() 只做集合查找。
  * 起点沿用旧 nextObjectId 的语义：从“已占用数量 + 1”开始找空位并跳过已占用编号。

@@ -2,6 +2,20 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-15 交互瞬态统一清理
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/core/model.js`：新增 `resetTransientInteractionState({keepCalib})`，统一清空 `draft/drag/rubber/activeOsnap/trackLine/refEdge/osnapMode/coverageResult` 与参考线；`keepCalib=true` 保留比例尺校准点，仿射草稿 `affinePairs` 始终清空。
+  - `js/core/persistence.js`：`afterStateLoaded(fit, opts)` 改为调用该函数（原散落的 coverage/affine/校准清理删除）；`clearCurrentFloor()` 复用同一清理。载入工程、撤销/重做、切层、协作合并都经 `afterStateLoaded` 覆盖。
+  - `js/core/snapshot.js`：快照回滚改为 `afterStateLoaded(false,{keepCalib:true})`，保留校准点、清空仿射草稿与草稿。
+  - `scripts/selftest.mjs`：api 新增 `resetTransientInteractionState`/`transient`/`setTransient`/`switchFloor`；39.12 节 14 项断言覆盖载入、快照回滚、切层三条入口。
+  - `tests/e2e/history.spec.mjs`：新增「撤销/重做清理交互瞬态」用例，断言 `coverageResult/draft/osnapMode` 均归零。
+  - `sw.js`：`VERSION` 23 → 24；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` 新增「瞬态清理（N-15）」。
+- **验证数据**：selftest 2885 通过 / 0 失败（+14）；e2e 99 passed / 1 skipped（35 spec / 100 用例）；产物 796,110 B（gzip 247,846 B，余量 43,570 B）；`check.mjs --selftest` 通过；`check-gates` 正面基线 6/6 + 9/9 破坏场景；`check-discipline --strict` 13/13。
+- **遗留风险**：计划中的 `affineDrag`/`trackingDrag`/`historyValueCache` 在当前代码已不存在，本次按现名 `affinePairs`/`trackLine`/`coverageResult` 落地；快照回滚保留 `calibPoints` 属刻意行为（避免打断校准），如需回滚时清空该校准点需另行拍板。
+
 ## 2026-11-08 · N-14 边界防护：切变退化 / fitView 缩放 / 顶点上限 / 大点列包围盒
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

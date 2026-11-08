@@ -107,6 +107,10 @@ code += `\n;globalThis.__api = {
   get history(){ return history; },
   get clipboard(){ return clipboard; }, setClipboard(v){ clipboard=v; },
   get drag(){ return drag; }, setDrag(v){ drag=v; },
+  resetTransientInteractionState,
+  get transient(){ return {draft,drag,rubber,affinePairs,calibPoints,trackLine,osnapMode,coverageResult}; },
+  setTransient(v){ ['draft','drag','affinePairs','calibPoints','trackLine','osnapMode','coverageResult'].forEach(k=>{ if(Object.prototype.hasOwnProperty.call(v,k)) eval(k+'=v[k]'); }); },
+  switchFloor,
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
@@ -2892,6 +2896,47 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     ok('N-14-大点列场地包围盒有限', [sb.minX,sb.minY,sb.maxX,sb.maxY].every(Number.isFinite));
     const ob=api.objectBounds(api.baseObject('line','line.line',{points:big}));
     ok('N-14-大点列对象包围盒有限', [ob.minX,ob.minY,ob.maxX,ob.maxY].every(Number.isFinite));
+    api.resetState();
+  }
+
+  /* 39.12 N-15：交互瞬态统一清理（载入 / 快照回滚 / 切层） */
+  {
+    /* ① 载入工程：仿射草稿、跟踪线、草稿、捕捉热键、校准点全部复位 */
+    api.resetState();
+    api.setTransient({affinePairs:[{u:0,v:0,x:0,y:0}],trackLine:{from:[0,0],dir:[1,0]},
+      draft:{kind:'line',points:[[0,0]]},osnapMode:'endpoint',calibPoints:[[0,0],[10,0]]});
+    await sandbox.afterStateLoaded(false);
+    let tr=api.transient;
+    eq('N-15-载入清空仿射草稿', tr.affinePairs.length, 0);
+    eq('N-15-载入清空跟踪线', tr.trackLine, null);
+    eq('N-15-载入清空草稿', tr.draft, null);
+    eq('N-15-载入复位捕捉热键', tr.osnapMode, null);
+    eq('N-15-载入清空校准点', tr.calibPoints.length, 0);
+    /* ②③ 快照回滚：保留比例尺校准点，清空仿射草稿/草稿/跟踪线 */
+    api.resetState();
+    api.state.objects.push(api.baseObject('point','point.marker',{name:'S',x:1,y:1}));
+    api.syncActiveFloor();
+    const raw=api.persistableState();
+    api.setTransient({calibPoints:[[0,0],[10,0]],affinePairs:[{u:0,v:0,x:0,y:0}],
+      draft:{kind:'line',points:[[0,0]]},trackLine:{from:[0,0],dir:[1,0]}});
+    const prevSnap=sandbox.getSnapshot;
+    sandbox.getSnapshot=async()=>({data:JSON.parse(JSON.stringify(raw)),meta:{projectName:'S'}});
+    ok('N-15-快照回滚成功', await sandbox.restoreSnapshotById('proj-test','snap-test'));
+    sandbox.getSnapshot=prevSnap;
+    tr=api.transient;
+    eq('N-15-快照保留校准点', tr.calibPoints.length, 2);
+    eq('N-15-快照清空仿射草稿', tr.affinePairs.length, 0);
+    eq('N-15-快照清空草稿', tr.draft, null);
+    eq('N-15-快照清空跟踪线', tr.trackLine, null);
+    /* ④ 切换楼层：草稿与捕捉热键复位 */
+    const init=api.createInitialState();
+    api.state.floors.push({id:'floor.N15',name:'N15',background:init.background,objects:[],viewport:{zoom:1,panX:0,panY:0}});
+    api.setTransient({draft:{kind:'line',points:[[0,0]]},osnapMode:'endpoint',trackLine:{from:[0,0],dir:[1,0]}});
+    ok('N-15-切层成功', await api.switchFloor('floor.N15'));
+    tr=api.transient;
+    eq('N-15-切层清空草稿', tr.draft, null);
+    eq('N-15-切层复位捕捉热键', tr.osnapMode, null);
+    eq('N-15-切层清空跟踪线', tr.trackLine, null);
     api.resetState();
   }
 }

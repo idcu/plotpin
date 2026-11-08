@@ -61,6 +61,28 @@ test('撤销/重做持久化：撤销后刷新保持 1，重做后刷新保持 2
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
 });
 
+test('撤销/重做清理交互瞬态：草稿、覆盖层与捕捉热键不残留', async ({ page }) => {
+  await openApp(page);
+  await drawPoint(page, 0, 0);
+  await drawPoint(page, 40, 30);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+
+  await page.evaluate(() => {
+    coverageResult = { regions: [], cameraCount: 0, ratio: 0.5 };
+    draft = { kind: 'line', points: [[0, 0]], current: [1, 1] };
+    osnapMode = 'endpoint';
+  });
+  await page.click('#undoBtn');
+  await expect.poll(() => page.evaluate(() => ({
+    coverage: coverageResult, draft, osnap: osnapMode
+  }))).toEqual({ coverage: null, draft: null, osnap: null });
+
+  await page.evaluate(() => { draft = { kind: 'line', points: [[0, 0]] }; osnapMode = 'midpoint'; });
+  await page.click('#redoBtn');
+  await expect.poll(() => page.evaluate(() => ({ draft, osnap: osnapMode })))
+    .toEqual({ draft: null, osnap: null });
+});
+
 test('新增楼层：新层绘制对象后刷新，楼层/活动层/对象都保持', async ({ page }) => {
   await openApp(page);
   const before = await page.evaluate(() => state.floors.map(f => f.id));

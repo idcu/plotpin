@@ -193,10 +193,8 @@ function clearCurrentFloor(){
   state.meta.updatedAt=nowISO();
   bgLoadSeq++;
   bgImage=null; bgImageState='none'; bgDataUrl='';
-  selectedIds.clear(); draft=null; drag=null; rubber=null;
-  calibPoints=[]; affinePairs=[]; calibSelection=null; calibUndoStack=[];
-  activeOsnap=null; trackLine=null; refEdge=null;
-  if(typeof clearGuides==='function') clearGuides();
+  selectedIds.clear();
+  resetTransientInteractionState();
   syncActiveFloor();
   resetFrameRef(); fitView();
   markDirty('clear');               /* 覆盖率/静态层/落盘/UI 统一走提交协议（保持既有：不广播） */
@@ -1213,13 +1211,12 @@ function loadImageSrc(src){
     img.src=src;
   });
 }
-async function afterStateLoaded(fit=true){
+async function afterStateLoaded(fit=true,opts={}){
   const seq=++bgLoadSeq;
-  bgImage=null; bgImageState='none'; bgDataUrl='';coverageResult=null; affinePairs=[];   /* 载入/撤销/重做后清空覆盖率叠加层与仿射校准草稿 */
-  calibSelection=null; calibUndoStack=[];                          /* 校准控制点的选中态与专用撤销栈同样清空 */
+  bgImage=null; bgImageState='none'; bgDataUrl='';
+  resetTransientInteractionState(opts);   /* 草稿/拖拽/捕捉/参考线/覆盖层统一复位；校准语义见函数注释 */
   invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
   resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
-  if(typeof clearGuides==='function') clearGuides();   /* 临时参考线随工程载入/撤销清空，避免坐标错位 */
   await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
   await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
   /* 旧版底图资产 */refreshUI();
