@@ -107,14 +107,21 @@ async function xlsxReadRows(arrayBuffer,opt){
   if(!sheets.length) throw new Error('XLSX 中未找到工作表');
   if(sheets.length>L.maxSheets) throw new Error('工作表数量超过上限 '+L.maxSheets+' 个，请拆分后导入');
   const known=h=>['编号','对象类型','X','Y','图层','业务类型'].some(k=>h.includes(k));
-  const merged=[]; let used=0;
+  const merged=[]; let used=0, skipped=0;
   sheets.forEach(path=>{
-    const rows=xlsxSheetToRows(decodeUtf8(entries[path]),shared,opt);
+    let rows;
+    try{ rows=xlsxSheetToRows(decodeUtf8(entries[path]),shared,opt); }
+    catch(e){
+      /* 单表超限只跳过该表，避免整个工作簿因附表过大而失败；合并/全部超限仍抛错 */
+      if(/^表格行数超过上限 /.test(e.message)){ skipped++; return; }
+      throw e;
+    }
     if(!rows.length) return;
     if(known(rows[0].map(x=>String(x||'').trim()))){ rows.forEach(r=>merged.push(r)); used++; }
   });
   if(merged.length>L.maxRows) throw new Error('合并后表格行数超过上限 '+L.maxRows+' 行，请拆分后导入');
   if(!used) xlsxSheetToRows(decodeUtf8(entries[sheets[0]]),shared,opt).forEach(r=>merged.push(r));
+  if(skipped) Object.defineProperty(merged,'skippedSheets',{value:skipped,enumerable:false});
   return merged;
 }
   global.Xlsx = { build: buildXlsx, readRows: xlsxReadRows, colLetter: xlsxColLetter, LIMITS: XLSX_LIMITS };

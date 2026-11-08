@@ -4350,6 +4350,19 @@ asyncSuites.push((async()=>{
   await rejects('加固XLSX-空缓冲', api.Xlsx.readRows(new ArrayBuffer(0)), /ZIP/);
   const emptySheet=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:'<worksheet></worksheet>'}]);
   eq('加固XLSX-空工作表返回空表', (await api.Xlsx.readRows(emptySheet)).length, 0);
+  /* IO-P2-21：单表超限只跳过该表，主表仍可导入 */
+  const sheetXml=rows=>'<worksheet><sheetData>'+rows.map((cells,ri)=>'<row>'+cells.map((v,ci)=>
+    '<c r="'+(ci?'B':'A')+(ri+1)+'" t="inlineStr"><is><t>'+v+'</t></is></c>').join('')+'</row>').join('')+'</sheetData></worksheet>';
+  const multiSheet=api.Zip.build([
+    {name:'xl/workbook.xml',text:'<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="主表" sheetId="1" r:id="rId1"/><sheet name="附表" sheetId="2" r:id="rId2"/></sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels',text:'<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>'},
+    {name:'xl/worksheets/sheet1.xml',text:sheetXml([['编号','对象类型'],['O1','点设备']])},
+    {name:'xl/worksheets/sheet2.xml',text:sheetXml([['编号','对象类型'],['A','点设备'],['B','点设备'],['C','点设备']])}
+  ]);
+  const skipRows=await api.Xlsx.readRows(multiSheet,{maxRows:3});
+  eq('加固XLSX-超限附表跳过', [skipRows.length,skipRows.skippedSheets], [2,1]);
+  const onlyBig=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:sheetXml([['编号'],['1'],['2'],['3']])}]);
+  await rejects('加固XLSX-全部超限仍报错', api.Xlsx.readRows(onlyBig,{maxRows:3}), /行数/);
 
   /* ---- DXF ---- */
   eq('加固DXF-空文本返回空实体', api.Dxf.parseDxf('').entities.length, 0);
