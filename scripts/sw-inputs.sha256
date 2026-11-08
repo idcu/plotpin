@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=60
+version=61
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -24,7 +24,7 @@ cb00476756b06976ddced3932677c7a74ac608c44b1e2ea23a7b9bd4dd22608f  js/core/geomet
 5cdb124fe1f429c77bf4b4eccb40c939dcd69320e71e180a46b79809aea963e9  js/core/model.js
 597cba43e7f2b805aa2b601316b44eea07fe6c4039e00fe9f4b5dd77b9111b35  js/core/persistence.js
 cedc2cb51a232713a3841a4a6a74d1a5e53f1c671efd12d78a3209ca867a13fe  js/core/render.js
-e94e09a28324a432d2622693556ad71da37200853154642bae7e87f0bcf83bb4  js/core/snapshot.js
+70848988b624a54d4dca3e658631be61042e9666100d966735f82e6de6f9d718  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
 90b47b297c7348093e760d4aa501ad6e71e524db8fe3b599cee4eedc40cba1fe  js/core/viewport.js
 2c8807de25dc960165b8dc7123c408f83f2927ea9294c924a863875c3bce9717  js/features/catalog.js

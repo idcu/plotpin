@@ -3173,6 +3173,7 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     eq('N-15-载入清空校准点', tr.calibPoints.length, 0);
     /* ②③ 快照回滚：保留比例尺校准点，清空仿射草稿/草稿/跟踪线 */
     api.resetState();
+    api.state.meta.projectId='proj-test';
     api.state.objects.push(api.baseObject('point','point.marker',{name:'S',x:1,y:1}));
     api.syncActiveFloor();
     const raw=api.persistableState();
@@ -7821,6 +7822,7 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
 
   /* CORE-P2-10：快照回滚清空覆盖率/框选，但保留比例尺校准点 */
   api.resetState();
+  api.state.meta.projectId='proj-p2c10';
   api.state.objects.push(api.baseObject('point','point.marker',{name:'S2',x:1,y:1}));
   api.syncActiveFloor();
   const snapRaw=api.persistableState();
@@ -7972,6 +7974,16 @@ await section("P2-RT 批次 6：快照与协作", async () => {
   ok('RT-P2-03 快照数据已剥离 photoDataUrl', !!rec3&&!('photoDataUrl' in (rec3.data.objects[0].props||{})));
   sandbox.idbGetKey=savedIdb.get; sandbox.idbPutKey=savedIdb.put;
   sandbox.idbDeleteKey=savedIdb.del; sandbox.idbAllKeys=savedIdb.keys;
+  api.resetState();
+
+  /* RT-P2-04：记录归属通过后，仍需与当前打开工程一致 */
+  api.resetState(); api.state.meta.projectId='PRJ_CUR';
+  const prevGetRt04=sandbox.getSnapshot;
+  sandbox.getSnapshot=async()=>({data:{schema:'1',objects:[]},meta:{projectId:'PRJ_OTHER',projectName:'他人工程'}});
+  let rt04='';
+  try{ await api.restoreSnapshotById('PRJ_OTHER','S1'); }catch(e){ rt04=e.message; }
+  sandbox.getSnapshot=prevGetRt04;
+  ok('RT-P2-04 非当前工程快照恢复被拒', /只能恢复当前打开工程/.test(rt04));
   api.resetState();
 }
 });
