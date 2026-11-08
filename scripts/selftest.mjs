@@ -7167,17 +7167,38 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   eq('B-04 快照字节上限 16MB', api.APP_LIMITS.SNAPSHOT_MAX_BYTES_PER_PROJECT, 16*1048576);
   eq('B-04 utf8 体积', api.utf8Length('快照'), 6);
 
-  /* 快照数据：剥离照片 base64、保留 photoId；深拷贝不回写当前 state */
+  /* 快照数据：资产化成功后剥离照片 base64、保留内容寻址 photoId；深拷贝不回写当前 state。
+     沙箱没有真实 IndexedDB，必须显式桩 assetPut 成功路径，否则测到的是「资产化失败」分支。 */
   api.resetState();
   api.state.meta.projectId='PRJ_B04';
   const p=api.baseObject('point','point.marker',{id:'PH1',name:'PH1',x:1,y:1});
   p.props={photoDataUrl:'data:image/png;base64,AAAA',photoId:'as_photo_1'};
   api.state.objects=[p];
-  const snapData=await api.snapshotProjectData();
+  const savedAssetPut1=sandbox.assetPut;
+  let assetPutCalls=0;
+  sandbox.assetPut=async()=>{ assetPutCalls++; };
+  let snapData;
+  try{ snapData=await api.snapshotProjectData(); }finally{ sandbox.assetPut=savedAssetPut1; }
   eq('B-04 快照剥离 photoDataUrl', 'photoDataUrl' in (snapData.objects[0].props||{}), false);
-  eq('B-04 快照保留 photoId 引用', snapData.objects[0].props.photoId, 'as_photo_1');
+  ok('B-04 快照写入内容寻址 photoId', /^bg[0-9a-f]{8}-\d+$/.test(snapData.objects[0].props.photoId));
+  eq('B-04 资产只入库一次', assetPutCalls, 1);
   eq('B-04 快照深拷贝不回写当前状态', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
   eq('B-04 快照对象总数', api.countProjectObjects(snapData), 1);
+
+  /* P1-4：资产化失败（IDB 不可用）时不得删除内嵌照片，必须保留并给出可见提示 */
+  const savedAssetPut2=sandbox.assetPut, savedToast1=sandbox.toast;
+  const toastMsgs=[];
+  sandbox.assetPut=async()=>{ throw new Error('idb down'); };
+  sandbox.toast=(m,k)=>{ toastMsgs.push({m,k}); };
+  let failSnap;
+  try{ failSnap=await api.snapshotProjectData(); }
+  finally{ sandbox.assetPut=savedAssetPut2; sandbox.toast=savedToast1; }
+  eq('P1-4 资产化失败仍保留照片 base64', failSnap.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
+  eq('P1-4 资产化失败不覆盖既有 photoId', failSnap.objects[0].props.photoId, 'as_photo_1');
+  eq('P1-4 失败给出可见提示条数', toastMsgs.length, 1);
+  eq('P1-4 提示为 warn 级', toastMsgs[0].k, 'warn');
+  ok('P1-4 提示含失败数量', /1 张设备照片/.test(toastMsgs[0].m));
+  eq('P1-4 实时 state 照片不受影响', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
 
   /* 资产保活：快照记录是 {meta,data} 外壳，必须解包 data 才能收集资产引用 */
   const snapRec={meta:{snapshotId:'S1'},data:{
@@ -8237,7 +8258,11 @@ await section("P2-RT 批次 6：快照与协作", async () => {
   const ph3=api.baseObject('point','point.marker',{id:'PH3',name:'PH3',x:1,y:1});
   ph3.props={photoDataUrl:'data:image/png;base64,AAAA'};
   api.state.objects=[ph3];
-  const meta3=await api.createSnapshot({label:'RT03'});
+  const savedAssetPutRt=sandbox.assetPut;
+  sandbox.assetPut=async()=>{}; /* 真实 IDB 不可用：桩成功路径，验证「资产化成功→剥离 base64」 */
+  let meta3;
+  try{ meta3=await api.createSnapshot({label:'RT03'}); }
+  finally{ sandbox.assetPut=savedAssetPutRt; }
   eq('RT-P2-03 快照生成成功', typeof meta3.snapshotId, 'string');
   eq('RT-P2-03 实时对象仍保留内嵌照片', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
   eq('RT-P2-03 实时对象未被写入 photoId', 'photoId' in api.state.objects[0].props, false);

@@ -21,14 +21,18 @@ function snapshotIdOfKey(key){
 }
 
 /** 快照数据：先深拷贝实时 state，再在副本上完成照片资产化（RT-P2-03）。
- *  资产化只写副本，不会静默改动正在编辑的工程；快照仍只保留 photoId 引用。 */
+ *  资产化只写副本，不会静默改动正在编辑的工程；快照仍只保留 photoId 引用。
+ *  P1-4：资产化失败的对象必须保留 photoDataUrl（宁可快照变大，也不能让照片不可逆丢失），
+ *  并给出可见提示；成功时 ensureObjectPhotoAssets 已自行删除 base64，无需再无条件删。 */
 async function snapshotProjectData(){
   syncActiveFloor();
   const data=persistableState();
   await ensureObjectPhotoAssets(data);
+  let keptPhotos=0;
   projectObjectLists(data).forEach(list=>{
-    list.forEach(o=>{ if(o&&o.props&&o.props.photoDataUrl) delete o.props.photoDataUrl; });
+    list.forEach(o=>{ if(o&&o.props&&o.props.photoDataUrl) keptPhotos++; });
   });
+  if(keptPhotos) toast(keptPhotos+' 张设备照片未能存入资产库，已保留在快照中（快照体积会偏大）','warn');
   return data;
 }
 /**

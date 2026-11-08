@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P1 批次二（1/3）：快照照片资产化失败不再丢数据
+
+- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(snapshot): 资产化失败保留内嵌照片并提示`）
+- **核心改动**：
+  - `snapshotProjectData` 删除无条件 `delete o.props.photoDataUrl`；`ensureObjectPhotoAssets` 成功时本就会删 base64 并写内容寻址 `photoId`，失败时保留 `photoDataUrl`，不再出现「资产化失败→base64 被删→照片不可逆丢失」。
+  - 快照副本统计仍带 `photoDataUrl` 的对象数，`>0` 时 `toast(..., 'warn')` 提示「N 张设备照片未能存入资产库，已保留在快照中（快照体积会偏大）」。
+  - 实时工程仍不被快照资产化回写（RT-P2-03 语义不变）；`docs/features.md` 同步补充失败保留口径。
+- **验证数据**：
+  - selftest **3438/0**（基线 3431，+7）：新增成功路径桩（`assetPut` 成功一次、base64 剥离、`photoId` 形如 `bg<8hex>-<n>`、实时 state 不回写）；新增失败路径（`assetPut` 抛错 → 快照仍含 `data:image/png;base64,AAAA`、既有 `photoId` 不被覆盖、toast 恰好 1 条且为 `warn`、提示含「1 张设备照片」）；既有 B-04 / RT-P2-03 测试改为显式桩成功路径（原断言实际依赖了旧的静默删除缺陷）。
+  - 门禁：e2e **118 通过 + 1 条件跳过（119）**；check-gates 6/6 + 10/10；discipline 13/13；i18n 46.16%（缺口 9 ≤ 10）；dist **823,793 B**（本条 +135 B）/ gzip 255,782 B / 余量 **15,887 B**；SW `VERSION=86`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 失败快照体积会显著变大（base64 内嵌），极端多照片工程可能提前触发 20 条/16 MB 淘汰；未新增独立配额提示（toast 只报数量）。
+  - 提示文案沿用仓库既有中文硬编码（F10/F12 的 i18n 缺口不在本条范围）。
+
 ## 2026-11-08 · 审计 P1 批次一（3/3）：停车纵向布局不出场地
 
 - **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(parking): 纵向布局按 90° 包围盒落位`）
