@@ -129,19 +129,23 @@ $('modalBackdrop').addEventListener('click',e=>{ if(e.target.id==='modalBackdrop
 function showConfirm(message){
   const T=I18N.t;
   return new Promise(resolve=>{
+    /* RT-P2-16：Esc/遮罩关闭也走 onClose → 统一 resolve(false)，避免 await showConfirm 永久挂起 */
+    let decided=false;
     openModal(T('confirmTitle'),`<p style="line-height:1.7;margin:0">${esc(L(message))}</p>`,[
-      {text:T('cancel'),click:()=>{closeModal();resolve(false);}},
-      {text:T('ok'),class:'primary',click:()=>{closeModal();resolve(true);}}
-    ]);
+      {text:T('cancel'),click:()=>{decided=false;closeModal();}},
+      {text:T('ok'),class:'primary',click:()=>{decided=true;closeModal();}}
+    ],{onClose:()=>resolve(decided)});
   });
 }
 function showPrompt({title,label,value=''}){
   const T=I18N.t;
   return new Promise(resolve=>{
+    /* RT-P2-16：Esc/遮罩关闭 resolve(null)，与「取消」一致；确认值在关闭前捕获 */
+    let decided=false, pending=null;
     openModal(L(title),`<label style="font-weight:600;display:block;margin-bottom:7px">${esc(L(label))}</label><input id="promptInput" style="width:100%" value="${esc(value)}">`,[
-      {text:T('cancel'),click:()=>{closeModal();resolve(null);}},
-      {text:T('ok'),class:'primary',click:()=>{const v=$('promptInput').value.trim();closeModal();resolve(v);}}
-    ]);
+      {text:T('cancel'),click:()=>{decided=false;closeModal();}},
+      {text:T('ok'),class:'primary',click:()=>{pending=$('promptInput').value.trim();decided=true;closeModal();}}
+    ],{onClose:()=>resolve(decided?pending:null)});
     setTimeout(()=>{ $('promptInput')?.focus(); $('promptInput')?.select(); },30);
   });
 }
