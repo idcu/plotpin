@@ -169,6 +169,7 @@
 | RT-P2-10 | 已确认（静态核对）：未声明 `state:read` 时沙箱导出器收到空 `input`，且不传 `site`；运行期用例未覆盖 | [ARCHITECTURE.md](ARCHITECTURE.md) 插件节、[features.md](features.md) §12 |
 | RT-P2-17 | 已说明：`MARK_DIRTY_PROFILES` 五种粒度中 `clear`/`floor` 不广播，其余广播；ARCHITECTURE 已列明，代码注释本轮未改 | [ARCHITECTURE.md](ARCHITECTURE.md) §一次编辑的数据流 |
 | RT-P2-19 | 已降级为限制：协作入站分片 TTL 淘汰仅由“收到新消息”驱动，无空闲定时器，最长残留 30 s | [ARCHITECTURE.md](ARCHITECTURE.md) §协作合并 |
+| RT-P2-20 | 已收敛（归档）：沙箱 Worker 的 `onmessage`/`onerror` 已在 N-02 封堵，见 §1 P0-4；端口通道不在契约内 | [known-issues.md](known-issues.md) §1 P0-4 |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 
