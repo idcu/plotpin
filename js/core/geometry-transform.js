@@ -132,7 +132,7 @@ function affineShapeTransform(M,shape,opts){
   if(o.allowRotatedBox===false&&Math.abs(Math.sin(ang*Math.PI/180))>1e-9)
     return {type:'polygon',points:corners,degraded:null};
   const skewOut=Math.atan2(offOut,hhOut)*180/Math.PI;
-  const clamped=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,skewOut));
+  const clamped=clampSkewDeg(skewOut);
   const isRect=type!=='parallelogram'&&Math.abs(skewOut)<1e-9;
   return {type:isRect?'rect':'parallelogram',x:bp[0],y:bp[1],w:lenU,h:hhOut,skew:clamped,angle:ang,
     degraded:Math.abs(clamped-skewOut)>1e-9?'skew-clamped':null};

@@ -69,7 +69,6 @@ function ruleCleanPolygon(points){
   }
   return out;
 }
-function rulePolygonArea(points){ return Math.abs(polygonArea(ruleCleanPolygon(points))); }
 function rulePolygonSelfIntersects(points){
   if(typeof __geo!=='undefined'&&typeof __geo.polygonSelfIntersects==='function') return !!__geo.polygonSelfIntersects(points);
   return false;

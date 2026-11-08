@@ -408,8 +408,8 @@ function buildSceneSvg(){
       shapes.push(`<image x="0" y="0" width="${bg.width}" height="${bg.height}" transform="${m}" href="${xmlEscape(bgDataUrl)}" xlink:href="${xmlEscape(bgDataUrl)}"/>`);
     }else{
       /* 轴对齐图片：按自身像素×m/px 尺寸绘制，不能用并集取景框尺寸（否则有场地时会被拉伸 */
-      const ww=Math.max(.01,Number(bg.width)*positiveNumber(bg.metersPerPixel,0.1));
-      const hh=Math.max(.01,Number(bg.height)*positiveNumber(bg.metersPerPixel,0.1));
+      const ww=Math.max(.01,Number(bg.width)*positiveNum(bg.metersPerPixel,0.1));
+      const hh=Math.max(.01,Number(bg.height)*positiveNum(bg.metersPerPixel,0.1));
       shapes.push(`<image x="${X(0)}" y="${Y(hh)}" width="${ww*ppu}" height="${hh*ppu}" href="${xmlEscape(bgDataUrl)}" xlink:href="${xmlEscape(bgDataUrl)}"/>`);
     }
   }

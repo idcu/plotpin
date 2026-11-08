@@ -812,7 +812,7 @@ function sanitizeSettings(raw){
   }
   settings.unit='m';
   settings.precision=Math.min(6,Math.max(0,Math.round(finiteNumber(settings.precision,2))));
-  settings.gridSize=positiveNumber(settings.gridSize,1);
+  settings.gridSize=positiveNum(settings.gridSize,1);
   settings.gridVisible=!!settings.gridVisible; settings.snap=!!settings.snap; settings.showLabels=!!settings.showLabels;
   settings.markerScale=Math.min(2.5,Math.max(.5,finiteNumber(settings.markerScale,1)));
   settings.showCursor=settings.showCursor!==false;
@@ -923,7 +923,7 @@ function migrateProject(p){
 /** 首次引导示例工程：空图片槽 + 100×70 矢量场地 + 6 个业务对象。
  *  不引用任何图片/照片资产，因此不会向资产库写入数据，也不会产生孤儿资产。 */
 function buildDemoProject(){
-  const site=createSiteSlot({type:'rect',w:100,h:70});
+  const site=createSiteSlot(defaultSiteShape());
   site.name=L('示例场地');
   /* 示范对象在数组里连续创建，若不建立编号作用域，baseObject 每次都扫描未写入 state 的编号而重名 */
   const objects=withObjectNameScope(allObjectNames(),()=>[
@@ -1027,9 +1027,9 @@ function sanitizeImageBackground(rawBg){
   if(rawBg.kind!=='image'&&!(rawBg.kind===undefined&&hasImageRef)) return createEmptyBackground();
   return {
     kind:'image',
-    width:positiveNumber(rawBg.width,1000),
-    height:positiveNumber(rawBg.height,700),
-    metersPerPixel:positiveNumber(rawBg.metersPerPixel,0.1),
+    width:positiveNum(rawBg.width,1000),
+    height:positiveNum(rawBg.height,700),
+    metersPerPixel:positiveNum(rawBg.metersPerPixel,0.1),
     origin:pointArray(rawBg.origin).length?pointArray(rawBg.origin)[0]:[0,0],
     assetId:typeof rawBg.assetId==='string'?rawBg.assetId:'',
     dataUrl:typeof rawBg.dataUrl==='string'?rawBg.dataUrl:'',
@@ -1067,8 +1067,8 @@ function sanitizeSite(rawSite,layers){
   const allowed=['rect','circle','ellipse','sector','parallelogram','polygon'];
   const shapeKind=rawSite.shape&&rawSite.shape.type;
   const kind=allowed.includes(rawSite.kind)?rawSite.kind:(allowed.includes(shapeKind)?shapeKind:'rect');
-  const legacyW=positiveNumber(rawSite.width,1000)*positiveNumber(rawSite.metersPerPixel,0.1);
-  const legacyH=positiveNumber(rawSite.height,700)*positiveNumber(rawSite.metersPerPixel,0.1);
+  const legacyW=positiveNum(rawSite.width,1000)*positiveNum(rawSite.metersPerPixel,0.1);
+  const legacyH=positiveNum(rawSite.height,700)*positiveNum(rawSite.metersPerPixel,0.1);
   const shape=sanitizeShape(rawSite.shape,kind,legacyW,legacyH);
   const site=createSiteSlot(shape);
   site.id=safeId(rawSite.id||site.id,'SITE');
@@ -1102,12 +1102,11 @@ function migrateBackgroundAndSite(raw,layers){
 }
 function sanitizeViewport(raw){
   const v=Object.assign(createInitialState().viewport,raw&&typeof raw==='object'?raw:{});
-  v.zoom=Math.min(APP_LIMITS.ZOOM_MAX,Math.max(APP_LIMITS.ZOOM_MIN,positiveNumber(v.zoom,1)));
+  v.zoom=Math.min(APP_LIMITS.ZOOM_MAX,Math.max(APP_LIMITS.ZOOM_MIN,positiveNum(v.zoom,1)));
   v.panX=finiteNumber(v.panX,0); v.panY=finiteNumber(v.panY,0);
   return v;
 }
 function finiteNumber(v,fallback){ const n=Number(v); return Number.isFinite(n)?n:fallback; }
-function positiveNumber(v,fallback){ const n=Number(v); return Number.isFinite(n)&&n>0?n:fallback; }
 function safeId(v,prefix){ const s=String(v??'').replace(/[^A-Za-z0-9_.-]/g,'_'); return s||prefix+uid('ID'); }
 function pointArray(v){
   return Array.isArray(v) ? v.filter(Array.isArray).map(p=>[finiteNumber(p[0],NaN),finiteNumber(p[1],NaN)])
@@ -1122,16 +1121,16 @@ function pointArray(v){
 function sanitizeShape(raw,kind,legacyW,legacyH){
   const sh=raw&&typeof raw==='object'?raw:{};
   if(kind==='circle'){
-    const r=positiveNumber(sh.r,50);
+    const r=positiveNum(sh.r,50);
     return {type:'circle',cx:finiteNumber(sh.cx,r),cy:finiteNumber(sh.cy,r),r};
   }
   if(kind==='ellipse'){
-    const rx=positiveNumber(sh.rx,NaN), ry=positiveNumber(sh.ry,NaN);
+    const rx=positiveNum(sh.rx,NaN), ry=positiveNum(sh.ry,NaN);
     if(Number.isFinite(rx)&&Number.isFinite(ry)) return {type:'ellipse',cx:finiteNumber(sh.cx,rx),cy:finiteNumber(sh.cy,ry),rx,ry,angle:finiteNumber(sh.angle,0)};
     return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
   if(kind==='sector'){
-    const r=positiveNumber(sh.r,NaN);
+    const r=positiveNum(sh.r,NaN);
     if(Number.isFinite(r)){
       const a0=finiteNumber(sh.a0,0);
       const a1=finiteNumber(sh.a1,finiteNumber(sh.a0,0)+90);
@@ -1146,10 +1145,10 @@ function sanitizeShape(raw,kind,legacyW,legacyH){
   }
   if(kind==='parallelogram'){
     return {type:'parallelogram',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),
-      w:positiveNumber(sh.w,positiveNum(legacyW,100)),h:positiveNumber(sh.h,positiveNum(legacyH,70)),
-      skew:Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,finiteNumber(sh.skew,PARALLELOGRAM_DEFAULT_SKEW)))};
+      w:positiveNum(sh.w,positiveNum(legacyW,100)),h:positiveNum(sh.h,positiveNum(legacyH,70)),
+      skew:clampSkewDeg(finiteNumber(sh.skew,PARALLELOGRAM_DEFAULT_SKEW))};
   }
-  if(kind==='rect') return {type:'rect',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),w:positiveNumber(sh.w,positiveNum(legacyW,100)),h:positiveNumber(sh.h,positiveNum(legacyH,70))};
+  if(kind==='rect') return {type:'rect',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),w:positiveNum(sh.w,positiveNum(legacyW,100)),h:positiveNum(sh.h,positiveNum(legacyH,70))};
   return {type:'rect',x:0,y:0,w:100,h:70};
 }
 function sanitizeLayers(arr){
@@ -1204,15 +1203,15 @@ function mergeTypes(saved){
 function sanitizeAreaShape(raw){
   if(!raw||typeof raw!=='object') return null;
   if(raw.type==='circle'){
-    const r=positiveNumber(raw.r,NaN);
+    const r=positiveNum(raw.r,NaN);
     return Number.isFinite(r)?{type:'circle',r}:null;
   }
   if(raw.type==='ellipse'){
-    const rx=positiveNumber(raw.rx,NaN), ry=positiveNumber(raw.ry,NaN);
+    const rx=positiveNum(raw.rx,NaN), ry=positiveNum(raw.ry,NaN);
     return Number.isFinite(rx)&&Number.isFinite(ry)?{type:'ellipse',rx,ry}:null;
   }
   if(raw.type==='sector'){
-    const r=positiveNumber(raw.r,NaN);
+    const r=positiveNum(raw.r,NaN);
     if(!Number.isFinite(r)) return null;
     const a0=finiteNumber(raw.a0,0);
     let a1=finiteNumber(raw.a1,finiteNumber(raw.a0,0)+90);
@@ -1221,7 +1220,7 @@ function sanitizeAreaShape(raw){
     return {type:'sector',r,a0,a1:a0+sweep};
   }
   if(raw.type==='parallelogram'){
-    return {type:'parallelogram',skew:Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,finiteNumber(raw.skew,PARALLELOGRAM_DEFAULT_SKEW)))};
+    return {type:'parallelogram',skew:clampSkewDeg(finiteNumber(raw.skew,PARALLELOGRAM_DEFAULT_SKEW))};
   }
   return null;
 }
@@ -1256,19 +1255,19 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
         o.shape=s;
         if(s.type==='parallelogram'){
           /* 平行四边形的底/高仍存在 width/height（shape 只存倾角），不能清零 */
-          o.width=positiveNumber(raw.width,0); o.height=positiveNumber(raw.height,0);
+          o.width=positiveNum(raw.width,0); o.height=positiveNum(raw.height,0);
           if(o.width<=0||o.height<=0){ audit.dropped=(audit.dropped||0)+1; return; }
         }else{
           o.width=0; o.height=0;
         }
       }else{
         o.shape=null;
-        o.width=positiveNumber(raw.width,0); o.height=positiveNumber(raw.height,0);
+        o.width=positiveNum(raw.width,0); o.height=positiveNum(raw.height,0);
         if(o.width<=0||o.height<=0){ audit.dropped=(audit.dropped||0)+1; return; }
       }
     }
     if(kind==='point'){ o.iconSize=Math.min(3,Math.max(.5,finiteNumber(raw.iconSize,1))); }
-    if(kind==='text'){ o.height=positiveNumber(raw.height,2.2); }
+    if(kind==='text'){ o.height=positiveNum(raw.height,2.2); }
     if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)){ audit.dropped=(audit.dropped||0)+1; return; } syncFirstPoint(o); }
     if(kind==='dimension'){
       o.points=points;
@@ -1349,7 +1348,7 @@ async function afterStateLoaded(fit=true,opts={}){
           url=await bytesToDataUrl(rec.bytes,rec.mime);
         }else if(bg.dataUrl){
           url=bg.dataUrl;            // 资产缺失（如跨设备清理过）退回内嵌图
-        }else if(bg.assetId){
+        }else{
           throw new Error('资产缺失');
         }
       }else if(bg.dataUrl){

@@ -636,7 +636,7 @@ function resizeShapeByHandle(o,h,p){
     const w=Math.max(.05,o.width), hh=Math.max(.05,o.height);
     const q=rotatePoint(p,[o.x,o.y],-(o.angle||0));
     const off=(q[0]-o.x)-w/2;
-    sh.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,Math.atan2(off,hh)*180/Math.PI));
+    sh.skew=clampSkewDeg(Math.atan2(off,hh)*180/Math.PI);
   }else if(mode==='rx'||mode==='ry'){
     const q=rotatePoint(p,[o.x,o.y],-(o.angle||0));
     if(mode==='rx') sh.rx=Math.max(.05,Math.abs(q[0]-o.x));

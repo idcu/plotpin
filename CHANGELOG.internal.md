@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 减字节专项：死代码清理与重复实现收敛
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - 删 `js/features/rules.js#rulePolygonArea`：全仓 grep 仅此一处定义，selftest 未导出、插件 API 清单无此键、文档无调用；audit `engineering.md` 列为死代码候选。
+  - 新增 `js/core/geometry.js#clampSkewDeg`，替换 8 处 `Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,…))` 重复表达式：`io-table.js`（表格导入）、`props.js`×2（属性面板）、`geometry-site.js` / `interaction.js`（斜切拖拽）、`geometry-transform.js`（变换）、`persistence.js`×2（载入清洗）。
+  - 删除 `persistence.js#positiveNumber`（与 `geometry-site.js#positiveNum` 实现逐字相同），27 处调用统一为 `positiveNum`。
+  - 2 处 `{type:'rect',w:100,h:70}` 字面量改用 `defaultSiteShape()`；`persistence.js` 底图恢复的 `else if(bg.assetId)` 改为 `else`（外层分支已保证 `bg.assetId` 为真，行为等价）。
+  - **两套切变上限未合并**：`APP_LIMITS.SHEAR_MAX=50` 是图片切变斜率，`PARALLELOGRAM_MAX_SKEW=80` 是面积图形倾角（度），语义不同；保留两常量并在 `geometry.js` 注释写明差异，未做行为变更。
+- **验证数据**：
+  - dist **833,497 B**（834,123 → **−626 B**，达到 ≥600 B 目标）；gzip **259,086 B**；余量 **6,183 B**；SW `VERSION=113`。
+  - selftest **3598 通过 / 0 失败**（无断言减少）；e2e 123 通过 + 1 跳过；五道门禁全绿。
+- **遗留 TODO / 风险**：
+  - `positiveNum` 与 `finiteNumber` 仍是同文件相邻的小工具，语义不同（>0 与有限数），未合并。
+  - 两套切变上限的交互（图片切变与平行四边形倾角同时使用）仍无交叉断言。
+
 ## 2026-11-08 · 批次 E（3/3）：显示网格步长对齐吸附步长
 
 - **Commit Hash**：`04a653c`

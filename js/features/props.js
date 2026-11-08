@@ -289,7 +289,7 @@ function applySiteField(field,v){
   if(field==='a0') sh.a0=normalizeAngle(n);
   else if(field==='angle') sh.angle=normalizeAngle(n);
   else if(field==='sweep') sh.a1=(Number(sh.a0)||0)+Math.min(360,Math.max(1,n));
-  else if(field==='skew') sh.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,n));
+  else if(field==='skew') sh.skew=clampSkewDeg(n);
   else if(['w','h','r','rx','ry'].includes(field)) sh[field]=Math.max(.05,n);
   else if(['x','y','cx','cy'].includes(field)) sh[field]=n;
   return true;
@@ -629,7 +629,7 @@ function applyField(el,o,changed){
     o.shape.a1=(Number(o.shape.a0)||0)+sweep;
   }
   else if(k==='shapeSkew'&&o.shape){
-    o.shape.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,Number(el.value)||0));
+    o.shape.skew=clampSkewDeg(Number(el.value)||0);
   }
   else if(k==='propQty'){
     o.props=o.props||{};

@@ -26,7 +26,7 @@ function siteBounds(bg){
     const w=Math.max(.01,bg.width*bg.metersPerPixel), h=Math.max(.01,bg.height*bg.metersPerPixel);
     return {minX:0,minY:0,maxX:w,maxY:h,w,h};
   }
-  const sh=bg.shape||{type:'rect',w:100,h:70};
+  const sh=bg.shape||defaultSiteShape();
   if(sh.type==='circle'){ const r=positiveNum(sh.r,50),cx=Number(sh.cx)||0,cy=Number(sh.cy)||0; return mk(cx-r,cy-r,cx+r,cy+r); }
   if(sh.type==='ellipse'){
     const rx=positiveNum(sh.rx,50), ry=positiveNum(sh.ry,35);
@@ -211,7 +211,7 @@ function siteHandleDragTo(site,h,p){
     /* 场地平行四边形顶边中点横向拖拽：只改倾角，底×高不变 */
     const x=Number(sh.x)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
     const off=p[0]-x-w/2;
-    sh.skew=Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,Math.atan2(off,hh)*180/Math.PI));
+    sh.skew=clampSkewDeg(Math.atan2(off,hh)*180/Math.PI);
     return;
   }
   if(h.mode==='center'){ sh.cx=p[0]; sh.cy=p[1]; return; }

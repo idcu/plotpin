@@ -12,7 +12,7 @@ function computeWorldFrame(){
     const f=imageWorldFrame(bg);
     if(f) frames.push(f);
     else if(Number(bg.width)>0&&Number(bg.height)>0){
-      const m=positiveNumber(bg.metersPerPixel,0.1);
+      const m=positiveNum(bg.metersPerPixel,0.1);
       const w=Math.max(.01,Number(bg.width)*m), h=Math.max(.01,Number(bg.height)*m);
       frames.push({minX:0,minY:0,maxX:w,maxY:h,w,h});
     }

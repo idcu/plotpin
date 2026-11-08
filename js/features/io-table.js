@@ -54,7 +54,7 @@ function applyRowShape(o,label,v){
     if(!(v.w>0)||!(v.h>0)) return false;
     /* 形状参数 = 倾角（度）；缺省 30° */
     const skew=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:PARALLELOGRAM_DEFAULT_SKEW);
-    o.shape={type:'parallelogram',skew:Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,skew))};
+    o.shape={type:'parallelogram',skew:clampSkewDeg(skew)};
     o.width=v.w; o.height=v.h; o.x=v.x; o.y=v.y;
     o.angle=normalizeAngle(Number.isFinite(v.angle)?v.angle:0);
     return true;

@@ -336,7 +336,8 @@ const AREA_SHAPE_TYPES=['rect','circle','ellipse','sector','parallelogram'];
 const SHAPE_SEGMENTS=72;
 /* 平行四边形倾角（°）：0=矩形，正值上边向右错切；限制 ±80° 避免退化为无限长边 */
 const PARALLELOGRAM_DEFAULT_SKEW=30;
-const PARALLELOGRAM_MAX_SKEW=80;
+const PARALLELOGRAM_MAX_SKEW=80; /* 倾角上限（度）；与 APP_LIMITS.SHEAR_MAX（图片切变斜率）语义不同，不可合并 */
+function clampSkewDeg(v){ return Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,v)); }
 function parallelogramSkew(sh){ return __geo.clampSkew(sh&&sh.skew,PARALLELOGRAM_MAX_SKEW); }
 /** 平行四边形四角（世界坐标，未旋转）：基点=左下角，错切位移 off=高×tan(倾角) */
 function parallelogramPoints(x,y,w,h,skew){ return __geo.parallelogramPoints(x,y,w,h,skew); }
