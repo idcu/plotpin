@@ -7813,6 +7813,22 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   eq('CORE-P2-9 失焦保留校准点', api.transient.calibPoints.length, 2);
   ok('CORE-P2-9 失焦保留覆盖率叠加', !!api.transient.coverageResult);
   api.resetState();
+
+  /* CORE-P2-10：快照回滚清空覆盖率/框选，但保留比例尺校准点 */
+  api.resetState();
+  api.state.objects.push(api.baseObject('point','point.marker',{name:'S2',x:1,y:1}));
+  api.syncActiveFloor();
+  const snapRaw=api.persistableState();
+  seedTransients();
+  const prevGet=sandbox.getSnapshot;
+  sandbox.getSnapshot=async()=>({data:JSON.parse(JSON.stringify(snapRaw)),meta:{projectName:'P2C10'}});
+  ok('CORE-P2-10 快照回滚成功', await sandbox.restoreSnapshotById('proj-p2c10','snap-p2c10'));
+  sandbox.getSnapshot=prevGet;
+  eq('CORE-P2-10 回滚清空覆盖率', api.transient.coverageResult, null);
+  eq('CORE-P2-10 回滚清空框选', api.transient.rubber, null);
+  eq('CORE-P2-10 回滚清空仿射草稿', api.transient.affinePairs.length, 0);
+  eq('CORE-P2-10 回滚保留校准点', api.transient.calibPoints.length, 2);
+  api.resetState();
 }
 
 });
