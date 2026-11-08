@@ -468,8 +468,8 @@ function runCoverageAnalysis(){
     <div>${esc(L('参与统计的点设备：'))}<b>${res.cameraCount}</b> ${esc(L('个'))}${esc(L('（含物理尺寸的圆/球机、扇形/摄像头、方形覆盖）'))}${res.ignoredPoints?`；${esc(L('仅标识位置的图标点'))} <b>${res.ignoredPoints}</b> ${esc(L('个未计入'))}`:''}</div>
     <div>${esc(L('区域/闭合折线：'))}<b>${res.regions.length}</b> ${esc(L('个'))} ｜ ${esc(L('合计覆盖'))} <b>${pct(res.ratio)}</b></div>
     <div>${esc(L('覆盖面积'))} <b>${fmt(res.totalCovered)}</b> m² ｜ ${esc(L('盲区'))} <b>${fmt(res.totalBlind)}</b> m² ｜ ${esc(L('总面积'))} <b>${fmt(res.totalArea)}</b> m²</div>
-    <div style="margin-top:6px"><b>${esc(L('统计口径 v2'))}</b>：${esc(L('固定目标'))} <b>${res.targetCells}</b> ${esc(L('格，按可见区域面积分配（实际'))} <b>${res.gridCells}</b> ${esc(L('格），格边'))} <b>${fmt(cellMin)}–${fmt(cellMax)}</b> m</div>
-    <div class="hint-text">${esc(L('统计与画布缩放/像素/DPR 无关；历史 v1 报告的格数随缩放变化，数值不可直接对比。'))}</div>
+    <div style="margin-top:6px"><b>${esc(L('统计口径 v3'))}</b>：${esc(L('固定目标'))} <b>${res.targetCells}</b> ${esc(L('格，按可见区域面积分配（实际'))} <b>${res.gridCells}</b> ${esc(L('格），格边'))} <b>${fmt(cellMin)}–${fmt(cellMax)}</b> m</div>
+    <div class="hint-text">${esc(L('统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。'))}</div>
     <div class="hint-text">${esc(L('镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。'))}</div>
   </div>`;
   const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">

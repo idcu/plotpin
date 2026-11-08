@@ -415,9 +415,9 @@
     '覆盖面积':'Covered area', '盲区':'Blind area', '总面积':'Total area', '覆盖':'Coverage ',
     '已覆盖':'Covered', '栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比':
       'Grid estimate; coverage = sampled cells covered by any field of view inside the area',
-    '统计口径 v2':'Coverage spec v2', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
-    '统计与画布缩放/像素/DPR 无关；历史 v1 报告的格数随缩放变化，数值不可直接对比。':
-      'Independent of zoom/pixels/DPR; legacy v1 reports varied with zoom, so values are not directly comparable.',
+    '统计口径 v3':'Coverage spec v3', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
+    '统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。':
+      'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors no longer approximated by sampled polygons), shared with the stats panel and reports. Legacy v1/v2 report values are not directly comparable.',
     '镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。':
       'Lens spec: sweep from type fov (default 90°, clamped 10–360°, 360° = omnidirectional); effective range from point physical size phys(m): sector radius=phys, circle/square=phys/2; markers without phys are excluded. Hidden objects and hidden layers are excluded from the denominator.',
     '当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。':'No areas to analyze: draw an Area or a closed Polyline first.',

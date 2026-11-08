@@ -28,14 +28,20 @@ function pointInFootprint(p,cam){
   const half=cam.fov/2;
   return bearing<=half||bearing>=360-half;
 }
-/** 参与覆盖率统计的闭合区域：区域对象 + 闭合折线；隐藏对象与隐藏图层不计入分母 */
+/** 参与覆盖率统计的闭合区域：区域对象 + 闭合折线；隐藏对象与隐藏图层不计入分母。
+ *  面积一律用解析公式（shapeArea / polygonArea），与统计面板、报告同源；
+ *  0 面积退化区域与 shapeArea 的排除口径一致，不进入分母也不生成空网格。 */
 function regionPolygons(st){
   const out=[];
   for(const o of st.objects){
     if(!isVisible(o)) continue;
-    if(o.kind==='rect'){ const pts=shapeWorldPoints(o); if(pts.length>=3) out.push({id:o.id,name:o.name||'未命名区域',points:pts}); }
+    if(o.kind==='rect'){
+      const pts=shapeWorldPoints(o), area=shapeArea(o);
+      if(pts.length>=3&&area>0) out.push({id:o.id,name:o.name||'未命名区域',points:pts,area});
+    }
     else if(o.kind==='line'&&o.closed&&Array.isArray(o.points)&&o.points.length>=3){
-      out.push({id:o.id,name:o.name||'未命名闭合折线',points:o.points.map(p=>p.slice())});
+      const pts=o.points.map(p=>p.slice()), area=polygonArea(pts);
+      if(area>0) out.push({id:o.id,name:o.name||'未命名闭合折线',points:pts,area});
     }
   }
   return out;
@@ -90,7 +96,7 @@ function analyzeCoverage(st,opt){
   const ignored=st.objects.filter(o=>o.kind==='point'&&isVisible(o)&&!(Number(o.phys)>0)).length;
   const raw=regionPolygons(st).map(r=>{
     const bb=polygonBBox(r.points);
-    return {id:r.id,name:r.name,points:r.points,area:polygonArea(r.points),bb};
+    return {id:r.id,name:r.name,points:r.points,area:r.area,bb};
   });
   const layout=coverageGridPlan(raw,opt);
   const regions=raw.map((r,idx)=>{
@@ -141,11 +147,12 @@ function analyzeCoverage(st,opt){
   const totalCovered=regions.reduce((s,r)=>s+r.coveredArea,0);
   /* 口径元数据：报告与文档必须引用同一份，避免“同一图纸换缩放得到不同结果”再次发生 */
   const spec=Object.freeze({
-    version:2,
+    version:3,
     targetCells:layout.targetCells, maxCells:layout.maxCells,
     cellMinM:APP_LIMITS.COVERAGE_CELL_MIN_M, cellMaxM:APP_LIMITS.COVERAGE_CELL_MAX_M,
     fovSource:'point-type.fov', rangeSource:'object.phys',
     sectorRadius:'phys', circleRadius:'phys/2', squareHalfSide:'phys/2',
+    areaSource:'shapeArea/polygonArea',
     zoomIndependent:true
   });
   return {regions,cameraCount:cameras.length,ignoredPoints:ignored,
@@ -203,16 +210,21 @@ function optimizeCameraPlacement(st,opt){
   const regions=res.regions;
   if(!regions.length) return {beforeRatio:0,afterRatio:0,suggestions:[],reached:false,empty:true};
 
-  const insideArea=regions.reduce((s,r)=>s+(r.grid.reduce((n,g)=>n+(g!==2?1:0),0))*r.cell*r.cell,0);
-  if(insideArea<=0) return {beforeRatio:0,afterRatio:0,suggestions:[],reached:false,empty:true};
+  /* 与 analyzeCoverage 同一口径：每格代表的真实面积 = 区域面积 / 区内格数，
+     基准覆盖率直接取 res.ratio（面板/统计/报告同源），增益按同一折算累加。 */
+  const insideCounts=regions.map(r=>r.grid.reduce((n,g)=>n+(g!==2?1:0),0));
+  const cellReal=regions.map((r,i)=>insideCounts[i]>0?r.area/insideCounts[i]:0);
+  const insideArea=regions.reduce((s,r,i)=>s+insideCounts[i]*r.cell*r.cell,0);
+  if(insideArea<=0||!(res.totalArea>0)) return {beforeRatio:0,afterRatio:0,suggestions:[],reached:false,empty:true};
   /* 每区域的「已覆盖」掩码（只区分 1/0）；2=区域外保持 0 且不参与增益 */
   const covered=regions.map(r=>{
     const c=new Uint8Array(r.grid.length);
     for(let i=0;i<r.grid.length;i++) c[i]=r.grid[i]===1?1:0;
     return c;
   });
-  let coveredArea=regions.reduce((s,r)=>s+(r.grid.reduce((n,g)=>n+(g===1?1:0),0))*r.cell*r.cell,0);
-  const ratioNow=()=>insideArea?coveredArea/insideArea:0;
+  const baseCovered=res.totalCovered;
+  let addedArea=0;
+  const ratioNow=()=>res.totalArea?(baseCovered+addedArea)/res.totalArea:0;
 
   /* 候选位置：所有区域并集包围盒上的规则网格（允许略在区域外，符合壁挂/立杆布点） */
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
@@ -238,7 +250,7 @@ function optimizeCameraPlacement(st,opt){
         const idx=j*reg.nx+i;
         if(reg.grid[idx]!==0||covered[ri][idx]) continue;   /* 只对「区内且未覆盖」格计增益 */
         const px=reg.minX+(i+.5)*reg.cell, py=reg.minY+(j+.5)*reg.cell;
-        if(pointInFootprint([px,py],cam)) gain+=reg.cell*reg.cell;
+        if(pointInFootprint([px,py],cam)) gain+=cellReal[ri];
       }
     }
     return gain;
@@ -270,7 +282,7 @@ function optimizeCameraPlacement(st,opt){
     }
     if(!best||best.gain<=0) break;
     markCovered(best.x,best.y,best.angle);
-    coveredArea+=best.gain;
+    addedArea+=best.gain;
     suggestions.push({x:best.x,y:best.y,angle:best.angle,phys,fov,
       gain:best.gain,gainRatio:best.gain/insideArea,ratioAfter:ratioNow()});
   }

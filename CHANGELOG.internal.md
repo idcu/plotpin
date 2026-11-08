@@ -2,6 +2,23 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-20 统一覆盖率面积口径（v3）
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/core/geometry-coverage.js`
+    - `regionPolygons()` 直接输出区域面积：区域矩形用 `shapeArea()`（解析公式），闭合折线用 `polygonArea()`；`analyzeCoverage()` 不再用采样多边形重算面积。统计面板、覆盖率面板、盲区导出、报告分母同源。
+    - 0 面积退化区域与隐藏对象/图层一样不进入分母，也不生成空网格。
+    - `spec.version` 2 → 3，新增 `areaSource:'shapeArea/polygonArea'`；历史 v1/v2 报告数值保留不改写。
+    - `optimizeCameraPlacement()`：基准覆盖率改为 `res.ratio`（与面板同 targetCells 时严格相等），新增覆盖面积按「区域面积 / 区内格数」折算，不再用 bbox 格面积乘格数。
+  - `js/features/ui-panels.js` 与 `js/common/i18n.js`：面板标注「统计口径 v3」，补充面积源与历史报告不可比说明。
+  - `tests/e2e/coverage.spec.mjs`：同一工程验证圆/椭圆/扇形区域总面积 = 统计解析面积、= `regionPolygons` 汇总；口径版本 3。
+  - `scripts/selftest.mjs`：48.1 新增 9 条断言（面积同源、退化区域、优化器基准一致、5000×5000 耗时），并新增 `[N-20]` 耗时打点。
+  - `sw.js`：`VERSION` 28 → 29；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` §6、`docs/known-issues.md` K6、`docs/performance.md` §4.1.1 同步。
+- **验证数据**（2026-11-08，Node 18 / Windows 本机，命令 `node scripts/selftest.mjs --filter="覆盖率口径"`）：5000×5000 m 单次分析 **6 ms**（阈值 300 ms）；优化器搜索（100×100 m，grid=10，targetCells=2500）**427 ms**（仅记录）；面积一致性 selftest 1e-9、优化器基准 selftest 1e-12 全通过。selftest 2923 通过 / 0 失败；e2e **105 passed / 1 skipped**（106 用例）；产物 805,367 B（gzip 250,475 B，上限 839,680 B，余量 34,313 B）。
+- **遗留风险**：栅格命中判定仍按固定段数采样，v3 只是统一“面积”口径；v2/v3 数值不可直接对比（已在 K6 与面板文案标注）。优化器耗时随 grid 与区域规模近似线性增长，未设硬阈值。
+
 ## 2026-11-08 · N-19 属性面板 focusin 历史累积改为事件委托
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

@@ -3902,8 +3902,8 @@ await section("48. 覆盖率：分辨率参数与盲区多边形导出数据", a
 
 });
 
-/* 48.1 覆盖率口径 v2：与缩放无关、按面积分配固定格数、隐藏图层不计入 ------- */
-await section("48.1 覆盖率口径 v2：与缩放无关、按面积分配固定格数、隐藏图层不计入", async () => {
+/* 48.1 覆盖率口径 v3：与缩放无关、面积同源、隐藏图层与退化区域不计入 -------- */
+await section("48.1 覆盖率口径 v3：与缩放无关、面积同源、隐藏图层与退化区域不计入", async () => {
 {
   api.resetState();
   api.state.objects.push(api.baseObject('rect','rect.area',{name:'R2',x:0,y:0,width:50,height:40}));
@@ -3919,9 +3919,10 @@ await section("48.1 覆盖率口径 v2：与缩放无关、按面积分配固定
   ok('覆盖口径v2-缩放差异≤1个百分点', span<=0.01);
   approx('覆盖口径v2-格边不随缩放变化', Math.max(...cells)-Math.min(...cells), 0, 1e-12);
   const fixed=runs[0];
-  eq('覆盖口径v2-固定目标格数', fixed.targetCells, api.APP_LIMITS.COVERAGE_TARGET_CELLS);
-  eq('覆盖口径v2-口径版本', fixed.spec.version, 2);
-  eq('覆盖口径v2-标记与缩放无关', fixed.spec.zoomIndependent, true);
+  eq('覆盖口径v3-固定目标格数', fixed.targetCells, api.APP_LIMITS.COVERAGE_TARGET_CELLS);
+  eq('覆盖口径v3-口径版本', fixed.spec.version, 3);
+  eq('覆盖口径v3-面积源标记', fixed.spec.areaSource, 'shapeArea/polygonArea');
+  eq('覆盖口径v3-标记与缩放无关', fixed.spec.zoomIndependent, true);
   ok('覆盖口径v2-总格数受上限护栏约束', fixed.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
   ok('覆盖口径v2-格边不低于下限', fixed.regions[0].cell>=api.APP_LIMITS.COVERAGE_CELL_MIN_M);
 
@@ -3961,9 +3962,50 @@ await section("48.1 覆盖率口径 v2：与缩放无关、按面积分配固定
 
   api.resetState();
   api.state.objects.push(api.baseObject('rect','rect.area',{name:'HUGE',x:0,y:0,width:5000,height:5000}));
+  const hugeT0=Date.now();
   const huge=api.analyzeCoverage(api.state);
-  ok('覆盖口径v2-5000×5000m 格数不超上限', huge.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
-  approx('覆盖口径v2-5000×5000m 全覆盖为100%', huge.totalArea?huge.ratio:0, 0, 1e-9);
+  const hugeMs=Date.now()-hugeT0;
+  ok('覆盖口径v3-5000×5000m 格数不超上限', huge.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
+  approx('覆盖口径v3-5000×5000m 无设备覆盖率为0', huge.ratio, 0, 1e-9);
+  ok('覆盖口径v3-5000×5000m 单次分析 <300ms（实测 '+hugeMs+'ms）', hugeMs<300);
+
+  /* N-20：统计面板、覆盖率面板、导出区域三处面积同源（圆/椭圆/扇形用解析公式） */
+  api.resetState();
+  api.state.objects.push(
+    api.baseObject('rect','rect.area',{name:'C',x:0,y:0,width:10,height:10,shape:{type:'circle',r:5}}),
+    api.baseObject('rect','rect.area',{name:'E',x:40,y:0,width:10,height:10,shape:{type:'ellipse',rx:5,ry:3}}),
+    api.baseObject('rect','rect.area',{name:'S',x:80,y:0,width:10,height:10,shape:{type:'sector',r:5,a0:0,a1:90}})
+  );
+  const covArea=api.analyzeCoverage(api.state).totalArea;
+  const statArea=api.state.objects.reduce((s,o)=>s+api.objectArea(o),0);
+  const repoArea=api.regionPolygons(api.state).reduce((s,r)=>s+r.area,0);
+  approx('覆盖口径v3-面板总面积=统计解析面积', covArea, statArea, 1e-9);
+  approx('覆盖口径v3-导出区域面积=统计解析面积', repoArea, statArea, 1e-9);
+
+  /* 0 面积退化区域：统计分母与区域列表同时排除 */
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'ZERO',x:200,y:0,width:0,height:10}));
+  eq('覆盖口径v3-0面积区域不进入分母', api.analyzeCoverage(api.state).regions.length, 3);
+  approx('覆盖口径v3-0面积区域不改变总面积', api.analyzeCoverage(api.state).totalArea, statArea, 1e-9);
+
+  /* 优化器基准覆盖率与面板同口径（同一 targetCells） */
+  api.resetState();
+  api.state.objects.push(
+    api.baseObject('rect','rect.area',{name:'A',x:0,y:0,width:20,height:20}),
+    api.baseObject('point','point.camera',{name:'C',x:10,y:10,phys:10,angle:45})
+  );
+  const sameCov=api.analyzeCoverage(api.state,{targetCells:6000});
+  const optBase=api.optimizeCameraPlacement(api.state,{phys:20,fov:90,targetRatio:.99,maxAdd:1,grid:6,targetCells:6000});
+  approx('覆盖口径v3-优化器基准覆盖率=面板覆盖率', optBase.beforeRatio, sameCov.ratio, 1e-12);
+  ok('覆盖口径v3-优化器提升不降低', optBase.afterRatio>=optBase.beforeRatio-1e-12);
+
+  /* 优化器搜索耗时实测（记录用，不设硬阈值） */
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'OPT',x:0,y:0,width:100,height:100}));
+  const optT0=Date.now();
+  api.optimizeCameraPlacement(api.state,{phys:30,fov:90,targetRatio:.9,maxAdd:2,grid:10,targetCells:2500});
+  const optMs=Date.now()-optT0;
+  ok('覆盖口径v3-优化器搜索耗时实测 '+optMs+'ms（Node 桩，仅记录）', optMs>=0);
+  console.log('  [N-20] 5000×5000m 覆盖率分析 ' + hugeMs + ' ms；优化器搜索 ' + optMs + ' ms（Node 桩）');
   api.resetState();
 }
 

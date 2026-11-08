@@ -4,11 +4,11 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-2914%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-2923%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 
 PlotPin 是一个在浏览器里运行的图纸标注工具：在一张图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量与标注尺寸，并把图纸和台账导出为常见格式。运行时不需要安装、服务器或网络；入口是仓库根目录的 `index.html`，托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-当前共 **2914 项断言全部通过**。
+当前共 **2923 项断言全部通过**。
 
 > 文档口径：行为以代码为准。本文只做入口索引，不重复实现细节；易漂移的数字统一指向单一来源（见[数字口径](#数字口径)），不在此处复制多个版本。最后核对日期：2026-11-08。
 
@@ -71,7 +71,7 @@ npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实浏览器 e2e（需先装 Playwright）
 npm run perf:browser  # 真实 Chromium 性能基线（可选）
 npm run discipline    # 方法论自检看板
-# 2914 assertions, no dependencies
+# 2923 assertions, no dependencies
 ```
 
 `node scripts/check.mjs` 当前覆盖 12 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、模块分层、`--selftest`、i18n 覆盖率、Service Worker 缓存版本。CI 另外串行执行 `bench`、`build --check`、`check-gates`、`check-ngm` 与 `check-discipline`。
@@ -143,8 +143,8 @@ CHANGELOG.internal.md      内部追溯：提交、改动点、实测数据、�
 
 | 指标 | 单一来源 | 采集/校验方式 |
 | --- | --- | --- |
-| 自测断言数 | `scripts/selftest.mjs` + `scripts/badge.mjs` | `node scripts/badge.mjs --check`；当前 2914，README 徽章/正文由脚本注入校验 |
-| 单文件产物体积 | `scripts/dist-manifest.json` | `node scripts/build.mjs --check`；2026-11-08 读取为 804,838 B（gzip 250,254 B），上限 839,680 B |
+| 自测断言数 | `scripts/selftest.mjs` + `scripts/badge.mjs` | `node scripts/badge.mjs --check`；当前 2923，README 徽章/正文由脚本注入校验 |
+| 单文件产物体积 | `scripts/dist-manifest.json` | `node scripts/build.mjs --check`；2026-11-08 读取为 805,367 B（gzip 250,475 B），上限 839,680 B |
 | e2e 用例 | `tests/e2e/*.spec.mjs` | `node node_modules/@playwright/test/cli.js test --list`；2026-11-08 实测 35 个 spec / 106 个用例（105 通过，1 个条件跳过），以当次 `--list` 为准 |
 | i18n 覆盖率 | `scripts/i18n-scan.mjs` | `node scripts/i18n-scan.mjs --check` |
 | Service Worker 缓存版本 | `sw.js` 的 `VERSION` | 预缓存输入的内容指纹必须与提交入库的 `scripts/sw-inputs.sha256` 一致；输入变更未递增 `VERSION` 即失败，干净检出下同样有效（bump 后运行 `node scripts/check-sw.mjs --update`） |
