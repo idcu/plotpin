@@ -662,7 +662,7 @@ function auditProject(raw){
   if(dup) warnings.push('id 重复 '+dup);
   const layerIds=new Set((Array.isArray(p.layers)?p.layers:[]).map(l=>l&&l.id).filter(Boolean));
   let badLayer=0;
-  if(layerIds.size) objs.forEach(o=>{ if(o&&typeof o==='object'&&o.layer&&!layerIds.has(o.layer)) badLayer++; });
+  if(layerIds.size) objs.forEach(o=>{ if(o&&typeof o==='object'&&o.layerId&&!layerIds.has(o.layerId)) badLayer++; });
   if(badLayer) warnings.push('未知图层 '+badLayer);
   const bg=p.background;
   if(bg!==undefined&&(!bg||typeof bg!=='object'||Array.isArray(bg))) warnings.push('底图损坏');
@@ -679,7 +679,7 @@ async function loadSavedProject(){
     if(p&&typeof p==='object'){
       audit=auditProject(p);
       if(audit.level==='error'){ rescue={source:'IndexedDB',text:JSON.stringify(p)}; idbFailed=true; }
-      else if(isReadableSchema(p.schema)) st=migrateProject(p);
+      else if(isReadableSchema(p.schema)){ st=migrateProject(p); noteDroppedObjects(audit); }
     }
   }catch(e){ idbFailed=true; }
   if(!st){
@@ -691,7 +691,7 @@ async function loadSavedProject(){
         if(a.level==='error'){ if(!rescue) rescue={source:'localStorage',text:raw}; audit=a; }
         else{
           const p=JSON.parse(raw);
-          if(isReadableSchema(p.schema)){ st=migrateProject(p); audit=a; }
+          if(isReadableSchema(p.schema)){ st=migrateProject(p); audit=a; noteDroppedObjects(audit); }
         }
       }
     }catch(e){}
@@ -767,8 +767,13 @@ async function ensureProjectBackgroundAssets(st){
   await ensureFloorBackgroundAssets(st);
 }
 /** 最近一次 buildProject 的对象唯一性修正计数（审计用；不写入工程状态） */
-let lastSanitizeReport={duplicateIds:0,normalizedIds:0,duplicateNames:0};
+let lastSanitizeReport={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
 function sanitizeReport(){ return lastSanitizeReport; }
+/** 把「结构非法而丢弃的对象数」追加到加载审计，确保丢对象不静默（P2-A4）。 */
+function noteDroppedObjects(audit){
+  const n=sanitizeReport().dropped||0;
+  if(n) audit.warnings.push('对象丢弃 '+n);
+}
 /** 设置清洗（唯一真源）：工程载入与启动本机设置共用同一套规则。
  *  只读取 SETTINGS_KEYS 白名单内的自有键，`__proto__` 等原型键不会进入 Object.assign（CORE-P2-1）。 */
 function sanitizeSettings(raw){
@@ -841,7 +846,7 @@ function buildProject(p){
      重复 id 或 safeId 归并冲突时追加稳定后缀，重名对象走编号作用域重编号。
      不把当前工程 id 灌入 seenIds——合并他人工程时同 id 代表同一对象，不能改名换姓。 */
   const seenIds=new Set(), seenNames=new Set();
-  const report={duplicateIds:0,normalizedIds:0,duplicateNames:0};
+  const report={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
   lastSanitizeReport=report;
   try{
     const objects=sanitizeObjects(p.objects,layers,objectTypes,seenIds,seenNames,report);
@@ -871,8 +876,8 @@ function buildProject(p){
     if(!floors.length) floors.push({id:'floor.default',name:'1F',updatedAt:''});
     /* floors 非空时 activeFloorId 必然命中：匹配则保留，否则回退首层（首层由上面的补默认层保证存在） */
     const activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
-    if(report.duplicateIds||report.normalizedIds||report.duplicateNames){
-      if(typeof console!=='undefined'&&console.warn) console.warn('[sanitize] 对象唯一性修正',report);
+    if(report.duplicateIds||report.normalizedIds||report.duplicateNames||report.dropped){
+      if(typeof console!=='undefined'&&console.warn) console.warn('[sanitize] 对象清洗修正',report);
     }
     if(dupFloorName&&typeof console!=='undefined'&&console.warn){
       console.warn('[sanitize] 楼层重名 '+dupFloorName+' 个，已保留原名；导入前请先重命名');
@@ -1190,9 +1195,9 @@ function sanitizeAreaShape(raw){
 function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
   const out=[]; if(!Array.isArray(arr)) return out;
   seenIds=seenIds||new Set(); seenNames=seenNames||new Set();
-  const audit=report||{duplicateIds:0,normalizedIds:0,duplicateNames:0};
+  const audit=report||{duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
   arr.forEach(raw=>{
-    if(!raw||typeof raw!=='object'||!['point','rect','line','text','dimension'].includes(raw.kind)) return;
+    if(!raw||typeof raw!=='object'||!['point','rect','line','text','dimension'].includes(raw.kind)){ audit.dropped=(audit.dropped||0)+1; return; }
     const kind=raw.kind, layerId=layers.some(l=>l.id===String(raw.layerId))?String(raw.layerId):'layer.default';
     const hasType=typeId=>types.some(t=>t.id===typeId&&t.kind===kind);
     const typeId=hasType(String(raw.typeId))?String(raw.typeId):defaultTypeId(kind);
@@ -1219,23 +1224,23 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
         if(s.type==='parallelogram'){
           /* 平行四边形的底/高仍存在 width/height（shape 只存倾角），不能清零 */
           o.width=positiveNumber(raw.width,0); o.height=positiveNumber(raw.height,0);
-          if(o.width<=0||o.height<=0) return;
+          if(o.width<=0||o.height<=0){ audit.dropped=(audit.dropped||0)+1; return; }
         }else{
           o.width=0; o.height=0;
         }
       }else{
         o.shape=null;
         o.width=positiveNumber(raw.width,0); o.height=positiveNumber(raw.height,0);
-        if(o.width<=0||o.height<=0) return;
+        if(o.width<=0||o.height<=0){ audit.dropped=(audit.dropped||0)+1; return; }
       }
     }
     if(kind==='point'){ o.iconSize=Math.min(3,Math.max(.5,finiteNumber(raw.iconSize,1))); }
     if(kind==='text'){ o.height=positiveNumber(raw.height,2.2); }
-    if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)) return; syncFirstPoint(o); }
+    if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)){ audit.dropped=(audit.dropped||0)+1; return; } syncFirstPoint(o); }
     if(kind==='dimension'){
       o.points=points;
       const minPts=(o.subtype==='distance'||o.subtype==='ruler')?2:3;
-      if(points.length<minPts) return;
+      if(points.length<minPts){ audit.dropped=(audit.dropped||0)+1; return; }
       syncFirstPoint(o);
     }
     if(raw.style&&typeof raw.style==='object'){

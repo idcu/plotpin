@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P2 批次 A（4/5）：加载丢对象计数可见 + 审计字段修正
+
+- **Commit Hash**：待批次末回填（`fix(load): 加载审计按 layerId 判定并统计丢弃对象`）
+- **核心改动**：
+  - `js/core/persistence.js` `auditProject` 的未知图层检查由 `o.layer` 改为 schema 与 `sanitizeObjects` 实际使用的 `o.layerId`；旧写法恒不命中，未知图层永不告警。
+  - `sanitizeObjects` 为 5 处结构非法丢弃分支（非法 kind、矩形/平行四边形非正宽高、折线点数不足、尺寸标注点数不足）累加 `audit.dropped`；`buildProject` 与 `lastSanitizeReport` 同步带 `dropped`，`console.warn` 覆盖丢弃场景。
+  - 新增 `noteDroppedObjects(audit)`：`loadSavedProject` 在 IndexedDB 与 localStorage 两条迁移路径后把「对象丢弃 N」写入加载审计横幅，丢对象不再静默。
+- **验证数据**：
+  - selftest **3478 通过 / 0 失败**（基线 3471，净 +7：layerId 正/负例、旧 `layer` 字段不误报、3 类非法对象 `dropped===3`、加载审计含「对象丢弃 1」且合法对象仍载入）。
+  - 更新 D-07 既有夹具从 `layer` 改为 `layerId`（原断言实际锁定了缺陷字段），断言数与语义未删减。
+  - e2e **120 通过 + 1 条件跳过（121）**；check-gates 6/6 + 12/12；discipline 13/13（54 条命令可解析）。
+  - dist **825,627 B**（本条 **+420 B**）/ gzip 256,221 B / 余量 **14,053 B**；SW `VERSION=92`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 审计横幅只在「加载已保存工程 / 本机草稿」路径展示；打开工程库与 JSON 导入由 `buildProject` 清洗，丢弃数目前只进 `console.warn` 与 `sanitizeReport()`，未弹 toast。
+  - `auditProject` 只检查 `layerId` 是否存在且不在图层集；对象缺 `layerId` 会被 `sanitizeObjects` 归到默认图层，审计不单独告警。
+
 ## 2026-11-08 · 审计 P2 批次 A（3/5）：切工程前强制落盘
 
 - **Commit Hash**：待批次末回填（`fix(persistence): 切工程前强制落盘待保存草稿`）

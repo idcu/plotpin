@@ -222,7 +222,8 @@ code += `\n;globalThis.__api = {
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
-  clearCurrentFloor,
+  clearCurrentFloor, loadSavedProject,
+  get idbGet(){ return idbGet; }, set idbGet(fn){ idbGet=fn; },
   get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
   get affinePairs(){ return affinePairs; }, set affinePairs(v){ affinePairs=v; },
   get calibSelection(){ return calibSelection; }, set calibSelection(v){ calibSelection=v; },
@@ -2085,6 +2086,40 @@ await section("28.11 P2-A3 切工程前强制落盘", async () => {
     sandbox.scheduleSave=orig.save; sandbox.runSave=orig.run; sandbox.reachableAssetIds=orig.reach;
     api.resetState(); api.resetSaveHealth();
   }
+}
+});
+
+/* 28.12 P2-A4 加载丢对象计数可见 + 审计 layerId 修正 --------------------- */
+await section("28.12 P2-A4 加载丢对象计数可见 + 审计 layerId 修正", async () => {
+{
+  const mk=o=>({schema:'offline-drawing-annotation/v2',layers:[{id:'layer.default'}],floors:[{id:'F1'}],activeFloorId:'F1',objects:[o]});
+  const a1=api.auditProject(mk({id:'A',kind:'point',layerId:'NOPE'}));
+  ok('P2-A4 审计按 layerId 识别未知图层', a1.warnings.some(w=>w.startsWith('未知图层 1')));
+  const a2=api.auditProject(mk({id:'B',kind:'point',layer:'NOPE'}));
+  ok('P2-A4 旧 layer 字段不再误报未知图层', !a2.warnings.some(w=>w.includes('未知图层')));
+  const a3=api.auditProject(mk({id:'C',kind:'point',layerId:'layer.default'}));
+  ok('P2-A4 合法 layerId 不报未知图层', !a3.warnings.some(w=>w.includes('未知图层')));
+
+  const rep={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
+  const out=api.sanitizeObjects([
+    {kind:'unknown',id:'X'},
+    {kind:'rect',id:'R',shape:null,width:0,height:0},
+    {kind:'line',id:'L',points:[[0,0]]}
+  ],[{id:'layer.default'}],[],new Set(),new Set(),rep);
+  eq('P2-A4 非法对象全部丢弃', out.length, 0);
+  eq('P2-A4 丢弃计数', rep.dropped, 3);
+
+  const prevIdb=api.idbGet;
+  api.resetState();
+  const raw=api.persistableState();
+  const baseCount=raw.objects.length;
+  raw.objects.push({id:'BADLOAD',kind:'line',points:[[0,0]],layerId:'layer.default'});
+  api.idbGet=async()=>JSON.parse(JSON.stringify(raw));
+  try{
+    const r=await api.loadSavedProject();
+    ok('P2-A4 加载审计含对象丢弃计数', r.audit.warnings.includes('对象丢弃 1'));
+    eq('P2-A4 合法对象仍载入', r.state.objects.length, baseCount);
+  }finally{ api.idbGet=prevIdb; api.resetState(); }
 }
 });
 
@@ -7926,9 +7961,9 @@ await section("D-07 加载完整性审计与资产状态区分", async () => {
   ok('D-07 楼层为空原因', noFloor.warnings.some(w=>w.includes('楼层为空')));
   ok('D-07 活动楼层缺失告警',
     api.auditProject(Object.assign({},base,{activeFloorId:'NOPE'})).warnings.some(w=>w.includes('活动楼层')));
-  const dup=api.auditProject(Object.assign({},base,{objects:[{id:'A',layer:'L1'},{id:'A',layer:'L1'}]}));
+  const dup=api.auditProject(Object.assign({},base,{objects:[{id:'A',layerId:'L1'},{id:'A',layerId:'L1'}]}));
   ok('D-07 重复对象 id 告警', dup.warnings.some(w=>w.includes('重复')));
-  const badLayer=api.auditProject(Object.assign({},base,{objects:[{id:'A',layer:'LX'}]}));
+  const badLayer=api.auditProject(Object.assign({},base,{objects:[{id:'A',layerId:'LX'}]}));
   ok('D-07 未知图层告警', badLayer.warnings.some(w=>w.includes('未知图层')));
   const noAsset=api.auditProject(Object.assign({},base,{background:{kind:'image',assetId:'',dataUrl:''}}));
   ok('D-07 底图资产缺失只告警', noAsset.level==='warn'&&noAsset.warnings.some(w=>w.includes('资产缺失')));
