@@ -8,7 +8,9 @@
   /* D-09 同工程多标签租约：先注册横幅回调，再开始心跳；不阻塞编辑 */
   onLeaseConflict(info=>{ if(info&&info.active) showLeaseConflictBanner(info); else hideLeaseConflictBanner(); });
   acquireEditorLease();
-  try{ const ss=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); Object.assign(state.settings,ss); }catch(e){}
+  /* CORE-P2-1：工程记录是设置唯一真源；仅「没有已保存工程」时用本机设置兜底，
+     并复用 sanitizeSettings 白名单，避免跨工程覆盖与 __proto__ 污染。 */
+  if(!(loaded&&loaded.state)) applyLocalSettings();
   await catalogLoad();
   /* 界面语言先于首屏渲染：动态面板/ARIA 标签也按当前语言生成 */
   I18N.setLang(state.settings.lang);

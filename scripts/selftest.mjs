@@ -101,6 +101,7 @@ code += `\n;globalThis.__api = {
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
   importJsonFile, openProjectById,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, baseObject,
+  SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
   importLimitErrors, importLimitMessage,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
@@ -7863,6 +7864,33 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   eq('CORE-P2-19 变更路径同样释放缓存', api.coverageLayerCache()[0], null);
 }
 
+});
+
+/* ---------------- P2 批次 5：核心 schema 与安全 ---------------- */
+await section("P2-CORE 批次 5：schema 与安全", async () => {
+{
+  /* CORE-P2-1：启动设置只接受白名单键，__proto__ 不得污染，越界值按既有规则收敛 */
+  const polluted=JSON.parse('{"__proto__":{"polluted":"yes"},"gridVisible":false,"segLabelMinPx":33,"precision":9,"lang":"en"}');
+  const st=api.sanitizeSettings(polluted);
+  eq('CORE-P2-1 __proto__ 不污染原型', ({}).polluted, undefined);
+  eq('CORE-P2-1 gridVisible 白名单生效', st.gridVisible, false);
+  eq('CORE-P2-1 segLabelMinPx 白名单生效', st.segLabelMinPx, 33);
+  eq('CORE-P2-1 precision 上限夹取', st.precision, 6);
+  eq('CORE-P2-1 lang 仅接受 zh/en', api.sanitizeSettings({lang:'xx'}).lang, 'zh');
+  eq('CORE-P2-1 未知键不进入设置', 'evil' in api.sanitizeSettings({evil:1}), false);
+  ok('CORE-P2-1 白名单覆盖全部默认设置键', api.SETTINGS_KEYS.includes('gridVisible')&&api.SETTINGS_KEYS.includes('segLabelMinPx')&&api.SETTINGS_KEYS.includes('precision'));
+  const stored=api.settingsForStorage(Object.assign({},api.createInitialState().settings,{gridVisible:false,segLabelMinPx:30,evil:1}));
+  eq('CORE-P2-1 存储视图含 gridVisible', stored.gridVisible, false);
+  eq('CORE-P2-1 存储视图含 segLabelMinPx', stored.segLabelMinPx, 30);
+  ok('CORE-P2-1 存储视图无未登记键', !('evil' in stored));
+  eq('CORE-P2-1 buildProject 复用同一清洗', api.buildProject({schema:api.SCHEMA,settings:{precision:99,gridVisible:false}}).settings.precision, 6);
+  /* 启动兜底：无已保存工程时从本机设置恢复；清理后不得残留 */
+  sandbox.localStorage.setItem('offline-drawing-annotation.settings', JSON.stringify({gridVisible:false,segLabelMinPx:31}));
+  api.resetState(); api.applyLocalSettings();
+  eq('CORE-P2-1 启动兜底读取本机设置', api.state.settings.gridVisible, false);
+  eq('CORE-P2-1 启动兜底 segLabelMinPx', api.state.settings.segLabelMinPx, 31);
+  sandbox.localStorage.removeItem('offline-drawing-annotation.settings'); api.resetState();
+}
 });
 
 /* ---------------- 结果汇总 ---------------- */

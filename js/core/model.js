@@ -198,6 +198,8 @@ function normalizeRuleConfig(raw){
   return out;
 }
 /* -------------------- 初始化 / 工程数据 -------------------- */
+/** 设置键白名单（唯一真源）：从默认设置派生，持久化与启动合并共用，避免第二套清单漏键。 */
+const SETTINGS_KEYS=Object.freeze(Object.keys(createInitialState().settings));
 /** @returns {ProjectState} 新工程状态 */
 function createInitialState(){
   const now = new Date().toISOString();

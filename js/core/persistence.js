@@ -600,8 +600,7 @@ async function runSave(){
   try{
     await idbPut(snapshot);
     if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(e=>{ warn=1; reportSaveFailure(e,'project'); });
-    const s=state.settings;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({showLabels:s.showLabels,gridSize:s.gridSize,snap:s.snap,markerScale:s.markerScale,showCursor:s.showCursor,showSegLen:s.showSegLen,osnap:s.osnap,showAreaTag:s.showAreaTag,siteNodes:s.siteNodes,siteSegLen:s.siteSegLen,siteBase:s.siteBase,siteRadius:s.siteRadius,siteArea:s.siteArea,sitePerimeter:s.sitePerimeter,polar:s.polar,polarStep:s.polarStep,lang:s.lang}));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(state.settings)));
     if(!warn){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:nowISO(),retry:0}; hideSaveFailureBanner(); }
     saveStatus((state.meta.projectId?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString());
   }catch(e){
@@ -745,16 +744,14 @@ async function ensureProjectBackgroundAssets(st){
 /** 最近一次 buildProject 的对象唯一性修正计数（审计用；不写入工程状态） */
 let lastSanitizeReport={duplicateIds:0,normalizedIds:0,duplicateNames:0};
 function sanitizeReport(){ return lastSanitizeReport; }
-/** 由原始 JSON 构建清洗后的工程对象；不写全局 state，供导入/打开工程做“先校验后替换”的事务 */
-function buildProject(p){
-  const base=createInitialState();
-  const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
-  meta.name=typeof meta.name==='string'&&meta.name.trim()?meta.name:base.meta.name;
-  /* B-07：图框/标题栏随 meta 持久化；旧档缺字段 → 默认模板（enabled:false，不改变既有导出） */
-  meta.titleBlock=normalizeTitleBlock(meta.titleBlock);
-  const settings=Object.assign(base.settings,typeof p.settings==='object'&&p.settings?p.settings:{});
+/** 设置清洗（唯一真源）：工程载入与启动本机设置共用同一套规则。
+ *  只读取 SETTINGS_KEYS 白名单内的自有键，`__proto__` 等原型键不会进入 Object.assign（CORE-P2-1）。 */
+function sanitizeSettings(raw){
+  const settings=Object.assign({},createInitialState().settings);
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw)){
+    SETTINGS_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(raw,k)) settings[k]=raw[k]; });
+  }
   settings.unit='m';
-  // 注意：base.settings 已被上面的 Object.assign 就地合并，兜底值必须用字面量，不能再引用 base
   settings.precision=Math.min(6,Math.max(0,Math.round(finiteNumber(settings.precision,2))));
   settings.gridSize=positiveNumber(settings.gridSize,1);
   settings.gridVisible=!!settings.gridVisible; settings.snap=!!settings.snap; settings.showLabels=!!settings.showLabels;
@@ -767,7 +764,7 @@ function buildProject(p){
   settings.siteSegLen=settings.siteSegLen!==false;
   settings.siteArea=settings.siteArea!==false;
   /* 场地周长自「场地周长面积」拆出：旧档缺省继承原面积开关；基点/半径为新增项，默认关 */
-  settings.sitePerimeter=(p.settings&&typeof p.settings.sitePerimeter==='boolean')?p.settings.sitePerimeter:settings.siteArea;
+  settings.sitePerimeter=(raw&&typeof raw.sitePerimeter==='boolean')?raw.sitePerimeter:settings.siteArea;
   settings.siteBase=!!settings.siteBase;
   settings.siteRadius=!!settings.siteRadius;
   settings.polar=!!settings.polar;
@@ -775,6 +772,29 @@ function buildProject(p){
   settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
     Math.round(finiteNumber(settings.segLabelMinPx,APP_LIMITS.SEG_LABEL_MIN_PX))));
   settings.lang=settings.lang==='en'?'en':'zh';
+  return settings;
+}
+/** 本机设置存储视图：只取白名单键，新增设置项不会因忘记改字面量而漏存。 */
+function settingsForStorage(s){
+  const out={};
+  SETTINGS_KEYS.forEach(k=>{ if(s&&Object.prototype.hasOwnProperty.call(s,k)) out[k]=s[k]; });
+  return out;
+}
+/** 启动兜底：仅当没有已保存工程时用本机设置初始化；工程记录始终是设置唯一真源。 */
+function applyLocalSettings(){
+  let raw={};
+  try{ raw=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); }catch(_){ raw={}; }
+  state.settings=sanitizeSettings(raw);
+  return state.settings;
+}
+/** 由原始 JSON 构建清洗后的工程对象；不写全局 state，供导入/打开工程做“先校验后替换”的事务 */
+function buildProject(p){
+  const base=createInitialState();
+  const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
+  meta.name=typeof meta.name==='string'&&meta.name.trim()?meta.name:base.meta.name;
+  /* B-07：图框/标题栏随 meta 持久化；旧档缺字段 → 默认模板（enabled:false，不改变既有导出） */
+  meta.titleBlock=normalizeTitleBlock(meta.titleBlock);
+  const settings=sanitizeSettings(p.settings);
   const layers=sanitizeLayers(p.layers);
   /* 双槽迁移：有 site 字段按新档清洗；旧档按 background.kind 拆分（image 保留，矢量迁入 site） */
   const slots=migrateBackgroundAndSite(p,layers);
