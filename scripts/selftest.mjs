@@ -7729,6 +7729,12 @@ await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
   eq('IO-P2-16 场地层 SITE 唯一', dxs.layers.filter(l=>l.name==='SITE').length, 1);
   ok('IO-P2-16 业务实体落在 SITE_2', dxs.entities.some(e=>e.layer==='SITE_2'&&e.type==='POINT'));
   ok('IO-P2-16 场地实体仍在 SITE', dxs.entities.some(e=>e.layer==='SITE'&&e.type==='LWPOLYLINE'));
+
+  /* IO-P2-18：R12 凸度拉直属明确降级，导入预检必须标注段数，无凸度不得误报 */
+  const fl=api.dxfFidelityLines({version:'AC1009',versionName:'R12',knownVersion:true,r12Bulge:2,supportedCount:5,blocks:0},null);
+  ok('IO-P2-18 R12 凸度降级在预检文案', fl.some(l=>l.includes('R12 凸度')&&l.includes('2')));
+  const fl0=api.dxfFidelityLines({version:'AC1009',versionName:'R12',knownVersion:true,r12Bulge:0,supportedCount:5,blocks:0},null);
+  ok('IO-P2-18 无凸度不误报降级', !fl0.some(l=>l.includes('R12 凸度')));
 }
 
 });
