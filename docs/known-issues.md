@@ -166,6 +166,7 @@
 | CORE-P2-14 | 已归档（仅自测入口）：`historyValueEqual` 生产代码不使用，保留供自测；断言未删除 | [known-issues.md](known-issues.md) §2.4 |
 | RT-P2-02 | 已降级为限制：快照每工程 20 条 / 约 16 MB 是 UTF-8 字节估算的软上限；单条超限仍保留 | [features.md](features.md) §11、[ARCHITECTURE.md](ARCHITECTURE.md) 快照节、[user-guide.md](user-guide.md) §14 |
 | RT-P2-06 | 已降级为限制：对比列表最多展示 2000 条差异；弹窗「完整数据见快照记录」不提供差异导出入口，UI 文案本轮未改 | [features.md](features.md) §11、[user-guide.md](user-guide.md) §14 |
+| RT-P2-10 | 已确认（静态核对）：未声明 `state:read` 时沙箱导出器收到空 `input`，且不传 `site`；运行期用例未覆盖 | [ARCHITECTURE.md](ARCHITECTURE.md) 插件节、[features.md](features.md) §12 |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 

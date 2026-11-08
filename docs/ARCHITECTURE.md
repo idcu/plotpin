@@ -205,6 +205,7 @@ Schema 为 `offline-drawing-annotation/v2`；`v1` 只读兼容，读取时迁移
 
 - 插件 API 版本 `1.1.0`；只接受主版本 1、次版本不高于宿主；不兼容时返回可读原因，不创建 Worker。
 - `capabilities` 是白名单，共 8 项：`state:read / state:write / annotate / types / icons / export / import / rules`；未声明能力在 RPC 层直接拒绝。
+- 沙箱导出器的 `input` 受 `state:read` 门控：未声明时只传空对象 `{}`，不传 `state`/`projectName`/`site`，避免导出器绕过能力白名单读取工程内容（静态核对，运行期用例未覆盖，RT-P2-10）。
 - Worker 启动时先捕获 `postMessage/addEventListener/setTimeout` 等绑定，再从全局删除 `fetch / indexedDB / XMLHttpRequest / WebSocket / importScripts / caches / localStorage / navigator / location / self / Worker / close` 等入口；插件无 DOM、无网络、无存储、不能直接逃逸到主线程；但浏览器广播通道（`BroadcastChannel` 等）未封堵，可绕过能力白名单读取/伪造协作消息（见 [known-issues](known-issues.md) P0-4）。
 - 单次调用/初始化超时 2000ms，超时由主线程 `terminate()`；异常不得影响主工程。
 - 清单 schema 为 `plotpin.plugin/v1`，上限 192KB，代码上限 64KB；清单校验是纯函数，失败无副作用。
