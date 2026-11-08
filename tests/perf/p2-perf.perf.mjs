@@ -240,6 +240,78 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
     expect(Math.max(...data.prune.readsPerCall), '淘汰每次 IDB get 次数（只读索引）').toBeLessThanOrEqual(2);
     expect(Math.min(...data.full.readsPerCall), '全量读每次 IDB get 次数（逐条读 data）').toBeGreaterThanOrEqual(20);
   });
+
+  test('IO-P2-11 导出字段「长度/面积」逐行重复计算', async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await page.evaluate(installScene, 10000);
+    const CFG = { rows: 10000, reps: 3 };
+
+    /* ---- 当前实现：直接按字段表构建全部行（无探针） ---- */
+    const base = await page.evaluate(cfg => {
+      const time = () => {
+        const t0 = performance.now();
+        let n = 0;
+        for (const o of state.objects) { buildExportRow(o, '1F'); n++; }
+        return { ms: performance.now() - t0, rows: n };
+      };
+      time();
+      const samples = [];
+      for (let i = 0; i < cfg.reps; i++) samples.push(time());
+      return { samples: samples.map(x => x.ms), rows: samples[0].rows };
+    }, CFG);
+
+    /* ---- 探针：包装 objectLength / objectArea 统计每行调用次数与总耗时 ---- */
+    const probe = await page.evaluate(cfg => {
+      const origLen = objectLength, origArea = objectArea;
+      let lenCalls = 0, areaCalls = 0;
+      window.objectLength = function (o) { lenCalls++; return origLen(o); };
+      window.objectArea = function (o) { areaCalls++; return origArea(o); };
+      const t0 = performance.now();
+      let rows = 0;
+      for (const o of state.objects) { buildExportRow(o, '1F'); rows++; }
+      const buildMs = performance.now() - t0;
+      window.objectLength = origLen;
+      window.objectArea = origArea;
+
+      /* 同一批量下单独计时：实际调用次数 vs 每对象一次（理论去重后的一半） */
+      const measure = (fn, n) => {
+        const t = performance.now();
+        for (let i = 0; i < n; i++) fn(state.objects[i % state.objects.length]);
+        return performance.now() - t;
+      };
+      const len2 = measure(origLen, cfg.rows * 2), len1 = measure(origLen, cfg.rows);
+      const area2 = measure(origArea, cfg.rows * 2), area1 = measure(origArea, cfg.rows);
+      return {
+        rows, buildMs, lenCalls, areaCalls,
+        lenMs: { twice: len2, once: len1 }, areaMs: { twice: area2, once: area1 }
+      };
+    }, CFG);
+
+    const data = {
+      case: 'IO-P2-11 导出字段长度/面积重复计算',
+      fixture: CFG,
+      baseline: { total: stat(base.samples), rows: base.rows, msPerRow: round(pct(base.samples, 0.5) / base.rows * 1000, 2) },
+      probe: {
+        rows: probe.rows, buildMs: round(probe.buildMs),
+        lenCalls: probe.lenCalls, areaCalls: probe.areaCalls,
+        lenCallsPerRow: round(probe.lenCalls / probe.rows, 2),
+        areaCallsPerRow: round(probe.areaCalls / probe.rows, 2),
+        lenMsTwice: round(probe.lenMs.twice), lenMsOnce: round(probe.lenMs.once),
+        areaMsTwice: round(probe.areaMs.twice), areaMsOnce: round(probe.areaMs.once)
+      },
+      reclaimableMs: round(probe.lenMs.once + probe.areaMs.once)
+    };
+    record(data);
+    expect(data.baseline.rows, '构建行数').toBe(10000);
+    expect(data.probe.rows, '探针构建行数').toBe(10000);
+    /* 打点目标：证明非零长度/面积的对象每行被计算两次（字段表 41/42 行的 `x?fmt(x):''` 短路）
+       installScene 10k = 3334 point + 3333 rect + 3333 line；line 长度非零、rect 面积非零，
+       故 objectLength / objectArea 各被调用 3333×2 + 6667×1 = 13333 次。 */
+    expect(data.probe.lenCalls, 'objectLength 调用次数').toBe(13333);
+    expect(data.probe.areaCalls, 'objectArea 调用次数').toBe(13333);
+    expect(data.baseline.total.p50, '10k 行构建耗时必须可测').toBeGreaterThan(0);
+  });
 });
 
 test.afterAll(save);

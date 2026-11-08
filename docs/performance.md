@@ -175,6 +175,21 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 
 本项只补打点，未改业务代码；对照列是同一 harness 下的量化上限，不作为已修复证据。
 
+#### 4.1.8 导出字段「长度/面积」逐行重复计算（2026-11-08，IO-P2-11 打点）
+
+命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "IO-P2-11" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，10,000 行 = 3,334 point + 3,333 rect + 3,333 line，`buildExportRow` 3 次取中位；探针包装 `objectLength`/`objectArea` 计数）。两次独立复跑。
+
+| 指标 | 第 1 次 | 第 2 次 | 说明 |
+|---|---|---|---|
+| 10k 行构建 P50 / P95 | 18.9 / 33.9 ms | 17.4 / 19.6 ms | 逐行 1.74~1.89 µs；P95 抖动来自机器负载 |
+| `objectLength` 调用 | 13,333 次（1.33 次/行） | 同左 | 仅 line 的首次结果非零，`x?fmt(x):''` 触发第二次 |
+| `objectArea` 调用 | 13,333 次（1.33 次/行） | 同左 | 仅 rect 的面积非零，同上 |
+| 单次 `objectLength` 10k 次耗时 | 0.3 ms | 0.3 ms | 实测 |
+| 单次 `objectArea` 10k 次耗时 | 1.3 ms | 0.9 ms | 实测 |
+| 去重后可回收耗时 | 1.6 ms | 1.2 ms | 占 10k 行构建 6.9%~8.5%，实测值相减 |
+
+结论：审计 P2-11 的「每行算两次」成立，但只在结果非零时才发生第二次；10k 行规模下可回收 1.2~1.6 ms。本批只补打点，未改业务代码。
+
 #### 4.1.7 快照列表/淘汰的 IDB 读取次数（2026-11-08，CORE-P2-4 打点）
 
 命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-4" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，20 条快照 × 10,000 对象，`idbGetKey` 计数包装）。两次独立复跑。
