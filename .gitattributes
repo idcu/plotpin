@@ -13,3 +13,7 @@
 *.zip binary
 # DXF 导出使用 CRLF，golden 必须逐字节保留（不得做换行归一）
 *.dxf -text
+
+# 台账 CSV/TSV golden 使用 CRLF，必须逐字节保留（IO-P2-2）
+tests/golden/*.csv -text
+tests/golden/*.tsv -text

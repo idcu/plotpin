@@ -152,10 +152,11 @@ function objectRowsAll(){
 /* 公式注入防护（formulaGuard / formulaUnguard）在 io-fields.js：导出加引号、导入去引号共用一份实现 */
 function delimitedFromTable(table,delim){
   const cols=table[0];
-  const opt={delimiter:delim,eol:'\n',bom:false,quoteChars:/[",\n\r\t]/,guardFormula:formulaGuard};
+  /* 换行统一 CRLF（IO-P2-2）：与规则 CSV 一致，Excel/记事本往返不再混用 LF/CRLF */
+  const opt={delimiter:delim,eol:'\r\n',bom:false,quoteChars:/[",\n\r\t]/,guardFormula:formulaGuard};
   const body=DSV.formatRows(table.slice(1),opt);
   /* 表头与数据行共用同一 quoteCell 策略（IO-P2-1）：列名含分隔符/引号/危险前缀时同样转义 */
-  return '\ufeff'+DSV.formatRows([cols],opt)+'\n'+body;
+  return '\ufeff'+DSV.formatRows([cols],opt)+'\r\n'+body;
 }
 /** 纯函数：生成 CSV/TSV 文本（导出与自测共用，不触发下载） */
 function delimitedText(delim){
