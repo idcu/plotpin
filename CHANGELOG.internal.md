@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 批次 E（1/3）：旋转方形设备按真实外接盒预筛，覆盖率不再漏格
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`dd56253`
 - **核心改动**：
   - `js/core/geometry-coverage.js`：新增 `cameraPrefilterBox(c,cosA,sinA)`；方形 `kind==='square'` 的外扩半宽由 `r` 改为 `r·(|cos|+|sin|)`，扇形/圆形保持 `r`；`analyzeCoverage` 的摄像机预计算改为展开该盒。预筛只允许偏大，不会把命中格误判为未命中。
   - `scripts/selftest.mjs` +8：0/30/45/90° 外扩值、30°/45° 旋转后四角均落在预筛盒内、45° 栅格命中数与逐格 `pointInFootprint` 严格相等、确有覆盖。
