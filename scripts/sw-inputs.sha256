@@ -2,8 +2,8 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=34
-1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
+version=35
+9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js

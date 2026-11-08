@@ -9,11 +9,11 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 810,985 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 252,199 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 810,986 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 252,200 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 28,695 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=34` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 28,694 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=35` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
@@ -28,7 +28,7 @@
 | 插件 API 面 | 23 键 / 清单 23 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
 | i18n 覆盖率 | 45.65% / 缺口 6 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
 | i18n 字典规模 | PHRASES 978 / TEMPLATES 112 / DICT.zh 193 | 同上 | |
-| 门禁牙齿 | 正面基线 6/6 + 人为破坏 9/9 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字 |
+| 门禁牙齿 | 正面基线 6/6 + 人为破坏 10/10 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10 场景为 CSS 花括号未配平 |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
 | Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **Node 桩数据，不能作为浏览器性能结论** |
 

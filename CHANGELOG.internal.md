@@ -4,6 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · CSS-P1-1 修复打印媒体查询未闭合并落地 CSS 结构门禁
+
+- **Commit Hash**：`待回填`（fix(css)：闭合 @media print 并新增 CSS 结构门禁）。
+- **核心改动**：
+  - `css/style.css:217` 补齐 `@media print{` 的闭合 `}`。此前文件内 `{` 比 `}` 多 1，打印块从 213 行一直吞到文件末尾，`/* C-04 符号库面板 */` 起的 `.symbol-grid` / `.symbol-tile` 等规则只在打印媒体生效、屏幕上不生效。
+  - `scripts/check.mjs` 新增第 13 步「CSS 结构」：去注释与字符串后统计 `css/*.css` 花括号，差值非 0 或出现多余 `}` 即失败；错误信息给出文件名与「文件末尾仍少 N 个 } / 第 N 行出现多余 }」。
+  - `scripts/check-gates.mjs` 新增第 10 个破坏场景：向 `css/style.css` 追加未闭合 `@media print{`，要求 `check.mjs --selftest` 非 0 且输出命中「CSS 结构未配平」。
+- **验证数据**：
+  - 负向先证（独立临时整仓副本，未改仓库）：追加 `@media print{` 后 `node scripts/check.mjs` 退出码 1，输出「CSS 结构未配平：css/style.css（文件末尾仍少 1 个 }）」；仓库本体 `node scripts/check.mjs` 退出码 0。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 全绿，人为破坏 10/10 全部变红且命中关键字（含第 10 场景「CSS 花括号未配平」），末行「正面基线 6/6 全绿，10/10 种人为破坏均被对应门禁以非 0 拦截」。
+  - `node scripts/check.mjs --selftest`：2991 通过 / 0 失败（断言数与上一提交持平，未删断言）；契约 7/0、插件 API 23/0/0、i18n 45.65%/缺口 6/UI 1/模板 0、SW VERSION=35（49 个预缓存输入一致）。
+  - 8 类导出 golden（SVG/DXF/PDF/CSV/TSV/XLSX/GeoJSON 逐字节 + PNG 语义）全部通过，未受影响。
+  - `node scripts/e2e.mjs`：109 passed / 1 skipped（110 用例 / 34 spec），与上一提交持平。
+  - `node scripts/build.mjs --check`：810,986 B（792.0 KB）、gzip 252,200 B、余量 28,694 B；较上一提交 **+1 B / gzip +1 B / 余量 −1 B**；SHA256 `a0645218…`，二次构建一致。
+- **遗留 TODO / 风险**：
+  - 打印媒体块内容本身未改动，只补闭合；仓库内无 `window.print` 渲染链路 e2e（known-issues 已登记「打印/二维码无 e2e」），本轮未做打印版式截图对比。
+  - 新增的 CSS 结构判据只校验花括号配平，不校验选择器/属性合法性；后者由浏览器解析与 e2e 承担。
+
 ## 2026-11-08 · N-27 公共抽象收敛与 P2 审计归档
 
 - **Commit Hash**：`7ea2de7`（perf(render)：删除选中绘制每帧未使用分配并归档 N-27 收敛结论）。

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* check-gates.mjs —— 门禁的牙齿：正面基线 + 9 种人为破坏，断言对应门禁会红
+/* check-gates.mjs —— 门禁的牙齿：正面基线 + 10 种人为破坏，断言对应门禁会红
  *
  * 为什么需要它：门禁脚本本身也会假绿（只打印不比对、缺文件退 0、模板缺失空操作、把 --selftest 透传给
  * 只跑解析器自检的分支）。一条从未红过的判据，与没有判据的区别只在于它更贵。这里把「会红」这件事本身
@@ -16,6 +16,7 @@
  *   7. UI 模板内新增硬编码中文        → node scripts/i18n-scan.mjs --check 必须非 0
  *   8. PlotPin 新增未登记私有键       → node scripts/check.mjs --selftest 必须非 0（API 面真实判据）
  *   9. sw.js VERSION 回退             → node scripts/check-sw.mjs      必须非 0
+ *  10. CSS 花括号未配平（@media 未闭合）→ node scripts/check.mjs --selftest 必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
@@ -183,6 +184,17 @@ const scenarios = [
       const m = text.match(/const VERSION\s*=\s*'(\d+)'/);
       if (!m) throw new Error('sw.js 找不到 VERSION');
       writeFileSync(p, text.replace(m[0], `const VERSION = '${Math.max(0, Number(m[1]) - 1)}'`));
+    }
+  },
+  {
+    name: 'CSS 花括号未配平（@media 未闭合）',
+    expected: 'node scripts/check.mjs --selftest 退出码非 0',
+    args: ['scripts/check.mjs', '--selftest'],
+    expect: /CSS 结构未配平/,
+    sabotage(dir) {
+      /* CSS 语法不需要闭合也能被浏览器解析：未闭合的 @media 会把其后所有规则吞进媒体查询，
+         页面照常加载、只是样式错位，node --check 与 e2e 都可能看不出来。 */
+      appendFileSync(join(dir, 'css', 'style.css'), '\n@media print{\n');
     }
   }
 ];

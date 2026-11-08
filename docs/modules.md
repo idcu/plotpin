@@ -74,11 +74,11 @@
 
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
-| `check.mjs` | 零依赖工程质量门禁（12 步） | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
+| `check.mjs` | 零依赖工程质量门禁（13 步） | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
 | `selftest.mjs` | 逻辑层自测（2982 断言 / 118 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
-| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 9 种人为破坏并断言对应门禁变红 | 仓库副本 → 通过/失败 | CI |
+| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 10 种人为破坏并断言对应门禁变红 | 仓库副本 → 通过/失败 | CI |
 | `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性与消费方导出 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor` → 报告 | CI、`npm test` |
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致 | 仓库 → 报告 | `check.mjs` |
 | `check-plugin-api.mjs` | 运行时 `PlotPin` 键集合与 `contracts/plugin-api.json` 一致 | 源码/契约 → 报告 | `check.mjs` |

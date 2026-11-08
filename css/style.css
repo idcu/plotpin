@@ -214,6 +214,7 @@
     body > :not(#report){display:none !important}
     #report{display:block !important;width:100%;padding:0}
     .report-page{page-break-after:always}
+  }
 
 /* C-04 符号库面板 */
 .symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px;margin-top:8px}

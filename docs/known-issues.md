@@ -15,7 +15,7 @@
 | A6 | DXF 折线近似与 SVG 图形缺少几何一致性断言 | `symbol-scene` 三符号 DXF 折线逐点/顶点数/闭合与同一轮廓源一致；`scripts/selftest.mjs` | 已关闭；DXF 近似限制见 K4 |
 | P0-4 | 插件沙箱可绕过：Worker 内 `BroadcastChannel` 可加入协作频道、`MessageChannel`/`MessagePort` 可自建端口、`onmessage`/`onerror` 可旁路 token 校验 | `tests/e2e/plugin-sandbox.spec.mjs`：插件内 `BroadcastChannel`/`MessageChannel`/`MessagePort`/`onmessage`/`onerror` 均为 `undefined`，向 `plotpin-collab-*` 发送 0 条，覆写 `onerror` 后异常仍走禁用路径 | 已关闭（N-02）；合法插件契约未承诺端口通道，一律封堵 |
 | P0-1 | PDF 导入的内嵌底图在自动保存后刷新/重开即丢失 | `tests/e2e/pdf-multipage.spec.mjs`「PDF 内嵌底图走资产入库，自动保存 + 刷新后仍在」：导入当场 `assetId=bg…`、无 dataUrl，重开后 `bgImageState=ready`；`scripts/selftest.mjs` 7.1 覆盖 dataUrl 兜底与非当前楼层；解压炸弹用例断言累计阶段即取消 | 已关闭（N-03） |
-| K1 | 离线缓存版本无门禁，旧缓存可能残留 | `scripts/check-sw.mjs` 以提交入库的 `scripts/sw-inputs.sha256`（预缓存输入指纹 + 清单 version）为基线，`scripts/check.mjs` 第 12 步纳入；`check-gates` 场景 6/9 证明会红 | 已关闭（N-01）；不再依赖 `git diff HEAD`，干净检出同样有效 |
+| K1 | 离线缓存版本无门禁，旧缓存可能残留 | `scripts/check-sw.mjs` 以提交入库的 `scripts/sw-inputs.sha256`（预缓存输入指纹 + 清单 version）为基线，`scripts/check.mjs` 第 12 步纳入；`check-gates` 场景 6/9 证明会红（场景 10 为 CSS 结构） | 已关闭（N-01）；不再依赖 `git diff HEAD`，干净检出同样有效 |
 | K11 | 文档超出团队自设篇幅 | `scripts/check-discipline.mjs` 13/13 通过；工程文档已拆分 | 已关闭；余量偏小，新增内容需控制 |
 | P0-2 | 协作方“清空场地”被静默应用：不计入变更、不进撤销栈、无提示 | `tests/e2e/collab.spec.mjs`「N-04」：对端清空后 `__collabLastMerge.siteCleared≥1`、撤销栈 +1、状态栏含“对端清空了场地/Ctrl+Z”，Ctrl+Z 恢复场地 | 已关闭（N-04）；双标签真实通道复现 |
 | P0-3 | 场地编辑不进提交/不广播，较旧场地会在合并时复活 | `tests/e2e/collab.spec.mjs`「N-04」：拖点与属性面板输入均实时同步到对端；本地较新清空不被旧快照复活；`scripts/selftest.mjs` 覆盖 null 胜出与同时间戳保留 | 已关闭（N-04） |

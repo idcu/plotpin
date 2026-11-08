@@ -98,7 +98,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
 | `node scripts/bench.mjs` | Node 桩渲染/覆盖率/规则/符号阈值 | 是 | `test` job |
 | `node scripts/build.mjs --check` | 单文件产物重建与登记比对 | 是 | `test` job |
-| `node scripts/check-gates.mjs` | 正面基线 + 9 种人为破坏 | 是 | `test` job |
+| `node scripts/check-gates.mjs` | 正面基线 + 10 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
 | `node scripts/e2e.mjs` | Chromium 功能 e2e | 否 | **不跑** |
@@ -152,7 +152,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 ### 3.4 门禁牙齿（`check-gates.mjs`）
 
-在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **9 种**破坏，断言对应门禁非 0 退出
+在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **10 种**破坏，断言对应门禁非 0 退出
 且输出命中目标错误关键字；仓库本身一个字节不改：
 
 | # | 破坏 | 期望变红的门禁 |
@@ -167,6 +167,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 7 | UI 模板内新增硬编码中文 | `i18n-scan.mjs --check` |
 | 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（插件 API 面真实判据） |
 | 9 | `sw.js` 的 `VERSION` 回退 | `check-sw.mjs` |
+| 10 | `css/*.css` 花括号不配平（未闭合 `@media`） | `check.mjs --selftest`（CSS 结构判据） |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 

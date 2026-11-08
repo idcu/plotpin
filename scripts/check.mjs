@@ -15,6 +15,7 @@
  * 11) --selftest：i18n 覆盖率门禁（scripts/i18n-scan.mjs --check，D-11）
  * 12) Service Worker 缓存版本：预缓存输入指纹与 scripts/sw-inputs.sha256 不一致时 VERSION 必须递增（K1）
  *     6/7 在 --selftest 下额外跑判据自检（证明判据会红），自检不会替代真实核对。
+ * 13) CSS 结构：去注释/字符串后花括号必须配平（未闭合的 @media 会静默吞掉其后所有规则）
  *
  * 用法：node scripts/check.mjs [--selftest]
  */
@@ -152,9 +153,34 @@ const swTail = (sw.stdout || '').trim().split('\n').pop() || (sw.stderr || '').t
 if (sw.status !== 0) errors.push('SW 缓存版本门禁未通过：\n' + (sw.stdout || sw.stderr || '').trim());
 else console.log(`  [门禁] SW 缓存版本已执行：${swTail}`);
 
+/* 13. CSS 结构：去注释/字符串后花括号必须配平。
+   未闭合的 @media 会让其后所有规则被静默吞进该媒体查询——语法合法、渲染错误，
+   node --check 管不到，只能在样式生效前做结构校验。 */
+const cssDir = join(root, 'css');
+const cssFiles = existsSync(cssDir)
+  ? readdirSync(cssDir).filter(n => n.endsWith('.css')).map(n => join(cssDir, n))
+  : [];
+for (const f of cssFiles) {
+  const src = readFileSync(f, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''");
+  let depth = 0, extraCloseAt = -1;
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth < 0 && extraCloseAt < 0) extraCloseAt = i; }
+  }
+  if (depth !== 0 || extraCloseAt >= 0) {
+    const where = extraCloseAt >= 0
+      ? `第 ${src.slice(0, extraCloseAt).split('\n').length} 行出现多余 }`
+      : `文件末尾仍少 ${depth} 个 }`;
+    errors.push(`CSS 结构未配平：${relative(root, f).replace(/\\/g, '/')}（${where}）`);
+  }
+}
+
 if (errors.length) {
   console.error('❌ 工程自检未通过：');
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、i18n 覆盖率守约、SW 缓存版本守约`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、i18n 覆盖率守约、SW 缓存版本守约、CSS 结构配平`);

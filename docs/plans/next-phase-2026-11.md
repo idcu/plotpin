@@ -43,7 +43,7 @@
 node scripts/check.mjs --selftest      # 断言数不得减少（当前值见 docs/facts.md）
 node scripts/e2e.mjs                   # 通过数不得减少、跳过项不得增加（当前值见 docs/facts.md）
 node scripts/build.mjs --check         # 产物 ≤ 839,680 B（当前值与余量见 docs/facts.md）
-node scripts/check-gates.mjs           # 正面基线 6/6 + 人为破坏 9/9
+node scripts/check-gates.mjs           # 正面基线 6/6 + 人为破坏 10/10
 node scripts/check-discipline.mjs --strict  # 13/13 L4
 ```
 
