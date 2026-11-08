@@ -4,6 +4,28 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2-A3 补漏：新建工程与 JSON 导入前同样强制落盘
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/io.js` 新建工程按钮改为 async：确认后先 `await flushPendingSave()`，失败 toast「操作失败：…」并中止，不再覆盖待保存的旧草稿。
+  - `js/features/io-import.js` `importJsonFile()` 入口先 `await flushPendingSave()`，失败 toast「工程导入失败：…」并直接返回；旧工程已落盘成功后才进入原有事务化导入（候选构建/限值校验/资产转存/现场替换）。
+  - 同步更新 `docs/features.md`（保存一节）与 `docs/ARCHITECTURE.md`（保存/切换第 5 条），把「打开工程库」扩为「打开工程库 / 新建 / JSON 导入」三个替换现场入口。
+- **验证数据**：
+  - selftest **3494 通过 / 0 失败**（基线 3484，+10）：新建先落盘旧工程、失败保留现场且有提示；JSON 导入先落盘、成功替换现场、失败保留现场且有提示。
+  - dist **825,903 B**（本条 **+240 B**）/ gzip 256,308 B / 余量 **13,777 B**；SW `VERSION=94`（io.js / io-import.js 变更触发 bump，49 个预缓存输入一致）；8 种 golden 与导出字段未变。
+  - 其余门禁见提交前完整执行记录（e2e / build --check / check-gates / discipline）。
+- **遗留 TODO / 风险**：
+  - 表格导入、`合并他人工程` 不替换现场，未接入该 flush；若后续改成整工程替换需同样处理。
+  - `flushPendingSave()` 只在存在防抖/重试定时器时才实际落盘；没有待保存内容时新建/导入不额外写盘。
+
+## 2026-11-08 · A2 来源表述更正（代码自查，非审计条目）
+
+- **Commit Hash**：`c464305`（`docs(changelog): 更正 A2 来源为代码自查，非审计条目`）
+- **核心改动**：把 A2（`c6eb64f`）的标题与遗留说明改为「来源：代码自查」，明确四份审计均无「CSV/XLSX 精度静默截断」独立条目，该问题由导出路径自查 `exportShapeSummary` 的 `Math.round` 定位；不重写历史提交。
+- **验证数据**：文档改动，五道门禁全绿（selftest 3484/0、e2e 120+1 跳过、build --check、check-gates 6/6+12/12、discipline 13/13）；dist 与 SW 指纹不变。
+- **遗留 TODO / 风险**：无。
+
 ## 2026-11-08 · 审计 P2 批次 A（5/5）：替换底图重置旧校准
 
 - **Commit Hash**：`88b880c`（`fix(import): 替换底图重置旧校准与仿射`）

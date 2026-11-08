@@ -1984,6 +1984,79 @@ await section("28.9 N-11 JSON 导入事务顺序：成功后才回收资产", as
 }
 });
 
+/* 28.12 P2-A3 新建 / JSON 导入同样先落盘：失败中止且提示 ---------------- */
+await section("28.12 P2-A3 新建 / JSON 导入先落盘", async () => {
+{
+  const orig={save:sandbox.scheduleSave,run:sandbox.runSave,toast:sandbox.toast,confirm:sandbox.showConfirm,
+              after:sandbox.afterStateLoaded,prune:sandbox.assetPrune,reach:sandbox.reachableAssetIds};
+  const payload=JSON.stringify({schema:api.SCHEMA,meta:{name:'IMPORTED_A3'},objects:[]});
+  const file=()=>({size:payload.length,text:async()=>payload});
+  try{
+    sandbox.showConfirm=async()=>true;
+    sandbox.afterStateLoaded=async()=>{};
+    sandbox.assetPrune=async()=>[];
+    sandbox.reachableAssetIds=async()=>[];
+    /* ① 新建：先以旧工程落盘，再替换为空工程 */
+    api.resetState();
+    api.state.meta.name='OLD_NEW'; api.state.meta.projectId='PRJ_OLD_NEW';
+    api.state.objects=[api.baseObject('point','point.marker',{name:'KEEP',x:1,y:1})];
+    const saved=[]; let errToasts=0;
+    sandbox.runSave=async()=>{ saved.push(api.state.meta.name); };
+    sandbox.toast=(m,t)=>{ if(t==='error') errToasts++; };
+    api.scheduleSave();
+    sandbox.scheduleSave=()=>{};
+    await api.$('newBtn').onclick();
+    eq('P2-A3 新建先落盘旧工程', saved[0], 'OLD_NEW');
+    eq('P2-A3 新建后为空工程', api.state.objects.length, 0);
+    eq('P2-A3 新建无错误提示', errToasts, 0);
+    /* ② 新建：落盘失败中止并保留旧现场 */
+    api.resetState();
+    api.state.meta.name='OLD_NEW2';
+    api.state.objects=[api.baseObject('point','point.marker',{name:'KEEP2',x:2,y:2})];
+    const before=api.state;
+    sandbox.scheduleSave=orig.save;
+    api.scheduleSave();
+    sandbox.scheduleSave=()=>{};
+    sandbox.runSave=async()=>{ throw new Error('disk full'); };
+    errToasts=0;
+    await api.$('newBtn').onclick();
+    eq('P2-A3 新建落盘失败保留现场', api.state, before);
+    ok('P2-A3 新建落盘失败有提示', errToasts>0);
+    /* ③ JSON 导入：先落盘旧工程，再替换为导入工程 */
+    api.resetState(); api.resetSaveHealth();
+    api.state.meta.name='OLD_JSON';
+    api.state.objects=[api.baseObject('point','point.marker',{name:'KEEP3',x:3,y:3})];
+    saved.length=0; errToasts=0;
+    sandbox.runSave=async()=>{ saved.push(api.state.meta.name); };
+    sandbox.scheduleSave=orig.save;
+    api.scheduleSave();
+    sandbox.scheduleSave=()=>{};
+    await api.importJsonFile(file());
+    eq('P2-A3 JSON 导入先落盘旧工程', saved[0], 'OLD_JSON');
+    eq('P2-A3 JSON 导入替换现场', api.state.meta.name, 'IMPORTED_A3');
+    eq('P2-A3 JSON 导入无错误提示', errToasts, 0);
+    /* ④ JSON 导入：落盘失败中止并保留旧现场 */
+    api.resetState();
+    api.state.meta.name='OLD_JSON2';
+    api.state.objects=[api.baseObject('point','point.marker',{name:'KEEP4',x:4,y:4})];
+    const before2=api.state;
+    sandbox.scheduleSave=orig.save;
+    api.scheduleSave();
+    sandbox.scheduleSave=()=>{};
+    sandbox.runSave=async()=>{ throw new Error('disk full'); };
+    errToasts=0;
+    await api.importJsonFile(file());
+    eq('P2-A3 JSON 导入落盘失败保留现场', api.state, before2);
+    ok('P2-A3 JSON 导入落盘失败有提示', errToasts>0);
+  } finally {
+    sandbox.scheduleSave=orig.save; sandbox.runSave=orig.run; sandbox.toast=orig.toast;
+    sandbox.showConfirm=orig.confirm; sandbox.afterStateLoaded=orig.after;
+    sandbox.assetPrune=orig.prune; sandbox.reachableAssetIds=orig.reach;
+    api.resetState(); api.resetSaveHealth();
+  }
+}
+});
+
 /* 28.10 IO-P1-6 工程库打开：加载成功后才回收资产 ---- */
 await section("28.10 IO-P1-6 工程库打开顺序：afterStateLoaded 成功后才回收资产", async () => {
 {

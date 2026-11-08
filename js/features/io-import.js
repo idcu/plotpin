@@ -5,6 +5,9 @@ function extOfFile(name){ const m=String(name||'').toLowerCase().match(/\.([a-z0
  * 提交阶段失败回滚到导入前现场（审计 P1-9 / P1-14）。
  */
 async function importJsonFile(f){
+  /* 替换现场前强制落盘：租约被占用或保存失败时中止导入并提示（P2-A3） */
+  try{ await flushPendingSave(); }
+  catch(e){ toast(L('工程导入失败：{msg}',{msg:e.message}),'error'); return; }
   const prevState=state, prevHistory=history, prevSelected=new Set(selectedIds), prevDraft=draft;
   let swapped=false;
   try{
