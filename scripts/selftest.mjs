@@ -7913,6 +7913,14 @@ await section("P2-CORE 批次 5：schema 与安全", async () => {
   eq('CORE-P2-11 重复图层 id 去重', bpLayers.layers.filter(l=>l.id==='layer.dup').length, 1);
   eq('CORE-P2-11 保留首个图层定义', bpLayers.layers.find(l=>l.id==='layer.dup').name, '甲层');
   ok('CORE-P2-11 默认图层仍唯一', bpLayers.layers.filter(l=>l.id==='layer.default').length===1);
+
+  /* CORE-P2-12：site.id 走 safeId，annot 只保留已知布尔键 */
+  const bpSite=api.buildProject({schema:api.SCHEMA,site:{id:'site:<x>/../../',shape:{type:'rect',x:0,y:0,w:10,h:5},annot:{siteNodes:false,siteArea:'yes',evil:true}}});
+  ok('CORE-P2-12 site.id 经 safeId 清洗', !/[<>:/]/.test(bpSite.site.id));
+  eq('CORE-P2-12 场地标注保留已知布尔', bpSite.site.annot.siteNodes, false);
+  ok('CORE-P2-12 场地标注丢弃未知键', !('evil' in bpSite.site.annot));
+  ok('CORE-P2-12 场地标注丢弃非布尔值', !('siteArea' in bpSite.site.annot));
+  eq('CORE-P2-12 缺失 id 回落默认槽', api.buildProject({schema:api.SCHEMA,site:{shape:{type:'rect',w:1,h:1}}}).site.id, 'site.default');
 }
 });
 

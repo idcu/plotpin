@@ -991,6 +991,13 @@ function sanitizeSiteStyle(raw){
  * 矢量场地槽清洗：复用 sanitizeShape 的形状规则，补独立元数据（id/name/layerId/visible/locked/annot/style）。
  * 场地不进 objects，不设 typeId；kind 始终等于 shape.type。
  */
+/** 场地标注清洗：只保留已知布尔键；annot 为兼容字段，不参与当前渲染（CORE-P2-12） */
+function sanitizeSiteAnnot(raw){
+  const out={};
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) return out;
+  SITE_ANNOT_SETTING_KEYS.forEach(k=>{ if(typeof raw[k]==='boolean') out[k]=raw[k]; });
+  return out;
+}
 function sanitizeSite(rawSite,layers){
   if(!rawSite||typeof rawSite!=='object') return null;
   const allowed=['rect','circle','ellipse','sector','parallelogram','polygon'];
@@ -1000,12 +1007,12 @@ function sanitizeSite(rawSite,layers){
   const legacyH=positiveNumber(rawSite.height,700)*positiveNumber(rawSite.metersPerPixel,0.1);
   const shape=sanitizeShape(rawSite.shape,kind,legacyW,legacyH);
   const site=createSiteSlot(shape);
-  site.id=typeof rawSite.id==='string'&&rawSite.id?rawSite.id:site.id;
+  site.id=safeId(rawSite.id||site.id,'SITE');
   site.name=String(rawSite.name||'场地').slice(0,40);
   site.layerId=Array.isArray(layers)&&layers.some(l=>l.id===rawSite.layerId)?rawSite.layerId:'layer.default';
   site.visible=rawSite.visible!==false;
   site.locked=!!rawSite.locked;
-  site.annot=typeof rawSite.annot==='object'&&rawSite.annot?rawSite.annot:{};
+  site.annot=sanitizeSiteAnnot(rawSite.annot);
   site.style=sanitizeSiteStyle(rawSite.style);
   site.updatedAt=typeof rawSite.updatedAt==='string'?rawSite.updatedAt:'';
   site.kind=shape.type;
