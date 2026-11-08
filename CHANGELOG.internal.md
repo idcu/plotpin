@@ -2,6 +2,19 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · IO-P1-6 工程库打开的事务顺序与资产回收
+
+- **Commit Hash**：待回填（本批 N-12~N-21 + IO-P1-6 完成后统一 `docs(changelog)` 补齐）。
+- **与 N-11 的关系**：N-11（`627471a`）只修了 JSON 导入路径的「先回收后加载」；`openProjectById` 是同一缺陷的另一入口，本条沿用完全相同的事务语义，未改动 `importJsonFile`。
+- **核心改动**
+  - `js/core/persistence.js`：`openProjectById()` 的提交顺序由「替换 state → `pruneBgAssets()` → `afterStateLoaded()`」改为「替换 state → `afterStateLoaded()` → `pruneBgAssets()` → `scheduleSave()`」。加载阶段的资产转换失败会进入 catch：state/history/选中集/草稿完整回滚，调用 `afterStateLoaded(false)` 复位 UI 并重绘，且 `assetPrune` 从未执行，旧工程资产不会被误删。
+  - `scripts/selftest.mjs`：api 新增 `openProjectById`；新增 28.10 节 11 项断言——注入 `afterStateLoaded` 抛错后向上抛出、状态/草稿/选中集回滚、旧 `assetId` 保留、`assetPrune` 0 次、回滚 UI 与重绘；成功打开断言工程替换、事件顺序 `afterStateLoaded` 先于 `prune`、回收恰好 1 次且 keep 集不含旧资产。
+  - `sw.js`：`VERSION` 30 → 31；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步。
+  - 文档：`docs/features.md` §9、`docs/known-issues.md`（关闭 IO-P1-6，已修复 20 → 21，P1 15 → 14）、`README.md` 数字口径（断言 2954）。
+- **调用方影响面**：`openProjectById` 全仓仅 `js/features/io.js:148`（工程库「打开」按钮）调用，成功路径行为不变；失败路径由「可能删旧资产」改为「零副作用 + 原错误继续向上抛」，UI 层既有 toast 逻辑无需改动。`deleteProjectById` 仍独立调用 `pruneBgAssets()`，不在本条范围。
+- **验证数据**：selftest **2954 通过 / 0 失败（+11）**；e2e 107 passed / 1 skipped（108 用例，未新增用例）；产物 **808,176 B**（gzip 251,282 B，上限 839,680 B，余量 31,504 B）；`check.mjs --selftest`、`check-gates` 6/6 + 9/9、`check-discipline --strict` 13/13 全绿；SW `VERSION=31`。
+- **遗留风险**：回滚路径调用 `afterStateLoaded(false)` 时 `ensureObjectPhotoAssets` 仍可能再次失败，此时只保证 state 已还原，不保证 UI 完全恢复到打开前；与 N-11 相同，属于既有降级行为。
+
 ## 2026-11-08 · N-21 快照场景级差异、恢复守卫与元数据索引
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

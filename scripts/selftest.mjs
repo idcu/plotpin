@@ -99,7 +99,7 @@ code += `\n;globalThis.__api = {
   get state(){ return state; },
   get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
-  importJsonFile,
+  importJsonFile, openProjectById,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, baseObject,
   importLimitErrors, importLimitMessage,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
@@ -1755,6 +1755,59 @@ await section("28.9 N-11 JSON 导入事务顺序：成功后才回收资产", as
   } finally {
     sandbox.assetPrune=origPrune; sandbox.afterStateLoaded=origAfter;
     sandbox.toast=origToast; sandbox.scheduleSave=origSave; sandbox.reachableAssetIds=origReach;
+    api.resetState();
+  }
+}
+});
+
+/* 28.10 IO-P1-6 工程库打开：加载成功后才回收资产 ---- */
+await section("28.10 IO-P1-6 工程库打开顺序：afterStateLoaded 成功后才回收资产", async () => {
+{
+  const orig={get:sandbox.idbGetKey,ensure:sandbox.ensureBackgroundAsset,prune:sandbox.assetPrune,
+              after:sandbox.afterStateLoaded,save:sandbox.scheduleSave,render:sandbox.requestRender,
+              reach:sandbox.reachableAssetIds};
+  const PID='PRJ_OPEN_IO_P1_6';
+  /* 候选工程记录：复用真实持久化结构，确保 isReadableSchema/buildProject 走生产路径 */
+  api.resetState();
+  api.state.meta.name='OPENED';
+  api.state.meta.projectId=PID;
+  const raw=api.persistableState();
+  try{
+    /* ① 加载阶段失败：回滚到打开前，且不回收任何资产 */
+    api.resetState();
+    api.state.meta.projectId='PRJ_CURRENT';
+    api.state.background.assetId='OLD_ASSET';
+    api.draft={probe:1};
+    api.selectedIds.clear(); api.selectedIds.add('S1');
+    const order=[]; let pruneCalls=0, keeps=[];
+    sandbox.idbGetKey=async k=>k==='proj:'+PID?JSON.parse(JSON.stringify(raw)):null;
+    sandbox.ensureBackgroundAsset=async()=>{ order.push('ensure'); };
+    sandbox.reachableAssetIds=async()=>[];
+    sandbox.assetPrune=async keep=>{ pruneCalls++; keeps.push(keep.slice()); order.push('prune'); return []; };
+    sandbox.afterStateLoaded=async flag=>{ if(flag===false){ order.push('after-rollback'); return; } order.push('after'); throw new Error('资产转换失败'); };
+    sandbox.scheduleSave=()=>{ order.push('save'); };
+    sandbox.requestRender=()=>{ order.push('render'); };
+    const beforeState=api.state, beforeDraft=api.draft;
+    let threw=false; try{ await api.openProjectById(PID); }catch(e){ threw=true; }
+    ok('IO-P1-6-失败向上抛出', threw);
+    eq('IO-P1-6-失败后状态回滚', api.state, beforeState);
+    eq('IO-P1-6-失败后旧底图 assetId 保留', api.state.background.assetId, 'OLD_ASSET');
+    eq('IO-P1-6-失败路径未回收资产', pruneCalls, 0);
+    eq('IO-P1-6-失败后草稿保留', api.draft, beforeDraft);
+    ok('IO-P1-6-失败后选中集恢复', api.selectedIds.has('S1'));
+    ok('IO-P1-6-失败后回滚 UI 且重绘', order.includes('after-rollback')&&order.includes('render'));
+    /* ② 成功打开：afterStateLoaded 完成资产转换后才回收 */
+    order.length=0; pruneCalls=0; keeps=[];
+    sandbox.afterStateLoaded=async flag=>{ order.push(flag===false?'after-rollback':'after'); };
+    await api.openProjectById(PID);
+    eq('IO-P1-6-成功打开替换工程', api.state.meta.name, 'OPENED');
+    ok('IO-P1-6-成功后先加载后回收', order.indexOf('after')>=0&&order.indexOf('after')<order.indexOf('prune'));
+    eq('IO-P1-6-成功路径回收一次', pruneCalls, 1);
+    ok('IO-P1-6-成功回收 keep 不含旧资产', keeps.length===1&&!keeps[0].includes('OLD_ASSET'));
+  } finally {
+    sandbox.idbGetKey=orig.get; sandbox.ensureBackgroundAsset=orig.ensure;
+    sandbox.assetPrune=orig.prune; sandbox.afterStateLoaded=orig.after;
+    sandbox.scheduleSave=orig.save; sandbox.requestRender=orig.render; sandbox.reachableAssetIds=orig.reach;
     api.resetState();
   }
 }

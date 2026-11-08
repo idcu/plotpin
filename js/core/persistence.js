@@ -291,13 +291,15 @@ async function openProjectById(id){
   history={past:[],future:[]};
   selectedIds.clear(); draft=null;
   try{
-    await pruneBgAssets();
+    await afterStateLoaded();           /* 先等全楼层照片 dataUrl→资产转换完成，打开才算提交 */
+    await pruneBgAssets();              /* IO-P1-6：提交成功后才回收；失败回滚不误删旧工程资产 */
+    scheduleSave();
   }catch(e){
     state=prevState; history=prevHistory;           /* 提交阶段失败：回滚到打开前 */
     selectedIds.clear(); prevSelected.forEach(x=>selectedIds.add(x)); draft=prevDraft;
+    afterStateLoaded(false); requestRender();
     throw e;
   }
-  await afterStateLoaded(); scheduleSave();
   return state;
 }
 async function renameProjectById(id,name){
