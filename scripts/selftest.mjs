@@ -3492,6 +3492,21 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     eq('N-17-同工程消息正常接收', api.collabPeerCount, before+1);
     api.collabHandleMessage({t:'hello',name:'PEER-Z'},'PEER-Z');
     eq('N-17-旧版无工程标识兼容', api.collabPeerCount, before+2);
+    /* B6：草稿/空 projectId 不再放行业务消息（仅控制消息兼容旧版） */
+    const merges=[], origMerge=sandbox.mergeProjectJSON;
+    sandbox.mergeProjectJSON=async raw=>{ merges.push(raw); return {}; };
+    try{
+      api.state.meta.projectId='';
+      const fd=api.collabForeignDropped;
+      api.collabHandleMessage({t:'snapshot',project:{schema:api.SCHEMA,objects:[]},pid:''},'DRAFT-A');
+      api.collabHandleMessage({t:'snapshot',project:{schema:api.SCHEMA,objects:[]},pid:'p:P-B'},'DRAFT-B');
+      api.collabHandleMessage({t:'floor-add',project:{schema:api.SCHEMA,objects:[]},pid:'p:P-B'},'DRAFT-C');
+      await new Promise(r=>setTimeout(r,0));
+      eq('B6-草稿业务消息不合并', merges.length, 0);
+      eq('B6-草稿跨工程消息计数', api.collabForeignDropped-fd, 3);
+      api.collabHandleMessage({t:'hello',name:'PEER-D'},'PEER-D');
+      eq('B6-旧版 hello 仍可建连', api.collabPeerCount, before+3);
+    } finally { sandbox.mergeProjectJSON=origMerge; }
     ok('N-17-纯冲突算作有变化', api.collabMergeChanged({conflicts:1}));
     ok('N-17-空统计无变化', !api.collabMergeChanged({}));
     ok('N-17-纯冲突不算覆盖', !api.collabMergeOverwritten({conflicts:1}));

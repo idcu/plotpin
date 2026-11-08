@@ -5,6 +5,8 @@ import { clickCanvasCenter } from './helpers.mjs';
 async function openApp(page) {
   await page.goto('/index.html?debug=1');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  /* B6：协作业务消息要求双方都有 projectId；e2e 显式绑定同一工程，避免草稿被按设计丢弃 */
+  await page.evaluate(() => { state.meta.projectId = 'E2E_PROJ'; });
   /* 两个标签共享同一个 IndexedDB：测试只验证内存合并，关闭自动保存避免互相覆盖 current */
   await page.evaluate(() => { window.scheduleSave = () => {}; });
 }
@@ -409,7 +411,7 @@ test('N-16：断线待发队列刷新页面后仍补发', async ({ page, context
 
   await page.reload();
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
-  await page.evaluate(() => { window.scheduleSave = () => {}; });
+  await page.evaluate(() => { state.meta.projectId = 'E2E_PROJ'; window.scheduleSave = () => {}; });
   const stillQueued = await page.evaluate(() => !!collabPendingLoad());
   console.log(`[N-16] reload pending kept=${stillQueued}`);
   expect(stillQueued).toBe(true);

@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 B（1/6）：草稿/空 projectId 业务消息不再跨工程放行
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/collab.js` `collabHandleMessage` 收紧 pid 校验：双方都有 `pid` 且不一致 → 丢弃；**新增**——除 `hello`/`hello-ack`/`bye` 控制消息外，任一侧缺失 `pid`（草稿/空 `projectId`）同样丢弃并计数，不再按旧行为放行。
+  - `tests/e2e/collab.spec.mjs` 的 `openApp` 显式绑定 `state.meta.projectId='E2E_PROJ'`（reload 后同样重设），让既有协作用例继续验证同工程合并；草稿拦截由 selftest 断言覆盖。
+  - 同步更新 `docs/features.md`、`docs/ARCHITECTURE.md`、`docs/known-issues.md`（RT-P1-04）：草稿需先另存工程库才能协作。
+- **验证数据**：
+  - selftest **3497 通过 / 0 失败**（基线 3494，+3）：草稿业务消息（空 pid / 异 pid）不触发合并、`collabForeignDropped` +3、旧版 `hello` 仍可建连。
+  - 协作 e2e **11 通过 + 1 条件跳过（12）**（单跑 `collab.spec.mjs`）；完整 e2e 见提交前门禁记录。
+  - dist **825,999 B**（本条 **+96 B**）/ gzip 256,344 B / 余量 **13,681 B**；SW `VERSION=95`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - **产品行为变化**：未绑定工程库的草稿标签之间不再实时同步；需先另存到工程库。旧版客户端（无 `pid`）仅能完成 `hello`/`bye` 握手，业务消息会被丢弃，必须双方升级。
+  - 跨工程丢弃提示仍复用 `- ≠ -` 格式，缺少 `pid` 时文案未单独区分（未新增 i18n 键）。
+
 ## 2026-11-08 · P2-A3 补漏：新建工程与 JSON 导入前同样强制落盘
 
 - **Commit Hash**：`待回填`

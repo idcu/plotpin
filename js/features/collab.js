@@ -408,11 +408,13 @@ function collabReceiveRaw(raw){
 }
 function collabHandleMessage(msg,from){
   if(!msg||!from) return;
-  /* N-17：跨工程隔离。双方都已绑定工程库且 projectId 不同 → 直接丢弃并计数；
-     任一侧为空（草稿/旧版）时按旧行为放行，避免旧邀请串静默失效。 */
+  /* N-17 / B6：跨工程隔离。双方都已绑定工程库且 projectId 不同 → 直接丢弃并计数；
+     hello / hello-ack / bye 允许任一侧缺失 pid（旧邀请串兼容），
+     其余业务消息必须双方都有 pid 且一致——草稿或空 projectId 不再跨工程放行。 */
   const got=typeof msg.pid==='string'?msg.pid.trim():'';
   const want=collabProjectToken();
-  if(got&&want&&got!==want){ collabNoteForeign(from,got); return; }
+  const control=msg.t==='hello'||msg.t==='hello-ack'||msg.t==='bye';
+  if((got&&want&&got!==want)||(!control&&(!got||!want))){ collabNoteForeign(from,got); return; }
   if(msg.t==='hello'){
     const name=String(msg.name||from).slice(0,80);
     const dup=collabHelloDup(from,name);
