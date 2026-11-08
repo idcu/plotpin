@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 批次 D（5/5）：对象清单收敛为唯一过滤入口，行点击不再全量重建
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`6ec3f0d`
 - **核心改动**：
   - `js/features/ui-panels.js`：新增 `listFilterState()`（唯一读取 `#filterText/#filterKind/#filterLayer`）、纯函数 `objectMatchesFilter(o,f)`、`filteredObjects(f)`；`renderList()`、「表头全选」、`selectAllChk` 三处不再各写一份过滤表达式，统一复用。
   - 行点击由 `refreshUI()`（属性+清单+图层+统计+画布全刷）改为 `refreshSelectionUI()`（属性面板 + 清单选中高亮），选中态/空态/表头全选计数由 `syncListSelection()` 保持一致。
