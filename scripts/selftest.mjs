@@ -213,7 +213,7 @@ code += `\n;globalThis.__api = {
   siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
   sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag, drawScreenTag, surfaceCssSize, markSurfaceSize,
-  invalidateStatic, visibleWorldRect, sceneStaticKey, sceneStaticContentKey, panScrollDelta,
+  invalidateStatic, visibleWorldRect, sceneStaticKey, sceneStaticContentKey, panScrollDelta, dragDrawObjects,
   detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
@@ -7504,6 +7504,13 @@ await section("72. A-15 公共抽象：outlineOf golden / objectIndexById / site
   api.state.objects[0].x=123;
   eq('P2-5 缓存索引反映对象最新坐标', i1.get('IDX_A').x, 123);
   ok('P2-5 无拖拽对象时每次新建', api.dragObjectIndex(null)!==api.dragObjectIndex(null));
+
+  /* P2-4 动态层按 id 直取：缺失/隐藏对象被剔除，结果按 z 升序 */
+  const dA={id:'DYN_A',z:9,kind:'point',x:0,y:0,visible:true}, dB={id:'DYN_B',z:2,kind:'point',x:0,y:0,visible:true}, dC={id:'DYN_C',z:5,kind:'point',x:0,y:0,visible:false};
+  const dynIdx=new Map([['DYN_A',dA],['DYN_B',dB],['DYN_C',dC]]);
+  eq('P2-4 动态层按 z 升序', api.dragDrawObjects(['DYN_A','DYN_B','DYN_C','GHOST'],dynIdx).map(o=>o.id), ['DYN_B','DYN_A']);
+  ok('P2-4 动态层返回活对象引用', api.dragDrawObjects(['DYN_A'],dynIdx)[0]===dA);
+  eq('P2-4 动态层空集合不抛错', api.dragDrawObjects([],dynIdx).length, 0);
   api.resetState();
 }
 

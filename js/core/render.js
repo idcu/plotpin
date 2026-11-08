@@ -175,11 +175,14 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
     .sort((a,b)=>a.z-b.z)
     .forEach(o=>{ if(boundsIntersect(objectSnapBounds(o,bnd),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
 }
+/** 动态层待绘对象：按 id 直取、过滤失效引用并按 z 升序（P2-4，取代全量 filter 扫描） */
+function dragDrawObjects(ids,idx){
+  return ids.map(id=>idx.get(id)).filter(o=>o&&isVisible(o)).sort((a,b)=>a.z-b.z);
+}
 /**
- * 能否用位图搬移代替整层重建（审计 P2-1）：缩放未变且平移量为整数设备像素。
- * 只有满足时才走此路径，保证像素级对齐、不引入重采样模糊；
- * 非整数平移（fitView / 触控板小数位移）与缩放变化都返回 `null`，交给整层重建。
- * @returns {[number,number]|null} 设备像素位移（可为 0）
+ * 纯平移帧：把静态位图按整数设备像素搬移，只重绘暴露出来的边缘条带（审计 P2-1）。
+ * 缩放未变且平移量为整数设备像素时才可搬移（像素级对齐、不重采样）；
+ * 非整数平移（fitView / 触控板小数位移）与缩放变化都整层重建。
  */
 function panScrollDelta(v,prevX,prevY,prevZoom,k){
   if(v.zoom!==prevZoom) return null;
@@ -244,9 +247,10 @@ function drawScene(c,v,cssW,cssH,opt={}){
     c.drawImage(staticCanvas,0,0,cssW,cssH);
     /* 拖拽中的对象逐帧变化，单独绘制在静态位图之上 */
     if(dynSet){
+      /* 动态层只画拖拽中的少数对象（P2-4）：按 id 直取，不再对全量 objects 做 filter 扫描 */
+      const idx=drag&&drag.index?drag.index:objectIndexById();
       const view=visibleWorldRect(v,d,cssW,cssH), db={minX:0,minY:0,maxX:0,maxY:0};
-      state.objects.filter(o=>dynSet.has(o.id)&&isVisible(o))
-        .sort((a,b)=>a.z-b.z)
+      dragDrawObjects(dyn,idx)
         .forEach(o=>{ if(boundsIntersect(objectSnapBounds(o,db),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
     }
     drawDiffOverlay(c,v,toS);

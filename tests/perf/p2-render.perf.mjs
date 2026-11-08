@@ -229,6 +229,39 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
       record('dragMoveRebuildIndex', size, dragLoop.rebuild);
       record('dragMoveCachedIndex', size, dragLoop.cached);
 
+      /* 7) 拖拽帧（P2-4）：200 个对象参与拖拽，静态层命中缓存后的逐帧动态层成本 */
+      const dragFrame = await page.evaluate(() => {
+        const pick = state.objects.slice(0, 200);
+        const d = { type: 'move', start: [0, 0], originals: new Map(), moved: true };
+        pick.forEach(o => d.originals.set(o.id, deepClone(o)));
+        d.index = objectIndexById();
+        const prev = drag; drag = d;
+        invalidateStatic();
+        drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
+        const out = [];
+        const oldSel = [], newSel = [];
+        const ds = new Set(pick.map(o => o.id));
+        for (let i = 0; i < 30; i++) {
+          pick.forEach(o => { o.x += 0.5; });
+          const ts = performance.now();
+          state.objects.filter(o => ds.has(o.id)).sort((a, b) => a.z - b.z);
+          oldSel.push(performance.now() - ts);
+          const ts2 = performance.now();
+          pick.map(o => d.index.get(o.id)).filter(Boolean).sort((a, b) => a.z - b.z);
+          newSel.push(performance.now() - ts2);
+          const t0 = performance.now();
+          drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
+          out.push(performance.now() - t0);
+        }
+        drag = prev;
+        pick.forEach(o => { o.x -= 15; });
+        invalidateStatic();
+        return { frame: out, oldSel, newSel };
+      });
+      record('dragFrame', size, dragFrame.frame);
+      record('dragSelectScanAll', size, dragFrame.oldSel);
+      record('dragSelectById', size, dragFrame.newSel);
+
       /* 6) 强制 GC 后堆占用 */
       const heapAfter = await gcUsed();
       results.push({ case: 'heapUsed', objects: size, bytes: heapAfter, baseBytes: heapBase, deltaBytes: heapAfter - heapBase });

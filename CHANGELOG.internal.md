@@ -4,9 +4,27 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
-## 2026-11-08 · 批次 C（3/5）：拖拽期对象索引只建一次，pointermove 不再重建 Map
+## 2026-11-08 · 批次 C（4/5）：动态层按 id 直取需绘对象，不再逐帧全表 filter
 
 - **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/render.js` 新增 `dragDrawObjects(ids, idx)`：按 id 直取、剔除失效引用与不可见对象、按 `z` 升序；动态层分支改用它并复用 `drag.index`（C16 引入），不再对 `state.objects` 做整表 `filter` + `sort`；
+  - `scripts/selftest.mjs` +3：按 z 升序且剔除缺失/隐藏、返回活对象引用、空集合不抛错；
+  - 同步 `docs/ARCHITECTURE.md` §6、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**（真实 Chromium 1920×1080@DPR1；`tests/perf/p2-render.perf.mjs`，200 个对象参与拖拽，30 帧）：
+  - 仅「选哪几个对象来画」这一步的 A/B（同一进程内交替执行旧/新实现）：
+    2,000 对象 **P95 0.1 → 0.1 ms**（avg 0.05 → 0.01）；5,000 **0.4 → 0.1 ms**；10,000 **0.5 → 0.1 ms**。
+  - 拖拽整帧（静态层已命中缓存）10,000 对象：**P95 4.1 → 3.3 ms**（同命令前后各跑一次；改动后多次复测落在 2.3–3.3 ms，帧内抖动约 ±1 ms）。2,000 / 5,000 对象改动后 P95 分别 2.5 / 4.2 ms（未采集改动前，不宣称提升）。
+  - selftest **3536 通过 / 0 失败**（基线 3533，+3）；e2e 123 通过 + 1 条件跳过（124）；bench 通过。
+  - dist **832,614 B**（本条 **+122 B**）/ gzip 258,414 B / 余量 **7,066 B**；SW `VERSION=104`；8 种 golden 未变。
+- **遗留 TODO / 风险**：
+  - 收益量级只有「0.4 ms/帧 @10k」，属于消除常驻小开销而非数量级优化；10k 以下几乎不可感知。
+  - `idx.get()` 依赖拖拽索引与 `state.objects` 一致；若拖拽中对象被删除（当前无此入口），动态层会静默跳过该对象而不是报错。
+  - 静态层仍需对全表做 `filter` + `sort`（这是绘制全部可见对象的必要工作），未做空间索引。
+
+## 2026-11-08 · 批次 C（3/5）：拖拽期对象索引只建一次，pointermove 不再重建 Map
+
+- **Commit Hash**：`4ba7116`
 - **核心改动**：
   - `js/core/model.js` 新增 `dragObjectIndex(d)`：索引挂在 `d.index` 上，缺省才新建；
   - `js/core/interaction.js` 的 pointerdown、move 的 pointermove 分支、`dragChangedIds()`、`cancelActiveDrag()` 四处统一改用它，去掉每次 pointermove 的 `objectIndexById()` 全量建表；
