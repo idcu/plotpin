@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 真实浏览器基线复跑（browser-baseline.perf.mjs 四组 × 2 轮）
+
+- **Commit Hash**：本提交
+- **核心改动**：仅更新 `docs/performance.md` §4.2（保留 11-07 历史值，新增 11-08 两轮实测与对照结论）并回填本档案；**业务代码未改，产物 0 B 增量**。
+- **采集环境**：真实 Playwright Chromium，CSS 视口 1920×1080（canvasWrap 1472×1028），DPR1 三组 + DPR2 一组，headless=true，渲染后端 SwiftShader（ANGLE Vulkan 1.3.0 / SwiftShader driver，非真实 GPU）；世界域 2000×1500 m，对象 2000/5000/10000，全部在视野内；命令 `node scripts/perf-browser.mjs --repeat-each=2`（20 passed / 1.2 min）。
+- **验证数据**（11-07 → 11-08 轮1/轮2）：
+  - 2000 DPR1：帧 P95 3.0 → 2.0/2.4 ms；重建 P95 51.6 → 42.4/40.1 ms；heap 峰值 16.85 → 23.55/23.64 MB。
+  - 5000 DPR1：帧 P95 6.3 → 2.1/2.3 ms；重建 P95 126.2 → 90.9/100.9 ms；heap 峰值 36.98 → 26.57/33.92 MB。
+  - 10000 DPR1：帧 P95 6.9 → 3.1/3.7 ms；重建 P95 235.7 → 182.3/199.4 ms；heap 峰值 68.88 → 65.92/62.10 MB。
+  - 5000 DPR2：帧 P95 17.1 → 11.6/12.3 ms；重建 P95 224.4 → 175.1/301.6 ms；heap 峰值 37.18 → 56.32/26.57 MB。
+  - 门禁：四组全部通过（阈值未改），无超阈值回退；`build --check` 产物 821,325 B（0 B 增量）。
+- **遗留 TODO / 风险**：
+  - DPR2 重建 P95 两轮 175.1/301.6 ms、heap 两轮 56.32/26.57 MB，轮间抖动大（SwiftShader 光栅与 GC 时机），均在阈值内但不宜引用单轮绝对值。
+  - 本数据仍是 SwiftShader 代理值，不代表真实 GPU 或低端真机。
+
 ## 2026-11-08 · P2 批次 11 修复：CORE-P2-3 内存 + IO-P2-11 去重
 
 - **Commit Hash**：
