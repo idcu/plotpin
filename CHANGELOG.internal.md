@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 减字节专项：死代码清理与重复实现收敛
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`79a665b`
 - **核心改动**：
   - 删 `js/features/rules.js#rulePolygonArea`：全仓 grep 仅此一处定义，selftest 未导出、插件 API 清单无此键、文档无调用；audit `engineering.md` 列为死代码候选。
   - 新增 `js/core/geometry.js#clampSkewDeg`，替换 8 处 `Math.max(-PARALLELOGRAM_MAX_SKEW,Math.min(PARALLELOGRAM_MAX_SKEW,…))` 重复表达式：`io-table.js`（表格导入）、`props.js`×2（属性面板）、`geometry-site.js` / `interaction.js`（斜切拖拽）、`geometry-transform.js`（变换）、`persistence.js`×2（载入清洗）。
@@ -22,7 +22,7 @@
 
 ## 2026-11-08 · 减字节专项：门禁脚本 walk/readJson 收敛
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`46c55a1`
 - **核心改动**：
   - 新增 `scripts/lib/fs-utils.mjs`：`walkFiles(dir,{ext,skip,out})` 与 `readJson(file)`。
   - 替换四处 walk 实现：`check.mjs`、`i18n-scan.mjs`、`check-contracts.mjs`（`walkJs`）、`check-discipline.mjs`（相对路径适配）；`check-contracts.mjs` 的 `readJson` 改用共享实现。
