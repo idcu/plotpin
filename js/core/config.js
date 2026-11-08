@@ -36,7 +36,7 @@ const APP_LIMITS = Object.freeze({
   SHAPE_POINTS_MAX: 10000,                  /* 单个折线/多边形对象的顶点上限（防病态点列） */
   SHEAR_MAX: 50,                            /* 图片切变斜率上限（约 88.9°），避免近 90° 时产生非有限变换 */
   HISTORY_MAX: 20,                          /* 撤销栈深度 */
-  TOMBSTONE_MAX: 20000,                     /* 删除墓碑硬上限：按对象 id 长期保留，仅在超限时淘汰 */
+  TOMBSTONE_MAX: 100000,                    /* 删除墓碑硬上限：与 OBJECTS_MAX 同量级，保证每个已删对象都有墓碑（否则离线合并会复活） */
   TOMBSTONE_EVICT_BATCH: 2000,              /* 增量淘汰批量：攒够一批才压缩一次，避免每次删除都全量排序 */
   TOMBSTONE_RETENTION_DAYS: 730,            /* 墓碑保留窗口：只有超过该天数的旧墓碑才允许按时间淘汰 */
   COVERAGE_TARGET_CELLS: 18000,             /* 覆盖率栅格固定目标总格数（按区域面积分配，与视口缩放无关） */

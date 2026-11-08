@@ -5932,6 +5932,17 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   const m10 = M(P([O('A', T1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
   ok('合并-删除墓碑写入结果', (m10.project.tombstones || []).some(t => t.id === 'A' && t.kind === 'object'));
 
+  /* A-1：墓碑上限必须与对象上限同量级，否则批量删除 3 万后旧墓碑被截断，旧端对象合并时复活 */
+  ok('墓碑-上限与对象上限同量级', api.TOMBSTONE_LIMIT >= 100000);
+  const bulkN = 30000;
+  const bulkTombs = Array.from({ length: bulkN }, (_, i) => ({ id: 'BULK' + i, deletedAt: T2, kind: 'object' }));
+  const bulkSan = api.sanitizeTombstones(bulkTombs, Date.parse(T3));
+  eq('墓碑-3万条不被上限截断', bulkSan.length, bulkN);
+  const bulkRemote = P(Array.from({ length: bulkN }, (_, i) => O('BULK' + i, T1)));
+  const mBulk = M(P([], { tombstones: bulkSan }), bulkRemote);
+  eq('墓碑-删3万后旧端不复活', mBulk.project.objects.length, 0);
+  eq('墓碑-删3万合并删除计数', mBulk.stats.deleted, bulkN);
+
   const srcA = P([O('A', T1)]);
   const srcB = P([O('A', T2, 5), O('B', T2)]);
   const m11 = M(srcA, srcB);
@@ -7081,7 +7092,7 @@ await section("70. A-09 导入限值与事务化原语", async () => {
 await section("71. A-11 墓碑按对象 id 保留 + 增量淘汰（离线旧端合并不复活）", async () => {
 {
   const L = api.APP_LIMITS;
-  eq('A-11 墓碑硬上限 2 万', L.TOMBSTONE_MAX, 20000);
+  eq('A-11 墓碑硬上限与对象上限同量级', L.TOMBSTONE_MAX, 100000);
   eq('A-11 增量淘汰批量', L.TOMBSTONE_EVICT_BATCH, 2000);
   eq('A-11 保留窗口 730 天', L.TOMBSTONE_RETENTION_DAYS, 730);
 

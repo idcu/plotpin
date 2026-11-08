@@ -73,7 +73,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 
 - 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/dist-manifest.json.maxBytes`）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-08 实测：`bytes = 810,985`、gzip `252,199`、余量 `28,695 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-08 实测：`bytes = 824,683`、gzip `255,989`、余量 `14,997 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---
@@ -257,7 +257,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `IMPORT_ENTITIES_MAX` | 100000 | DXF/PDF 实体数 |
 | `OBJECTS_MAX` | 100000 | 单工程对象总数（含所有楼层） |
 | `HISTORY_MAX` | 20 | 撤销栈深度 |
-| `TOMBSTONE_MAX` / `TOMBSTONE_EVICT_BATCH` | 20000 / 2000 | 墓碑硬上限与增量淘汰批量 |
+| `TOMBSTONE_MAX` / `TOMBSTONE_EVICT_BATCH` | 100000 / 2000 | 墓碑硬上限（与 `OBJECTS_MAX` 同量级）与增量淘汰批量 |
 | `TOMBSTONE_RETENTION_DAYS` | 730 天 | 墓碑保留窗口 |
 | `COVERAGE_TARGET_CELLS` | 18000 | 覆盖率 v2 固定目标总格数 |
 | `COVERAGE_MAX_CELLS` | 200000 | 单次分析栅格总格数上限 |
