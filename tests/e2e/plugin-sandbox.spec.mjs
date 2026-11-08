@@ -445,3 +445,20 @@ test('定时器逃逸：载入后 setInterval 与初始化期捕获的 setTimeou
   expect(await page.evaluate(() => state.objects.length)).toBe(0);
   await drawPoint(page);
 });
+
+test('F07：载入期用 clearTimeout 暴力取消冻结定时器无效，初始化定时器仍被清空', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'evil.freeze',
+    apiVersion: '1.0',
+    capabilities: ['state:write'],
+    code: [
+      'for(var i=0;i<500;i++){ try{ clearTimeout(i); }catch(e){} }',
+      'globalThis.setInterval(function(){ PlotPin.addObjects([{kind:"point",x:1,y:1}]); },50);'
+    ].join('\n')
+  });
+  expect(r.ok).toBe(true);
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+  await drawPoint(page);
+});

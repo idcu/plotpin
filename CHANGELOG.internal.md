@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 B（5/6）：插件冻结改微任务，载入期 clearTimeout 无法取消
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/plugins.js` 沙箱 bootstrap：冻结动作由 `later(freeze,0)`（可被插件枚举 id 后 `clearTimeout` 取消）改为 `queueMicrotask(freeze)`；微任务在插件顶层同步代码结束后、任何插件微任务/定时器之前执行，且不占用可枚举的定时器 id。
+  - 无 `queueMicrotask` 的旧环境退回 0ms 定时器时，`clearTimeout` 包装对 `freezeId` 直接拒绝，插件即使遍历 id 也无法取消冻结。
+  - 新增 e2e `plugin-sandbox` 用例：插件载入期循环 `clearTimeout(0..499)` 后再 `setInterval` 写对象，700 ms 后对象数仍为 0；同步更新 `docs/features.md` 与 `docs/testing.md` 计数（122/35）。
+- **验证数据**：
+  - 插件沙箱 e2e **20 通过（原 19 + 1）**；完整 e2e 见提交前门禁记录。
+  - selftest **3514 通过 / 0 失败**（未变；本条为 Worker 源码行为，由 e2e 覆盖）。
+  - dist **828,709 B**（本条 **+137 B**）/ gzip 257,177 B / 余量 **10,971 B**；SW `VERSION=99`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 无 `queueMicrotask` 的旧环境仍依赖 `freezeId` 保护；该路径未在本机 Chromium 外实测。
+  - 冻结仍发生在插件顶层同步代码结束之后；顶层无限忙循环不受冻结保护（2 s 调用超时也不适用于载入阶段），属既有限制。
+
 ## 2026-11-08 · 批次 B（4/6）：插件类型注册/注销接入持久化与协作广播
 
 - **Commit Hash**：`待回填`

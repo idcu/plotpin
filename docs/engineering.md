@@ -73,7 +73,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 
 - 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/dist-manifest.json.maxBytes`）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-08 实测：`bytes = 828,572`、gzip `257,122`、余量 `11,108 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-08 实测：`bytes = 828,709`、gzip `257,177`、余量 `10,971 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---
@@ -182,7 +182,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |
 | `i18n-scan.mjs` | 只按静态字面量扫描，不证明译文语义正确；JSON/HTML 内的动态拼接可能漏扫 |
-| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 121 用例（120 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
+| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 122 用例（121 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
 | `perf:browser` | **不在任何 CI job 中**；本机为 SwiftShader，数据不能当真实 GPU 结论 |
 | `.github/workflows/ci.yml` | `discipline` job 的步骤名仍写着「十问看板」，实际为 **13 问**；为文案滞后，不影响执行 |
 | `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用「本地 ci 绿」代替全部门禁 |

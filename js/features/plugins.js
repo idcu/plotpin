@@ -329,10 +329,10 @@
       'var g=self,post=g.postMessage.bind(g),add=g.addEventListener.bind(g),later=g.setTimeout.bind(g);',
       /* N-18：初始化期允许插件用定时器，但必须可追踪；载入完成后全部清掉并冻结回调，
          否则插件可在 loaded 之后用 setInterval / 捕获的 setTimeout 永久占用 Worker。 */
-      'var frozen=false,tmo=new Set(),tmi=new Set(),_st=g.setTimeout,_si=g.setInterval,_ct=g.clearTimeout,_ci=g.clearInterval,_qm=g.queueMicrotask;',
+      'var frozen=false,tmo=new Set(),tmi=new Set(),_st=g.setTimeout,_si=g.setInterval,_ct=g.clearTimeout,_ci=g.clearInterval,_qm=typeof g.queueMicrotask==="function"?g.queueMicrotask.bind(g):null,freezeId=-1;',
       'g.setTimeout=function(fn,ms){var id=_st(function(){tmo.delete(id);if(frozen)return;return fn.apply(null,arguments);},ms);tmo.add(id);return id;};',
       'g.setInterval=function(fn,ms){var id=_si(function(){if(frozen)return;return fn.apply(null,arguments);},ms);tmi.add(id);return id;};',
-      'g.clearTimeout=function(id){tmo.delete(id);return _ct(id);};',
+      'g.clearTimeout=function(id){if(id===freezeId)return;tmo.delete(id);return _ct(id);};',
       'g.clearInterval=function(id){tmi.delete(id);return _ci(id);};',
       'if(typeof _qm==="function")g.queueMicrotask=function(fn){return _qm(function(){if(frozen)return;return fn();});};',
       'var V=', JSON.stringify(PLUGIN_API_VERSION), ',CAPS=', JSON.stringify(rec.caps),
@@ -375,11 +375,13 @@
       '["fetch","indexedDB","XMLHttpRequest","WebSocket","EventSource","importScripts","caches","localStorage","sessionStorage","navigator","location","postMessage","addEventListener","removeEventListener","self","Worker","SharedWorker","close","BroadcastChannel","MessageChannel","MessagePort","onmessage","onerror","onmessageerror"].forEach(function(k){',
       'try{Object.defineProperty(g,k,{value:undefined,configurable:false,writable:false});}catch(e){}',
       'var p=g;while(p){try{delete p[k];}catch(e){}p=Object.getPrototypeOf(p);}});',
-      /* 初始化完成：先冻结回调并清空初始化期定时器，再从全局删除定时器入口。
-         删除后插件仍持有初始化期捕获的包装引用，但回调会因 frozen 直接返回，无法续命。 */
-      'later(function(){frozen=true;tmo.forEach(function(id){_ct(id);});tmi.forEach(function(id){_ci(id);});tmo.clear();tmi.clear();',
+      /* 初始化完成：冻结动作走微任务（不占用可被 clearTimeout 取消的定时器 id）；
+         没有 queueMicrotask 的旧环境才退回 0ms 定时器，并用 freezeId 拒绝插件取消。
+         冻结后删除全局定时器入口；插件仍持有初始化期捕获的包装引用，但回调因 frozen 直接返回。 */
+      'function freeze(){frozen=true;tmo.forEach(function(id){_ct(id);});tmi.forEach(function(id){_ci(id);});tmo.clear();tmi.clear();',
       '["setTimeout","setInterval","clearTimeout","clearInterval","queueMicrotask","requestAnimationFrame","requestIdleCallback","setImmediate"].forEach(function(k){try{Object.defineProperty(g,k,{value:undefined,configurable:false,writable:false});}catch(e){}var p=g;while(p){try{delete p[k];}catch(e){}p=Object.getPrototypeOf(p);}});',
-      'send({type:"loaded"});},0);',
+      'send({type:"loaded"});}',
+      'if(_qm)_qm(freeze);else{freezeId=later(freeze,0);}',
       '})();',
       ''
     ].join('') + '\n' + rec.code;
