@@ -3,11 +3,24 @@ import { test, expect } from '@playwright/test';
 import { clickCanvasCenter } from './helpers.mjs';
 
 async function openApp(page) {
-  await page.goto('/index.html');
+  await page.goto('/index.html?debug=1');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
   /* 两个标签共享同一个 IndexedDB：测试只验证内存合并，关闭自动保存避免互相覆盖 current */
   await page.evaluate(() => { window.scheduleSave = () => {}; });
 }
+
+test('调试观测全局仅在 ?debug=1 下暴露', async ({ page }) => {
+  await page.goto('/index.html');
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  expect(await page.evaluate(() => [typeof window.__collabState, typeof window.__collabLastError, typeof window.__collabLastMerge]))
+    .toEqual(['undefined', 'undefined', 'undefined']);
+
+  await page.goto('/index.html?debug=1');
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  await page.evaluate(() => { collabSetState('waiting'); collabRecordError('boom'); });
+  expect(await page.evaluate(() => window.__collabState)).toBe('waiting');
+  expect(await page.evaluate(() => window.__collabLastError)).toBe('boom');
+});
 
 async function openCollab(page) {
   await page.click('#collabBtn');

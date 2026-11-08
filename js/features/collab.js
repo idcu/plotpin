@@ -14,6 +14,9 @@ const COLLAB_PENDING_MAX=2*1024*1024;
 const COLLAB_RECONNECT_BASE_MS=1000;
 const COLLAB_RECONNECT_MAX_MS=5*60*1000;
 const COLLAB_WATCHDOG_MS=15000;
+/* RT-P2-18：协作内部状态只在 ?debug=1 下挂到 window，生产界面不再常驻调试全局（e2e 通过该开关读取） */
+const COLLAB_DEBUG=(()=>{ try{ return /[?&]debug=1(?:&|$)/.test(location.search||''); }catch(_){ return false; } })();
+function collabDebugSet(key,value){ if(!COLLAB_DEBUG) return; try{ window[key]=value; }catch(_){} }
 /* N-16：楼层同步消息类型 ↔ 操作名，发送与接收共用同一张表，避免字符串两处漂移 */
 const COLLAB_FLOOR_OPS=Object.freeze({add:'floor-add',delete:'floor-delete',clear:'floor-clear'});
 const COLLAB_FLOOR_TYPES=Object.freeze({'floor-add':'add','floor-delete':'delete','floor-clear':'clear'});
@@ -226,7 +229,7 @@ function collabStateText(code,detail){
 }
 function collabRecordError(text){
   collabLastError=String(text||'');
-  try{ window.__collabLastError=collabLastError; }catch(_){}
+  collabDebugSet('__collabLastError',collabLastError);
 }
 function collabSetStatus(text,type=''){
   collabLastStatus=text||'';
@@ -238,7 +241,7 @@ function collabSetStatus(text,type=''){
 function collabSetState(code,detail,type=''){
   collabState=code||'idle';
   collabSetStatus(collabStateText(collabState,detail),type);
-  try{ window.__collabState=collabState; }catch(_){}
+  collabDebugSet('__collabState',collabState);
 }
 /** 同一提示 2 秒内只报一次，避免 500ms 快照把控制台/界面刷爆 */
 function collabNotifyThrottled(text,type='warn'){
@@ -268,9 +271,9 @@ function collabProjectToken(){
 /** 跨工程消息丢弃计数（N-17）：消息体 projectId 与本地不一致时计入并展示，不静默吞掉。 */
 function collabNoteForeign(from,pid){
   collabForeignDropped++;
-  try{ window.__collabForeignDropped=collabForeignDropped; }catch(_){}
+  collabDebugSet('__collabForeignDropped',collabForeignDropped);
   collabRecordError(L('已丢弃跨工程协作消息（{got} ≠ {want}）',{got:pid||'-',want:collabProjectToken()||'-'}));
-  try{ window.__collabLastForeignFrom=String(from||''); }catch(_){}
+  collabDebugSet('__collabLastForeignFrom',String(from||''));
   collabRefreshConflictInfo();
 }
 function collabRefreshConflictInfo(){
@@ -455,7 +458,7 @@ function collabQueueApply(raw,from){
       /* overwrite：只有远端真正覆盖本地对象/楼层时才入撤销栈，避免每条远端快照都挤占 20 条历史 */
       const stats=await mergeProjectJSON(raw,{history:'overwrite'});
       collabLastMerge=Object.assign({at:nowISO(),from},stats);
-      try{ window.__collabLastMerge=collabLastMerge; }catch(_){}
+      collabDebugSet('__collabLastMerge',collabLastMerge);
       const changed=collabMergeChanged(stats);
       if(!changed){
         collabSetStatus(`${L('已同步')}：${L('无变化')}`,'ok');
