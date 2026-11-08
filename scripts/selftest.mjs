@@ -200,7 +200,7 @@ code += `\n;globalThis.__api = {
   csvCell: (v,d)=>csvCell(v,d),
   formulaGuard, delimitedText, exportJSON,
   TABLE_COLUMNS,
-  cameraFootprint, cameraPrefilterBox, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
+  cameraFootprint, cameraPrefilterBox, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotRectArea, blindSpotArea,
   optimizeCameraPlacement,
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform, imageHandleList, imageHandleDragTo,
@@ -4566,9 +4566,21 @@ await section("48. 覆盖率：分辨率参数与盲区多边形导出数据", a
   const part=api.analyzeCoverage(api.state,{targetCells:4000});
   const pr=part.regions[0];
   const blindCells=pr.grid.reduce((s,g)=>s+(g===0?1:0),0);
-  approx('盲区-多边形面积=盲格数×格面积', api.blindSpotArea(part), blindCells*pr.cell*pr.cell, 1e-6);
-  ok('盲区-多边形面积与栅格盲区接近(<2%)', Math.abs(api.blindSpotArea(part)-part.totalBlind)<=part.totalBlind*.02);
+  approx('盲区-矩形并集面积=盲格数×格面积', api.blindSpotRectArea(part), blindCells*pr.cell*pr.cell, 1e-6);
+  ok('盲区-矩形并集面积与 totalBlind 接近(<2%)', Math.abs(api.blindSpotRectArea(part)-part.totalBlind)<=part.totalBlind*.02);
   ok('盲区-部分覆盖存在面', api.blindSpotRects(part).length>0);
+  /* E2：blindSpotArea 与主覆盖率同口径（逐区域 area·(1−ratio)），与 totalBlind 严格自洽 */
+  approx('E2-盲区面积=totalBlind', api.blindSpotArea(part), part.totalBlind, 1e-9);
+  approx('E2-盲区面积+已覆盖=总面积', api.blindSpotArea(part)+part.totalCovered, part.totalArea, 1e-9);
+  approx('E2-盲区面积=Σ区域blindArea', api.blindSpotArea(part), part.regions.reduce((s,r)=>s+r.blindArea,0), 1e-9);
+  approx('E2-盲区面积=总面积×(1-ratio)', api.blindSpotArea(part), part.totalArea*(1-part.ratio), 1e-9);
+  /* E2：多区域（含重叠）同一口径自洽 */
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'R2',x:10,y:10,width:20,height:20}));
+  const multi=api.analyzeCoverage(api.state,{targetCells:4000});
+  ok('E2-多区域盲区面积=totalBlind', Math.abs(api.blindSpotArea(multi)-multi.totalBlind)<1e-9);
+  ok('E2-多区域盲区+已覆盖=总面积', Math.abs(api.blindSpotArea(multi)+multi.totalCovered-multi.totalArea)<1e-9);
+  ok('E2-多区域矩形并集与盲区面积接近(<2%)', Math.abs(api.blindSpotRectArea(multi)-multi.totalBlind)<=multi.totalBlind*.02);
+  ok('E2-多区域逐区域面积之和=totalArea', multi.regions.every(r=>Math.abs(r.blindArea-r.area+r.area*r.ratio)<1e-9));
   api.resetState();
 }
 

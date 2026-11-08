@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 E（2/3）：盲区面积与主覆盖率统一口径
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/geometry-coverage.js`：`blindSpotArea(res)` 改为逐区域 `area·(1−ratio)` 求和（与 `totalBlind`、面板/报告同口径）；原「盲格矩形并集面积」实现保留为 `blindSpotRectArea(res)`，供 GeoJSON 导出面自检。
+  - `js/features/io-export.js`：盲区 GeoJSON 导出提示中的「合计面积」改用 `blindSpotRectArea`，与导出的矩形面严格对应。
+  - `scripts/selftest.mjs` +8：单区域/多区域交叉验证 `blindSpotArea === totalBlind`、`blindSpotArea + totalCovered === totalArea`、`= Σ区域 blindArea`、`= totalArea×(1−ratio)`；矩形并集与栅格盲区 `<2%` 的几何近似断言迁移到 `blindSpotRectArea` 保留。
+  - 同步 `docs/features.md` §6、`docs/modules.md`、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**：
+  - 实测差异（修复前 `blindSpotArea` 用矩形并集）：单区域 `rectArea=300.800000` vs `blindArea=303.149408`（偏差 −2.349408，0.78%）；双区域含重叠 `rectArea=510.800000` vs `blindArea=504.493827`（偏差 +6.306173，1.25%，`totalArea=800`）。修复后两路径差值 `0`（断言容差 `1e-9`）。
+  - selftest **3592 通过 / 0 失败**（基线 3584，+8）；e2e 123 通过 + 1 条件跳过。
+  - dist **833,907 B**（本条 **+109 B**）/ gzip 259,065 B / 余量 **5,773 B**；SW `VERSION=111`。
+- **遗留 TODO / 风险**：
+  - 多区域多边形重叠时，`area·(1−ratio)` 仍按各区域自身面积计入，重叠部分在分母与盲区里各算一次；这是既有「按区域统计」口径，未在本轮去重。
+  - GeoJSON 导出的矩形面面积仍是栅格几何近似，与 `blindSpotArea` 的差异上界约为盲区周长×格宽/2。
+
 ## 2026-11-08 · 批次 E（1/3）：旋转方形设备按真实外接盒预筛，覆盖率不再漏格
 
 - **Commit Hash**：`dd56253`

@@ -171,7 +171,7 @@ function analyzeCoverage(st,opt){
 }
 /**
  * 盲区多边形：逐行合并连续盲格为矩形面（世界坐标，闭合环）。
- * 与栅格统计同源，面积求和严格等于 blindArea（到浮点误差），供 GeoJSON 导出。
+ * 供 GeoJSON 导出；矩形并集面积是栅格几何近似，用 blindSpotRectArea 汇总。
  */
 function blindSpotRects(res){
   const out=[];
@@ -194,12 +194,16 @@ function blindSpotRects(res){
   }
   return out;
 }
-/** 盲区多边形总面积（矩形并集，与栅格盲区面积一致） */
-function blindSpotArea(res){
+/** 盲格矩形并集面积（栅格几何近似）：盲格数×格面积，用于 GeoJSON 导出面自检 */
+function blindSpotRectArea(res){
   return blindSpotRects(res).reduce((s,r)=>{
     const a=r.points;
     return s+Math.abs((a[1][0]-a[0][0])*(a[2][1]-a[1][1]));
   },0);
+}
+/** 盲区面积（与主覆盖率同口径）：逐区域 area·(1−ratio) 求和，严格等于 totalBlind */
+function blindSpotArea(res){
+  return res&&res.regions?res.regions.reduce((s,r)=>s+r.blindArea,0):0;
 }
 /**
  * 布点优化（贪心覆盖最大化）：在区域外接网格上枚举候选位置与朝向，

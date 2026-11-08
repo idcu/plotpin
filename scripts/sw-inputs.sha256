@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=110
+version=111
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -16,7 +16,7 @@ ea9d3794f7fe59a2d68bd63333153e131b45f6d8571f142bffc8f63297e2e522  js/common/i18n
 bcddea9a431948fae2f237f8eeb8c6d4b897697356fe11f5ba26eb2d460edbcc  js/common/symbols.js
 44b8475861194cbf1b40e8a5164bf283e2ae5973950f8b0c4cded4d5a67bbf36  js/core/app.js
 a2962157eaa3e20eb56eeca1c8d7566d8f6a6c052dc8cc3c408126ee44e40a08  js/core/config.js
-4814912f4892940061e4cd09304e3ea3911fa8507869a2cc5da822b4d2c3e502  js/core/geometry-coverage.js
+8cffb2dc57cddf2c01d71151f6b286952acd2014653f52ca9daddc5b3ff1521f  js/core/geometry-coverage.js
 bb3f98797ec0abadfd2f8223696cf3b5aa6f0b851ca9ed3410b775e7f0d58362  js/core/geometry-site.js
 4fbe234ecbc18d2313dedc7346efc8a8e5254c557305d55b37e7271b758dec58  js/core/geometry-transform.js
 e1adf61f04f0f1315ed94c5772135ef15809ca60599c48a101933fbec5f3df92  js/core/geometry.js
@@ -29,7 +29,7 @@ d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-le
 90b47b297c7348093e760d4aa501ad6e71e524db8fe3b599cee4eedc40cba1fe  js/core/viewport.js
 c717628ed256a4372b9851cafadbf55689c13fd118729943725b587528f87169  js/features/catalog.js
 cd2006b307d76dd4b3292dd281e17fa7e19d3a961feec41086a24a727609a0a4  js/features/collab.js
-49d47ed2569bd74cbac72bc4a46d54f2cf5e55ea12fb3cf197c62376e4e4ebe1  js/features/io-export.js
+e69c02696f495590dcf0b9a5b6689d7d5392f9a2984c215dbd4c83ef1675e115  js/features/io-export.js
 f15890d6d877ba8be5cc2c7a86d86e645c9eb0c1140c37fdae35c4bf9166c2d2  js/features/io-fields.js
 046814ae5ab6346be36eeb99ed3914ac1df55500486a4aa4999a3e7930ecabea  js/features/io-import.js
 d1c8066483d7f3374577333787c60c5c21c02a5cba3f30b076f484a1e9cf7faa  js/features/io-table.js

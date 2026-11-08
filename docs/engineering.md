@@ -73,7 +73,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 
 - 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/dist-manifest.json.maxBytes`）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-08 实测：`bytes = 833,798`、gzip `259,041`、余量 `5,882 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-08 实测：`bytes = 833,907`、gzip `259,065`、余量 `5,773 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---

@@ -95,7 +95,7 @@ function exportBlindSpotsGeoJson(){
   if(!fc) return toast('当前没有盲区可导出','warn');
   downloadBlob(new Blob([JSON.stringify(fc,null,2)],{type:'application/geo+json'}),safeName()+'-盲区.geojson');
   toast(L('盲区多边形已导出：{n} 个面（合计 {area} ㎡，口径 v{version}）',
-    {n:fc.features.length,area:fmt(blindSpotArea(coverageResult)),version:fc.coverageSpec.version}),'success');
+    {n:fc.features.length,area:fmt(blindSpotRectArea(coverageResult)),version:fc.coverageSpec.version}),'success');
 }
 async function exportJSON(){
   /* IO-P2-25：导出只更新副本时间戳，不改写实时 state——避免“导出后内存时间与已落盘工程不一致”的隐式副作用。
