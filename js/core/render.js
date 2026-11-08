@@ -65,7 +65,7 @@ function areaShapeHandles(o,handles){
       /* 顶边中点：横向拖拽只改倾角，面积（底×高）保持不变 */
       handles.push({type:'shapeHandle',mode:'skew',x:(quad[2][0]+quad[3][0])/2,y:(quad[2][1]+quad[3][1])/2});
     }
-    const c=objectCenter(o), a=(o.angle+90)*Math.PI/180, off=Math.max(.55,30/state.viewport.zoom);
+    const c=shapeLabelCenter(o), a=(o.angle+90)*Math.PI/180, off=Math.max(.55,30/state.viewport.zoom);
     handles.push({type:'rotate',x:c[0]+Math.cos(a)*off,y:c[1]+Math.sin(a)*off});
     return;
   }

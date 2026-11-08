@@ -401,9 +401,7 @@ canvas.addEventListener('pointermove',e=>{
   if(drag?.type==='rotate'){
     drag.dirty=true;
     const o=state.objects.find(x=>x.id===drag.id); if(!o) return;
-    let deg=Math.atan2(wp[1]-o.y,wp[0]-o.x)*180/Math.PI;
-    if(drag.handle.kind!=='pointRotate') deg-=90;
-    o.angle=normalizeAngle(Math.round(deg));
+    rotateShapeByHandle(o,wp,drag.handle.kind==='pointRotate');
     requestRender(); return;
   }
   if(drag?.type==='rect'){

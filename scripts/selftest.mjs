@@ -128,7 +128,7 @@ code += `\n;globalThis.__api = {
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
   siteDescription, worldDims, findIssues, STATS_ISSUE_VERSION,
   hitPhysicalPoint, siteKindName,
-  areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter,
+  areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter, rotateShapeByHandle,
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
   PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
   sectorSweep, sectorArcPoints, sectorArcRange, pointIconScale, areaParamText,
@@ -154,6 +154,7 @@ code += `\n;globalThis.__api = {
   exportTitleBlockSvg, drawTitleBlockOnCanvas,
   xmlEscape, modalBody, safeHTML, sanitizeSiteStyle,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
+  getHandles,
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, buildExportRow, exportShapeSummary, exportParamText, xlsxExportTable,
   effectiveVisible, isVisible, exportScope, pdfDrawObjectsFor, pdfPagePlan,
@@ -1092,6 +1093,41 @@ await section("19. 区域基点：面板设置 (o.x,o.y) 与渲染/命中同基�
 
   /* 基点修改不破坏形状对象引用（圆仍可正常换算面积） */
   approx('基点-移动后圆面积不变', api.shapeArea(c), 25*Math.PI, 1e-9);
+
+  /* P1-1 旋转手柄基准统一：手柄定位（getHandles）与角度换算（rotateShapeByHandle）共用 shapeLabelCenter。
+     把指针放回手柄自己绘制的位置，角度必须不变——旧实现按 (o.x,o.y) 算角，矩形/平行四边形会绕左下角跳变。 */
+  for(const ang of [0,30,90,150,-45,210]){
+    for(const shape of ['rect','parallelogram']){
+      const o=api.baseObject('rect','rect.area',{x:4,y:6,width:10,height:6,angle:ang});
+      if(shape==='parallelogram') o.shape={type:'parallelogram',skew:35};
+      api.state.objects=[o];
+      const c=api.shapeLabelCenter(o);
+      const hd=api.getHandles(o).find(h=>h.type==='rotate');
+      ok(`旋转-${shape}@${ang}° 有手柄`, !!hd);
+      api.rotateShapeByHandle(o,[hd.x,hd.y],false);
+      approx(`旋转-${shape}@${ang}° 拖回原位角度不变`, api.normalizeAngle(o.angle), api.normalizeAngle(ang), 1e-9);
+      approx(`旋转-${shape}@${ang}° 中心X不动`, api.shapeLabelCenter(o)[0], c[0], 1e-9);
+      approx(`旋转-${shape}@${ang}° 中心Y不动`, api.shapeLabelCenter(o)[1], c[1], 1e-9);
+    }
+  }
+  const rr=api.baseObject('rect','rect.area',{x:4,y:6,width:10,height:6,angle:0});
+  api.state.objects=[rr];
+  const rc=api.shapeLabelCenter(rr);
+  api.rotateShapeByHandle(rr,[rc[0]+2*Math.cos(Math.PI*2/3),rc[1]+2*Math.sin(Math.PI*2/3)],false);
+  approx('旋转-拖到120°方位得30°', rr.angle, 30, 1e-9);
+  approx('旋转-拖拽后中心X不动', api.shapeLabelCenter(rr)[0], rc[0], 1e-9);
+  const pt=api.baseObject('point','point.camera',{x:0,y:0,angle:0});
+  api.state.objects=[pt];
+  const ph=api.getHandles(pt).find(h=>h.kind==='pointRotate');
+  api.rotateShapeByHandle(pt,[ph.x,ph.y],true);
+  approx('旋转-点设备手柄沿用 angle 方向', pt.angle, 0, 1e-9);
+  api.rotateShapeByHandle(pt,[0,2],true);
+  approx('旋转-点设备向上拖为90°', pt.angle, 90, 1e-9);
+  const cc=api.baseObject('rect','rect.area',{x:2,y:3,shape:{type:'circle',r:4}});
+  api.state.objects=[cc];
+  api.rotateShapeByHandle(cc,[2,5],false);
+  approx('旋转-圆形锚点即中心不动 X', api.shapeLabelCenter(cc)[0], 2, 1e-9);
+  approx('旋转-圆形锚点即中心不动 Y', api.shapeLabelCenter(cc)[1], 3, 1e-9);
 }
 
 });

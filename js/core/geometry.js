@@ -433,11 +433,27 @@ function shapePerimeter(o){
   /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
   return __geo.sectorPerimeter(r,sweep);
 }
-/** 标签/变换中心：矩形取四角中心；圆/椭圆/扇形锚点即圆心 (x,y) */
+/** 标签/变换中心（旋转基准唯一实现）：矩形/平行四边形取四角中心；圆/椭圆/扇形/点/文字锚点即中心 (x,y)。
+ *  手柄定位（render.js）与旋转角度换算（interaction.js）必须共用本函数，否则图形绕锚点甩动而手柄画在中心。 */
 function shapeLabelCenter(o){
   const tt=areaShapeType(o);
   if(tt==='rect'||tt==='parallelogram') return objectCenter(o);
   return [o.x,o.y];
+}
+/** 旋转手柄拖拽写回：以 shapeLabelCenter 为基准由指针方位角求对象角度（P1-1）。
+ *  pointRotate 手柄沿 angle 方向摆放，方位角即角度；其余手柄位于 angle+90° 方向，需减 90°。
+ *  矩形/平行四边形写回后会反解基点，使视觉中心保持在拖拽开始时的位置（不再绕左下角甩动）。 */
+function rotateShapeByHandle(o,wp,pointRotate){
+  const c=shapeLabelCenter(o);
+  let deg=Math.atan2(wp[1]-c[1],wp[0]-c[0])*180/Math.PI;
+  if(!pointRotate) deg-=90;
+  o.angle=normalizeAngle(Math.round(deg));
+  const tt=areaShapeType(o);
+  if(tt!=='rect'&&tt!=='parallelogram') return;
+  const w=Number(o.width)||0, h=Number(o.height)||0;
+  const off=tt==='parallelogram'?h*Math.tan(parallelogramSkew(o.shape)*Math.PI/180):0;
+  const v=rotatePoint([(w+off)/2,h/2],[0,0],o.angle);
+  o.x=c[0]-v[0]; o.y=c[1]-v[1];
 }
 /**
  * 区域形状互换：保持中心（质心）不动，按等面积（矩形/平行四边形/圆/扇形）或外接轴（椭圆）换算参数。
