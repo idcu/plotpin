@@ -133,7 +133,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 11 种「应当失败」的改动，
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 12 种「应当失败」的改动，
 断言对应门禁非 0 退出且输出命中目标错误关键字：
 
 | # | 破坏 | 期望变红 |
@@ -150,9 +150,10 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 9 | `sw.js` VERSION 回退 | `check-sw.mjs` |
 | 10 | `css/*.css` 追加未闭合的 `@media`（花括号不配平） | `check.mjs --selftest`（CSS 结构判据） |
 | 11 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验：规则删空即红） |
+| 12 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成，需先 bump） |
 
 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，
-干净检出同样生效；bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单
+干净检出同样生效；bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单（未 bump 时 `--update` 会拒绝写入）
 （详见 [engineering.md](engineering.md) §3.4 / §3.5）。
 
 ---

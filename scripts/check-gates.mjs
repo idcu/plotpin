@@ -18,6 +18,7 @@
  *   9. sw.js VERSION 回退             → node scripts/check-sw.mjs      必须非 0
  *  10. CSS 花括号未配平（@media 未闭合）→ node scripts/check.mjs --selftest 必须非 0
  *  11. 契约规则被清空                 → node scripts/check-contracts.mjs 必须非 0
+ *  12. 输入变更未 bump 就执行 --update → node scripts/check-sw.mjs --update 必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
@@ -197,6 +198,18 @@ const scenarios = [
          「0 项核对，0 处违约」并退 0，等于门禁被合法地关掉。 */
       writeFileSync(join(dir, 'contracts', 'conventions.json'),
         JSON.stringify({ schemaVersion: 1, versionSources: [], i18n: null, headers: null, enums: [] }, null, 2));
+    }
+  },
+  {
+    name: '预缓存输入变更未 bump VERSION 就执行 --update',
+    expected: 'node scripts/check-sw.mjs --update 退出码非 0',
+    args: ['scripts/check-sw.mjs', '--update'],
+    expect: /拒绝生成|VERSION 未递增/,
+    sabotage(dir) {
+      /* 旧实现只拒绝版本回退：改资产后直接 --update 会把新指纹写成基线，
+         校验步骤再也看不到这次变更，等于绕过「输入变更必须 bump」。 */
+      appendFileSync(join(dir, 'js', 'core', 'render.js'),
+        '\n/* 门禁牙齿：输入变更未 bump 就刷新指纹 */\n');
     }
   },
   {

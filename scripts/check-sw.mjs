@@ -14,7 +14,8 @@
  *   2. 清单里的 version 必须等于 sw.js 的 VERSION；
  *   3. 输入有变更而 VERSION 未高于清单版本 → 红（要求 bump）；
  *   4. VERSION 低于清单版本 → 红（回退）；
- *   5. 变更后即使 bump 了 VERSION，也必须用 --update 刷新清单（否则下一条输入变更又会漏过）。
+ *   5. 变更后即使 bump 了 VERSION，也必须用 --update 刷新清单（否则下一条输入变更又会漏过）；
+ *      --update 自身拒绝「输入已变更但 VERSION 未递增」，不允许用刷新清单掩盖漏 bump。
  *
  * 合并冲突处理：不要手工合并哈希行；取合并后的工作树重新执行 --update，再与 VERSION 一起提交。
  *
@@ -65,12 +66,33 @@ function parseManifest(text) {
 
 const current = new Map(inputs.map(rel => [rel, digest(rel)]));
 
+/** 清单与当前工作树的指纹差异（更新与校验共用，避免两套实现漂移）。 */
+function changedInputs(base, now) {
+  const changed = [];
+  for (const [rel, hash] of now) {
+    if (base.entries.get(rel) !== hash) changed.push(rel);
+  }
+  for (const rel of base.entries.keys()) {
+    if (!now.has(rel)) changed.push(rel);
+  }
+  return changed;
+}
+
 if (process.argv.includes('--update')) {
   const next = Number(cur);
   if (existsSync(MANIFEST)) {
     const old = parseManifest(readFileSync(MANIFEST, 'utf8'));
     if (old.version && Number(cur) < Number(old.version)) {
       fail(`拒绝生成：VERSION 回退（清单 ${old.version} → 当前 ${cur}）`);
+    }
+    /* 指纹变了但版本没升：此时若直接写清单，新基线会与当前指纹一致，
+       校验步骤再也看不到这次资产变更，等于绕过「输入变更必须 bump」。
+       必须拒绝写入，先 bump VERSION。 */
+    const drift = changedInputs(old, current);
+    if (drift.length && Number(cur) <= Number(old.version)) {
+      fail(`拒绝生成：预缓存输入已变更但 VERSION 未递增（清单=${old.version}，当前=${cur}）：\n  - `
+        + drift.join('\n  - ') + `\n  请先把 sw.js 的 VERSION 提升到至少 ${Number(old.version) + 1}，`
+        + '再执行 node scripts/check-sw.mjs --update');
     }
   }
   const lines = [
@@ -92,13 +114,7 @@ if (!existsSync(MANIFEST)) {
 const base = parseManifest(readFileSync(MANIFEST, 'utf8'));
 if (!base.version) fail('scripts/sw-inputs.sha256 缺少 version=<数字> 行');
 
-const changed = [];
-for (const [rel, hash] of current) {
-  if (base.entries.get(rel) !== hash) changed.push(rel);
-}
-for (const rel of base.entries.keys()) {
-  if (!current.has(rel)) changed.push(rel);
-}
+const changed = changedInputs(base, current);
 
 if (Number(cur) < Number(base.version)) {
   fail(`VERSION 回退：清单=${base.version} → 当前=${cur}`);

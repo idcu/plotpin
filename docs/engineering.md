@@ -152,7 +152,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 ### 3.4 门禁牙齿（`check-gates.mjs`）
 
-在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **10 种**破坏，断言对应门禁非 0 退出
+在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **12 种**破坏，断言对应门禁非 0 退出
 且输出命中目标错误关键字；仓库本身一个字节不改：
 
 | # | 破坏 | 期望变红的门禁 |
@@ -168,6 +168,8 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（插件 API 面真实判据） |
 | 9 | `sw.js` 的 `VERSION` 回退 | `check-sw.mjs` |
 | 10 | `css/*.css` 花括号不配平（未闭合 `@media`） | `check.mjs --selftest`（CSS 结构判据） |
+| 11 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验） |
+| 12 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成） |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 
@@ -175,7 +177,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 | 判据 | 真实边界 |
 |---|---|
-| `check-sw.mjs` | 基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹 + 清单 `version`），不依赖 git 工作区或 `git diff HEAD`，干净检出同样生效。清单需在 bump `VERSION` 后执行 `node scripts/check-sw.mjs --update` 重新生成；合并冲突时不得手工合并哈希行，取合并后的工作树重新 `--update` |
+| `check-sw.mjs` | 基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹 + 清单 `version`），不依赖 git 工作区或 `git diff HEAD`，干净检出同样生效。清单需在 bump `VERSION` 后执行 `node scripts/check-sw.mjs --update` 重新生成；`--update` 自身会拒绝「输入已变更但版本未递增」，不能用刷新清单掩盖漏 bump；合并冲突时不得手工合并哈希行，取合并后的工作树重新 `--update` |
 | `bench.mjs` | 绝对阈值在共享 CI 机器与开发机上会漂移；机器负载/Node 版本不同结果不可直接比较，只能看是否越过阈值 |
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |

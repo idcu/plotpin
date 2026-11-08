@@ -28,7 +28,7 @@
 | 插件 API 面 | 23 键 / 清单 23 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
 | i18n 覆盖率 | 46.16% / 缺口 9 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
 | i18n 字典规模 | PHRASES 1003 / TEMPLATES 112 / DICT.zh 193 | 同上 | |
-| 门禁牙齿 | 正面基线 6/6 + 人为破坏 11/11 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 11 场景为契约规则被清空 |
+| 门禁牙齿 | 正面基线 6/6 + 人为破坏 12/12 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 12 场景为未 bump 就 `--update` |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
 | Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **Node 桩数据，不能作为浏览器性能结论** |
 
