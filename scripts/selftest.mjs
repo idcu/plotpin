@@ -5633,14 +5633,29 @@ await section("57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨
   eq('重叠-相邻贴合不报', cnt(run([rect(0,0),rect(10,0)]),'overlap'), 0);
   eq('重叠-0.02m 贴合容差内不报', cnt(run([rect(0,0),rect(10.02,0)]),'overlap'), 0);
   eq('重叠-0.10m 有间隙不报', cnt(run([rect(0,0),rect(10.10,0)]),'overlap'), 0);
-  eq('重叠-0.04m 微交在容差内不报', cnt(run([rect(0,0),rect(9.96,0)]),'overlap'), 0);
+  /* F11 口径：容差只作为面积阈值（tol² m²），不再把「浅穿透」当贴合 */
+  eq('重叠-0.04m 浅穿透面积 0.4m² 超阈值仍报', cnt(run([rect(0,0),rect(9.96,0)]),'overlap'), 1);
+
+  /* F11：细长薄重叠——bbox 预筛不得用「重叠深度 ≤ 容差」代替面积判据（tol=0.1、交面积 5 m²） */
+  api.resetState();
+  api.state.rules.overlap.tolerance = 0.1;
+  api.state.objects = [rect(0,0,100,0.2,'薄条A'), rect(0,0.15,100,0.2,'薄条B')];
+  const thin = api.runRuleCheck({scope:'current'});
+  eq('重叠-细长薄重叠不因 y 深度小于容差漏报', cnt(thin,'overlap'), 1);
+  approx('重叠-细长薄交面积 5m²', thin.violations.find(v=>v.ruleId==='overlap').value, 5, 1e-6);
+  api.state.objects = [rect(0,0,100,0.2), rect(0,0.2,100,0.2)];
+  eq('重叠-薄条正好贴合仍不报', cnt(api.runRuleCheck({scope:'current'}),'overlap'), 0);
 
   api.resetState();
   api.state.rules.overlap.tolerance = 0.5;
   api.state.objects = [rect(0,0),rect(9.6,0)];
-  eq('重叠-调大容差后浅穿透不报', cnt(api.runRuleCheck({scope:'current'}),'overlap'), 0);
+  eq('重叠-调大容差后 0.4m 浅穿透面积 4m² 仍报', cnt(api.runRuleCheck({scope:'current'}),'overlap'), 1);
   api.state.objects = [rect(0,0),rect(9.4,0)];
   eq('重叠-超出容差的实质重叠仍报', cnt(api.runRuleCheck({scope:'current'}),'overlap'), 1);
+  /* 面积阈值仍是唯一豁免：交面积 ≤ tol² 的极小接触不报 */
+  api.state.rules.overlap.tolerance = 0.5;
+  const tiny = [rect(0,0,0.05,0.05),rect(0.04,0.04,0.05,0.05)];
+  eq('重叠-交面积低于 tol² 的极小接触不报', cnt(run(tiny),'overlap'), 0);
 
   const L = api.baseObject('line','line.custom',{closed:true,name:'L',points:[[0,0],[10,0],[10,4],[4,4],[4,10],[0,10]]});
   const rc = run([L,rect(2,2,6,6)]);

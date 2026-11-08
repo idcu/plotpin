@@ -394,7 +394,9 @@ function ruleOverlapCheck(ctx){
   for(const [a,b] of pairRes.pairs){
     const ox=Math.min(a.bbox.maxX,b.bbox.maxX)-Math.max(a.bbox.minX,b.bbox.minX);
     const oy=Math.min(a.bbox.maxY,b.bbox.maxY)-Math.max(a.bbox.minY,b.bbox.minY);
-    if(ox<=tol||oy<=tol) continue;
+    /* F11：预筛只判断 bbox 是否相交，不再用「重叠深度 ≤ 容差」代替面积判据——
+       否则 100m×0.2m 这类薄长构件 0.05m 的重叠（5 m²）会被静默漏报 */
+    if(ox<=0||oy<=0) continue;
     const hit=ruleMaxPolygonIntersection(a.g.polygons,b.g.polygons);
     if(!(hit.area>minArea)) continue;
     const c=objectCenter(a.o);
