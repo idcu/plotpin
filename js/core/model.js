@@ -245,10 +245,12 @@ let objectNameScope = null;
  */
 function resetTransientInteractionState(opts){
   const keepCalib=!!(opts&&opts.keepCalib);
+  const keepCoverage=!!(opts&&opts.keepCoverage);
+  const keepGuides=!!(opts&&opts.keepGuides);
   draft=null; drag=null; rubber=null;
   activeOsnap=null; trackLine=null; refEdge=null; osnapMode=null;
-  coverageResult=null;
-  if(typeof clearGuides==='function') clearGuides();
+  if(!keepCoverage) coverageResult=null;
+  if(!keepGuides&&typeof clearGuides==='function') clearGuides();
   if(!keepCalib) calibPoints=[];
   affinePairs=[]; calibSelection=null; calibUndoStack=[];
   if(typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.remove('panning');

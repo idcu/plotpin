@@ -110,9 +110,9 @@ code += `\n;globalThis.__api = {
   get history(){ return history; },
   get clipboard(){ return clipboard; }, setClipboard(v){ clipboard=v; },
   get drag(){ return drag; }, setDrag(v){ drag=v; },
-  resetTransientInteractionState,
-  get transient(){ return {draft,drag,rubber,affinePairs,calibPoints,trackLine,osnapMode,coverageResult}; },
-  setTransient(v){ ['draft','drag','affinePairs','calibPoints','trackLine','osnapMode','coverageResult'].forEach(k=>{ if(Object.prototype.hasOwnProperty.call(v,k)) eval(k+'=v[k]'); }); },
+  resetTransientInteractionState, escapeInterrupt, handleWindowBlur,
+  get transient(){ return {draft,drag,rubber,affinePairs,calibPoints,trackLine,refEdge,osnapMode,coverageResult}; },
+  setTransient(v){ ['draft','drag','rubber','affinePairs','calibPoints','trackLine','refEdge','osnapMode','coverageResult'].forEach(k=>{ if(Object.prototype.hasOwnProperty.call(v,k)) eval(k+'=v[k]'); }); },
   switchFloor,
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
@@ -7776,6 +7776,43 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   api.convertAreaShape(ci,'rect'); eq('CORE-P2-7 圆转矩形角度为 0', ci.angle, 0);
   const pa=api.baseObject('rect','rect.area',{x:0,y:0,width:6,height:4,angle:25,shape:{type:'parallelogram',skew:12}});
   api.convertAreaShape(pa,'rect'); eq('CORE-P2-7 平行四边形转矩形保留角度', pa.angle, 25);
+
+  /* CORE-P2-9：四类退出路径（中断 / 切层 / 撤销 / 失焦）逐一独立断言 */
+  const seedTransients=()=>api.setTransient({
+    draft:{kind:'line',points:[[0,0]]}, rubber:{x0:0,y0:0,x1:5,y1:5},
+    trackLine:{from:[0,0],dir:[1,0]}, refEdge:{a:[0,0],b:[1,1]},
+    osnapMode:'endpoint', affinePairs:[{u:0,v:0,x:0,y:0}], calibPoints:[[0,0],[10,0]],
+    coverageResult:{probe:1}
+  });
+  const emptyInteraction=()=>{
+    const t=api.transient;
+    return t.draft===null&&t.rubber===null&&t.trackLine===null&&t.refEdge===null&&
+      t.affinePairs.length===0&&t.osnapMode===null;
+  };
+  /* ① 中断（Esc）：交互瞬态全清，覆盖率叠加保留 */
+  api.resetState(); seedTransients();
+  eq('CORE-P2-9 中断返回 reset', api.escapeInterrupt(), 'reset');
+  ok('CORE-P2-9 中断清空交互瞬态', emptyInteraction());
+  ok('CORE-P2-9 中断保留覆盖率叠加', !!api.transient.coverageResult);
+  eq('CORE-P2-9 中断清空校准草稿', api.transient.calibPoints.length, 0);
+  /* ② 切层 */
+  api.resetState();
+  const floorInit=api.createInitialState();
+  api.state.floors.push({id:'floor.P2C9',name:'P2C9',background:floorInit.background,objects:[],viewport:{zoom:1,panX:0,panY:0}});
+  seedTransients();
+  ok('CORE-P2-9 切层成功', await api.switchFloor('floor.P2C9'));
+  ok('CORE-P2-9 切层清空交互瞬态', emptyInteraction());
+  eq('CORE-P2-9 切层清空覆盖率', api.transient.coverageResult, null);
+  /* ③ 撤销 */
+  api.resetState(); api.pushHistory(); seedTransients();
+  api.undo(); ok('CORE-P2-9 撤销清空交互瞬态', emptyInteraction());
+  /* ④ 窗口失焦：只结束进行中的交互，校准点/覆盖率保留 */
+  api.resetState(); seedTransients();
+  api.handleWindowBlur();
+  ok('CORE-P2-9 失焦清空交互瞬态', emptyInteraction());
+  eq('CORE-P2-9 失焦保留校准点', api.transient.calibPoints.length, 2);
+  ok('CORE-P2-9 失焦保留覆盖率叠加', !!api.transient.coverageResult);
+  api.resetState();
 }
 
 });

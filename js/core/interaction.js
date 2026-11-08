@@ -1178,6 +1178,21 @@ function cycleKeyboardRegion(){
   const el=regions[keyboardRegion]();
   if(el&&typeof el.focus==='function') el.focus();
 }
+/* CORE-P2-9：Esc 中断统一复位（拖拽先回滚，再清草稿/框选/捕捉/校准草稿；保留覆盖率叠加） */
+function escapeInterrupt(){
+  if(cancelActiveDrag()) return 'drag';
+  resetTransientInteractionState({keepCoverage:true});
+  selectedIds.clear(); setTool('select'); refreshUI(); return 'reset';
+}
+/* CORE-P2-9：窗口失焦只结束进行中的交互，保留校准点、参考线与覆盖率叠加 */
+function handleWindowBlur(){
+  if(drag) cancelActiveDrag();
+  resetTransientInteractionState({keepCalib:true,keepGuides:true,keepCoverage:true});
+  spaceDown=false;
+  if(typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.remove('panning');
+  requestRender();
+}
+window.addEventListener('blur',handleWindowBlur);
 window.addEventListener('keydown',e=>{
   if(e.defaultPrevented) return;
   const tag=(document.activeElement?.tagName||'').toLowerCase();
@@ -1210,8 +1225,8 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(); return; }
   if(e.key==='Escape'){
-    if(cancelActiveDrag()){ requestRender(); return; }   /* 拖拽中 Esc：恢复到按下前，不动选择集 */
-    draft=null; selectedIds.clear(); setTool('select'); refreshUI(); return;
+    if(escapeInterrupt()==='drag') requestRender();
+    return;
   }
   if(e.key==='Enter'&&onCanvas&&(currentTool==='affine'||currentTool==='calibrate'||(draft&&draft.points))){ finishDraft(); return; }
   if(e.key==='Backspace'&&onCanvas&&draft?.points?.length){ draft.points.pop(); requestRender(); return; }
