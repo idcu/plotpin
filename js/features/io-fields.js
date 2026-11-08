@@ -1,11 +1,19 @@
 /* io-fields.js —— 导出字段描述表与行渲染器（CSV/TSV/XLSX/PDF/打印报告/GeoJSON/SVG/DXF 的唯一字段源） */
 /* 公式注入防护（导出加前导单引号、导入去引号还原）：CSV/TSV/XLSX 往返的唯一实现 */
 const NUMERIC_CELL_RE=/^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*[,;，]\s*-?\d+(?:\.\d+)?)*$/;
-function formulaGuard(s){ return /^[=+\-@\t\r]/.test(s)&&!NUMERIC_CELL_RE.test(s); }
-/** 表格导入用：撤销导出时加的前导单引号（仅当原值确实会被公式防护） */
+function formulaGuard(s){
+  const t=String(s??'');
+  /* 已有前导单引号的值再加一个（双层），导入侧剥离一层，保证字面量 '=SUM(A1) 可逆（IO-P2-4） */
+  if(t.charAt(0)==="'") return true;
+  return /^[=+\-@\t\r]/.test(t)&&!NUMERIC_CELL_RE.test(t);
+}
+/** 表格导入用：先还原 ''→'，再仅对公式前缀去引号；字面单引号文本不会被误删 */
 function formulaUnguard(s){
   const t=String(s??'');
-  return t.charAt(0)==="'"&&formulaGuard(t.slice(1))?t.slice(1):t;
+  if(t.charAt(0)!=="'") return t;
+  const rest=t.slice(1);
+  if(rest.charAt(0)==="'") return rest;
+  return formulaGuard(rest)?rest:t;
 }
 /* 单一字段描述表：每个条目声明键名、取值函数以及进入哪些导出格式。
    各格式只负责布局（列宽/列序/文本模板），不得再各自拼装对象字段。 */

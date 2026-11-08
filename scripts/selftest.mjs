@@ -1558,6 +1558,11 @@ await section("28. 表格导入导出往返：节点坐标/闭合/形状/标注�
   eq('CSV 表头与数据行同一转义', api.DSV.parseRows(hdrText,',')[0], ['a,b','c"d',"'=x"]);
   /* IO-P2-2：台账 CSV/TSV 统一 CRLF */
   eq('CSV/TSV 换行统一 CRLF', api.delimitedFromTable([['a','b'],['1','2']],',').replace(/^\ufeff/,''), 'a,b\r\n1,2');
+  /* IO-P2-4：字面单引号 + 公式前缀可逆，导出加一层、导入剥一层 */
+  const litFormula="'=SUM(A1)";
+  const litBack=api.formulaUnguard(api.DSV.parseRows(api.delimitedFromTable([['名称'],[litFormula]],',').replace(/^\ufeff/,''),',')[1][0]);
+  eq('字面单引号公式文本往返不变', litBack, litFormula);
+  eq('危险前缀仍按公式去引号', api.formulaUnguard("'=SUM(A1)"), '=SUM(A1)');
   /* 真实导出路径：编号/备注危险前缀被加引号，负坐标保持数值语义 */
   const fst=api.resetState();
   fst.objects.push(api.baseObject('point','point.marker',{name:'=cmd|calc',x:-12.5,y:3,props:{note:'@SUM(1)'}}));
