@@ -139,7 +139,7 @@ code += `\n;globalThis.__api = {
   annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
   annotToggleGroupHTML, bindAnnotToggleInputs, siteAnnotToggleKeys, renderSiteAnnotToggles,
   SITE_ANNOT_SETTING_KEYS, siteAnnotSettingOn, setSiteAnnotSetting,
-  typeDisplayName, populateSelects,
+  typeDisplayName, populateSelects, objectMatchesFilter, filteredObjects,
   normalizeIcon, TYPE_ICONS, mergeTypes,
   SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
   markDirty, MARK_DIRTY_PROFILES,
@@ -1957,6 +1957,39 @@ await section("28.7b F17 删除图层/类型跨楼层迁移单调打点", async 
   eq('F17-stampObjectsIn 空集合返回 0', api.stampObjectsIn([]), 0);
   eq('F17-stampObjectsIn 按引用计数', api.stampObjectsIn([ob,null]), 1);
   eq('F17-stampObjects 仍只覆盖当前层', api.stampObjects([ob.id]), 0);
+  api.resetState();
+}
+});
+
+/* 28.7c D21 对象清单唯一过滤入口 ---- */
+await section("28.7c D21 对象清单唯一过滤入口", async () => {
+{
+  const st=api.resetState();
+  const pointT=api.BUILTIN_TYPES.find(t=>t.kind==='point').id;
+  const rectT=api.BUILTIN_TYPES.find(t=>t.kind==='rect').id;
+  const textT=api.BUILTIN_TYPES.find(t=>t.kind==='text').id;
+  const lid1=st.layers[0].id;
+  st.layers.push({id:'layer.f21',name:'筛选层',visible:true,locked:false});
+  const oa=api.baseObject('point',pointT,{name:'摄像头A',layerId:lid1});
+  const ob=api.baseObject('rect',rectT,{name:'区域B',layerId:'layer.f21'});
+  const oc=api.baseObject('text',textT,{name:'备注C',layerId:lid1,text:'ALPHA'});
+  st.objects.push(oa,ob,oc);
+  const all={q:'',kf:'',lf:''};
+  eq('D21-无筛选返回全部', api.filteredObjects(all).length, 3);
+  eq('D21-关键字命中文本', api.filteredObjects({q:'alpha',kf:'',lf:''}).map(o=>o.id), [oc.id]);
+  eq('D21-按类型过滤', api.filteredObjects({q:'',kf:'point',lf:''}).map(o=>o.id), [oa.id]);
+  eq('D21-按图层过滤', api.filteredObjects({q:'',kf:'',lf:'layer.f21'}).map(o=>o.id), [ob.id]);
+  eq('D21-组合过滤', api.filteredObjects({q:'a',kf:'point',lf:lid1}).map(o=>o.id), [oa.id]);
+  eq('D21-空态返回 0 行', api.filteredObjects({q:'no-such-xyz',kf:'',lf:''}).length, 0);
+  ok('D21-切换筛选不复用旧结果',
+    api.filteredObjects({q:'alpha',kf:'',lf:''}).length===1 &&
+    api.filteredObjects({q:'',kf:'',lf:'layer.f21'}).length===1 &&
+    api.filteredObjects(all).length===3);
+  oc.props={note:'hidden-token'};
+  eq('D21-属性值参与搜索', api.filteredObjects({q:'hidden-token',kf:'',lf:''}).length, 1);
+  const rectType=api.BUILTIN_TYPES.find(t=>t.id===rectT);
+  eq('D21-类型名参与搜索', api.filteredObjects({q:api.typeDisplayName(rectType).toLowerCase(),kf:'',lf:''}).length, 1);
+  ok('D21-过滤结果与条件自洽', api.filteredObjects({q:'',kf:'point',lf:''}).every(o=>o.kind==='point'&&o.layerId===lid1));
   api.resetState();
 }
 });

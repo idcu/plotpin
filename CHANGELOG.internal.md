@@ -4,9 +4,27 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
-## 2026-11-08 · 批次 D（4/5）：删除图层/类型跨楼层迁移按对象引用打点，协作不回退旧引用
+## 2026-11-08 · 批次 D（5/5）：对象清单收敛为唯一过滤入口，行点击不再全量重建
 
 - **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/ui-panels.js`：新增 `listFilterState()`（唯一读取 `#filterText/#filterKind/#filterLayer`）、纯函数 `objectMatchesFilter(o,f)`、`filteredObjects(f)`；`renderList()`、「表头全选」、`selectAllChk` 三处不再各写一份过滤表达式，统一复用。
+  - 行点击由 `refreshUI()`（属性+清单+图层+统计+画布全刷）改为 `refreshSelectionUI()`（属性面板 + 清单选中高亮），选中态/空态/表头全选计数由 `syncListSelection()` 保持一致。
+  - `filteredObjects` 每次按当下条件重算，不做跨筛选缓存——切换筛选不会复用旧结果。
+  - `scripts/selftest.mjs` +10（新分区 28.7c）：无筛选/关键字/类型/图层/组合/空态、切换筛选不复用、属性值参与搜索、类型名参与搜索、结果与条件自洽。
+  - 同步 `docs/features.md` §1、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**：
+  - 修复前 `api.filteredObjects` 不存在，先跑 selftest 得到失败（红）；实现后 selftest **3576 通过 / 0 失败**（基线 3566，+10）。
+  - 行为等价：空态返回 0 行；表头勾选态沿用 `rows.length>0 && rows.every(selected)`；行点击仍切到 `属性` 页并同步清单高亮。
+  - dist **833,476 B**（本条 **−278 B**，重复过滤表达式收敛带来的净减少）/ gzip 258,939 B / 余量 **6,204 B**；SW `VERSION=109`；e2e 123 通过 + 1 条件跳过（124）；8 种 golden 未变。
+- **遗留 TODO / 风险**：
+  - 行点击不再触发图层/统计全量刷新；二者不依赖选中集，当前无行为差异。若未来出现依赖「行点击后全量刷新」的副作用，需要显式补调用。
+  - `renderList()` 在筛选变化或对象增删时仍重建 `tbody`（必要路径），未做虚拟列表；10k 行重建成本仍在，但已不在点选热路径。
+  - `listFilterState()` 依赖 DOM 值，selftest 只覆盖纯函数 `objectMatchesFilter/filteredObjects`，DOM 读取路径由 e2e 既有用例覆盖。
+
+## 2026-11-08 · 批次 D（4/5）：删除图层/类型跨楼层迁移按对象引用打点，协作不回退旧引用
+
+- **Commit Hash**：`b3a59c6`
 - **核心改动**：
   - `js/core/persistence.js`：抽出单对象打点原语 `stampObject(o)`（新时间严格大于旧值）；`stampObjects(ids)` 改为复用该原语，**签名与行为不变**；新增 `stampObjectsIn(objs)` 按对象引用打点——`objectIndexById()` 只覆盖当前楼层，跨楼层对象必须按引用打点。
   - 新增 `migrateRefsAndDelete(kind, fromId, toId)`：先 `syncActiveFloor()` 写回当前层，再遍历全部楼层迁移 `layerId`/`typeId`、删除图层/类型条目、`stampObjectsIn(moved)` 打点、`commitChange()` 收尾；返回受影响对象数。

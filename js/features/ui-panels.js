@@ -105,9 +105,24 @@ function syncListSelection(){
 }
 /** 选中集变化的最小 UI 刷新：属性面板 + 列表高亮（不重建 10k 行、不刷图层/统计） */
 function refreshSelectionUI(){ renderProps(); syncListSelection(); }
+/** 对象清单过滤条件（唯一读取点）：q 已小写，空串表示不过滤 */
+function listFilterState(){
+  return {q:$('filterText').value.trim().toLowerCase(), kf:$('filterKind').value, lf:$('filterLayer').value};
+}
+/** 单个对象是否命中清单过滤条件（纯函数；f 必须来自 listFilterState） */
+function objectMatchesFilter(o,f){
+  if(f.kf && o.kind!==f.kf) return false;
+  if(f.lf && o.layerId!==f.lf) return false;
+  if(!f.q) return true;
+  return [o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(f.q);
+}
+/** 当前筛选命中的对象（每次按当下条件重算，不跨筛选复用旧结果） */
+function filteredObjects(f){
+  const ff=f||listFilterState();
+  return state.objects.filter(o=>objectMatchesFilter(o,ff));
+}
 function renderList(){
-  const q=$('filterText').value.trim().toLowerCase(), kf=$('filterKind').value, lf=$('filterLayer').value;
-  const rows=state.objects.filter(o=>(!kf||o.kind===kf)&&(!lf||o.layerId===lf)&&(!q||[o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(q)));
+  const rows=filteredObjects(listFilterState());
   $('headSelectChk').checked=rows.length>0&&rows.every(o=>selectedIds.has(o.id));
   $('objectTbody').innerHTML=rows.map(o=>{
     const t=getType(o.typeId), l=layerOf(o);
@@ -130,7 +145,7 @@ function renderList(){
     const id=tr.dataset.id;
     if(e.shiftKey) selectedIds.has(id)?selectedIds.delete(id):selectedIds.add(id);
     else { selectedIds.clear(); selectedIds.add(id); switchTab('props'); }
-    refreshUI();
+    refreshSelectionUI();
   }));
   $('objectTbody').querySelectorAll('[data-row-select]').forEach(chk=>chk.addEventListener('click',e=>{
     e.stopPropagation(); const id=chk.dataset.rowSelect; chk.checked?selectedIds.add(id):selectedIds.delete(id); refreshUI();
@@ -139,14 +154,10 @@ function renderList(){
   $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); });
 }
 $('headSelectChk').addEventListener('change',e=>{
-  const q=$('filterText').value.trim().toLowerCase(), kf=$('filterKind').value, lf=$('filterLayer').value;
-  const rows=state.objects.filter(o=>(!kf||o.kind===kf)&&(!lf||o.layerId===lf)&&(!q||[o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(q)));
-  rows.forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
+  filteredObjects().forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
 });
 $('selectAllChk').addEventListener('change',e=>{
-  const q=$('filterText').value.trim().toLowerCase(), kf=$('filterKind').value, lf=$('filterLayer').value;
-  const rows=state.objects.filter(o=>(!kf||o.kind===kf)&&(!lf||o.layerId===lf)&&(!q||[o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(q)));
-  rows.forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
+  filteredObjects().forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
 });
 $('batchLayerBtn').onclick=()=>{ const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可修改的选中对象','warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层', items.map(o=>o.id)); };
 $('batchMoveBtn').onclick=()=>{

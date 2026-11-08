@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=108
+version=109
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -39,7 +39,7 @@ c013108ff2745750ef2de9e11b716eed90ea53d53f479ba2809d3aec362c12f2  js/features/pl
 487dcba1d47b458c9e8b359c90667451a5d06f718e3e32cc3d53dbda703151d1  js/features/props.js
 7695e023b65710717a61c88f66f257971147ebe600af7a5a0e849506a0a0cd33  js/features/rules.js
 423ee24cf1ff09d4e575e5160a9afa3fd2e6f937f3f45df16cf631515dbbaca5  js/features/snapshot-ui.js
-378adb3901b253b11c364cd88fcdae8e2e2ebe2acabae4ebd360de32335258fa  js/features/ui-panels.js
+a6b6d9e37100880f5278dd145c6506a460408b3465ee1773442fd1fa91cdef5e  js/features/ui-panels.js
 5380aed910a4f2083956552338e62495138f95a0dca86bd97213bcf1eead6080  js/features/ui-shell.js
 34d4ca019bf4e3e7f7e8bb648d46a2c7d9ebe6b4eca0a11f9e1203ceeba47e40  manifest.webmanifest
 5e1137eca399e2bd0a85e1890268b319aec2fffd3c20354fd8664ff079ad7909  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets/src/core.js
