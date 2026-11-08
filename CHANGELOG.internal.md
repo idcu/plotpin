@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 批次 E（3/3）：显示网格步长对齐吸附步长
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`04a653c`
 - **核心改动**：
   - `js/core/viewport.js`：新增 `gridDisplayStep(zoom, gridSize, minPx=45)`，返回 `gridSize` 的整数倍且屏幕间距不小于 `minPx`；`niceStep` 保留给比例尺。
   - `js/core/render.js#drawGrid`：网格步长由 `niceStep(45/zoom)` 改为 `gridDisplayStep(v.zoom, state.settings.gridSize, 45)`，网格线始终落在可吸附坐标上。
