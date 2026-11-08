@@ -4,6 +4,26 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · CORE-P1-8 图片切变手柄改用图片自身基底（89°/90°/91° 一致）
+
+- **Commit Hash**：`待回填`（fix(geometry)：切变基底改为图片自身底边/法向，消除 90° 附近分母退化）。
+- **根因**：`imageHandleDragTo` 的 skew 分支用世界竖直投影高度 `top.y-bot.y` 作分母。图片旋转到 90° 附近时该值趋 0，斜率 `raw=(wp.x-start.x)/hgt` 发散并被夹到 `±SHEAR_MAX(50)`；而 50 的斜率作用在仍与世界 y 轴重合的图片宽度上，可产生数百米量级的错切 → 手柄跳变/图像崩坏。
+- **修复**：
+  - 新增 `affShearAlong(k,ex,n,base)`（行优先 2×3 仿射）：`p' = p + k·(n·(p−base))·ex`，`ex` 取底边单位方向、`n` 取指向顶边的单位法向、`base` 取底边中点。
+  - `imageHandleDragTo` skew 分支改用 `d = (wp-start)·ex`、分母 `VH=|top-bot|`（图片自身高度，与旋转角无关），替换原 `affShearX(k,bot.y)`。
+  - 退化策略（确定性）：底边长度或图片高度 ≤1e-9、或任一值非有限时，直接返回原变换（无操作），不产生非有限矩阵；非有限斜率仍归零。已写入 `docs/features.md`、`docs/ARCHITECTURE.md`、`docs/modules.md`。
+  - 公共抽象变更：`affShearX` 被 `affShearAlong` 取代（唯一调用方 `imageHandleDragTo`，无外部调用；`docs/modules.md` 的 API 表同步）。
+- **验证数据**：
+  - 新增 selftest 19 条断言：89°/90°/91° 三角度各 6 条（变换 6 元组有限、顶边沿自身方向精确位移 1 m 的 X/Y、底边中点不动 X/Y、四角点最大位移 ≤1 m），另 1 条退化高度返回原变换。旧实现在 90° 附近角点位移可达数百米，新实现恒 ≤1 m。
+  - `selftest`：3010 通过 / 0 失败（上一提交 2991，+19，未删断言）。
+  - `e2e`：109 passed / 1 skipped（110 用例 / 34 spec），全量通过。
+  - `check-gates`：正面基线 6/6、破坏 10/10。
+  - `check.mjs --selftest`：契约 7/0、插件 API 23/0/0、i18n 45.65%/缺口 6/UI 1/模板 0、SW VERSION=36。
+  - 产物 811,457 B / gzip 252,391 B / 余量 28,223 B；相对 CSS-P1-1 提交 **+471 B / gzip +191 B / 余量 −471 B**；SHA256 `c2215858…`，二次构建一致。
+- **遗留 TODO / 风险**：
+  - 切变手柄的“跟手”只在逻辑层以 1 m 位移断言；无浏览器指针 e2e 覆盖旋转后拖拽的像素级轨迹（现有 e2e 无图片仿射手柄用例）。
+  - `SHEAR_MAX=50` 阈值未改；新基底下达标场景不需要它，但极端退化输入仍由它兜底。
+
 ## 2026-11-08 · CSS-P1-1 修复打印媒体查询未闭合并落地 CSS 结构门禁
 
 - **Commit Hash**：`待回填`（fix(css)：闭合 @media print 并新增 CSS 结构门禁）。

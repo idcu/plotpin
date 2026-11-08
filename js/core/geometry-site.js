@@ -354,7 +354,16 @@ function affRotateAbout(deg,cx,cy){
   return [co,-si,cx-co*cx+si*cy,si,co,cy-si*cx-co*cy];
 }
 function affScaleAbout(k,cx,cy){ return [k,0,cx*(1-k),0,k,cy*(1-k)]; }
-function affShearX(k,baseY){ return [1,k,-k*baseY,0,1,0]; }
+/**
+ * 沿图片自身底边方向 ex、法向 n 关于 base 的切变（行优先 [a,b,c;d,e,f]）：
+ * p' = p + k·(n·(p−base))·ex。ex/n 为单位正交向量；ex=(1,0)、n=(0,1) 时退化为世界水平切变。
+ * 用图片自身基底而不是世界水平线，旋转到任意角度都不会出现投影高度分母退化。
+ */
+function affShearAlong(k,ex,n,base){
+  const nb=n[0]*base[0]+n[1]*base[1];
+  return [1+k*ex[0]*n[0], k*ex[0]*n[1], -k*ex[0]*nb,
+          k*ex[1]*n[0], 1+k*ex[1]*n[1], -k*ex[1]*nb];
+}
 /** 站点（场地）边角世界坐标：平移/缩放吸附用 */
 function siteCornerPoints(site){
   if(!site) return [];
@@ -411,11 +420,24 @@ function imageHandleDragTo(bg,drag,wp){
     }
     out=affMul(affScaleAbout(k,anchor[0],anchor[1]),T);
   }else if(drag.mode==='skew'){
-    const hgt=(top[1]-bot[1])||1;
-    const raw=(wp[0]-drag.start[0])/hgt;
-    /* 近 90° 时投影高度趋 0，斜率会发散为非有限值：夹取到 SHEAR_MAX，非有限直接归零 */
-    const k=Number.isFinite(raw)?Math.max(-APP_LIMITS.SHEAR_MAX,Math.min(APP_LIMITS.SHEAR_MAX,raw)):0;
-    out=affMul(affShearX(k,bot[1]),T);
+    /* 切变基底取图片自身底边方向与法向，而不是世界水平线：
+       图片旋转到 90° 附近时世界竖直投影高度 top.y-bot.y 趋 0，旧实现除以它会发散并被夹到
+       ±SHEAR_MAX，导致整幅图被数百米量级的错切（手柄跳变/退化）。自身基底下分母是图片高度，
+       与旋转角无关，恒 >0。 */
+    const edge=[cs[2][0]-cs[3][0],cs[2][1]-cs[3][1]];
+    const H=Math.hypot(edge[0],edge[1]);
+    const vx=top[0]-bot[0], vy=top[1]-bot[1], VH=Math.hypot(vx,vy);
+    if(!(H>1e-9)||!(VH>1e-9)||!Number.isFinite(H)||!Number.isFinite(VH)){
+      out=T.slice();  /* 退化图片（零宽/零高/非有限变换）：确定性降级为无操作，保持原变换 */
+    }else{
+      const ex=[edge[0]/H,edge[1]/H];
+      let n=[-ex[1],ex[0]];
+      if(n[0]*vx+n[1]*vy<0){ n=[-n[0],-n[1]]; }  /* 法向指向顶边 */
+      const d=(wp[0]-drag.start[0])*ex[0]+(wp[1]-drag.start[1])*ex[1];
+      const raw=d/VH;
+      const k=Number.isFinite(raw)?Math.max(-APP_LIMITS.SHEAR_MAX,Math.min(APP_LIMITS.SHEAR_MAX,raw)):0;
+      out=affMul(affShearAlong(k,ex,n,bot),T);
+    }
   }
   if(!out.every(Number.isFinite)) out=T.slice();  /* 任何非有限结果都拒绝应用，保持原变换 */
   return {T:{a:out[0],b:out[1],c:out[2],d:out[3],e:out[4],f:out[5]}, snap};

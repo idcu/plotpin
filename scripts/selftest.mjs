@@ -3053,6 +3053,39 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     const bg2=Object.assign({},bg,{transform:rot.T});
     const sk=api.imageHandleDragTo(bg2,{mode:'skew',start:[0,0],origin:api.imageTransformOf(bg2),originCorners:api.imageCornerWorld(bg2)},[10,0]);
     ok('N-14-近90°切变仍为有限变换', ['a','b','c','d','e','f'].every(k=>Number.isFinite(sk.T[k])));
+    /* CORE-P1-8：89°/90°/91° 三角度都必须沿图片自身底边方向切变。
+       旧实现除以世界竖直投影高度 top.y-bot.y，90° 附近趋 0 → 夹到 SHEAR_MAX，整幅图被巨量错切。
+       新实现的判据：顶边沿自身方向精确位移 1 m、底边不动、任一角点位移 ≤1 m（旧实现可达数百米）。 */
+    [89,90,91].forEach(deg=>{
+      const r=deg*Math.PI/180, co=Math.cos(r), si=Math.sin(r), cx=5, cy=2.5;
+      const R=[co,-si,cx-co*cx+si*cy,si,co,cy-si*cx-co*cy];
+      const Tm=api.affMul(R,[bo.a,bo.b,bo.c,bo.d,bo.e,bo.f]);
+      const T={a:Tm[0],b:Tm[1],c:Tm[2],d:Tm[3],e:Tm[4],f:Tm[5]};
+      const bgR=Object.assign({},bg,{transform:T});
+      const cs=api.imageCornerWorld(bgR);
+      const top=[(cs[0][0]+cs[1][0])/2,(cs[0][1]+cs[1][1])/2];
+      const bot=[(cs[3][0]+cs[2][0])/2,(cs[3][1]+cs[2][1])/2];
+      const e0=[cs[1][0]-cs[0][0],cs[1][1]-cs[0][1]], el=Math.hypot(e0[0],e0[1]);
+      const ex=[e0[0]/el,e0[1]/el];
+      const res=api.imageHandleDragTo(bgR,{mode:'skew',start:top,origin:T,originCorners:cs},[top[0]+ex[0],top[1]+ex[1]]);
+      ok(`CORE-P1-8-${deg}° 切变变换有限`, ['a','b','c','d','e','f'].every(k=>Number.isFinite(res.T[k])));
+      const after=Object.assign({},bgR,{transform:res.T});
+      const topA=api.bgPixelToWorld(after,[50,0]), botA=api.bgPixelToWorld(after,[50,50]);
+      approx(`CORE-P1-8-${deg}° 顶边沿自身方向位移 X`, topA[0], top[0]+ex[0], 1e-9);
+      approx(`CORE-P1-8-${deg}° 顶边沿自身方向位移 Y`, topA[1], top[1]+ex[1], 1e-9);
+      approx(`CORE-P1-8-${deg}° 底边不动 X`, botA[0], bot[0], 1e-9);
+      approx(`CORE-P1-8-${deg}° 底边不动 Y`, botA[1], bot[1], 1e-9);
+      const maxMove=Math.max(...[[0,0],[100,0],[100,50],[0,50]].map(px=>{
+        const p0=api.bgPixelToWorld(bgR,px), p1=api.bgPixelToWorld(after,px);
+        return Math.hypot(p1[0]-p0[0],p1[1]-p0[1]);
+      }));
+      ok(`CORE-P1-8-${deg}° 角点位移有界(≤1m)`, maxMove<=1+1e-9);
+    });
+    /* 确定性降级：图片高度退化为 0 时不做切变，原变换原样返回（不产生非有限值） */
+    const bgZero=Object.assign({},bg,{height:0});
+    const zeroT=api.imageTransformOf(bgZero);
+    const zeroRes=api.imageHandleDragTo(bgZero,{mode:'skew',start:[0,0],origin:zeroT,originCorners:api.imageCornerWorld(bgZero)},[10,0]);
+    eq('CORE-P1-8-退化高度保持原变换', zeroRes.T, zeroT);
     /* fitView：极小场地时缩放夹取到 ZOOM_MAX，不出现超大/非有限值 */
     api.resetState();
     api.state.site={kind:'rect',layerId:'layer.default',visible:true,locked:false,shape:{type:'rect',x:0,y:0,w:0.001,h:0.001}};
