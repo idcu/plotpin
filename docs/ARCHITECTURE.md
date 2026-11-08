@@ -121,7 +121,7 @@ pointer/keyboard
 - **纯平移帧走位图搬移（P2-1）**：内容签名与缩放都没变、且平移量是整数设备像素时，`panScrollDelta()` 返回位移，`scrollStaticLayer()` 把静态位图整体搬移并只重绘暴露出来的边缘条带（`drawStaticContent()` 带 clip 复用同一套绘制函数）；浮点平移（`fitView`、触控板小数位移）与缩放变化仍整层重建，避免重采样模糊与像素漂移。
 - **失效入口** `invalidateStatic()` 只做 `staticRev++` 与清空 key。对象增删改、载入/撤销/重做、切换楼层、覆盖率重算都必须调用；漏调会留下过期像素。
 - 静态层 canvas 尺寸随 CSS 尺寸与 DPR 重建，重建时必须调用 `markSurfaceSize()` 以维持统一的尺寸记账。
-- 可见性剔除用 `visibleWorldRect()`（外扩 48 CSS px），避免标签/图标在边界处被裁掉；对象按 `z` 升序绘制。
+- 可见性剔除用 `visibleWorldRect()`（外扩 48 CSS px），避免标签/图标在边界处被裁掉；对象按 `z` 升序绘制。裁剪预筛用 `objectSnapBounds()` 的**保守** O(1) 盒（P2-3）：圆/椭圆/扇形取「中心 ± 最大半径」，不再逐对象做 72 段采样；只允许偏大（偏小会漏画），由 selftest「裁剪预筛-…保守盒覆盖真实包围盒」守护。
 - 差异叠加 `drawDiffOverlay()` 只在 `interactive` 时绘制，**不进入导出**。
 - SVG/DXF 不走 canvas 管线：SVG 由 `io-export` 直接拼节点，DXF 由 `dxf.js` 生成实体；三条路径共享几何源（`outlineOf`、`siteBounds`、符号 path），但渲染实现各自独立。修改几何时必须同时验证 canvas、SVG、DXF 三类产物。
 

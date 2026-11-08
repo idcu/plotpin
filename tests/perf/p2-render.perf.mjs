@@ -101,6 +101,37 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
       });
       record('staticRebuild', size, rebuild);
 
+      /* 1b) 形状密集场景重建（P2-3）：全部为圆/椭圆/扇形，objectBounds 需 72 段采样 */
+      const rebuildShapes = await page.evaluate(() => {
+        const prev = state.objects;
+        const tpl = baseObject('rect', 'rect.area', {});
+        const list = [];
+        for (let i = 0; i < 2000; i++) {
+          const x = (i * 37) % 1900 + 20, y = (i * 53) % 1400 + 20;
+          const r = i % 3;
+          const o = Object.assign({}, tpl, {
+            id: 'OBJ_SHAPE_' + i, name: 'S' + i, z: i, x, y,
+            shape: r === 0 ? { type: 'circle', r: 6 }
+              : r === 1 ? { type: 'ellipse', rx: 8, ry: 4, angle: 0.6 }
+                : { type: 'sector', r: 7, a0: 20, a1: 160 }
+          });
+          list.push(o);
+        }
+        state.objects = list;
+        invalidateStatic();
+        const out = [];
+        for (let i = 0; i < 20; i++) {
+          invalidateStatic();
+          const t0 = performance.now();
+          drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
+          out.push(performance.now() - t0);
+        }
+        state.objects = prev;
+        invalidateStatic();
+        return out;
+      });
+      record('staticRebuildShapes', size === 2000 ? 2000 : size, rebuildShapes);
+
       /* 2) 平移帧：每帧改 pan 触发静态层重建（现状），60 帧 */
       const pan = await page.evaluate(() => {
         const v = state.viewport, base = v.panX, out = [];
@@ -140,6 +171,27 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
         return out;
       });
       record('staticKeyCost', size, keyCost);
+
+      /* 4b) 大场地签名成本（P2-2）：3,000 节点多边形，逐帧 JSON.stringify(state.site) 的真实代价 */
+      const bigSiteCost = await page.evaluate(() => {
+        const prev = state.site;
+        const pts = [];
+        for (let i = 0; i < 3000; i++) {
+          const a = (i / 3000) * Math.PI * 2;
+          pts.push([1000 + Math.cos(a) * 900, 750 + Math.sin(a) * 700]);
+        }
+        state.site = createSiteSlot({ type: 'polygon', points: pts });
+        const d = worldDims(), out = [];
+        for (let i = 0; i < 200; i++) {
+          const t0 = performance.now();
+          sceneStaticKey(state.viewport, wrap.clientWidth, wrap.clientHeight, d);
+          out.push(performance.now() - t0);
+        }
+        state.site = prev;
+        invalidateStatic();
+        return out;
+      });
+      record('staticKeyCostBigSite', size, bigSiteCost);
 
       /* 5) pointermove 索引重建成本（P2-5） */
       const idxCost = await page.evaluate(() => {

@@ -4411,6 +4411,21 @@ await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", a
   eq('平移-缩放变化禁止搬移', api.panScrollDelta({zoom:2.5,panX:10,panY:0},0,0,2,1), null);
   eq('平移-非整数设备像素禁止搬移', api.panScrollDelta({zoom:2,panX:0.25,panY:0},0,0,2,1), null);
   eq('平移-DPR2 整数像素换算', api.panScrollDelta({zoom:2,panX:0,panY:3},0,0,2,2), [0,6]);
+
+  /* P2-3 裁剪预筛改用 objectSnapBounds：必须始终是 objectBounds 的超集，否则会漏画 */
+  const covers=(b,s)=>b.minX<=s.minX+1e-9&&b.maxX>=s.maxX-1e-9&&b.minY<=s.minY+1e-9&&b.maxY>=s.maxY-1e-9;
+  const shapeCases=[
+    ['圆', { kind:'rect', x:10, y:20, shape:{ type:'circle', r:7 } }],
+    ['旋转椭圆', { kind:'rect', x:10, y:20, shape:{ type:'ellipse', rx:9, ry:4, angle:0.7 } }],
+    ['跨 0° 扇形', { kind:'rect', x:10, y:20, shape:{ type:'sector', r:8, a0:350, a1:20 } }],
+    ['旋转矩形', { kind:'rect', x:10, y:20, width:12, height:6, angle:0.5 }],
+    ['平行四边形', { kind:'rect', x:10, y:20, width:12, height:6, angle:0, shape:{ type:'parallelogram', skew:30 } }],
+    ['折线', { kind:'line', x:0, y:0, points:[[0,0],[10,4],[3,-6]] }],
+    ['点', { kind:'point', x:4, y:-9 }]
+  ];
+  shapeCases.forEach(([name,o])=>{
+    ok('裁剪预筛-'+name+'保守盒覆盖真实包围盒', covers(api.objectSnapBounds(o), api.objectBounds(o)));
+  });
   api.resetState();
 }
 

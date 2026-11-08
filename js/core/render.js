@@ -168,9 +168,12 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
   drawCoverage(sc,v,d);
   drawSiteAnnotations(sc,v,toS);
   drawAxes(sc,v,toS,cssH);
+  /* 裁剪预筛用保守 O(1) 包围盒（P2-3）：圆/椭圆/扇形不再逐对象 72 段取样。
+     只允许偏大——偏小会漏画；`objectSnapBounds` 的契约正是「绝不偏小」。 */
+  const bnd={minX:0,minY:0,maxX:0,maxY:0};
   state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
     .sort((a,b)=>a.z-b.z)
-    .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
+    .forEach(o=>{ if(boundsIntersect(objectSnapBounds(o,bnd),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
 }
 /**
  * 能否用位图搬移代替整层重建（审计 P2-1）：缩放未变且平移量为整数设备像素。
@@ -241,10 +244,10 @@ function drawScene(c,v,cssW,cssH,opt={}){
     c.drawImage(staticCanvas,0,0,cssW,cssH);
     /* 拖拽中的对象逐帧变化，单独绘制在静态位图之上 */
     if(dynSet){
-      const view=visibleWorldRect(v,d,cssW,cssH);
+      const view=visibleWorldRect(v,d,cssW,cssH), db={minX:0,minY:0,maxX:0,maxY:0};
       state.objects.filter(o=>dynSet.has(o.id)&&isVisible(o))
         .sort((a,b)=>a.z-b.z)
-        .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
+        .forEach(o=>{ if(boundsIntersect(objectSnapBounds(o,db),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
     }
     drawDiffOverlay(c,v,toS);
     drawDraft(c,v,d,toS);
