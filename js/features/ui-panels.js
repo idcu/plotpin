@@ -388,9 +388,35 @@ function issueBoundsTolerance(){
   const raw=state.rules&&state.rules.bounds?state.rules.bounds.tolerance:undefined;
   return ruleTolerance(raw,0.05);
 }
+/**
+ * 闭合轮廓自交检测（F16）：线段按 minX 排序后只比较 x 区间重叠的对，
+ * 并对 y 区间做廉价预筛；相邻边（首尾相接）跳过。O(n log n + 候选对)。
+ */
+function polygonSelfIntersects(pts){
+  const n=pts.length, segs=new Array(n);
+  for(let i=0;i<n;i++){
+    const a=pts[i], b=pts[(i+1)%n];
+    segs[i]={i,minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),
+      minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
+  }
+  segs.sort((p,q)=>p.minX-q.minX);
+  for(let s=0;s<n;s++){
+    const A=segs[s];
+    for(let t=s+1;t<n&&segs[t].minX<=A.maxX;t++){
+      const B=segs[t];
+      if(B.i===A.i||B.minY>A.maxY||B.maxY<A.minY) continue;
+      const gi=(A.i-B.i+n)%n, gj=(B.i-A.i+n)%n;
+      if(gi===1||gj===1) continue;                    /* 相邻边共享端点，不算自交 */
+      if(segmentsIntersect(pts[A.i],pts[(A.i+1)%n],pts[B.i],pts[(B.i+1)%n])) return true;
+    }
+  }
+  return false;
+}
 function findIssues(){
   const issues=[]; const d=issueBoundsFrame(); const tol=issueBoundsTolerance();
   state.objects.forEach(o=>{
+    /* F16：统计检查只统计可见对象，与规则页口径一致（CORE-P2-11 既有说明） */
+    if(!isVisible(o)) return;
     if(o.kind==='rect'){
       const tt=areaShapeType(o), sh=o.shape||{};
       const small=tt==='rect'?(o.width<.05||o.height<.05)
@@ -400,12 +426,7 @@ function findIssues(){
       if(small) issues.push(`${o.name} ${L('尺寸过小')}`);
     }
     if(o.kind==='line'&&o.points.length<2) issues.push(`${o.name} ${L('折线节点不足')}`);
-    if(o.closed&&o.points.length>=3){
-      for(let i=0;i<o.points.length;i++) for(let j=i+1;j<o.points.length;j++){
-        const a=o.points[i],b=o.points[(i+1)%o.points.length],c=o.points[j],dd=o.points[(j+1)%o.points.length];
-        if(j!==i&&(j+1)%o.points.length!==i&&segmentsIntersect(a,b,c,dd)) issues.push(`${o.name} ${L('存在自相交')}`);
-      }
-    }
+    if(o.closed&&o.points.length>=3&&polygonSelfIntersects(o.points)) issues.push(`${o.name} ${L('存在自相交')}`);
     if(o.kind==='point'&&(o.phys||0)>0&&o.phys>Math.max(d.w,d.h))
       issues.push(`${o.name} ${L('物理尺寸')} ${fmt(o.phys)}m ${L('超过场地长边')} ${fmt(Math.max(d.w,d.h))}m`);
     const b=objectBounds(o);

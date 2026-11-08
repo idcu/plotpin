@@ -262,6 +262,29 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
       record('dragSelectScanAll', size, dragFrame.oldSel);
       record('dragSelectById', size, dragFrame.newSel);
 
+      /* 8) findIssues 自交检测（F16）：单个 1000 点闭合轮廓 */
+      if (size === 2000) {
+        const issueCost = await page.evaluate(() => {
+          const prev = state.objects;
+          const pts = [];
+          for (let i = 0; i < 1000; i++) {
+            const a = i / 1000 * Math.PI * 2;
+            pts.push([Math.cos(a) * 50, Math.sin(a) * 50]);
+          }
+          state.objects = [baseObject('line', 'line.custom', { name: 'P', closed: true, points: pts })];
+          resetFrameRef();
+          const out = [];
+          for (let i = 0; i < 30; i++) {
+            const t0 = performance.now();
+            findIssues();
+            out.push(performance.now() - t0);
+          }
+          state.objects = prev;
+          return out;
+        });
+        record('findIssues1000pt', 1000, issueCost);
+      }
+
       /* 6) 强制 GC 后堆占用 */
       const heapAfter = await gcUsed();
       results.push({ case: 'heapUsed', objects: size, bytes: heapAfter, baseBytes: heapBase, deltaBytes: heapAfter - heapBase });

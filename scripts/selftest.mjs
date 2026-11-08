@@ -5521,6 +5521,21 @@ await section("57.1c RT-P2-14 统计越界与规则页共用场地包围盒/容�
   st.site.visible=false; api.resetFrameRef();
   ok('RT-P2-14 场地隐藏时退回取景框不误报', !api.findIssues().some(x=>x.includes('R2')&&x.includes('超出')));
   eq('RT-P2-14 统计口径版本', api.STATS_ISSUE_VERSION, 2);
+
+  /* F16：统计检查只统计可见对象；自交检测改扫描后仍要抓得住自交 */
+  api.resetState(); api.resetFrameRef();
+  const poly = pts => api.baseObject('line','line.custom',{ name:'P', closed:true, points:pts });
+  const hiddenBad = poly([[0,0],[10,10],[10,0],[0,10]]);
+  hiddenBad.visible=false;
+  api.state.objects.push(hiddenBad);
+  ok('F16 隐藏对象不计入统计问题', !api.findIssues().some(x=>x.includes('P')&&x.includes('自相交')));
+  hiddenBad.visible=true;
+  ok('F16 8 字形闭合轮廓报自相交', api.findIssues().some(x=>x.includes('P')&&x.includes('自相交')));
+  api.resetState(); api.resetFrameRef();
+  const ring=[];
+  for(let i=0;i<1000;i++){ const a=i/1000*Math.PI*2; ring.push([Math.cos(a)*50,Math.sin(a)*50]); }
+  api.state.objects.push(poly(ring));
+  ok('F16 1000 点凸多边形不误报自相交', !api.findIssues().some(x=>x.includes('P')&&x.includes('自相交')));
   api.resetState(); api.resetFrameRef();
 }
 });
