@@ -7765,6 +7765,17 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   api.resetFrameRef(); api.fitView();
   eq('CORE-P2-2 超大场地缩放夹到 ZOOM_MIN', api.state.viewport.zoom, api.APP_LIMITS.ZOOM_MIN);
   ok('CORE-P2-2 缩放/平移均为有限值', [api.state.viewport.zoom,api.state.viewport.panX,api.state.viewport.panY].every(Number.isFinite));
+
+  /* CORE-P2-7：椭圆→矩形保留旋转角；圆（角度无意义）仍归零 */
+  api.resetState();
+  const el=api.baseObject('rect','rect.area',{x:0,y:0,width:0,height:0,angle:30,shape:{type:'ellipse',rx:4,ry:2}});
+  api.convertAreaShape(el,'rect');
+  eq('CORE-P2-7 椭圆转矩形保留角度', el.angle, 30);
+  ok('CORE-P2-7 椭圆转矩形尺寸=2rx×2ry', Math.abs(el.width-8)<1e-9&&Math.abs(el.height-4)<1e-9);
+  const ci=api.baseObject('rect','rect.area',{x:0,y:0,width:0,height:0,angle:0,shape:{type:'circle',r:3}});
+  api.convertAreaShape(ci,'rect'); eq('CORE-P2-7 圆转矩形角度为 0', ci.angle, 0);
+  const pa=api.baseObject('rect','rect.area',{x:0,y:0,width:6,height:4,angle:25,shape:{type:'parallelogram',skew:12}});
+  api.convertAreaShape(pa,'rect'); eq('CORE-P2-7 平行四边形转矩形保留角度', pa.angle, 25);
 }
 
 });

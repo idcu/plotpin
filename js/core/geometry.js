@@ -454,7 +454,8 @@ function convertAreaShape(o,newType){
     else if(old==='parallelogram'){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
     else { bw=bh=Math.sqrt(A); }
     o.x=c[0]-bw/2; o.y=c[1]-bh/2; o.width=bw; o.height=bh;
-    o.angle=old==='parallelogram'?oldAngle:0; o.shape=null;
+    /* CORE-P2-7：椭圆带旋转时，本地框=2rx×2ry，转换后必须保留角度，否则视觉朝向丢失 */
+    o.angle=(old==='parallelogram'||old==='ellipse')?oldAngle:0; o.shape=null;
     return;
   }
   if(newType==='parallelogram'){
