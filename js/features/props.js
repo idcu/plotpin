@@ -220,6 +220,25 @@ function renderSiteProps(box, mode){
   box.innerHTML=img+sitePropsHTML(state.site, mode||'default');
   bindSiteNodeEvents(box);
 }
+
+/* N-19：属性面板撤销入栈改为容器级委托，场地与对象共用同一实现。
+   只在「字段获得焦点后的首次 input/change」压一次历史，单纯切换焦点不再入栈；
+   捕获阶段先于字段自身的处理器执行，保证快照记录的是修改前状态。 */
+let propHistoryField=null;
+function bindPropHistory(box){
+  if(!box||box.__propHistoryBound) return;
+  box.__propHistoryBound=true;
+  const isField=el=>!!(el&&el.closest&&el.closest('input,select,textarea'));
+  box.addEventListener('focusin',e=>{ if(isField(e.target)) propHistoryField=null; });
+  const once=e=>{
+    const el=e.target;
+    if(!isField(el)||el===propHistoryField||(el.matches&&el.matches('[data-photo-input]'))) return;
+    propHistoryField=el;
+    pushHistory();
+  };
+  box.addEventListener('input',once,true);
+  box.addEventListener('change',once,true);
+}
 function updateSiteStats(box){
   const ap=siteAreaPerimeter(state.site);
   const a=box.querySelector('#siteAreaVal'), p=box.querySelector('#sitePerimVal');
@@ -227,8 +246,7 @@ function updateSiteStats(box){
   if(p) p.textContent=fmt(ap.perimeter);
 }
 function bindSiteNodeEvents(box){
-  box.addEventListener('focusin',()=>pushHistory(),{once:true});
-  /* 场地属性/顶点编辑走统一提交协议：touchFloor + 落盘 + 协作广播 + 撤销栈（focusin 已压一次快照） */
+  /* 场地属性/顶点编辑走统一提交协议：touchFloor + 落盘 + 协作广播 + 撤销栈（bindPropHistory 在首次输入前压快照） */
   const changed=()=>{ coverageResult=null; syncFramePan(); updateSiteStats(box); commitObjectEdit(); };
   box.querySelectorAll('[data-site-field]').forEach(el=>el.addEventListener('input',()=>{
     if(applySiteField(el.dataset.siteField,el.value)){ state.site.updatedAt=nowISO(); changed(); }
@@ -299,6 +317,7 @@ function siteMoveNode(i,dir){
 }
 function renderProps(){
   const box=$('propPanel');
+  bindPropHistory(box);
   if(currentTool==='site-node'){ renderSiteProps(box,'tool'); return; }
   const objs=state.objects.filter(o=>selectedIds.has(o.id));
   if(!objs.length){ renderSiteProps(box,'default'); return; }
@@ -487,7 +506,6 @@ function renderMultiProps(box,objs){
   if($('multiBackBtn')) $('multiBackBtn').onclick=()=>restack('back');
 }
 function bindPropEvents(box,o){
-  box.addEventListener('focusin',()=>pushHistory(),{once:true});
   const changed=()=>{ o.updatedAt=nowISO(); commitObjectEdit(); };
   box.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>applyField(el,o,changed)));
   /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘（与场地面板共用同一绑定实现） */

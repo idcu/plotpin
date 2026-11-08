@@ -2,6 +2,17 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-19 属性面板 focusin 历史累积改为事件委托
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/features/props.js`：新增 `bindPropHistory(box)` 与模块级 `propHistoryField`，在 `#propPanel` 上只绑定一次 `focusin` + 捕获阶段 `input`/`change` 委托。字段首次输入前压一次快照，同一字段连续输入不重复入栈；`focusin` 只重置“当前字段”，单纯切换焦点不入栈。删除对象/场地面板各自的一次性 `focusin → pushHistory`。`renderProps()` 不重置字段引用，避免面板重建移除聚焦元素时触发的 `change` 被误判为新字段而多压一条（collab N-04 回归修复）。照片上传的 `[data-photo-input]` 保留自身提交路径，避免双压。
+  - `tests/e2e/history.spec.mjs`：新增 1 条用例——对象面板连续切换 5 个字段后历史条数不变，拖动一次只增 1 且 Ctrl+Z 回原位；场地面板切换字段不入栈、首次输入只增 1。
+  - `sw.js`：`VERSION` 27 → 28；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` §3、`docs/known-issues.md` RT-P1-07 同步。
+- **验证数据**：selftest 2914 通过 / 0 失败（未变）；e2e 单 spec 6 passed（新增 1 条），collab/history 17 用例复跑通过；产物 804,838 B（gzip 250,254 B，上限 839,680 B，余量 34,842 B）；`check.mjs --selftest`、`check-gates` 6/6 + 9/9、`check-discipline --strict` 13/13 全绿。
+- **遗留风险**：同一字段连续编辑只保留一次撤销（符合 N-19 目标）；若未来新增不带 `input`/`change` 的自定义控件，需要显式调用 `pushHistory()`，否则不会入栈。属性面板外（如清单批量按钮）的既有入栈逻辑未改动。
+
 ## 2026-11-08 · N-18 插件写入可撤销与载入后定时器逃逸封堵
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

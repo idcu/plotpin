@@ -197,3 +197,47 @@ test('删除当前楼层：删除后刷新不复活，活动层回到 1F', async
     hasTemp: state.floors.some(f => f.id === id)
   }), tempId)).toEqual({ floors: 1, active: 'floor.default', objects: 0, hasTemp: false });
 });
+
+/* N-19：属性面板撤销入栈改为容器级委托，单纯切换焦点不再消耗 20 步历史。 */
+test('N-19：属性面板切换 5 个字段不入栈，拖动后一次撤销回原位；场地面板一致', async ({ page }) => {
+  await openApp(page);
+  await drawPoint(page);
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  const c = await page.evaluate(() => {
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await page.mouse.click(c.x, c.y);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+
+  const before = await page.evaluate(() => ({ hist: history.past.length, x: state.objects[0].x }));
+  const fields = page.locator('#propPanel input[data-field], #propPanel select[data-field]');
+  expect(await fields.count()).toBeGreaterThanOrEqual(5);
+  for (let i = 0; i < 5; i++) await fields.nth(i).focus();
+  expect(await page.evaluate(() => history.past.length)).toBe(before.hist);
+
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 70, c.y + 40, { steps: 6 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => history.past.length)).toBe(before.hist + 1);
+  expect(await page.evaluate(() => state.objects[0].x)).not.toBe(before.x);
+
+  await page.click('#undoBtn');
+  await expect.poll(() => page.evaluate(() => state.objects[0].x)).toBe(before.x);
+
+  /* 场地面板：切换字段不入栈，首次输入只压一条（与对象面板同一委托） */
+  await page.evaluate(() => {
+    selectedIds.clear();
+    state.site = createSiteSlot({ type: 'rect', w: 20, h: 10 });
+    renderProps();
+  });
+  await expect.poll(() => page.locator('#propPanel [data-site-field="w"]').count()).toBe(1);
+  const siteBefore = await page.evaluate(() => history.past.length);
+  await page.locator('#propPanel [data-site-field="w"]').focus();
+  await page.locator('#propPanel [data-site-field="h"]').focus();
+  expect(await page.evaluate(() => history.past.length)).toBe(siteBefore);
+  await page.locator('#propPanel [data-site-field="w"]').fill('35');
+  await expect.poll(() => page.evaluate(() => history.past.length)).toBe(siteBefore + 1);
+  expect(await page.evaluate(() => state.site.shape.w)).toBe(35);
+});

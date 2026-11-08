@@ -144,8 +144,8 @@ CHANGELOG.internal.md      内部追溯：提交、改动点、实测数据、�
 | 指标 | 单一来源 | 采集/校验方式 |
 | --- | --- | --- |
 | 自测断言数 | `scripts/selftest.mjs` + `scripts/badge.mjs` | `node scripts/badge.mjs --check`；当前 2914，README 徽章/正文由脚本注入校验 |
-| 单文件产物体积 | `scripts/dist-manifest.json` | `node scripts/build.mjs --check`；2026-11-08 读取为 804,399 B（gzip 250,109 B），上限 839,680 B |
-| e2e 用例 | `tests/e2e/*.spec.mjs` | `node node_modules/@playwright/test/cli.js test --list`；2026-11-08 实测 35 个 spec / 105 个用例（104 通过，1 个条件跳过），以当次 `--list` 为准 |
+| 单文件产物体积 | `scripts/dist-manifest.json` | `node scripts/build.mjs --check`；2026-11-08 读取为 804,838 B（gzip 250,254 B），上限 839,680 B |
+| e2e 用例 | `tests/e2e/*.spec.mjs` | `node node_modules/@playwright/test/cli.js test --list`；2026-11-08 实测 35 个 spec / 106 个用例（105 通过，1 个条件跳过），以当次 `--list` 为准 |
 | i18n 覆盖率 | `scripts/i18n-scan.mjs` | `node scripts/i18n-scan.mjs --check` |
 | Service Worker 缓存版本 | `sw.js` 的 `VERSION` | 预缓存输入的内容指纹必须与提交入库的 `scripts/sw-inputs.sha256` 一致；输入变更未递增 `VERSION` 即失败，干净检出下同样有效（bump 后运行 `node scripts/check-sw.mjs --update`） |
 | 第三方模块版本 | `ngm.lock` / `.ngm-version` | `node scripts/check-ngm.mjs` |
