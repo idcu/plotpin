@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 批次 D（2/5）：统计基础问题只统计可见对象，自交检测改扫描
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`edbd236`
 - **核心改动**：
   - `js/features/ui-panels.js`：新增 `polygonSelfIntersects(pts)`——线段按 `minX` 排序、只比较 x 区间重叠的对（`minX > maxX` 即跳出），先做 y 区间预筛，再判断相邻边（首尾相接）跳过；`findIssues()` 自交分支改用它，取代原来的全对 `O(n²)` 双循环（同时修掉旧相邻边判定的单侧比较）。
   - `findIssues()` 入口新增 `if(!isVisible(o)) return;`：隐藏对象不再计入统计页「基础问题检查」，与规则页口径一致。
