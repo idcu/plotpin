@@ -180,6 +180,7 @@ Schema 为 `offline-drawing-annotation/v2`；`v1` 只读兼容，读取时迁移
 - 收到远端工程后按 §8 合并；本地未同步修改不因断线丢失：`collabOnLocalChange()` 在传输不可用时把最新整工程快照写入 localStorage 待发队列（单条上限 2 MB，超限/写盘失败显式提示），传输就绪后先 `collabFlushPending()` 再握手与全量快照，成功才清队列。
 - 自动重连：本机频道异常丢失时 `collabCheckTransport()` 触发指数退避（1s 起翻倍、封顶 5 分钟）重建 `BroadcastChannel`；WebRTC 无信令通道，DataChannel 异常断开只明确提示重新交换邀请串，不做假重连。
 - 楼层新增/删除/清空使用 `floor-add` / `floor-delete` / `floor-clear` 显式广播，消息体携带整份可持久化工程，接收端仍走 `mergeProjectJSON()` 的墓碑与场地 LWW，不另写合并逻辑；发送/接收共用 `COLLAB_FLOOR_OPS` / `COLLAB_FLOOR_TYPES` 映射表。
+- 跨工程隔离与冲突可见性（N-17）：每条消息附带 `pid`（已绑定工程为 `p:<projectId>`，草稿为空串），双方都有 `pid` 且不一致时丢弃并计数，界面对「已丢弃跨工程消息」告警；合并统计统一走 `collabMergeChanged()` / `collabMergeOverwritten()`，`changed` 计入 `conflicts`，避免「只有冲突、远端没覆盖」时误报「无变化」，且纯冲突不提供撤销回滚。
 
 ## 9. 扩展点
 

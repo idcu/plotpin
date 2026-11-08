@@ -23,6 +23,7 @@ let collabTimer=null, collabApplyChain=Promise.resolve(), collabLastStatus='', c
 let collabState='idle', collabClosing=false, collabPendingSnapshot=false, collabSendRetry=null;
 let collabLastMerge=null, collabNotifyAt=0;
 let collabLocalChannel='', collabReconnectAttempt=0, collabReconnectTimer=null, collabWatchdog=null;
+let collabForeignDropped=0;
 const collabPeers=new Map();
 const collabInbound=new Map();
 const collabHelloSeen=new Map();
@@ -247,18 +248,54 @@ function collabNotifyThrottled(text,type='warn'){
   if(type==='error') collabRecordError(text);
   collabSetStatus(text,type);
 }
+/** 合并统计的统一口径（N-17）：
+ *  changed 必须计入 conflicts，否则「只有冲突、远端没赢」时界面显示「无变化」，用户完全不知情；
+ *  overwritten 只统计真正覆盖本地内容的项，用于决定是否可 Ctrl+Z 回滚，不能把纯冲突算进去。 */
+function collabMergeChanged(stats){
+  const s=stats||{};
+  return ((s.added||0)+(s.updated||0)+(s.deleted||0)+(s.floorsAdded||0)+(s.floorMetaUpdated||0)+
+    (s.floorsDeleted||0)+(s.siteDeleted||0)+(s.conflicts||0))>0;
+}
+function collabMergeOverwritten(stats){
+  const s=stats||{};
+  return ((s.updated||0)+(s.deleted||0)+(s.floorMetaUpdated||0)+(s.floorsDeleted||0)+(s.siteDeleted||0))>0;
+}
+/** 当前工程的协作身份：已绑定工程库时用 projectId，草稿返回空串（保留旧版兼容）。 */
+function collabProjectToken(){
+  const id=state&&state.meta&&typeof state.meta.projectId==='string'?state.meta.projectId.trim():'';
+  return id?'p:'+id:'';
+}
+/** 跨工程消息丢弃计数（N-17）：消息体 projectId 与本地不一致时计入并展示，不静默吞掉。 */
+function collabNoteForeign(from,pid){
+  collabForeignDropped++;
+  try{ window.__collabForeignDropped=collabForeignDropped; }catch(_){}
+  collabRecordError(L('已丢弃跨工程协作消息（{got} ≠ {want}）',{got:pid||'-',want:collabProjectToken()||'-'}));
+  try{ window.__collabLastForeignFrom=String(from||''); }catch(_){}
+  collabRefreshConflictInfo();
+}
 function collabRefreshConflictInfo(){
   const el=$('collabConflictInfo');
   if(!el) return;
   const m=collabLastMerge;
-  if(!m){ el.textContent=L('尚无冲突记录'); el.className='hint-text'; return; }
-  const changed=(m.added||0)+(m.updated||0)+(m.deleted||0)+(m.floorsAdded||0)+(m.floorMetaUpdated||0)+(m.floorsDeleted||0)+(m.siteDeleted||0);
-  if(!changed){ el.textContent=L('最近一次合并：无变化'); el.className='hint-text'; return; }
-  const overwritten=(m.updated||0)+(m.deleted||0)+(m.floorMetaUpdated||0)+(m.floorsDeleted||0)+(m.siteDeleted||0);
+  const foreign=collabForeignDropped;
+  const foreignNote=foreign?` · ${L('已丢弃跨工程消息 {n} 条',{n:foreign})}`:'';
+  if(!m){
+    el.textContent=foreign?L('已丢弃跨工程消息 {n} 条',{n:foreign}):L('尚无冲突记录');
+    el.className='hint-text'+(foreign?' warn':'');
+    return;
+  }
+  if(!collabMergeChanged(m)){
+    el.textContent=L('最近一次合并：无变化')+foreignNote;
+    el.className='hint-text'+(foreign?' warn':'');
+    return;
+  }
+  const overwritten=collabMergeOverwritten(m);
   el.textContent=`${L('最近一次合并')}：+${m.added||0} ~${m.updated||0} -${m.deleted||0} · ${L('冲突')} ${m.conflicts||0}`+
+    (m.conflicts&&!overwritten?`（${L('已保留较新值')}）`:'')+
     (m.siteCleared?` · ${L('场地已清空')}`:'')+
-    (overwritten?` · ${L('已写入撤销栈，可 Ctrl+Z 回滚')}`:'');
-  el.className='hint-text'+(overwritten?' warn':'');
+    (overwritten?` · ${L('已写入撤销栈，可 Ctrl+Z 回滚')}`:'')+
+    foreignNote;
+  el.className='hint-text'+((overwritten||foreign)?' warn':'');
 }
 function collabRefreshUI(){
   const b=$('collabLocalBtn');
@@ -298,7 +335,8 @@ function collabSendRaw(data,to='*'){
 }
 function collabSendObject(obj,to='*'){
   if(!collabTransportReady()) return false;
-  const payload=JSON.stringify(Object.assign({},obj,{sender:collabPeerId,to:to||'*'}));
+  /* N-17：每条消息携带工程身份；接收端比对失败即丢弃并计数（只进消息体，不改频道名/邀请串） */
+  const payload=JSON.stringify(Object.assign({},obj,{sender:collabPeerId,to:to||'*',pid:collabProjectToken()}));
   if(payload.length>COLLAB_MAX){
     toast(L('协作消息过大，已跳过（请用工程库合并或 JSON 交换）'),'warn');
     return false;
@@ -367,6 +405,11 @@ function collabReceiveRaw(raw){
 }
 function collabHandleMessage(msg,from){
   if(!msg||!from) return;
+  /* N-17：跨工程隔离。双方都已绑定工程库且 projectId 不同 → 直接丢弃并计数；
+     任一侧为空（草稿/旧版）时按旧行为放行，避免旧邀请串静默失效。 */
+  const got=typeof msg.pid==='string'?msg.pid.trim():'';
+  const want=collabProjectToken();
+  if(got&&want&&got!==want){ collabNoteForeign(from,got); return; }
   if(msg.t==='hello'){
     const name=String(msg.name||from).slice(0,80);
     const dup=collabHelloDup(from,name);
@@ -413,18 +456,20 @@ function collabQueueApply(raw,from){
       const stats=await mergeProjectJSON(raw,{history:'overwrite'});
       collabLastMerge=Object.assign({at:nowISO(),from},stats);
       try{ window.__collabLastMerge=collabLastMerge; }catch(_){}
-      const changed=(stats.added||0)+(stats.updated||0)+(stats.deleted||0)+(stats.floorsAdded||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0)+(stats.siteDeleted||0);
+      const changed=collabMergeChanged(stats);
       if(!changed){
         collabSetStatus(`${L('已同步')}：${L('无变化')}`,'ok');
         collabRefreshConflictInfo();
         return;
       }
-      const overwritten=(stats.updated||0)+(stats.deleted||0)+(stats.floorMetaUpdated||0)+(stats.floorsDeleted||0)+(stats.siteDeleted||0);
+      const overwritten=collabMergeOverwritten(stats);
       const siteNote=stats.siteCleared?` · ${L('对端清空了场地')}`:'';
+      const conflictNote=stats.conflicts
+        ?(overwritten?` · ${L('冲突 {n}',{n:stats.conflicts})}`:` · ${L('冲突 {n} 条（保留较新值）',{n:stats.conflicts})}`)
+        :'';
       const detail=`+${stats.added||0} ~${stats.updated||0} -${stats.deleted||0}`+
         (stats.floorMetaUpdated?` · ${L('楼层元数据覆盖 {n}',{n:stats.floorMetaUpdated})}`:'')+
-        siteNote+
-        (stats.conflicts?` · ${L('冲突 {n}',{n:stats.conflicts})}`:'');
+        siteNote+conflictNote;
       if(overwritten){
         collabSetStatus(L('已同步：{detail} · 可按 Ctrl+Z 回滚',{detail}),'warn');
         collabNotifyOverwrite(stats);
@@ -513,7 +558,7 @@ function collabStartLocal(name,opts){
     collabNotifyThrottled(L('本机频道消息解析失败'),'error');
   };
   collabMode='local'; collabActive=true; collabLocalChannel=channelName;
-  if(opts.reconnect) collabReconnectAttempt=attempt; else collabReconnectAttempt=0;
+  if(opts.reconnect) collabReconnectAttempt=attempt; else { collabReconnectAttempt=0; collabForeignDropped=0; }
   collabSetState('waiting',`${L('频道')} ${COLLAB_PREFIX+channelName}`);
   try{ localStorage.setItem('plotpin.collab.channel',String(name||'draft')); }catch(_){}
   /* 重连后先补发断线期间落盘的修改，再 hello + 当前快照；

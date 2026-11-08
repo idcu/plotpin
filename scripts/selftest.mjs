@@ -176,9 +176,12 @@ code += `\n;globalThis.__api = {
   collabInboundBytes, collabHelloDup, mergeHistoryNeeded,
   collabBackoffDelay, collabPendingStore, collabPendingLoad, collabPendingClear,
   collabFlushPending, collabCheckTransport, collabBroadcastFloor,
+  collabHandleMessage, collabProjectToken, collabMergeChanged, collabMergeOverwritten,
   COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY,
   get collabMode(){ return collabMode; }, set collabMode(v){ collabMode=v; },
   get collabReconnectAttempt(){ return collabReconnectAttempt; },
+  get collabForeignDropped(){ return collabForeignDropped; },
+  get collabPeerCount(){ return collabPeers.size; },
   get collabInbound(){ return collabInbound; },
   get collabHelloSeen(){ return collabHelloSeen; },
   get collabState(){ return collabState; },
@@ -2983,6 +2986,29 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     api.collabMode=null;
     eq('N-16-未协作不广播楼层', api.collabBroadcastFloor('add'), false);
     eq('N-16-未协作不产生待发', api.collabPendingLoad(), null);
+    api.resetState();
+  }
+
+  /* 39.14 N-17：冲突统计口径与跨工程消息隔离 */
+  {
+    api.resetState();
+    api.state.meta.projectId='P-A';
+    eq('N-17-工程令牌', api.collabProjectToken(), 'p:P-A');
+    api.state.meta.projectId='';
+    eq('N-17-草稿令牌为空', api.collabProjectToken(), '');
+    api.state.meta.projectId='P-A';
+    const before=api.collabPeerCount;
+    api.collabHandleMessage({t:'hello',name:'PEER-X',pid:'p:P-B'},'PEER-X');
+    eq('N-17-跨工程消息丢弃并计数', api.collabForeignDropped, 1);
+    eq('N-17-跨工程不进在线表', api.collabPeerCount, before);
+    api.collabHandleMessage({t:'hello',name:'PEER-Y',pid:'p:P-A'},'PEER-Y');
+    eq('N-17-同工程消息正常接收', api.collabPeerCount, before+1);
+    api.collabHandleMessage({t:'hello',name:'PEER-Z'},'PEER-Z');
+    eq('N-17-旧版无工程标识兼容', api.collabPeerCount, before+2);
+    ok('N-17-纯冲突算作有变化', api.collabMergeChanged({conflicts:1}));
+    ok('N-17-空统计无变化', !api.collabMergeChanged({}));
+    ok('N-17-纯冲突不算覆盖', !api.collabMergeOverwritten({conflicts:1}));
+    ok('N-17-更新算覆盖', api.collabMergeOverwritten({updated:1}));
     api.resetState();
   }
 }

@@ -2,6 +2,22 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-17 冲突可见性与跨工程消息隔离
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/features/collab.js`
+    - 冲突口径统一：新增 `collabMergeChanged()` / `collabMergeOverwritten()`，`changed` 计入 `conflicts`。纯冲突（对端更旧、本地胜出）不再显示「无变化」，而是「冲突 N 条（保留较新值）」，且不计入可回滚项。
+    - 跨工程隔离：`collabSendObject()` 给每条消息附加 `pid`（已绑定工程为 `p:<projectId>`，草稿为空串）；`collabHandleMessage()` 在双方都有 `pid` 且不一致时丢弃，`collabNoteForeign()` 计数并经 `collabRefreshConflictInfo()` 展示「已丢弃跨工程消息 N 条」。旧版/草稿无 `pid` 时按旧行为放行，邀请串格式不变。
+    - `collabStartLocal()` 新建会话时清零丢弃计数；自动重连保留计数。
+  - `js/common/i18n.js`：新增 4 条中英文案。
+  - `scripts/selftest.mjs`：新增 39.14 节 10 项断言（工程令牌、跨工程丢弃计数/不进在线表、同工程接收、旧版兼容、纯冲突算变化但不算覆盖）。
+  - `tests/e2e/collab.spec.mjs`：新增 1 条用例——同名频道下 A/B 同工程、C 不同工程：C 的绘制不进入 A/B 且丢弃计数增加；A 的绘制仍同步到 B；B 回放旧时间戳快照只产生冲突、不出现「无变化」或 Ctrl+Z 回滚提示。
+  - `sw.js`：`VERSION` 25 → 26；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` §10、`docs/ARCHITECTURE.md` §8、`docs/known-issues.md` RT-P1-03/04 同步。
+- **验证数据**：selftest 2914 通过 / 0 失败（+10）；e2e 102 passed / 1 skipped（35 spec / 103 用例，新增 1 条）；产物 803,155 B（gzip 249,766 B，余量 36,525 B）；`check.mjs --selftest`、`check-gates` 6/6 + 9/9、`check-discipline --strict` 13/13 全绿。
+- **遗留风险**：跨工程隔离依赖消息体 `pid`，未改频道名；未绑定工程的草稿或旧版客户端仍按旧行为兼容，极端情况下仍可能串数据（已在文档标注）。WebRTC 真机断线重连仍为未实测项。
+
 ## 2026-11-08 · N-16 协作断线补发、自动重连与楼层广播
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

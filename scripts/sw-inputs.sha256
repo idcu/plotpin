@@ -2,13 +2,13 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=25
+version=26
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
 25d8b28152c77215404f5b66ef3c06e0d2c72aec5f424b24f5aa5eeaf62019c1  js/common/dxf.js
-665f0263131bb9ea1a29d6f95201935db9bd34793febd2656752c321c74321fe  js/common/i18n.js
+3acece937ab7ad6fbe1ae225e758d21eef081d40d4fa8968a42dd7b5f19d77b0  js/common/i18n.js
 99aa5e3d60c02d924805468660f3616b4a8f6f2c0b2bc2d41fa71b91bc721890  js/common/merge.js
 4df813717856383f877d6552aeb8529ebf7f2adbbc52cf0c62ca40c4e7db60d2  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
@@ -28,7 +28,7 @@ a8527ffa39db9cddd5a43fc5f969828c85e76b0419a65bebed10a3662281f19a  js/core/persis
 7d993922b0b0f81a7a668c3c6ea7dbc9c4f02bf2725cdc8165d60116f6c72e73  js/core/tab-lease.js
 90b47b297c7348093e760d4aa501ad6e71e524db8fe3b599cee4eedc40cba1fe  js/core/viewport.js
 2c8807de25dc960165b8dc7123c408f83f2927ea9294c924a863875c3bce9717  js/features/catalog.js
-d2a2400aa1200f8af4759534c2d4f43c37286fff73df868b382637f85aaba96c  js/features/collab.js
+dc1bfe657ae04d62d9a0216134a2a5b7f199e0cd95db92a428da45d85785439f  js/features/collab.js
 d5c96f8825aacba27b2ee9879ca86d6c5fa52c2d91517645cbf04b7cab6a5098  js/features/io-export.js
 c15a33387f12004084f19bdd9b04ccf9fde78633033926c8fb5f0f572803e872  js/features/io-fields.js
 69b7769c531ea2045cb1b7f8c045e237d2720561c5f654ba9cc21787431d057d  js/features/io-import.js

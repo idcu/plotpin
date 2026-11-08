@@ -856,6 +856,11 @@
     '{s} 秒后自动重连（第 {n} 次）':'Reconnecting automatically in {s}s (attempt {n})',
     '跨设备连接已断开：请重新交换邀请串（WebRTC 无信令通道，无法自动重连）':
       'Cross-device connection lost: exchange invite strings again (WebRTC has no signaling channel, so auto-reconnect is unavailable)',
+    /* N-17：冲突可见性与跨工程隔离 */
+    '冲突 {n} 条（保留较新值）':'{n} conflict(s) (newer value kept)',
+    '已保留较新值':'newer value kept',
+    '已丢弃跨工程消息 {n} 条':'Dropped {n} cross-project message(s)',
+    '已丢弃跨工程协作消息（{got} ≠ {want}）':'Dropped cross-project collaboration message ({got} ≠ {want})',
     '邀请串':'Invite string',
     '字节，超过内置二维码上限':'bytes, exceeding the built-in QR limit of',
     '字节：请复制邀请串文本发送，未生成无效二维码。':'bytes. Copy the invite text instead; no invalid QR was generated.',

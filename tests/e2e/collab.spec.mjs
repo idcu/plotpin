@@ -406,6 +406,54 @@ test('N-16：断线待发队列刷新页面后仍补发', async ({ page, context
   await expect.poll(() => page.evaluate(() => collabPendingLoad()), { timeout: 4000 }).toBe(null);
 });
 
+test('N-17：跨工程消息隔离与纯冲突可见', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  const p3 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  await openApp(p3);
+  const ch = uniqueChannel('e2e-n17');
+  await page.evaluate(() => { state.meta.projectId='PROJ-A'; });
+  await p2.evaluate(() => { state.meta.projectId='PROJ-A'; });
+  await p3.evaluate(() => { state.meta.projectId='PROJ-B'; });
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await startLocal(p3, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+  await closeModal(p3);
+
+  /* ① 同名频道、不同工程：消息被丢弃并计数，状态不串 */
+  await drawPoint(p3);
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+  expect(await page.evaluate(() => collabForeignDropped)).toBeGreaterThan(0);
+  expect(await p2.evaluate(() => collabForeignDropped)).toBeGreaterThan(0);
+
+  /* ② 同工程仍正常同步 */
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* ③ 纯冲突（对端更旧）：冲突必须可见，但不能谎称「无变化」或可回滚 */
+  await p2.evaluate(() => {
+    const raw=persistableState();
+    const o=raw.objects[0];
+    o.name='OLD_REMOTE';
+    o.updatedAt='2000-01-01T00:00:00.000Z';
+    collabSendObject({t:'snapshot',project:raw});
+  });
+  await expect.poll(() => page.evaluate(() => window.__collabLastMerge && window.__collabLastMerge.conflicts), { timeout: 4000 }).toBeGreaterThan(0);
+  const merge=await page.evaluate(() => window.__collabLastMerge);
+  expect(merge.updated).toBe(0);
+  expect(merge.conflicts).toBeGreaterThan(0);
+  const info=await page.evaluate(() => (document.getElementById('collabConflictInfo')||{}).textContent||'');
+  expect(info).toContain('冲突');
+  expect(info).not.toContain('无变化');
+  expect(info).not.toContain('Ctrl+Z');
+});
+
 test('邀请串三步建连与二维码容量提示（同机双标签，非双设备）', async ({ page, context }) => {
   const p2 = await context.newPage();
   await openApp(page);
