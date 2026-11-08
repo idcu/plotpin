@@ -917,6 +917,7 @@
       'No usable graphics found in this PDF (it may be a scan without an embedded image, or use unsupported compression)',
     '目录已导出':'Catalog exported',
     '目录已删除':'Catalog deleted',
+    '目录数据损坏，已忽略：{msg}':'Catalog data is corrupt and was ignored: {msg}',
     '本机频道消息解析失败':'Failed to parse the local channel message',
     '无可汇总型号：先绑定型号并填数量':'Nothing to summarize: bind a model and enter quantities first',
     '标注总长：':'Total measured length: ', '区域总面积：':'Total area: ',

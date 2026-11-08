@@ -236,6 +236,7 @@ code += `\n;globalThis.__api = {
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
+  get catalogLoadError(){ return catalogLoadError; },
   quoteTable, quoteAggregate, quoteColumns, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
   catalogVersion, QUOTE_SNAPSHOT_KEY, quoteSignature, quoteSnapshotTable, quoteMetaTable,
   get currentCatalog(){ return currentCatalog; }, setCurrentCatalog(v){ currentCatalog=v; },
@@ -7398,6 +7399,25 @@ asyncSuites.push((async()=>{
   eq('回滚-落盘失败目录不变', api.currentCatalog.items[0].vendor, 'OLD');
   await api.importCatalog({ schema:'plotpin-catalog/v1', items:[{ vendor:'NEW', model:'N', price:1 }] }, async()=>{});
   eq('目录-成功导入替换', api.currentCatalog.items[0].vendor, 'NEW');
+
+  /* 75.8b IO-P2-22：启动读取损坏目录须保留原因且不改写已载入目录；IDB 不可用不算损坏 */
+  const prevLoadGet = sandbox.idbGetKey;
+  sandbox.idbGetKey = async()=>({ schema:'wrong', items:[] });
+  eq('载入-损坏记录返回旧目录', await api.catalogLoad(), api.currentCatalog);
+  ok('载入-损坏记录给出原因', /schema/.test(api.catalogLoadError));
+  eq('载入-损坏记录不污染目录', api.currentCatalog.items[0].vendor, 'NEW');
+  sandbox.idbGetKey = async()=>({ schema:'plotpin-catalog/v1', items:[] });
+  await api.catalogLoad();
+  ok('载入-校验失败同样给原因', /items/.test(api.catalogLoadError));
+  eq('载入-校验失败仍不污染目录', api.currentCatalog.items[0].vendor, 'NEW');
+  sandbox.idbGetKey = async()=>null;
+  eq('载入-空记录不改目录', await api.catalogLoad(), api.currentCatalog);
+  eq('载入-空记录清除原因', api.catalogLoadError, '');
+  sandbox.idbGetKey = async()=>{ throw new Error('idb down'); };
+  await api.catalogLoad();
+  eq('载入-IDB 不可用不改目录', api.currentCatalog.items[0].vendor, 'NEW');
+  eq('载入-IDB 不可用不误报损坏', api.catalogLoadError, '');
+  sandbox.idbGetKey = prevLoadGet;
 
   /* 75.9 XLSX 数值往返：同一 quoteTable → Xlsx.build → Xlsx.readRows */
   const cat = api.catalogValidate({ schema:'plotpin-catalog/v1', items:[{ vendor:'海康', model:'DS-2CD', price:1200 }] });

@@ -20,7 +20,16 @@ function catalogValidate(r){
   });
   return {schema:CATALOG_SCHEMA,items};
 }
-async function catalogLoad(){try{const r=await idbGetKey(CATALOG_KEY);if(r)currentCatalog=catalogValidate(r)}catch(_){currentCatalog=null}return currentCatalog}
+let catalogLoadError='';
+/* IO-P2-22：损坏记录不覆盖已载入目录、也不静默吞掉——保留原因供启动提示（IDB 不可用属降级路径，不算损坏） */
+async function catalogLoad(){
+  let r;
+  try{ r=await idbGetKey(CATALOG_KEY); }catch(_){ return currentCatalog; }
+  if(!r){ catalogLoadError=''; return currentCatalog; }
+  try{ currentCatalog=catalogValidate(r); catalogLoadError=''; }
+  catch(e){ catalogLoadError=String((e&&e.message)||''); }
+  return currentCatalog;
+}
 async function importCatalog(raw,save){const c=catalogValidate(raw);await(save||(x=>idbPutKey(CATALOG_KEY,x)))(c);currentCatalog=c;return c}
 function roundMoney(n){return Math.round(n*100)/100}
 /* 目录版本：内容指纹（FNV-1a 32 位），用于报价快照追溯 */

@@ -12,6 +12,7 @@
      并复用 sanitizeSettings 白名单，避免跨工程覆盖与 __proto__ 污染。 */
   if(!(loaded&&loaded.state)) applyLocalSettings();
   await catalogLoad();
+  if(catalogLoadError) toast(L('目录数据损坏，已忽略：{msg}',{msg:catalogLoadError}),'warn');
   /* 界面语言先于首屏渲染：动态面板/ARIA 标签也按当前语言生成 */
   I18N.setLang(state.settings.lang);
   I18N.apply(document);
