@@ -4,7 +4,7 @@
 
 ## 2026-11-08 · IO-P1-6 工程库打开的事务顺序与资产回收
 
-- **Commit Hash**：待回填（本批 N-12~N-21 + IO-P1-6 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`3f4f2ef`（fix(io)：工程库打开改为加载成功后再回收资产）。
 - **与 N-11 的关系**：N-11（`627471a`）只修了 JSON 导入路径的「先回收后加载」；`openProjectById` 是同一缺陷的另一入口，本条沿用完全相同的事务语义，未改动 `importJsonFile`。
 - **核心改动**
   - `js/core/persistence.js`：`openProjectById()` 的提交顺序由「替换 state → `pruneBgAssets()` → `afterStateLoaded()`」改为「替换 state → `afterStateLoaded()` → `pruneBgAssets()` → `scheduleSave()`」。加载阶段的资产转换失败会进入 catch：state/history/选中集/草稿完整回滚，调用 `afterStateLoaded(false)` 复位 UI 并重绘，且 `assetPrune` 从未执行，旧工程资产不会被误删。
@@ -17,7 +17,7 @@
 
 ## 2026-11-08 · N-21 快照场景级差异、恢复守卫与元数据索引
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`259a25e`（feat(snapshot)：快照增加场景级差异、恢复守卫与元数据索引）。
 - **核心改动**
   - `js/core/snapshot.js`
     - `diffSceneItems()`：新增场景级差异（场地形状/名称、底图、楼层名），追加在对象差异之后，保持既有分类顺序契约；场地形状变化归 `moved`，底图/楼层名归 `modified`，另一方缺失归 `added`/`removed`。
@@ -34,7 +34,7 @@
 
 ## 2026-11-08 · N-20 统一覆盖率面积口径（v3）
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`d72cea9`（fix(coverage)：统一区域面积口径为解析公式并升 v3）。
 - **核心改动**
   - `js/core/geometry-coverage.js`
     - `regionPolygons()` 直接输出区域面积：区域矩形用 `shapeArea()`（解析公式），闭合折线用 `polygonArea()`；`analyzeCoverage()` 不再用采样多边形重算面积。统计面板、覆盖率面板、盲区导出、报告分母同源。
@@ -51,7 +51,7 @@
 
 ## 2026-11-08 · N-19 属性面板 focusin 历史累积改为事件委托
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`3c4e522`（perf(history)：属性面板撤销入栈改为首次输入触发）。
 - **核心改动**
   - `js/features/props.js`：新增 `bindPropHistory(box)` 与模块级 `propHistoryField`，在 `#propPanel` 上只绑定一次 `focusin` + 捕获阶段 `input`/`change` 委托。字段首次输入前压一次快照，同一字段连续输入不重复入栈；`focusin` 只重置“当前字段”，单纯切换焦点不入栈。删除对象/场地面板各自的一次性 `focusin → pushHistory`。`renderProps()` 不重置字段引用，避免面板重建移除聚焦元素时触发的 `change` 被误判为新字段而多压一条（collab N-04 回归修复）。照片上传的 `[data-photo-input]` 保留自身提交路径，避免双压。
   - `tests/e2e/history.spec.mjs`：新增 1 条用例——对象面板连续切换 5 个字段后历史条数不变，拖动一次只增 1 且 Ctrl+Z 回原位；场地面板切换字段不入栈、首次输入只增 1。
@@ -62,7 +62,7 @@
 
 ## 2026-11-08 · N-18 插件写入可撤销与载入后定时器逃逸封堵
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`9cbc25c`（fix(plugin)：插件写入可撤销并在载入后冻结定时器）。
 - **核心改动**
   - `js/features/plugins.js`
     - `pluginAddObjects()` 在 `st.objects.push(...clean)` 前调用 `pushHistory()`，与手动绘制共用撤销栈；`undo` 完全移除、`redo` 恢复。
@@ -75,7 +75,7 @@
 
 ## 2026-11-08 · N-17 冲突可见性与跨工程消息隔离
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`877deec`（fix(collab)：冲突口径计入纯冲突并隔离跨工程消息）。
 - **核心改动**
   - `js/features/collab.js`
     - 冲突口径统一：新增 `collabMergeChanged()` / `collabMergeOverwritten()`，`changed` 计入 `conflicts`。纯冲突（对端更旧、本地胜出）不再显示「无变化」，而是「冲突 N 条（保留较新值）」，且不计入可回滚项。
@@ -91,7 +91,7 @@
 
 ## 2026-11-08 · N-16 协作断线补发、自动重连与楼层广播
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`d093071`（fix(collab)：断线补发/本机频道退避重连/楼层增删清空广播）。
 - **核心改动**
   - `js/features/collab.js`
     - 断线待发队列：`collabOnLocalChange()` 在已启用协作但传输不可用时，把 `persistableState()` 写入 localStorage `plotpin.collab.pending`（只保留最新一份整工程快照，上限 2 MB）；超限或写盘失败通过 `collabRecordError` + `collabNotifyThrottled` 显式提示，不静默丢弃。
@@ -109,7 +109,7 @@
 
 ## 2026-11-08 · N-15 交互瞬态统一清理
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`d836db2`（fix(core)：交互瞬态在载入/撤销/切层/快照回滚时统一清理）。
 - **核心改动**
   - `js/core/model.js`：新增 `resetTransientInteractionState({keepCalib})`，统一清空 `draft/drag/rubber/activeOsnap/trackLine/refEdge/osnapMode/coverageResult` 与参考线；`keepCalib=true` 保留比例尺校准点，仿射草稿 `affinePairs` 始终清空。
   - `js/core/persistence.js`：`afterStateLoaded(fit, opts)` 改为调用该函数（原散落的 coverage/affine/校准清理删除）；`clearCurrentFloor()` 复用同一清理。载入工程、撤销/重做、切层、协作合并都经 `afterStateLoaded` 覆盖。
@@ -123,7 +123,7 @@
 
 ## 2026-11-08 · N-14 边界防护：切变退化 / fitView 缩放 / 顶点上限 / 大点列包围盒
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`d07bcf2`（fix(core)：边界防护覆盖切变退化、fitView 缩放、顶点上限与大点列包围盒）。
 - **核心改动**
   - `js/core/config.js`：`APP_LIMITS` 新增 `SHAPE_POINTS_MAX=10000`、`SHEAR_MAX=50`。
   - `js/core/geometry-site.js`：图片切变斜率 `(wp.x-start.x)/hgt` 夹取到 ±50，非有限值归零；`imageHandleDragTo` 出参前统一校验，任一非有限分量拒绝应用并保持原变换；`siteBounds` 改用逐点包围盒。
@@ -139,7 +139,7 @@
 
 ## 2026-11-08 · N-13 跨 0° 扇形画布与 SVG 外圈方向不一致
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`745af08`（fix(render)：跨 0° 扇形画布与 SVG 外圈方向统一）。
 - **核心改动**
   - `js/core/geometry.js`：新增 `sectorArcRange(shape)`，以 `sectorSweep()` 为唯一角度源，返回 `{a0, a1:a0+sweep, sweep}`。
   - `js/core/render.js`：画布扇形弧由「原始 a1 → a0」改为「归一后 a1 → a0」，`350°→20°` 不再反向画成 330°。
@@ -152,7 +152,7 @@
 
 ## 2026-11-08 · N-12 一般仿射下圆/椭圆/平行四边形/扇形的系统性失真
 
-- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **Commit Hash**：`3a94d57`（fix(geometry)：一般仿射下圆/椭圆/平行四边形/扇形精确迁移）。
 - **核心改动**
   - `js/core/geometry-transform.js`：新增公共 `affineLinearSummary()`（2×2 SVD + 极分解旋转角）、`affineEllipseImage()`、`affineShapeTransform(M, shape, opts)`；`migrateObjectsByAffine()` 与 `siteShapeByAffine()` 改为调用同一实现。
   - 圆/椭圆：按精确主轴成像。共轭直径正交时保留 `rx/ry` 与旋转轴约定（兼容既有 `diag(2,3)` 用例），否则取 SVD 主轴；剪切下面积严格为 `rx·ry = |det A|·rx₀·ry₀`。
