@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 C（1/5）：纯平移帧走静态层位图搬移，不再整层重建
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/render.js`：缓存签名拆两级——`sceneStaticContentKey()` 只含「画什么」，`sceneStaticKey()` 再拼 `zoom/panX/panY`；新增 `panScrollDelta(v,prevX,prevY,prevZoom,k)` 判定「缩放未变 + 平移为整数设备像素」，新增 `scrollStaticLayer()` 用临时 canvas 搬移位图并只对暴露的边缘条带重绘（`drawStaticContent()` 抽出原绘制序列，带 clip 复用）。
+  - 浮点平移与缩放变化仍整层重建，不引入重采样模糊或像素漂移；`staticScroll` 临时画布按设备像素尺寸懒分配。
+  - 同步 `docs/ARCHITECTURE.md` §6、`docs/facts.md`（selftest 3523 / dist 832,251 B / 余量 7,429 B / SW 101）。
+- **验证数据**（真实 Chromium 1920×1080@DPR1，SwiftShader，`node scripts/perf-browser.mjs --no-gate tests/perf/p2-render.perf.mjs`，新增 `tests/perf/p2-render.perf.mjs` 夹具）：
+  - 平移帧 P95：2,000 对象 **40.4 → 5.1 ms（−87%）**；5,000 **96.8 → 6.6 ms（−93%）**；10,000 **199.6 → 9.9 ms（−95%）**。
+  - 静态层整层重建 P95 基本不变（45.3 / 95.6 / 184.9 → 44.0 / 96.1 / 184.8 ms），说明增益来自「不再重建」而非降低单次重建成本。
+  - selftest **3523 通过 / 0 失败**（基线 3516，+7：内容签名不含视口、缩放变化使完整签名失效、整数位移可搬移、零位移、缩放变化禁止、非整数禁止、DPR2 换算）。
+  - e2e 123 通过 + 1 条件跳过（124）；bench 通过（缓存帧 P95 0.07 ms、重建 24.21 ms、heapUsed 29.01 MB）。
+  - dist **832,251 B**（本条 **+2,222 B**）/ gzip 258,282 B / 余量 **7,429 B**；SW `VERSION=101`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 搬移路径只在「整数设备像素」触发；触控板/高 DPI 下常见的小数位移仍整层重建（正确性优先）。
+  - 边缘条带重绘仍会遍历全部对象做包围盒裁剪（只省光栅化），对象数极大时条带补画仍有 CPU 成本。
+  - `staticScroll` 额外占用一张与画布等大的位图（DPR1 下约 8.3 MB），未做尺寸上限保护。
+  - 缩放帧未优化，仍为整层重建（10k 对象 P95 ≈ 196 ms）。
+
 ## 2026-11-08 · 批次 B（6/6）：插件调用限流 + 清单解析前字节校验
 
 - **Commit Hash**：`46b761e`

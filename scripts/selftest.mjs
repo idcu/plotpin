@@ -213,7 +213,8 @@ code += `\n;globalThis.__api = {
   siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
   sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag, drawScreenTag, surfaceCssSize, markSurfaceSize,
-  invalidateStatic, visibleWorldRect, sceneStaticKey, detectCapabilities, detectRuntimeCapabilities,
+  invalidateStatic, visibleWorldRect, sceneStaticKey, sceneStaticContentKey, panScrollDelta,
+  detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
   snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
@@ -4400,6 +4401,16 @@ await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", a
   ok('缓存-控制点改形后排除对象使签名失效', api.sceneStaticKey(v,dims,800,600)!==k2);
   api.setDrag(null);
   eq('缓存-结束拖拽后恢复包含全部对象', api.sceneStaticKey(v,dims,800,600), k2);
+
+  /* P2-1 平移搬移：内容签名不随视口变化，仅整数设备像素平移才可搬移位图 */
+  const ck0=api.sceneStaticContentKey(800,600,dims);
+  eq('平移-内容签名不含视口', api.sceneStaticContentKey(800,600,dims), ck0);
+  ok('平移-缩放变化使完整签名失效', api.sceneStaticKey({zoom:3,panX:v.panX,panY:v.panY},dims,800,600)!==api.sceneStaticKey(v,dims,800,600));
+  eq('平移-缩放未变时整数像素位移可搬移', api.panScrollDelta({zoom:2,panX:10,panY:-4},0,0,2,1), [10,-4]);
+  eq('平移-位置未变返回零位移', api.panScrollDelta({zoom:2,panX:0,panY:0},0,0,2,1), [0,0]);
+  eq('平移-缩放变化禁止搬移', api.panScrollDelta({zoom:2.5,panX:10,panY:0},0,0,2,1), null);
+  eq('平移-非整数设备像素禁止搬移', api.panScrollDelta({zoom:2,panX:0.25,panY:0},0,0,2,1), null);
+  eq('平移-DPR2 整数像素换算', api.panScrollDelta({zoom:2,panX:0,panY:3},0,0,2,2), [0,6]);
   api.resetState();
 }
 

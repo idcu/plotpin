@@ -108,6 +108,8 @@ function requestRender(){
  * 只有开始/结束拖拽时改形集合变化，静态层才重建一次（N-23）。
  * 导出 / 打印走「直接全量绘制」路径，保证产物与旧行为一致。 */
 let staticCanvas=null, staticCtx=null, staticKey='', staticRev=0;
+/* 内容签名（不含视口缩放/平移）与上一次静态层对应的视口，用于平移时整像素搬移位图 */
+let staticSig='', staticPanX=0, staticPanY=0, staticZoom=0, staticScroll=null;
 /** 显式作废静态层：对象增删改、载入/撤销/重做、覆盖率结果变化时调用 */
 function invalidateStatic(){ staticRev++; staticKey=''; }
 /**
@@ -123,21 +125,26 @@ function staticDragIds(){
   if(drag.type==='node'||drag.type==='rotate'||drag.type==='rect'||drag.type==='shapeHandle') return [drag.id];
   return null;
 }
-/** 静态层缓存签名：任何影响静态层像素的输入都在此收敛 */
-function sceneStaticKey(v,cssW,cssH,d){
+/** 静态层内容签名：只随“画什么”变化，不含缩放/平移（平移可整像素搬移位图） */
+function sceneStaticContentKey(cssW,cssH,d){
   const bg=state.background||{};
   const dyn=staticDragIds();
-  return [v.zoom,v.panX,v.panY,cssW,cssH,dpr||1,staticRev,
+  return [cssW,cssH,dpr||1,staticRev,
     d.minX,d.minY,d.maxX,d.maxY,
     JSON.stringify(state.settings),
     JSON.stringify(state.site||null),
     bg.transform?JSON.stringify(bg.transform):'',
-    bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,bg.metersPerPixel||0,
+    bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,
+    bg.metersPerPixel||0,
     bgImage?1:0,(bgDataUrl||'').length,
     (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
     dyn?dyn.slice().sort().join(','):'',   /* 只跟“正在拖拽改形”有关，与选中集无关 */
     coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0'
   ].join('|');
+}
+/** 静态层缓存签名：内容签名 + 视口（缩放必须重建；平移可在整数像素时搬移） */
+function sceneStaticKey(v,cssW,cssH,d){
+  return sceneStaticContentKey(cssW,cssH,d)+'|'+v.zoom+'|'+v.panX+'|'+v.panY;
 }
 function ensureStaticLayer(cssW,cssH){
   const k=dpr||1;
@@ -153,6 +160,59 @@ function visibleWorldRect(v,d,cssW,cssH,padPx=48){
   const a=s2w([-padPx,-padPx],v,d), b=s2w([cssW+padPx,cssH+padPx],v,d);
   return {minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
 }
+/** 静态层全部内容（不含动态层）；view/strip 决定对象裁剪范围 */
+function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view){
+  drawBackground(sc,v,d,cssW,cssH,toS);
+  drawSite(sc,v,toS);
+  drawGrid(sc,v,d,cssW,cssH,toS);
+  drawCoverage(sc,v,d);
+  drawSiteAnnotations(sc,v,toS);
+  drawAxes(sc,v,toS,cssH);
+  state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
+    .sort((a,b)=>a.z-b.z)
+    .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
+}
+/**
+ * 能否用位图搬移代替整层重建（审计 P2-1）：缩放未变且平移量为整数设备像素。
+ * 只有满足时才走此路径，保证像素级对齐、不引入重采样模糊；
+ * 非整数平移（fitView / 触控板小数位移）与缩放变化都返回 `null`，交给整层重建。
+ * @returns {[number,number]|null} 设备像素位移（可为 0）
+ */
+function panScrollDelta(v,prevX,prevY,prevZoom,k){
+  if(v.zoom!==prevZoom) return null;
+  const dx=(v.panX-prevX)*k, dy=(v.panY-prevY)*k, ix=Math.round(dx), iy=Math.round(dy);
+  if(Math.abs(dx-ix)>0.01||Math.abs(dy-iy)>0.01) return null;
+  return [ix,iy];
+}
+function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet){
+  const k=dpr||1, delta=panScrollDelta(v,staticPanX,staticPanY,staticZoom,k);
+  if(!delta) return false;
+  const ix=delta[0], iy=delta[1];
+  if(!ix&&!iy) return true;                       /* 亚像素抖动：位图已是正确内容 */
+  const w=staticCanvas.width, h=staticCanvas.height;
+  if(Math.abs(ix)>=w||Math.abs(iy)>=h) return false;
+  if(!staticScroll||staticScroll.width!==w||staticScroll.height!==h){
+    staticScroll=document.createElement('canvas'); staticScroll.width=w; staticScroll.height=h;
+  }
+  const ss=staticScroll.getContext('2d');
+  ss.setTransform(1,0,0,1,0,0); ss.clearRect(0,0,w,h); ss.drawImage(staticCanvas,0,0);
+  sc.setTransform(1,0,0,1,0,0); sc.clearRect(0,0,w,h); sc.drawImage(staticScroll,ix,iy);
+  sc.setTransform(k,0,0,k,0,0);
+  staticPanX+=ix/k; staticPanY+=iy/k;
+  /* 暴露区：横向条带（整高）+ 纵向条带（避开已重绘的横向区，避免半透明叠加变深） */
+  const ddx=ix/k, ddy=iy/k, rects=[];
+  if(ddx) rects.push([ddx>0?0:cssW+ddx,0,Math.abs(ddx),cssH]);
+  const x0=ddx>0?ddx:0, x1=ddx>0?cssW:cssW+ddx;
+  if(ddy&&x1>x0) rects.push([x0,ddy>0?0:cssH+ddy,x1-x0,Math.abs(ddy)]);
+  rects.forEach(r=>{
+    const a=s2w([r[0]-48,r[1]-48],v,d), b=s2w([r[0]+r[2]+48,r[1]+r[3]+48],v,d);
+    const strip={minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
+    sc.save(); sc.beginPath(); sc.rect(r[0],r[1],r[2],r[3]); sc.clip();
+    drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,strip);
+    sc.restore();
+  });
+  return true;
+}
 function drawScene(c,v,cssW,cssH,opt={}){
   const d=worldDims();
   const toS=p=>w2s(p,v,d);
@@ -164,21 +224,18 @@ function drawScene(c,v,cssW,cssH,opt={}){
   if(cacheable){
     /* 只有逐帧改形的对象从静态层排除；选中但静止的对象留在位图里（N-23） */
     const dyn=staticDragIds(), dynSet=dyn?new Set(dyn):null;
-    const key=sceneStaticKey(v,cssW,cssH,d);
+    const sig=sceneStaticContentKey(cssW,cssH,d);
+    const key=sig+'|'+v.zoom+'|'+v.panX+'|'+v.panY;
     if(key!==staticKey){
       const sc=ensureStaticLayer(cssW,cssH);
-      sc.clearRect(0,0,cssW,cssH);
-      drawBackground(sc,v,d,cssW,cssH,toS);
-      drawSite(sc,v,toS);
-      drawGrid(sc,v,d,cssW,cssH,toS);
-      drawCoverage(sc,v,d);
-      drawSiteAnnotations(sc,v,toS);
-      drawAxes(sc,v,toS,cssH);
-      const view=visibleWorldRect(v,d,cssW,cssH);
-      state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
-        .sort((a,b)=>a.z-b.z)
-        .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
-      staticKey=key;
+      const scrolled=staticSig===sig&&staticZoom===v.zoom
+        ?scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet):false;
+      if(!scrolled){
+        sc.clearRect(0,0,cssW,cssH);
+        drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,visibleWorldRect(v,d,cssW,cssH));
+        staticPanX=v.panX; staticPanY=v.panY;
+      }
+      staticKey=key; staticSig=sig; staticZoom=v.zoom;
     }
     c.clearRect(0,0,cssW,cssH);
     c.drawImage(staticCanvas,0,0,cssW,cssH);
