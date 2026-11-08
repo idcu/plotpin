@@ -506,7 +506,9 @@ function renderMultiProps(box,objs){
   if($('multiBackBtn')) $('multiBackBtn').onclick=()=>restack('back');
 }
 function bindPropEvents(box,o){
-  const changed=()=>{ o.updatedAt=nowISO(); commitObjectEdit(); };
+  /* 属性面板所有写路径统一走 commitObjectEdit([id]) 打点：手写 updatedAt 会绕过 stampObjects
+     的同毫秒严格递增保护，合并时本地较新修改可能被判旧而被远端覆盖（P1-5）。 */
+  const changed=()=>commitObjectEdit([o.id]);
   box.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>applyField(el,o,changed)));
   /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘（与场地面板共用同一绑定实现） */
   bindAnnotToggleInputs(box,{apply:(key,val)=>setAnnot(o,key,val),changed});
@@ -662,7 +664,6 @@ function rotateSelected(delta){
     }else if(o.points&&o.points.length){
       const c=objectCenter(o); o.points=o.points.map(p=>rotatePoint(p,c,delta)); syncFirstPoint(o);
     }else o.angle=normalizeAngle((o.angle||0)+delta);
-    o.updatedAt=nowISO();
   });
-  commitChange('已旋转选中对象');
+  commitChange('已旋转选中对象', objs.map(o=>o.id));
 }

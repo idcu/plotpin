@@ -133,7 +133,7 @@ code += `\n;globalThis.__api = {
   PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
   sectorSweep, sectorArcPoints, sectorArcRange, pointIconScale, areaParamText,
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
-  applyField,
+  applyField, bindPropEvents, rotateSelected,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
   isPolylineEditable, objectArea, objectLength, renderNodeEditor,
   annotKeys, annotOn, annotLabel, annotDefault, setAnnot, annotationItems, renderAnnotToggles,
@@ -5814,6 +5814,39 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   const m5z = M(P([O('A', T1, 1)]), P([Object.assign(O('A', T1, 1), { z: 5 })]));
   eq('合并-仅叠放顺序不同不算冲突', m5z.stats.conflicts, 0);
   eq('合并-仅叠放顺序不同保留本地', m5z.project.objects[0].z, 0);
+
+  /* P1-5 属性面板写路径统一打点：旧实现先手写 o.updatedAt=nowISO() 再调 commitObjectEdit()（不传 ids），
+     stampObjects 不生效；同一毫秒内连续编辑时间戳不递增，合并时本地较新值会被远端旧值判胜覆盖。 */
+  api.resetState();
+  api.state.meta.projectId='PRJ_P15';
+  const po=O('PX', T3, 1);
+  api.state.objects=[po];
+  const fieldY={dataset:{field:'y'},value:'7',type:'number'};
+  fieldY.addEventListener=(ev,fn)=>{ fieldY[ev]=fn; };
+  const fakeEl={};
+  const box={querySelectorAll:sel=>sel==='[data-field]'?[fieldY]:[], querySelector:()=>fakeEl};
+  api.bindPropEvents(box,po);
+  ok('P1-5 属性输入绑定成功', typeof fieldY.input==='function');
+  fieldY.input();
+  const ts1=po.updatedAt;
+  ok('P1-5 属性写入打点晚于旧基线', ts1>T3);
+  eq('P1-5 属性值已写入', po.y, 7);
+  fieldY.value='9'; fieldY.input();
+  ok('P1-5 同毫秒二次编辑严格递增', po.updatedAt>ts1);
+  eq('P1-5 二次属性值', po.y, 9);
+  const m15=M(P([po], { meta:{name:'P1-5',projectId:'PRJ_P15',createdAt:T1,updatedAt:T3} }), P([O('PX', T3, 1)]));
+  eq('P1-5 合并保留本地较新 y', m15.project.objects[0].y, 9);
+  eq('P1-5 合并本地胜出不计更新', m15.stats.updated, 0);
+
+  api.resetState();
+  const ro=O('RX', T3, 1); ro.angle=0;
+  api.state.objects=[ro];
+  api.selectedIds.clear(); api.selectedIds.add('RX');
+  api.rotateSelected(15);
+  approx('P1-5 批量旋转角度', ro.angle, 15, 1e-9);
+  ok('P1-5 批量旋转走统一打点', ro.updatedAt>T3);
+  const m15r=M(P([ro], { meta:{name:'P1-5',projectId:'PRJ_P15',createdAt:T1,updatedAt:T3} }), P([Object.assign(O('RX', T3, 1), { angle:0 })]));
+  approx('P1-5 合并保留本地较新角度', m15r.project.objects[0].angle, 15, 1e-9);
 
   const floorMetaA=P([],{floors:[{id:'floor.default',name:'1F',updatedAt:T1}],background:{kind:'rect',shape:{type:'rect',w:10,h:10}}});
   const floorMetaB=P([],{floors:[{id:'floor.default',name:'2F',updatedAt:T2}],background:{kind:'rect',shape:{type:'rect',w:20,h:10}}});

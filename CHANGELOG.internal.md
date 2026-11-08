@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P1 批次二（2/3）：属性写路径统一单调打点
+
+- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(props): 属性/旋转写路径统一 stampObjects 打点`）
+- **核心改动**：
+  - `bindPropEvents` 的 `changed` 由「手写 `o.updatedAt=nowISO()` + `commitObjectEdit()`（不传 ids）」改为 `commitObjectEdit([o.id])`；后者内部 `stampObjects` 对同一毫秒连续编辑做严格递增（`ts<=prev` 时 `prev+1ms`），协作 LWW 不再把本地较新修改判旧。
+  - `rotateSelected` 删除逐对象手写 `updatedAt`，改为 `commitChange('已旋转选中对象', objs.map(o=>o.id))`，同样走 `stampObjects`。
+  - 站点属性字段的手写 `state.site.updatedAt` 保留：site 不在对象索引内，无法也不应由 `stampObjects` 打点；该路径的 LWW 依赖站点自身时间戳，属既有机制。
+- **验证数据**：
+  - selftest **3448/0**（基线 3438，+10）：用真实 `bindPropEvents` + 假 box/输入框触发属性写入（y=7→9），断言打点时间戳晚于旧基线、同毫秒二次编辑严格递增；`mergeProjectData` 合并远端旧值后本地 y=9 胜出且 `stats.updated=0`；`rotateSelected(15)` 走统一打点，合并后本地角度 15 胜出。
+  - 门禁：e2e **118 通过 + 1 条件跳过（119）**；check-gates 6/6 + 10/10；discipline 13/13；i18n 46.16%（缺口 9 ≤ 10）；dist **823,769 B**（本条 −24 B，删除手写打点）/ gzip 255,788 B / 余量 **15,911 B**；SW `VERSION=87`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - `rotateSelected` 对矩形/平行四边形仍按 `o.angle` 绕基点旋转（与手柄拖拽的「绕视觉中心」不同口径）；属既有产品行为，审计未列，本次未改，建议后续单独评估。
+  - 站点字段的 `updatedAt` 仍是手写 `nowISO()`，同毫秒连续编辑无严格递增保护（site 冲突概率低，但理论上存在）。
+
 ## 2026-11-08 · 审计 P1 批次二（1/3）：快照照片资产化失败不再丢数据
 
 - **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(snapshot): 资产化失败保留内嵌照片并提示`）
