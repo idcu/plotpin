@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 批次 E（2/3）：盲区面积与主覆盖率统一口径
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`e69bdb2`
 - **核心改动**：
   - `js/core/geometry-coverage.js`：`blindSpotArea(res)` 改为逐区域 `area·(1−ratio)` 求和（与 `totalBlind`、面板/报告同口径）；原「盲格矩形并集面积」实现保留为 `blindSpotRectArea(res)`，供 GeoJSON 导出面自检。
   - `js/features/io-export.js`：盲区 GeoJSON 导出提示中的「合计面积」改用 `blindSpotRectArea`，与导出的矩形面严格对应。
