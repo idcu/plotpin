@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=107
+version=108
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -22,7 +22,7 @@ bb3f98797ec0abadfd2f8223696cf3b5aa6f0b851ca9ed3410b775e7f0d58362  js/core/geomet
 e1adf61f04f0f1315ed94c5772135ef15809ca60599c48a101933fbec5f3df92  js/core/geometry.js
 3d2b25f91b07318da173f392eb7dafd0563322fe670c59deaca2a244d0a1f390  js/core/interaction.js
 6370f180aac52e5bf125d7154c071d9fb0dfdf987c273d0ca5b9ba09ea22b989  js/core/model.js
-91ec1a157cd29e3ab1c7328d73377fa93ab191aae8e43706c262105a48343de5  js/core/persistence.js
+b1943d5bc408e1481725329967d475b31e732bad171d8fe7f198411171f60b3a  js/core/persistence.js
 1c4cac67abd6d6a3b4d587f5edeee13fb0d645040456e1352c00a6d845f46a39  js/core/render.js
 15b8367adf844d671a44bc5fa31e871ec69f533a96c0093d25cd1999d1b44366  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
@@ -39,7 +39,7 @@ c013108ff2745750ef2de9e11b716eed90ea53d53f479ba2809d3aec362c12f2  js/features/pl
 487dcba1d47b458c9e8b359c90667451a5d06f718e3e32cc3d53dbda703151d1  js/features/props.js
 7695e023b65710717a61c88f66f257971147ebe600af7a5a0e849506a0a0cd33  js/features/rules.js
 423ee24cf1ff09d4e575e5160a9afa3fd2e6f937f3f45df16cf631515dbbaca5  js/features/snapshot-ui.js
-6d5004e1cb97fc0f2bc28bc7cbf3d90ab2afa891593dffbd5095d941dd0e1684  js/features/ui-panels.js
+378adb3901b253b11c364cd88fcdae8e2e2ebe2acabae4ebd360de32335258fa  js/features/ui-panels.js
 5380aed910a4f2083956552338e62495138f95a0dca86bd97213bcf1eead6080  js/features/ui-shell.js
 34d4ca019bf4e3e7f7e8bb648d46a2c7d9ebe6b4eca0a11f9e1203ceeba47e40  manifest.webmanifest
 5e1137eca399e2bd0a85e1890268b319aec2fffd3c20354fd8664ff079ad7909  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets/src/core.js

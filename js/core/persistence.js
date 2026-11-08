@@ -145,6 +145,14 @@ function markDirty(kind){
   else if(p.ui==='lists'){ renderList(); renderLayers(); renderStats(); }
   if(p.broadcast&&typeof collabOnLocalChange==='function') collabOnLocalChange();
 }
+/** 单个对象单调打点：新时间必须严格大于旧值（同一毫秒连续提交也递增）。 */
+function stampObject(o){
+  if(!o||typeof o!=='object') return false;
+  const prev=typeof o.updatedAt==='string'?o.updatedAt:'';
+  let ts=new Date().toISOString();
+  if(prev && ts<=prev) ts=new Date(new Date(prev).getTime()+1).toISOString();
+  o.updatedAt=ts; return true;
+}
 /** 对象变更打点（N-06）：只对实际变化的 id 写 updatedAt，供协作 LWW 判定。
  *  ids 支持数组 / Set / Map；省略或为空时不遍历对象（无变化不产生新时间戳）。
  *  同一毫秒内连续提交也对每个对象严格递增，避免后一次编辑被合并判旧。 */
@@ -154,13 +162,16 @@ function stampObjects(ids){
   if(!list.length) return 0;
   const idx=objectIndexById();
   let n=0;
-  for(const id of list){
-    const o=idx.get(id); if(!o) continue;
-    const prev=typeof o.updatedAt==='string'?o.updatedAt:'';
-    let ts=new Date().toISOString();
-    if(prev && ts<=prev) ts=new Date(new Date(prev).getTime()+1).toISOString();
-    o.updatedAt=ts; n++;
-  }
+  for(const id of list){ if(stampObject(idx.get(id))) n++; }
+  return n;
+}
+/** 对给定对象引用集合单调打点（F17）：objectIndexById() 只覆盖当前楼层，
+ *  跨楼层迁移必须按受影响对象引用直接打点，否则非当前楼层对象的 updatedAt 不更新，
+ *  协作合并会保留对端旧引用。 */
+function stampObjectsIn(objs){
+  if(!objs) return 0;
+  let n=0;
+  for(const o of objs) if(stampObject(o)) n++;
   return n;
 }
 /** @param {string} [floorId] 需要打点的楼层；缺省当前楼层（CORE-P2-8：重命名非当前楼层时也要刷新该层） */
@@ -443,6 +454,23 @@ function floorRefs(pred){
     if(count) out.push({id:f.id,name:f.name,count});
   });
   return out;
+}
+/** 删除图层/类型并把全楼层引用迁移到 toId（F17）。调用方负责确认与 pushHistory。
+ *  先写回当前楼层，再遍历所有楼层收集受影响对象；objectIndexById() 只覆盖当前楼层，
+ *  因此用 stampObjectsIn 按引用打点，非当前楼层对象的 updatedAt 也单调递增，
+ *  协作合并不会保留对端旧引用。
+ *  @param {'layer'|'type'} kind
+ *  @returns {number} 受影响对象数 */
+function migrateRefsAndDelete(kind, fromId, toId){
+  const field=kind==='layer'?'layerId':'typeId';
+  const moved=[];
+  syncActiveFloor();
+  (state.floors||[]).forEach(f=>(f.objects||[]).forEach(o=>{ if(o&&o[field]===fromId){ o[field]=toId; moved.push(o); } }));
+  if(kind==='layer') state.layers=state.layers.filter(x=>x.id!==fromId);
+  else state.objectTypes=state.objectTypes.filter(x=>x.id!==fromId);
+  stampObjectsIn(moved);
+  commitChange(kind==='layer'?'已删除图层':'已删除类型');
+  return moved.length;
 }
 function floorObjectCount(f){
   return f&&f.id===state.activeFloorId?state.objects.length:(f&&Array.isArray(f.objects)?f.objects.length:0);

@@ -143,7 +143,7 @@ code += `\n;globalThis.__api = {
   normalizeIcon, TYPE_ICONS, mergeTypes,
   SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
   markDirty, MARK_DIRTY_PROFILES,
-  dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects,
+  dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects, stampObjectsIn, migrateRefsAndDelete,
   sanitizeObjects, sanitizeReport, safeId,
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
@@ -1924,6 +1924,39 @@ await section("28.7 N-08 楼层名唯一化与跨楼层引用检查", async () =
   ok('N08-导入重名楼层整批拒绝', plan.errors.some(e=>e.includes('楼层名称')&&e.includes('重复')));
   eq('N08-拒绝时无更新', plan.updates.length, 0);
   eq('N08-拒绝时无新增', plan.creates.length, 0);
+  api.resetState();
+}
+});
+
+/* 28.7b F17 删除图层/类型跨楼层迁移单调打点 ---- */
+await section("28.7b F17 删除图层/类型跨楼层迁移单调打点", async () => {
+{
+  const st=api.resetState();
+  st.layers.push({id:'layer.f17',name:'待删层',visible:true,locked:false});
+  st.objectTypes.push({id:'type.f17',kind:'point',name:'待删类型',color:'#123456',icon:'pin',builtin:false});
+  st.floors.push({id:'floor.f17',name:'2F',objects:[],updatedAt:'2026-01-01T00:00:00.000Z'});
+  const oa=api.baseObject('point','point.marker',{name:'跨层A',layerId:'layer.f17',typeId:'type.f17'});
+  st.objects.push(oa);
+  const ob=api.baseObject('point','point.marker',{name:'跨层B',layerId:'layer.f17',typeId:'type.f17'});
+  st.floors[1].objects.push(ob);
+  const t0a=oa.updatedAt, t0b=ob.updatedAt;
+  const nLayer=api.migrateRefsAndDelete('layer','layer.f17','layer.default');
+  eq('F17-图层迁移覆盖两层', nLayer, 2);
+  eq('F17-当前层图层已迁移', oa.layerId, 'layer.default');
+  eq('F17-非当前层图层已迁移', ob.layerId, 'layer.default');
+  ok('F17-当前层图层迁移打点递增', oa.updatedAt>t0a);
+  ok('F17-非当前层图层迁移打点递增', ob.updatedAt>t0b);
+  ok('F17-图层条目已删除', !st.layers.some(x=>x.id==='layer.f17'));
+  const t1a=oa.updatedAt, t1b=ob.updatedAt;
+  const nType=api.migrateRefsAndDelete('type','type.f17','point.marker');
+  eq('F17-类型迁移覆盖两层', nType, 2);
+  eq('F17-当前层类型已迁移', oa.typeId, 'point.marker');
+  eq('F17-非当前层类型已迁移', ob.typeId, 'point.marker');
+  ok('F17-类型迁移两层都打点递增', oa.updatedAt>t1a && ob.updatedAt>t1b);
+  ok('F17-类型条目已删除', !st.objectTypes.some(x=>x.id==='type.f17'));
+  eq('F17-stampObjectsIn 空集合返回 0', api.stampObjectsIn([]), 0);
+  eq('F17-stampObjectsIn 按引用计数', api.stampObjectsIn([ob,null]), 1);
+  eq('F17-stampObjects 仍只覆盖当前层', api.stampObjects([ob.id]), 0);
   api.resetState();
 }
 });

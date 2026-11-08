@@ -4,9 +4,27 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
-## 2026-11-08 · 批次 D（3/5）：「场地参数」改结构化取值，英文模式不再恒为空
+## 2026-11-08 · 批次 D（4/5）：删除图层/类型跨楼层迁移按对象引用打点，协作不回退旧引用
 
 - **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/persistence.js`：抽出单对象打点原语 `stampObject(o)`（新时间严格大于旧值）；`stampObjects(ids)` 改为复用该原语，**签名与行为不变**；新增 `stampObjectsIn(objs)` 按对象引用打点——`objectIndexById()` 只覆盖当前楼层，跨楼层对象必须按引用打点。
+  - 新增 `migrateRefsAndDelete(kind, fromId, toId)`：先 `syncActiveFloor()` 写回当前层，再遍历全部楼层迁移 `layerId`/`typeId`、删除图层/类型条目、`stampObjectsIn(moved)` 打点、`commitChange()` 收尾；返回受影响对象数。
+  - `js/features/ui-panels.js`：两处删除处理器改为 `migrateRefsAndDelete('layer'|'type', …)`，不再手写 `state.floors.forEach` 迁移且不再漏传 ids。
+  - `scripts/selftest.mjs` +14（新分区 28.7b）：覆盖两层迁移计数、当前/非当前层引用迁移、两层 `updatedAt` 严格递增、条目删除、`stampObjectsIn` 空集合/引用计数、`stampObjects` 仍只覆盖当前层。
+  - 同步 `docs/ARCHITECTURE.md` §8、`docs/features.md` §9、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**：
+  - 修复前路径：`commitChange('已删除图层')` 不传 ids → `stampObjects(undefined)` 返回 0，非当前楼层（以及当前楼层）迁移对象的 `updatedAt` 均不更新；对端 LWW 会保留旧 `layerId`/`typeId`。修复后 selftest 断言两层均严格递增且计数为 2。
+  - selftest **3566 通过 / 0 失败**（基线 3552，+14）；e2e **123 通过 + 1 条件跳过（124）**；bench 通过。
+  - dist **833,754 B**（本条 **+378 B**）/ gzip 258,888 B / 余量 **5,926 B**；SW `VERSION=108`；8 种 golden 未变。
+- **遗留 TODO / 风险**：
+  - 只对对象打点；非当前楼层的楼层级 `updatedAt` 不变（对象级 LWW 已足够，楼层元数据未被修改）。
+  - 仍无跨楼层删除的 e2e 场景，当前仅有 selftest 覆盖；若后续改删除交互需补 e2e。
+  - `stampObjectsIn` 按引用去重依赖调用方传入唯一对象集合；传重复引用会重复 +1ms（结果仍单调，不影响正确性）。
+
+## 2026-11-08 · 批次 D（3/5）：「场地参数」改结构化取值，英文模式不再恒为空
+
+- **Commit Hash**：`f4bc2d5`
 - **核心改动**：
   - `js/core/geometry-site.js`：把 `siteDescription()` 拆成 `siteDescriptionParts(bg)` → `{kind,title,detail}` 与 `siteDescription()=title+detail`；六类场地（图片/矩形/圆/椭圆/扇形/多边形）与「未设置」都给出结构化 `title`/`detail`，所有文案仍走 `L()`。
   - `js/features/ui-panels.js`：统计页「场地参数」由 `siteDescription().split('：').slice(1).join('：')` 改为 `siteDescriptionParts().detail`，不再依赖中文全角冒号。

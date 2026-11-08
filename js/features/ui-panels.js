@@ -203,8 +203,7 @@ function renderLayers(){
       if(!ok) return;
     }
     pushHistory();
-    if(refs.length) state.floors.forEach(f=>(f.objects||[]).forEach(o=>{ if(o&&o.layerId===l.id) o.layerId=target.id; }));
-    state.layers=state.layers.filter(x=>x.id!==l.id); commitChange('已删除图层');
+    migrateRefsAndDelete('layer', l.id, target.id);
   });
 }
 function getLayer(id){ return state.layers.find(l=>l.id===id); }
@@ -242,8 +241,7 @@ function renderTypes(){
       if(!ok) return;
     }
     pushHistory();
-    if(refs.length) state.floors.forEach(f=>(f.objects||[]).forEach(o=>{ if(o&&o.typeId===t.id) o.typeId=target.id; }));
-    state.objectTypes=state.objectTypes.filter(x=>x.id!==t.id); commitChange('已删除类型');
+    migrateRefsAndDelete('type', t.id, target.id);
   });
 }
 $('addTypeBtn').onclick=async()=>{
