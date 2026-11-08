@@ -489,17 +489,24 @@ async function switchFloor(id){
   scheduleSave();                  /* 切换也是一次状态变更：刷新后回到上次活动楼层（审计 P0-4 补口） */
   return true;
 }
-/** 在指定楼层内执行异步任务（如逐层导出/打印），结束后恢复原楼层、视口与选择集 */
+/** 在指定楼层内执行异步任务（如逐层导出/打印），结束后恢复原楼层、视口与选择集。
+ *  P1-6：必须 await switchFloor 并校验返回值，且等待底图就绪后才执行 fn；
+ *  旧实现不 await（`!switchFloor(id)` 对 Promise 恒为 false），底图仍在解码/未加载就取像素，
+ *  导出的多楼层 PDF 会缺底图；切层失败则中止，绝不导出错楼层的内容。 */
 async function withFloor(id, fn){
-  if(!id||id===state.activeFloorId) return fn();
+  if(!id||id===state.activeFloorId){
+    if(!(await waitBackgroundReady())) throw new Error('楼层底图未就绪，已中止导出');
+    return fn();
+  }
   const prevId=state.activeFloorId;
   const prevViewport=deepClone(state.viewport);
   const prevSelection=new Set(selectedIds);
-  if(!switchFloor(id)) throw new Error('楼层切换失败');
+  if(!(await switchFloor(id))) throw new Error('楼层切换失败，已中止导出');
   try{
+    if(!(await waitBackgroundReady())) throw new Error('楼层底图未就绪，已中止导出');
     return await fn();
   }finally{
-    if(switchFloor(prevId)){
+    if(await switchFloor(prevId)){
       state.viewport=prevViewport;
       selectedIds.clear(); prevSelection.forEach(x=>selectedIds.add(x));
       invalidateStatic(); resetFrameRef();
@@ -1254,39 +1261,61 @@ function loadImageSrc(src){
     img.src=src;
   });
 }
+/* 底图就绪信号：afterStateLoaded 每次重建底图都会重建一个信号，导出/切层前可 await；
+   新一轮加载开始时会让上一轮等待者 resolve(false)，避免悬挂（审计 P1-6）。 */
+let bgReadyPromise=Promise.resolve(true), bgReadyResolve=null;
+/** 等待当前楼层底图就绪：非图片底图/已 ready 立即 true；资产缺失 false；加载中等待本轮信号。 */
+function waitBackgroundReady(){
+  if(!isImageBackground(state.background)) return Promise.resolve(true);
+  if(bgImageState==='ready'&&bgImage) return Promise.resolve(true);
+  if(bgImageState==='missing') return Promise.resolve(false);
+  return bgReadyPromise;
+}
+
 async function afterStateLoaded(fit=true,opts={}){
   const seq=++bgLoadSeq;
+  if(bgReadyResolve){ const r=bgReadyResolve; bgReadyResolve=null; r(false); }
+  let resolveMine=null;
+  bgReadyPromise=new Promise(res=>{ bgReadyResolve=res; resolveMine=res; });
   bgImage=null; bgImageState='none'; bgDataUrl='';
-  resetTransientInteractionState(opts);   /* 草稿/拖拽/捕捉/参考线/覆盖层统一复位；校准语义见函数注释 */
-  invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
-  resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
-  await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
-  await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
-  /* 旧版底图资产 */refreshUI();
-  if(fit) fitView();
-  requestRender();
-  const bg=state.background;
-  if(!isImageBackground(bg)) return;   /* 空槽（含仅场地）无需加载图片 */
-  bgImageState='decoding';
   try{
-    let url='';
-    if(bg.assetId){
-      const rec=await assetGet(bg.assetId);
-      if(rec){
-        url=await bytesToDataUrl(rec.bytes,rec.mime);
+    resetTransientInteractionState(opts);   /* 草稿/拖拽/捕捉/参考线/覆盖层统一复位；校准语义见函数注释 */
+    invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
+    resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
+    await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
+    await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
+    /* 旧版底图资产 */refreshUI();
+    if(fit) fitView();
+    requestRender();
+    const bg=state.background;
+    if(!isImageBackground(bg)) return;   /* 空槽（含仅场地）无需加载图片 */
+    bgImageState='decoding';
+    try{
+      let url='';
+      if(bg.assetId){
+        const rec=await assetGet(bg.assetId);
+        if(rec){
+          url=await bytesToDataUrl(rec.bytes,rec.mime);
+        }else if(bg.dataUrl){
+          url=bg.dataUrl;            // 资产缺失（如跨设备清理过）退回内嵌图
+        }else if(bg.assetId){
+          throw new Error('资产缺失');
+        }
       }else if(bg.dataUrl){
-        url=bg.dataUrl;            // 资产缺失（如跨设备清理过）退回内嵌图
-      }else if(bg.assetId){
-        throw new Error('资产缺失');
+        url=bg.dataUrl;              // IDB 不可用的退化环境
       }
-    }else if(bg.dataUrl){
-      url=bg.dataUrl;              // IDB 不可用的退化环境
+      if(!url){ bgImageState='missing'; refreshCalibStatus(); return; }
+      bgDataUrl=url;
+      const img=await loadImageSrc(url);
+      if(seq===bgLoadSeq){ bgImage=img; bgImageState='ready'; refreshCalibStatus(); requestRender(); }
+    }catch(e){
+      if(seq===bgLoadSeq){ bgImageState='missing'; refreshCalibStatus(); toast('底图读取失败，请重新导入底图','warn'); }
     }
-    if(!url){ bgImageState='missing'; refreshCalibStatus(); return; }
-    bgDataUrl=url;
-    const img=await loadImageSrc(url);
-    if(seq===bgLoadSeq){ bgImage=img; bgImageState='ready'; refreshCalibStatus(); requestRender(); }
-  }catch(e){
-    if(seq===bgLoadSeq){ bgImageState='missing'; refreshCalibStatus(); toast('底图读取失败，请重新导入底图','warn'); }
+  }finally{
+    /* 只结算本轮自己的信号：并发加载时 bgReadyResolve 可能已被新加载替换 */
+    if(resolveMine){
+      resolveMine(seq===bgLoadSeq&&(!isImageBackground(state.background)||(bgImageState==='ready'&&!!bgImage)));
+      if(bgReadyResolve===resolveMine) bgReadyResolve=null;
+    }
   }
 }

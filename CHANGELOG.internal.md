@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P1 批次二（3/3）：多楼层导出等待切层与底图就绪
+
+- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(export): withFloor 等待切层与底图就绪`）
+- **核心改动**：
+  - `withFloor` 两处 `switchFloor(...)` 均改为 `await` 并校验布尔返回值：旧写法 `!switchFloor(id)` 对 Promise 恒为 false，既不等待也不校验；切层失败现在抛 `楼层切换失败，已中止导出`，不再导出当前楼层内容冒充目标楼层。
+  - 新增底图就绪信号：`afterStateLoaded` 每次重建底图创建 `bgReadyPromise`（并发加载只结算自己那轮，旧轮 resolve(false) 防悬挂），`waitBackgroundReady()` 在 `decoding/none` 时等待、`missing` 时返回 false；`withFloor` 在 fn 执行前等待就绪，未就绪抛 `楼层底图未就绪，已中止导出` 并仍恢复原楼层（就绪检查置于 try 内，确保 finally 还原）。
+  - 就绪失败恢复顺序：仍执行 `switchFloor(prevId)` 还原视口/选择集/渲染，避免把界面留在导出楼层。
+- **验证数据**：
+  - selftest **3456/0**（基线 3448，+8）：目标楼层任务内 `bgImageState==='ready'` 且回到原楼层；不存在楼层与缺底图楼层均「抛错 + fn 未执行 + 已恢复原楼层」；普通楼层就绪查询立即 true。旧实现两类失败路径都会执行 fn（断言必红）。
+  - e2e **120 通过 + 1 条件跳过（121，+2）**：真实 Chromium 下两层内联图片底图，`withFloor` 逐层断言 ready+img；实际 `exportPDF()` 下载 PDF ≥2 页且无 pageerror；切层失败/底图缺失均中止且恢复 1F。新增用例保留在 `pdf-multipage.spec.mjs`（spec 数仍 35）。
+  - 门禁：check-gates 6/6 + 10/10；discipline 13/13；i18n 46.16%（缺口 9 ≤ 10）；dist **824,682 B**（本条 +913 B）/ gzip 255,986 B / 余量 **14,998 B**；SW `VERSION=88`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 底图资产缺失（`missing`）现在会中止整次多楼层导出（按「底图未就绪」口径）；若某层资产已从 IDB 丢失，用户会看到导出失败而非静默缺图——这是有意的显式失败，但恢复入口依赖重新导入底图。
+  - `switchFloor` 在 withFloor 导出期间仍会 `scheduleSave()`，临时把 `activeFloorId` 写入草稿后又被还原；未引入 silent 模式（会改内部签名），风险仅为一次多余的自动保存。
+
 ## 2026-11-08 · 审计 P1 批次二（2/3）：属性写路径统一单调打点
 
 - **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(props): 属性/旋转写路径统一 stampObjects 打点`）

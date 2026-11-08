@@ -118,7 +118,7 @@ code += `\n;globalThis.__api = {
   coverageLayerCache(){ return [coverageLayers,coverageLayersFor]; },
   get transient(){ return {draft,drag,rubber,affinePairs,calibPoints,trackLine,refEdge,osnapMode,coverageResult}; },
   setTransient(v){ ['draft','drag','rubber','affinePairs','calibPoints','trackLine','refEdge','osnapMode','coverageResult'].forEach(k=>{ if(Object.prototype.hasOwnProperty.call(v,k)) eval(k+'=v[k]'); }); },
-  switchFloor,
+  switchFloor, withFloor, waitBackgroundReady,
   normalizeAngle, rotatePoint,
   XmlLite, Zip, Xlsx, DSV, ContentAssets,
   parseRowsStub: DSV.parseRows,
@@ -4637,6 +4637,30 @@ await section("53. 多楼层 / 多底图：数据切换、持久化裁剪、迁�
   const otherEntry=snap.floors.find(f=>f.id==='floor.F2');
   ok('持久化-非当前层保留对象', !!otherEntry&&Array.isArray(otherEntry.objects)&&otherEntry.objects.length===1);
   eq('持久化-顶层对象为当前层', snap.objects.length, 1);
+
+  /* P1-6 withFloor：旧实现 `!switchFloor(id)` 对 Promise 恒为 false（既不等待也不校验），
+     多楼层 PDF/打印在切层后立刻取像素，底图仍为 decoding 而被清空。 */
+  api.resetState();
+  api.state.floors.push({id:'floor.WF2',name:'WF2',background:{kind:'image',dataUrl:'data:image/png;base64,AAAA'},objects:[],viewport:{zoom:1,panX:0,panY:0}});
+  const savedLoadImg=sandbox.loadImageSrc;
+  sandbox.loadImageSrc=async()=>({wf:true});   /* 桩解码：验证 ready 门禁而不是真实像素 */
+  let seenFloor=null, seenReady=null;
+  try{
+    await api.withFloor('floor.WF2', async()=>{ seenFloor=api.state.activeFloorId; seenReady=api.bgImageState; });
+  }finally{ sandbox.loadImageSrc=savedLoadImg; }
+  eq('P1-6 任务内处于目标楼层', seenFloor, 'floor.WF2');
+  eq('P1-6 任务前底图已就绪', seenReady, 'ready');
+  eq('P1-6 结束后恢复原楼层', api.state.activeFloorId, 'floor.default');
+  let ranMissing=false, threwMissing=false;
+  try{ await api.withFloor('missing.floor', async()=>{ ranMissing=true; }); }catch(e){ threwMissing=true; }
+  ok('P1-6 切层失败中止且不执行任务', threwMissing&&!ranMissing);
+  eq('P1-6 切层失败保持原楼层', api.state.activeFloorId, 'floor.default');
+  api.state.floors.push({id:'floor.WFBAD',name:'WFBAD',background:{kind:'image'},objects:[],viewport:{zoom:1,panX:0,panY:0}});
+  let ranBad=false, threwBad=false;
+  try{ await api.withFloor('floor.WFBAD', async()=>{ ranBad=true; }); }catch(e){ threwBad=true; }
+  ok('P1-6 底图缺失中止且不执行任务', threwBad&&!ranBad);
+  eq('P1-6 底图缺失已恢复原楼层', api.state.activeFloorId, 'floor.default');
+  ok('P1-6 底图就绪查询-普通楼层立即 true', await api.waitBackgroundReady());
 
   /* 迁移：多楼层工程；活动层取顶层，非活动层各自清洗 */
   const m=api.migrateProject({schema:'offline-drawing-annotation/v1',

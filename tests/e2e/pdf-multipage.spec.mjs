@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { deflateSync } from 'node:zlib';
+import { readFileSync } from 'node:fs';
 
 const PT_M = 0.0254 / 72;
 
@@ -157,4 +158,82 @@ test('N-03：PDF 内嵌底图走资产入库，自动保存 + 刷新后仍在', 
   await expect.poll(() => page.evaluate(() => state.background.assetId), { timeout: 15000 }).toBe(id);
   await expect.poll(() => page.evaluate(() => bgImageState), { timeout: 15000 }).toBe('ready');
   expect(await page.evaluate(() => !!bgImage)).toBe(true);
+});
+
+/* 两层图片底图：直接构造 state（绕过导入），让 withFloor 走真实的 switchFloor→afterStateLoaded→图片解码路径 */
+async function seedTwoImageFloors(page){
+  await page.evaluate(async () => {
+    const png = rgb => {
+      const c = document.createElement('canvas'); c.width = 8; c.height = 8;
+      const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, 8, 8);
+      return c.toDataURL('image/png');
+    };
+    const init = createInitialState();
+    const mk = (id, name, rgb) => ({
+      id, name, updatedAt: nowISO(),
+      background: { kind: 'image', dataUrl: png(rgb) },
+      site: init.site, objects: [], viewport: { zoom: 1, panX: 0, panY: 0 }
+    });
+    state.floors = [mk('floor.default', '1F', 'rgb(255,0,0)'), mk('floor.e2e2', '2F', 'rgb(0,0,255)')];
+    state.activeFloorId = 'floor.default';
+    state.background = state.floors[0].background;
+    state.site = state.floors[0].site;
+    state.objects = state.floors[0].objects;
+    await afterStateLoaded(false);
+  });
+}
+
+test('P1-6：多楼层 PDF 导出时每层底图均已就绪并恢复原楼层', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await seedTwoImageFloors(page);
+
+  const inner = await page.evaluate(async () => {
+    const seen = [];
+    for (const id of ['floor.e2e2', 'floor.default']){
+      await withFloor(id, async () => { seen.push({ id: state.activeFloorId, st: bgImageState, img: !!bgImage }); });
+    }
+    return { seen, active: state.activeFloorId, bg: bgImageState };
+  });
+  expect(inner.seen).toEqual([
+    { id: 'floor.e2e2', st: 'ready', img: true },
+    { id: 'floor.default', st: 'ready', img: true }
+  ]);
+  expect(inner.active).toBe('floor.default');
+  expect(inner.bg).toBe('ready');
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.evaluate(() => exportPDF())
+  ]);
+  const buf = readFileSync(await download.path());
+  const pages = (buf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+  expect(buf.length).toBeGreaterThan(1000);
+  expect(pages).toBeGreaterThanOrEqual(2);   /* 每层一张图纸页；旧实现底图丢失但页数仍≥2，靠上面的 ready 断言区分 */
+  expect(errors).toEqual([]);
+});
+
+test('P1-6：withFloor 切层失败/底图缺失时中止，不导出错楼层内容', async ({ page }) => {
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await seedTwoImageFloors(page);
+  await page.evaluate(() => {
+    state.floors.push({ id: 'floor.nobg', name: 'NOBG', updatedAt: nowISO(), background: { kind: 'image' }, objects: [], viewport: { zoom: 1, panX: 0, panY: 0 } });
+  });
+
+  const r = await page.evaluate(async () => {
+    let ranMissing = false, ranNoBg = false, msgMissing = '', msgNoBg = '';
+    try{ await withFloor('missing.floor', async () => { ranMissing = true; }); }
+    catch(e){ msgMissing = String(e.message || e); }
+    try{ await withFloor('floor.nobg', async () => { ranNoBg = true; }); }
+    catch(e){ msgNoBg = String(e.message || e); }
+    return { ranMissing, ranNoBg, msgMissing, msgNoBg, active: state.activeFloorId };
+  });
+  expect(r.ranMissing).toBe(false);
+  expect(r.ranNoBg).toBe(false);
+  expect(r.msgMissing).toContain('楼层切换失败');
+  expect(r.msgNoBg).toContain('底图未就绪');
+  expect(r.active).toBe('floor.default');
 });
