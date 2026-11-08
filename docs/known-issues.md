@@ -162,6 +162,7 @@
 | IO-P2-12 | 已降级为限制：PDF 清单列是台账子集（无楼层/备注/更新时间）；多楼层按层分页；打印报告单页不标楼层 | [features.md](features.md) §6、[user-guide.md](user-guide.md) §12 |
 | CORE-P2-5 | 已降级为限制：面板盲区面积=多边形面积×(1-ratio)；GeoJSON 面面积=盲格数×cell²；两者差异上界约 周长×格宽/2，均为栅格口径 | [features.md](features.md) §6、[user-guide.md](user-guide.md) 10.2 |
 | CORE-P2-6 | 已收敛（归档）：`optimizeCameraPlacement` 的 before/after 已与 `analyzeCoverage` 同分母（`res.totalArea`），未改代码 | [geometry-coverage.js](../js/core/geometry-coverage.js) 优化分支 |
+| CORE-P2-13 | 已收敛（归档）：`drawSelection` 的无用 `alloc` 已在 N-27 删除，见 §2.4 对应条目 | [known-issues.md](known-issues.md) §2.4 |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 
