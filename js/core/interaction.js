@@ -665,8 +665,11 @@ function imageHandleAt(sp){
   return pickScreenHandle(imageHandleList(state.background),sp,9);
 }
 /** 拖拽场地控制点：实现见 geometry.js 的 siteHandleDragTo / resizeSiteByHandle（薄包装） */
-/** 可序列化值的深比较（拖拽提交判定的唯一实现；只用于单个对象/形状，体量可控） */
-function sameSerializable(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
+/** 稳定序列化比较：键顺序不同但内容相同视为未变（RT-P2-05，复用 mergeStable）。 */
+function sameSerializable(a,b){
+  if(a===b) return true;
+  try{ return mergeStable(a)===mergeStable(b); }catch(_){ return false; }
+}
 /** 对象是否发生业务变更：updatedAt 在拖拽过程中必变，不能当作变更证据，比较前剔除（审计 P1-1） */
 function objectMovedFrom(orig,o){
   if(!orig||!o) return false;

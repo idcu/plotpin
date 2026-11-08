@@ -190,7 +190,8 @@ function sameJson(a,b){
   if(a===b) return true;
   if(typeof a!==typeof b||a===null||b===null) return false;
   if(typeof a!=='object') return false;
-  try{ return JSON.stringify(a)===JSON.stringify(b); }catch(_){ return false; }
+  /* RT-P2-05：稳定序列化比较，键顺序不同但内容相同的对象不再误报差异 */
+  try{ return mergeStable(a)===mergeStable(b); }catch(_){ return false; }
 }
 /**
  * 对比用对象副本：剥掉 props 内嵌的 photoDataUrl。

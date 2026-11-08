@@ -214,7 +214,7 @@ code += `\n;globalThis.__api = {
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
   snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
-  snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById, createSnapshot,
+  snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById, createSnapshot, sameJson,
   snapshotFloorMetas, diffSceneItems,
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
@@ -7985,6 +7985,12 @@ await section("P2-RT 批次 6：快照与协作", async () => {
   sandbox.getSnapshot=prevGetRt04;
   ok('RT-P2-04 非当前工程快照恢复被拒', /只能恢复当前打开工程/.test(rt04));
   api.resetState();
+
+  /* RT-P2-05：键序无关的稳定序列化比较（快照差异 + 拖拽提交共用） */
+  ok('RT-P2-05 拖拽比较忽略键顺序', api.sameSerializable({a:1,b:{x:1,y:[2,3]}},{b:{y:[2,3],x:1},a:1}));
+  ok('RT-P2-05 拖拽比较识别真差异', api.sameSerializable({a:1,b:{x:1,y:2}},{a:1,b:{x:1,y:3}})===false);
+  ok('RT-P2-05 快照比较忽略键顺序', api.sameJson({props:{color:'red',width:2}},{props:{width:2,color:'red'}}));
+  ok('RT-P2-05 快照比较识别真差异', api.sameJson({props:{color:'red'}},{props:{color:'blue'}})===false);
 }
 });
 
