@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 审计 P1 批次三（4/4）：测试矩阵口径校正 + 体积报告改 dist 口径
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`docs(test): 测试矩阵与体积报告口径校正`）
+- **Commit Hash**：`0d5dd5f`（`docs(test): 测试矩阵口径校正 + size-report 改 dist 分块统计`）
 - **核心改动**：
   - `docs/testing.md` §3.2 用例矩阵按 `playwright test --list` 实测重写：110/34 → **121/35**，补齐 `ui-hardening(2)`，并逐项修正 collab(12)、plugin-sandbox(19)、table-batch(4)、pdf-multipage(6)。旧表 110/34 与同版本检出 119/35 已有 9 条漏计（本批 P1-6 再 +2）。
   - `scripts/size-report.mjs` 统计对象从**源文件**改为 **dist 内联分块**：注释/缩进/空行、重复字符串、重复代码行、死代码引用面全部基于 dist 文本；新增 `sourcePotential` 字段保留源文件潜在值，并明确「不可当 dist 预算」。
@@ -23,7 +23,7 @@
 
 ## 2026-11-08 · 审计 P1 批次三（3/4）：e2e 接入 CI（实际执行未验证）
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`test(ci): e2e 接入 GitHub Actions`）
+- **Commit Hash**：`f516dd2`（`test(ci): e2e 接入 GitHub Actions（CI 实际执行未验证）`）
 - **核心改动**：
   - `.github/workflows/ci.yml` 新增独立 `e2e` job（`ubuntu-latest` / Node 20）：`actions/checkout@v4` → `setup-node@v4`（`cache: npm`）→ `npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`。
   - `test` job 的 check-gates 步骤描述由「9 种人为破坏」更正为「12 种」。
@@ -40,7 +40,7 @@
 
 ## 2026-11-08 · 审计 P1 批次三（2/4）：`check-sw --update` 拒绝未 bump 刷新指纹
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(sw): 输入变更未 bump VERSION 时拒绝 --update`）
+- **Commit Hash**：`59d187b`（`fix(sw): 输入变更未 bump VERSION 时拒绝 --update 刷新指纹`）
 - **核心改动**：
   - 抽出共享 `changedInputs(base, now)`：校验与更新使用同一套指纹差异实现，避免两套逻辑漂移。
   - `--update` 在版本回退检查后新增：若指纹有差异且 `VERSION <= 清单版本`，拒绝写入并列出变更输入，提示先把 `VERSION` 提升到至少 `清单版本 + 1`。旧实现会直接把新指纹写成基线，之后校验因指纹一致而无从发现漏 bump。
@@ -56,7 +56,7 @@
 
 ## 2026-11-08 · 审计 P1 批次三（1/4）：契约门禁拒绝空契约
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(contracts): 契约规则删空即判红`）
+- **Commit Hash**：`ce0add0`（`fix(contracts): 契约规则删空即判红，不再 0 项核对退 0`）
 - **核心改动**：
   - `check-contracts.mjs` 在逐条核对前新增契约结构校验：`versionSources` ≥ 3 条、`i18n`（`source` + `html`）、`headers.root`、`enums` ≥ 1 条；任一缺失直接记为违约并返回，不再继续得出「0 项核对，0 处违约」。
   - 全部核对完成后增加读数下限（`MIN_READINGS = 6`），规则被逐条削减时同样判红。
@@ -73,7 +73,7 @@
 
 ## 2026-11-08 · 审计 P1 批次二（3/3）：多楼层导出等待切层与底图就绪
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(export): withFloor 等待切层与底图就绪`）
+- **Commit Hash**：`804005d`（`fix(export): withFloor 等待切层与底图就绪后再渲染导出`）
 - **核心改动**：
   - `withFloor` 两处 `switchFloor(...)` 均改为 `await` 并校验布尔返回值：旧写法 `!switchFloor(id)` 对 Promise 恒为 false，既不等待也不校验；切层失败现在抛 `楼层切换失败，已中止导出`，不再导出当前楼层内容冒充目标楼层。
   - 新增底图就绪信号：`afterStateLoaded` 每次重建底图创建 `bgReadyPromise`（并发加载只结算自己那轮，旧轮 resolve(false) 防悬挂），`waitBackgroundReady()` 在 `decoding/none` 时等待、`missing` 时返回 false；`withFloor` 在 fn 执行前等待就绪，未就绪抛 `楼层底图未就绪，已中止导出` 并仍恢复原楼层（就绪检查置于 try 内，确保 finally 还原）。
@@ -88,7 +88,7 @@
 
 ## 2026-11-08 · 审计 P1 批次二（2/3）：属性写路径统一单调打点
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(props): 属性/旋转写路径统一 stampObjects 打点`）
+- **Commit Hash**：`256db6d`（`fix(props): 属性/旋转写路径统一 stampObjects 打点`）
 - **核心改动**：
   - `bindPropEvents` 的 `changed` 由「手写 `o.updatedAt=nowISO()` + `commitObjectEdit()`（不传 ids）」改为 `commitObjectEdit([o.id])`；后者内部 `stampObjects` 对同一毫秒连续编辑做严格递增（`ts<=prev` 时 `prev+1ms`），协作 LWW 不再把本地较新修改判旧。
   - `rotateSelected` 删除逐对象手写 `updatedAt`，改为 `commitChange('已旋转选中对象', objs.map(o=>o.id))`，同样走 `stampObjects`。
@@ -102,7 +102,7 @@
 
 ## 2026-11-08 · 审计 P1 批次二（1/3）：快照照片资产化失败不再丢数据
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(snapshot): 资产化失败保留内嵌照片并提示`）
+- **Commit Hash**：`95e9b34`（`fix(snapshot): 资产化失败保留内嵌照片并提示`）
 - **核心改动**：
   - `snapshotProjectData` 删除无条件 `delete o.props.photoDataUrl`；`ensureObjectPhotoAssets` 成功时本就会删 base64 并写内容寻址 `photoId`，失败时保留 `photoDataUrl`，不再出现「资产化失败→base64 被删→照片不可逆丢失」。
   - 快照副本统计仍带 `photoDataUrl` 的对象数，`>0` 时 `toast(..., 'warn')` 提示「N 张设备照片未能存入资产库，已保留在快照中（快照体积会偏大）」。
@@ -116,7 +116,7 @@
 
 ## 2026-11-08 · 审计 P1 批次一（3/3）：停车纵向布局不出场地
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(parking): 纵向布局按 90° 包围盒落位`）
+- **Commit Hash**：`6c3e069`（`fix(parking): 纵向布局按 90° 包围盒落位`）
 - **核心改动**：
   - `parkingLayout` 的 `mapRect` 纵向分支基点 `x` 由 `siteX+v` 改为 `siteX+v+h`。angle=90 的矩形绕基点逆时针转 90°，包围盒是 `x∈[x-h,x]`、`y∈[y,y+w]`；旧实现把 `v` 当左边界，`usedD==usableD`（无居中余量）时 `v0=margin=1`，左侧车位落到 `x∈[-4.3,1]`，约 4.3 m 出场。
   - 横向分支、统计口径、通道宽度与非法尺寸拒绝逻辑不变。
@@ -129,7 +129,7 @@
 
 ## 2026-11-08 · 审计 P1 批次一（2/3）：区域形状互换质心不漂移
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(geometry): 区域形状互换按旋转后质心反解基点`）
+- **Commit Hash**：`5eb2be4`（`fix(geometry): 区域形状互换按旋转后质心反解基点`）
 - **核心改动**：
   - `convertAreaShape` 矩形分支：先确定最终角度（矩形⇄椭圆/平行四边形保留原角度，其余归零），再用 `rotatePoint([bw/2,bh/2],ang)` 反解基点；旧实现直接用未旋转的 `bw/2,bh/2`，角度≠0 时质心沿旋转方向漂移。
   - 平行四边形分支同样按 `(bw+off)/2,bh/2` 旋转后反解基点（`off=bh·tan(skew)`）。
@@ -143,7 +143,7 @@
 
 ## 2026-11-08 · 审计 P1 批次一（1/3）：旋转手柄基准统一
 
-- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(geometry): 旋转手柄与图形共用中心基准`）
+- **Commit Hash**：`d061f20`（`fix(geometry): 旋转手柄与图形共用中心基准`）
 - **核心改动**：
   - `geometry.js` 新增 `rotateShapeByHandle(o,wp,pointRotate)`：以既有唯一实现 `shapeLabelCenter(o)` 为圆心求指针方位角（非 `pointRotate` 手柄位于 `angle+90°` 方向故减 90°），写回 `o.angle` 后对矩形/平行四边形反解基点，使视觉中心保持在拖拽开始处；圆/椭圆/扇形/点/文字锚点即中心，不改 x/y。
   - `interaction.js` 旋转分支改为调用上函数（旧实现用 `atan2(wp-o.y,wp-o.x)` 绕左下锚点算角，矩形/平行四边形旋转时图形绕角甩动、手柄与图形脱节）。
