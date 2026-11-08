@@ -469,9 +469,12 @@ function convertAreaShape(o,newType){
     if(old==='ellipse'){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
     else if(old==='parallelogram'){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
     else { bw=bh=Math.sqrt(A); }
-    o.x=c[0]-bw/2; o.y=c[1]-bh/2; o.width=bw; o.height=bh;
-    /* CORE-P2-7：椭圆带旋转时，本地框=2rx×2ry，转换后必须保留角度，否则视觉朝向丢失 */
-    o.angle=(old==='parallelogram'||old==='ellipse')?oldAngle:0; o.shape=null;
+    /* CORE-P2-7：椭圆带旋转时，本地框=2rx×2ry，转换后必须保留角度，否则视觉朝向丢失。
+       P1-2：角度的旋转绕基点发生，基点必须按旋转后的质心偏移反解，否则质心沿旋转方向漂移。 */
+    const ang=(old==='parallelogram'||old==='ellipse')?oldAngle:0;
+    o.angle=ang; o.shape=null;
+    const v=rotatePoint([bw/2,bh/2],[0,0],ang);
+    o.x=c[0]-v[0]; o.y=c[1]-v[1]; o.width=bw; o.height=bh;
     return;
   }
   if(newType==='parallelogram'){
@@ -481,8 +484,9 @@ function convertAreaShape(o,newType){
     else { bw=bh=Math.sqrt(A); ang=0; }
     const skew=old==='parallelogram'?parallelogramSkew(oldShape):PARALLELOGRAM_DEFAULT_SKEW;
     const off=bh*Math.tan(skew*Math.PI/180);
-    /* 质心相对基点偏移 (w+off)/2, h/2：反推基点使质心落在原中心 */
-    o.x=c[0]-(bw+off)/2; o.y=c[1]-bh/2;
+    /* 质心相对基点偏移 (w+off)/2, h/2：按最终角度旋转后反推基点，使质心落在原中心（angle≠0 时也成立） */
+    const v=rotatePoint([(bw+off)/2,bh/2],[0,0],ang);
+    o.x=c[0]-v[0]; o.y=c[1]-v[1];
     o.width=bw; o.height=bh; o.angle=ang; o.shape={type:'parallelogram',skew};
     return;
   }

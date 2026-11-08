@@ -900,6 +900,30 @@ await section("15. 区域形状互换：中心保持、等面积换算、角度�
   const before=JSON.stringify(o5);
   api.convertAreaShape(o5,'star');
   eq('换形-未知形状忽略', JSON.stringify(o5), before);
+
+  /* P1-2 质心漂移：多角度 × 多形状互换。矩形/平行四边形的基点不是中心，
+     带角度时必须按旋转后的质心偏移反解基点，否则图形沿旋转方向跳走。 */
+  const shapeObj=(tt,ang)=>{
+    if(tt==='rect') return {kind:'rect',x:3,y:4,width:10,height:6,angle:ang,shape:null};
+    if(tt==='parallelogram') return {kind:'rect',x:3,y:4,width:10,height:6,angle:ang,shape:{type:'parallelogram',skew:35}};
+    if(tt==='circle') return {kind:'rect',x:3,y:4,angle:ang,shape:{type:'circle',r:5}};
+    if(tt==='ellipse') return {kind:'rect',x:3,y:4,angle:ang,shape:{type:'ellipse',rx:7,ry:3}};
+    return {kind:'rect',x:3,y:4,angle:ang,shape:{type:'sector',r:5,a0:10,a1:100}};
+  };
+  const shapeTypes=['rect','parallelogram','circle','ellipse','sector'];
+  let swapChecks=0;
+  for(const src of shapeTypes) for(const dst of shapeTypes){
+    if(src===dst) continue;
+    for(const ang of [0,30,90,150]){
+      const ob=shapeObj(src,ang), c0=api.shapeLabelCenter(ob);
+      api.convertAreaShape(ob,dst);
+      const c1=api.shapeLabelCenter(ob);
+      approx(`换形-质心不动 ${src}→${dst}@${ang}° X`, c1[0], c0[0], 1e-9);
+      approx(`换形-质心不动 ${src}→${dst}@${ang}° Y`, c1[1], c0[1], 1e-9);
+      swapChecks+=2;
+    }
+  }
+  eq('换形-质心矩阵校验条数', swapChecks, 160);
 }
 
 });
