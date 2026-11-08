@@ -82,6 +82,10 @@ function parkingOptionsFromInputs(){
   };
 }
 function parkingSite(){
+  /* IO-P2-23：场地可见时只取场地实际包围盒；场地隐藏/缺失才回退图片∪场地取景框，
+     避免图片底图比场地大时把车位排到场地范围之外。 */
+  const site=state.site;
+  if(site&&siteIsVisible(site)){ const b=siteBounds(site); return {x:b.minX,y:b.minY,w:b.w,h:b.h}; }
   const d=worldDims();
   return {x:d.minX,y:d.minY,w:d.w,h:d.h};
 }

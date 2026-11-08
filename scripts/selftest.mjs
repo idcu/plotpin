@@ -175,7 +175,7 @@ code += `\n;globalThis.__api = {
   customSymbolsFromTypes: globalThis.customSymbolsFromTypes, sanitizeSymbolBundle: globalThis.sanitizeSymbolBundle,
   PlotPin: globalThis.PlotPin, I18N: globalThis.I18N,
   exportViaPlugin: globalThis.exportViaPlugin, importViaPlugin: globalThis.importViaPlugin,
-  parkingLayout, parkingWarningText, applyParkingLayout,
+  parkingLayout, parkingWarningText, parkingSite, applyParkingLayout,
   collabChunkText, collabCleanSDP,
   collabInviteEncode, collabInviteDecode, collabQrFit, collabSweepInbound,
   collabInboundBytes, collabHelloDup, mergeHistoryNeeded,
@@ -6129,6 +6129,20 @@ await section("61. 停车规划：双面垂直车位/通道布局、净宽检查
   ok('停车-车位偏窄给出提示', api.parkingLayout(Object.assign({},base,{stallWidth:2.2})).warnings.includes('stallWidthSmall'));
   ok('停车-车位偏浅给出提示', api.parkingLayout(Object.assign({},base,{stallDepth:4.8})).warnings.includes('stallDepthSmall'));
   ok('停车-边距过小给出提示', api.parkingLayout(Object.assign({},base,{margin:0})).warnings.includes('marginSmall'));
+
+  /* IO-P2-23：场地可见时只取场地包围盒；图片底图更大也不得扩大排布范围 */
+  const pst=api.resetState();
+  pst.background={ kind:'image', width:2000, height:1400, metersPerPixel:0.1, xform:null };
+  api.resetFrameRef();
+  eq('停车-取场地包围盒', api.parkingSite(), { x:0, y:0, w:100, h:70 });
+  pst.site.visible=false;
+  api.resetFrameRef();
+  eq('停车-场地隐藏才回退取景框', api.parkingSite(), { x:0, y:0, w:200, h:140 });
+  pst.site.visible=true;
+  pst.site.shape={ type:'rect', x:20, y:30, w:40, h:25 };
+  api.resetFrameRef();
+  eq('停车-跟随场地实际位置', api.parkingSite(), { x:20, y:30, w:40, h:25 });
+  api.resetState();
   api.I18N.setLang('en');
   ok('停车-规范提示可翻译', api.parkingWarningText('aisleNarrow').includes('Aisle'));
   api.I18N.setLang('zh');
