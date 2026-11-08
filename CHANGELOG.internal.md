@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P1 批次三（4/4）：测试矩阵口径校正 + 体积报告改 dist 口径
+
+- **Commit Hash**：待收尾 `docs(changelog)` 回填（`docs(test): 测试矩阵与体积报告口径校正`）
+- **核心改动**：
+  - `docs/testing.md` §3.2 用例矩阵按 `playwright test --list` 实测重写：110/34 → **121/35**，补齐 `ui-hardening(2)`，并逐项修正 collab(12)、plugin-sandbox(19)、table-batch(4)、pdf-multipage(6)。旧表 110/34 与同版本检出 119/35 已有 9 条漏计（本批 P1-6 再 +2）。
+  - `scripts/size-report.mjs` 统计对象从**源文件**改为 **dist 内联分块**：注释/缩进/空行、重复字符串、重复代码行、死代码引用面全部基于 dist 文本；新增 `sourcePotential` 字段保留源文件潜在值，并明确「不可当 dist 预算」。
+  - `docs/engineering.md` §3.4 场景编号与顺序对齐（10 契约清空 / 11 未 bump `--update` / 12 CSS 未配平）；`docs/modules.md` 同步 size-report 口径；`docs/facts.md` 修正 i18n 46.16%→46.08%、e2e `.mjs` 36→37（35 spec + 2 helper）。
+- **验证数据**：
+  - `node scripts/size-report.mjs`：dist 实测可回收 **399 B**（注释 254 / 缩进 100 / 空行 45；模板内换行 39,061 B 不可删）；源文件潜在值 **219,676 B**（注释 166,789 / 缩进 52,559 / 空行 328）——旧口径把后者当可回收空间，高估约 219 KB。
+  - 重复字符串 6,093 个 / 唯一 3,629 / 940 组 / 浪费 39,830 B；重复代码行 393 组 / 23,949 B；死代码候选 1 个（dist 口径）。
+  - `playwright test --list`：**35 spec / 121 用例**；逐 spec 计数与本表一致。
+  - selftest **3456/0**；e2e **120 通过 + 1 条件跳过（121）**；check-gates 6/6 + 12/12；discipline 13/13。
+  - dist **824,682 B**（本条 0 B，仅 scripts/ 与 docs/）/ 余量 14,998 B；SW `VERSION=88`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - dist 分块中仍有 **254 B 注释 / 100 B 行首缩进 / 45 B 空行** 未被构建期压缩吃掉（分布在 dist 包壳或压缩边界），量级极小，暂不追加清理规则。
+  - `sourcePotential` 与 `compressible` 会同时出现在 `--json` 输出，消费方必须按字段名区分，不能把两者相加。
+
 ## 2026-11-08 · 审计 P1 批次三（3/4）：e2e 接入 CI（实际执行未验证）
 
 - **Commit Hash**：待收尾 `docs(changelog)` 回填（`test(ci): e2e 接入 GitHub Actions`）
@@ -27,9 +44,9 @@
 - **核心改动**：
   - 抽出共享 `changedInputs(base, now)`：校验与更新使用同一套指纹差异实现，避免两套逻辑漂移。
   - `--update` 在版本回退检查后新增：若指纹有差异且 `VERSION <= 清单版本`，拒绝写入并列出变更输入，提示先把 `VERSION` 提升到至少 `清单版本 + 1`。旧实现会直接把新指纹写成基线，之后校验因指纹一致而无从发现漏 bump。
-  - `check-gates` 新增场景 12：临时副本改一个预缓存输入后执行 `check-sw.mjs --update`，断言非 0 且输出命中「拒绝生成 / VERSION 未递增」。
+  - `check-gates` 新增场景 11：临时副本改一个预缓存输入后执行 `check-sw.mjs --update`，断言非 0 且输出命中「拒绝生成 / VERSION 未递增」。
 - **验证数据**：
-  - `check-gates`：正面基线 **6/6** + 人为破坏 **12/12**；场景 12 实测输出「拒绝生成：预缓存输入已变更但 VERSION 未递增（清单=88，当前=88）」，退出码 1。
+  - `check-gates`：正面基线 **6/6** + 人为破坏 **12/12**；场景 11 实测输出「拒绝生成：预缓存输入已变更但 VERSION 未递增（清单=88，当前=88）」，退出码 1。
   - `node scripts/check-sw.mjs` 在未破坏仓库：**VERSION=88，49 个预缓存输入一致**，退出码 0。
   - selftest **3456/0**（未变）；e2e **120 通过 + 1 条件跳过（121，未变）**；discipline 13/13。
   - dist **824,682 B**（本条 0 B，仅改 scripts/ 与 docs/）/ 余量 14,998 B；SW `VERSION=88`；8 种 golden 与导出字段未变。
@@ -44,7 +61,7 @@
   - `check-contracts.mjs` 在逐条核对前新增契约结构校验：`versionSources` ≥ 3 条、`i18n`（`source` + `html`）、`headers.root`、`enums` ≥ 1 条；任一缺失直接记为违约并返回，不再继续得出「0 项核对，0 处违约」。
   - 全部核对完成后增加读数下限（`MIN_READINGS = 6`），规则被逐条削减时同样判红。
   - `--selftest` 增加空契约负例：清空规则后必须报违约且输出含「契约」，否则自检失败。
-  - `check-gates` 新增场景 11「契约规则被清空」：在临时副本清空 `contracts/conventions.json` 四个规则段，断言 `check-contracts.mjs` 非 0 且命中关键字。旧实现在同一破坏下输出「0 项核对，0 处违约」并退 0。
+  - `check-gates` 新增场景 10「契约规则被清空」：在临时副本清空 `contracts/conventions.json` 四个规则段，断言 `check-contracts.mjs` 非 0 且命中关键字。旧实现在同一破坏下输出「0 项核对，0 处违约」并退 0。
 - **验证数据**：
   - 契约门禁：真实仓库 **11 项核对 / 0 违约**（原 7 项；新增 4 项结构校验）；空契约破坏下 **4 项核对 / 4 处违约**、退出码 1。
   - `check-contracts.mjs --selftest`：原有 6 类漂移全部识别（9 条违约）+ 空契约被拒绝。

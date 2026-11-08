@@ -167,9 +167,9 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 7 | UI 模板内新增硬编码中文 | `i18n-scan.mjs --check` |
 | 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（插件 API 面真实判据） |
 | 9 | `sw.js` 的 `VERSION` 回退 | `check-sw.mjs` |
-| 10 | `css/*.css` 花括号不配平（未闭合 `@media`） | `check.mjs --selftest`（CSS 结构判据） |
-| 11 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验） |
-| 12 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成） |
+| 10 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验） |
+| 11 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成） |
+| 12 | `css/*.css` 花括号不配平（未闭合 `@media`） | `check.mjs --selftest`（CSS 结构判据） |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 

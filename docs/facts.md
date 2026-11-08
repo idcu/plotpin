@@ -23,12 +23,12 @@
 | selftest 分区 | 127 个 | `node scripts/selftest.mjs --list` | 输出 128 行（含 1 行标题） |
 | 加载脚本 | 45 个（35 项目 + 10 vendor） | `check.mjs` 输出「加载 45 个脚本」 | `js/` 下 35 个 `.js` |
 | e2e 用例 | 121 个（120 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
-| e2e spec 文件 | 35 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 36 个 `.mjs`（含 1 个 helper） |
+| e2e spec 文件 | 35 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 37 个 `.mjs`（35 个 spec + 2 个 helper） |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/`；含 4 项结构校验（规则删空即红） |
 | 插件 API 面 | 23 键 / 清单 23 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
-| i18n 覆盖率 | 46.16% / 缺口 9 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
+| i18n 覆盖率 | 46.08% / 缺口 9 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
 | i18n 字典规模 | PHRASES 1003 / TEMPLATES 112 / DICT.zh 193 | 同上 | |
-| 门禁牙齿 | 正面基线 6/6 + 人为破坏 12/12 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 12 场景为未 bump 就 `--update` |
+| 门禁牙齿 | 正面基线 6/6 + 人为破坏 12/12 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10/11 场景为契约清空 / 未 bump 就 `--update` |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
 | Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **Node 桩数据，不能作为浏览器性能结论** |
 

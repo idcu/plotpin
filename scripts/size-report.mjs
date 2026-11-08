@@ -5,15 +5,16 @@
  *   node scripts/size-report.mjs          人类可读报告
  *   node scripts/size-report.mjs --json   JSON（便于前后对比）
  *
- * 口径：
+ * 口径（P2-06 修正）：
  *   - 组成：按 dist/plotpin-standalone.html 中的 `/* 文件 *​/` 标记切分（与 build 完全同源），
  *     剩余部分记作 HTML 其余（含 CSP/图标 data URI/内联壳）。
- *   - 注释/缩进：逐字符状态机跳过字符串与模板字面量，只统计真正的 JS 注释；缩进统计行首空白。
- *     模板字面量内部换行与缩进不参与「可压缩」估算（删除会改字符串内容）。
- *   - 重复字符串：所有 JS 源文件的字符串字面量（单/双/反引号，长度 ≥ 6），按值分组；
+ *   - 注释/缩进/空行：统计对象是 **dist 内联后的分块文本**（构建期已删注释、行首缩进与空行），
+ *     得到的是「当前产物还能再回收多少」；另给 `sourcePotential` 作为源文件潜在值参考，
+ *     不能直接当作 dist 可回收空间（旧口径把两者混为一谈，高估约 200 KB）。
+ *   - 重复字符串：dist 分块内的字符串字面量（单/双/反引号，长度 ≥ 6），按值分组；
  *     浪费字节 = Σ 长度 × (出现次数 − 1)。
- *   - 重复代码行：去空白后长度 ≥ 24 的非注释行，按内容分组；浪费字节同口径。
- *   - 死代码：顶层 `function name(...)` 在全仓（js + index.html + scripts 引用测试）只出现 1 次定义，
+ *   - 重复代码行：dist 分块内去空白后长度 ≥ 24 的非注释行，按内容分组；浪费字节同口径。
+ *   - 死代码：顶层 `function name(...)` 在 dist 分块 + index.html + scripts/selftest 中只出现 1 次，
  *     视为无引用候选（仅候选，删除前必须人工确认，且由 selftest/e2e 兜底）。
  */
 import { readFileSync, existsSync } from 'node:fs';
@@ -35,7 +36,8 @@ const total = bytes(bundle);
 /* ---- 1. 按构建标记切分组成 ---- */
 const parts = [];
 for (const m of bundle.matchAll(/<script>\n\/\* ([^*]+) \*\/\n([\s\S]*?)\n<\/script>/g)) {
-  parts.push({ path: m[1].trim(), bytes: bytes(m[2]) });
+  /* text 为 dist 内联后的实际文本：后续所有统计都基于它，不再回读源文件 */
+  parts.push({ path: m[1].trim(), bytes: bytes(m[2]), text: m[2] });
 }
 const cssMatch = bundle.match(/<style>\n\/\* ([^*]+) \*\/\n([\s\S]*?)\n<\/style>/);
 if (cssMatch) parts.push({ path: cssMatch[1].trim(), bytes: bytes(cssMatch[2]) });
@@ -101,10 +103,20 @@ function scanJs(text) {
 }
 
 const jsParts = parts.filter(p => p.path.endsWith('.js') && p.path !== '(HTML 其余：CSP/图标/内联壳)');
+
+/* 产物口径：dist 分块文本里还剩多少可回收（构建期压缩后的真实值）。 */
 const savings = { comment: 0, indent: 0, blank: 0, templateInside: 0 };
 for (const p of jsParts) {
-  const s = scanJs(read(p.path));
+  const s = scanJs(p.text);
   savings.comment += s.comment; savings.indent += s.indent; savings.blank += s.blank; savings.templateInside += s.template;
+}
+
+/* 源文件潜在值：仅供跨版本比较，不能当作 dist 预算（构建期已删注释/缩进/空行）。 */
+const sourceSavings = { comment: 0, indent: 0, blank: 0, templateInside: 0 };
+for (const p of jsParts) {
+  const s = scanJs(read(p.path));
+  sourceSavings.comment += s.comment; sourceSavings.indent += s.indent;
+  sourceSavings.blank += s.blank; sourceSavings.templateInside += s.template;
 }
 
 /* ---- 3. 重复字符串 / 重复代码行 ---- */
@@ -135,7 +147,7 @@ function stringLiterals(text) {
 const literalMap = new Map();
 const literals = [];
 for (const p of jsParts) {
-  const list = stringLiterals(read(p.path));
+  const list = stringLiterals(p.text);
   literals.push(...list);
   for (const v of list) literalMap.set(v, (literalMap.get(v) || 0) + 1);
 }
@@ -145,7 +157,7 @@ const dupStrings = [...literalMap.entries()].filter(([, n]) => n > 1)
 
 const lineMap = new Map();
 for (const p of jsParts) {
-  for (const line of read(p.path).split('\n')) {
+  for (const line of p.text.split('\n')) {
     const t = line.trim();
     if (t.length < 24 || t.startsWith('//') || t.startsWith('/*')) continue;
     lineMap.set(t, (lineMap.get(t) || 0) + 1);
@@ -156,12 +168,12 @@ const dupLines = [...lineMap.entries()].filter(([, n]) => n > 1)
   .sort((a, b) => b.wasted - a.wasted);
 
 /* ---- 4. 死代码候选 ---- */
-const allJs = jsParts.map(p => read(p.path)).join('\n');
+const allJs = jsParts.map(p => p.text).join('\n');
 const indexHtml = read('index.html');
 const selftest = read('scripts/selftest.mjs');
 const names = [];
 for (const p of jsParts) {
-  for (const m of read(p.path).matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) names.push({ name: m[1], file: p.path });
+  for (const m of p.text.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) names.push({ name: m[1], file: p.path });
 }
 const deadCandidates = names.filter(({ name }) => {
   const re = new RegExp('\\b' + name.replace(/[$]/g, '\\$') + '\\b', 'g');
@@ -174,6 +186,7 @@ const report = {
   top: parts.slice(0, 10).map(p => ({ path: p.path, bytes: p.bytes, pct: +(p.bytes / total * 100).toFixed(2) })),
   jsBytes: jsParts.reduce((a, p) => a + p.bytes, 0),
   compressible: { ...savings, total: savings.comment + savings.indent + savings.blank },
+  sourcePotential: { ...sourceSavings, total: sourceSavings.comment + sourceSavings.indent + sourceSavings.blank },
   duplicateStrings: {
     totalLiterals: literals.length,
     unique: literalMap.size,
@@ -195,8 +208,11 @@ if (process.argv.includes('--json')) {
   console.log(`发行包总体积：${total} B（${(total / 1024).toFixed(1)} KB）`);
   console.log('\nTop 10 组成：');
   for (const p of report.top) console.log(`  ${String(p.bytes).padStart(7)} B  ${String(p.pct).padStart(5)}%  ${p.path}`);
-  console.log(`\nJS 合计：${report.jsBytes} B；可压缩估算：注释 ${savings.comment} B / 行首缩进 ${savings.indent} B / 空行 ${savings.blank} B`
+  console.log(`\nJS 合计：${report.jsBytes} B`);
+  console.log(`产物可回收（dist 分块实测）：注释 ${savings.comment} B / 行首缩进 ${savings.indent} B / 空行 ${savings.blank} B`
     + `（模板内换行 ${savings.templateInside} B 不可删；合计 ${report.compressible.total} B）`);
+  console.log(`源文件潜在值（构建期已压缩，仅作参考，不可当 dist 预算）：注释 ${sourceSavings.comment} B / 缩进 ${sourceSavings.indent} B`
+    + ` / 空行 ${sourceSavings.blank} B（合计 ${report.sourcePotential.total} B）`);
   console.log(`\n重复字符串：${literals.length} 个，唯一 ${literalMap.size} 个，重复组 ${dupStrings.length}，浪费 ${report.duplicateStrings.wastedBytes} B`);
   for (const d of dupStrings.slice(0, 10)) console.log(`  ×${d.count}  ${d.bytes} B  ${d.value.slice(0, 60)}`);
   console.log(`\n重复代码行：${dupLines.length} 组，浪费 ${report.duplicateLines.wastedBytes} B`);

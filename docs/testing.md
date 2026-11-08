@@ -82,19 +82,22 @@
 |---|---|
 | 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(3)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(6)、history-increment(4)、save-failure(2)、tab-lease(2)、snapshot(7) |
-| 协作 | collab(11)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(3)、title-block(1)、export-scope(4)、perf-render(1)、coverage(1) |
+| 协作 | collab(12)（含 1 个 soak 条件跳过） |
+| 导出与图面 | pdf-multipage(6)、title-block(1)、export-scope(4)、perf-render(1)、coverage(1) |
 | 符号与目录 | symbols(3)、catalog(1) |
-| 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(3) |
-| 插件 | plugin-sandbox(15)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
+| 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(4) |
+| 插件 | plugin-sandbox(19)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
 | 规则 | rules(1) |
 | 校准前置 | calibration-precheck(3)（只验入口可用性与提示，不拖手柄） |
 | 移动端/离线 | mobile(2)、sw(1) |
 | i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
+| 界面加固 | ui-hardening(2)（触控尺寸/溢出等界面回归） |
 
-合计 **110** 个用例、**34** 个 spec（逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
+合计 **121** 个用例、**35** 个 spec（逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
+口径校正（2026-11-08）：旧表写 110/34，实际同版本检出为 119/35（collab 12、plugin-sandbox 19、table-batch 4、pdf-multipage 4、ui-hardening 2 此前漏计）；
+本轮 P1-6 再为 pdf-multipage 增 2 条多楼层导出用例，故当前为 121/35。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 
@@ -151,9 +154,9 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 7 | UI 模板新增硬编码中文 | `i18n-scan.mjs --check` |
 | 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（API 面真实判据） |
 | 9 | `sw.js` VERSION 回退 | `check-sw.mjs` |
-| 10 | `css/*.css` 追加未闭合的 `@media`（花括号不配平） | `check.mjs --selftest`（CSS 结构判据） |
-| 11 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验：规则删空即红） |
-| 12 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成，需先 bump） |
+| 10 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验：规则删空即红） |
+| 11 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成，需先 bump） |
+| 12 | `css/*.css` 追加未闭合的 `@media`（花括号不配平） | `check.mjs --selftest`（CSS 结构判据） |
 
 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，
 干净检出同样生效；bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单（未 bump 时 `--update` 会拒绝写入）

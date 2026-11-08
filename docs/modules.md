@@ -92,7 +92,7 @@
 | `serve.mjs` | 零依赖静态服务器 | `HOST/PORT` → `127.0.0.1:4173` | 本地/e2e |
 | `pack-core.mjs` | 单文件打包纯函数（便于自测） | 输入文件 → HTML 文本 | `build.mjs`、selftest |
 | `minify-core.mjs` | 构建期无损压缩纯函数 | 文本 → 压缩文本 | `build.mjs`、selftest |
-| `size-report.mjs` | 发行包体积组成/重复/死代码统计 | `plotpin.html` → 报告 | 体积专项 |
+| `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考） | `plotpin.html` → 报告 | 体积专项 |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
 > 脚本层没有"20 个 .mjs"；实际是 19 个 `.mjs` + `dist-manifest.json` 共 20 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
