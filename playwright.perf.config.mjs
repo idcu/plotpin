@@ -26,6 +26,8 @@ export default defineConfig({
     deviceScaleFactor: 1,
     trace: 'off',
     screenshot: 'only-on-failure',
+    /* 性能采集屏蔽 Service Worker：避免旧缓存脚本让 before/after 测到不同代码 */
+    serviceWorkers: 'block',
     /* heapUsed 走 performance.memory：精确内存信息需显式开启 */
     launchOptions: { args: ['--enable-precise-memory-info'] }
   },

@@ -2,6 +2,30 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-22 捕捉热路径包围盒预筛与单趟收集
+
+- **Commit Hash**：`待回填`（perf(snap)：捕捉候选改为单趟扫描并按指针邻域预筛）。
+- **核心改动**
+  - `js/core/geometry.js`
+    - 新增 `collectSnap(st, vis, box, parts)`：一次遍历同时收集特征点 / 可垂足边 / 正圆，`SNAP_CAND|SNAP_EDGE|SNAP_CIRCLE` 位掩码选择类别；`collectSnapCandidates/Edges/Circles` 改为薄包装，外部签名与语义不变。
+    - 新增 `objectSnapBounds(o, out)`：按对象类型给出保守超集 AABB（旋转矩形/平行四边形用角点、圆/椭圆/扇形用外接半径），支持 scratch 复用。
+    - `findOsnap` 只计算一次指针邻域 `box=[raw±tol]`，三个收集器共用；场地边角逐点 `inBox` 过滤，参考线不预筛。
+    - `pointBounds(points,out)` 增加可选 `out`，消除每对象临时数组。
+  - `js/core/interaction.js`：`nearestReferenceEdge` 把自身已算好的 `box` 传给 `collectSnapEdges`。
+  - `scripts/selftest.mjs`：导出 `objectSnapBounds`；新增「25b. 捕捉包围盒预筛等价性」22 项断言（7 个盒子下三类收集器与全量结果按对象 bbox 过滤等价；200 个随机点 × 4 变体与全量扫描 oracle 逐点一致）。
+  - `tests/perf/fixture.mjs`（新增）：抽出 10k 对象夹具，`browser-baseline.perf.mjs` 与 `speed.perf.mjs` 共用。
+  - `tests/perf/speed.perf.mjs`（新增）：N-22/N-23/N-24 真实 Chromium 采集与相对基线门禁。
+  - `playwright.perf.config.mjs`：`serviceWorkers: 'block'`，避免 SW 旧缓存导致改造前后测到不同代码。
+  - `sw.js`：`VERSION` 31 → 32；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步。
+  - 文档：`docs/ARCHITECTURE.md` §2 新增「捕捉候选收集（OSNAP）」、`docs/performance.md` §4.1.3、`README.md` 数字口径。
+- **性能数据**（真实 Chromium 1920×1080@DPR1，10k 对象，真实 `page.mouse`；改造前用同一 harness 将 `geometry.js`+`interaction.js` stash 回退采两次）
+  - 捕捉解析 P95：**18.5 / 14.1 ms → 3.1~4.0 ms**（−71%~−83%）。
+  - 拖动帧 P95（事件 → 应用渲染完成）：**34.3 / 34.4 ms → 21.9 / 22.5 / 22.6 ms**（−34%~−36%，门禁 ≥30%）。
+  - 拖动整帧 P95（含强制光栅）：37.0 / 38.3 ms → 25.1~26.5 ms（仅记录）。
+  - 拖动期 heapUsed 增量：+0.32% → **+0.62%~+0.63%**（门禁 ≤5%）。
+- **验证数据**：selftest **2976 通过 / 0 失败（+22）**；产物 **810,040 B**（gzip 251,896 B，上限 839,680 B，余量 29,640 B，本项 +1,864 B）；SW `VERSION=32`。
+- **遗留风险**：`objectSnapBounds` 对旋转矩形/平行四边形用角点外接盒，属于保守超集——只会多算近邻对象，不会漏捕捉；单趟扫描下 `areaShapeType` 对 rect 每个对象调用一次，非 rect 对象不调用。
+
 ## 2026-11-08 · IO-P1-6 工程库打开的事务顺序与资产回收
 
 - **Commit Hash**：`3f4f2ef`（fix(io)：工程库打开改为加载成功后再回收资产）。

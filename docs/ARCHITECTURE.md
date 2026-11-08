@@ -50,6 +50,14 @@ pointer/keyboard
 
 `MARK_DIRTY_PROFILES` 定义了五种提交粒度：`object`（全量刷新+广播）、`objectEdit`（只刷清单/图层/统计+广播）、`clear`（全量刷新、不广播）、`restore`（不刷 UI、广播）、`floor`（不刷 UI、不广播）。见 [persistence.js](file:///f:/proj/plotpin/js/core/persistence.js) `markDirty`。
 
+### 捕捉候选收集（OSNAP）
+
+[geometry.js](file:///f:/proj/plotpin/js/core/geometry.js) 的 `findOsnap()` 每次解析只做一趟对象扫描：`collectSnap(st, vis, box, parts)` 在同一个循环里同时收集特征点、可垂足边与正圆，`parts` 位掩码（`SNAP_CAND` / `SNAP_EDGE` / `SNAP_CIRCLE`）选择需要的类别；`collectSnapCandidates/Edges/Circles` 是它的薄包装，签名保持不变。
+
+- 指针邻域 `box = [raw ± tol]` 只算一次；每个对象先用 `objectSnapBounds(o, scratch)` 做保守超集 AABB 预筛，远处对象不物化。`objectSnapBounds`/`pointBounds` 支持传入 scratch 复用，避免 O(N) 临时对象分配。
+- 场地（不在 `objects`）的边角按逐点 `inBox` 过滤后追加；参考线不参与预筛（无限长，必须全量参与求交/垂足）。
+- 语义等价性由 selftest「25b. 捕捉包围盒预筛等价性」守护：对 200 个随机点 × 4 种变体（默认 / `excludeIds` / `endpoint` / `tangent`）与全量扫描 oracle 逐点比对。
+
 ## 3. 坐标系与变换
 
 - **世界坐标**：米，Y 轴向上，第一象限习惯但不强制；负坐标合法（场地节点可拖到任意位置）。

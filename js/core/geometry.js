@@ -24,77 +24,90 @@ const OSNAP_LABELS={
   endpoint:'端点', midpoint:'中点', center:'圆心', quadrant:'象限点',
   perpendicular:'垂足', intersection:'交点', tangent:'切点'
 };
-/**
- * 收集当前工程全部"特征点"候选（离散点）。
- * endpoint 节点/角点；midpoint 边中点；center 中心或圆心；quadrant 圆/椭圆四象限点。
- */
-function collectSnapCandidates(st,vis){
-  const out=[];
-  const push=(id,p,type)=>out.push({p:[p[0],p[1]],type,id});
-  (st.objects||[]).forEach(o=>{
-    if(vis && !vis(o)) return;
-    if(o.kind==='point'||o.kind==='text'){
-      push(o.id,[o.x,o.y],'endpoint');
-    }else if(o.kind==='line'||o.kind==='dimension'){
-      const ps=o.points||[];
-      ps.forEach(p=>push(o.id,p,'endpoint'));
-      const segN=o.closed?ps.length:ps.length-1;
-      for(let k=0;k<segN;k++) push(o.id,[(ps[k][0]+ps[(k+1)%ps.length][0])/2,(ps[k][1]+ps[(k+1)%ps.length][1])/2],'midpoint');
-    }else if(o.kind==='rect'){
-      const tt=areaShapeType(o);
-      if(tt==='rect'){
-        const cs=rectPoints(o);
-        cs.forEach(p=>push(o.id,p,'endpoint'));
-        for(let k=0;k<4;k++) push(o.id,[(cs[k][0]+cs[(k+1)%4][0])/2,(cs[k][1]+cs[(k+1)%4][1])/2],'midpoint');
-        push(o.id,[(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2],'center');
-      }else{
-        const sh=o.shape;
-        push(o.id,[o.x,o.y],'center');
-        if(tt==='circle'||tt==='ellipse'){
-          const rx=tt==='circle'?sh.r:sh.rx, ry=tt==='circle'?sh.r:sh.ry;
-          const a=(o.angle||0)*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
-          /* 象限点独立标记（椭圆旋转按其角度） */
-          [[rx,0],[-rx,0],[0,ry],[0,-ry]].forEach(q=>{
-            push(o.id,[o.x+q[0]*ca-q[1]*sa, o.y+q[0]*sa+q[1]*ca],'quadrant');
-          });
+/* -------------------- 捕捉候选收集（单趟扫描，N-22） --------------------
+ * 拖动热路径每帧都要收集「特征点 / 可垂足边 / 正圆」三类候选。三类判据都依赖
+ * objectSnapBounds 的包围盒预筛，分三趟扫描会把这份成本乘 3；合并为单趟后
+ * 每个对象只算一次可见性、包围盒与形状类型。parts 位掩码选择需要的类别。 */
+const SNAP_CAND=1, SNAP_EDGE=2, SNAP_CIRCLE=4;
+function collectSnap(st,vis,box,parts){
+  if(parts===undefined) parts=SNAP_CAND|SNAP_EDGE|SNAP_CIRCLE;
+  const wantC=!!(parts&SNAP_CAND), wantE=!!(parts&SNAP_EDGE), wantCir=!!(parts&SNAP_CIRCLE);
+  const cands=[], edges=[], circles=[];
+  const sb={minX:0,minY:0,maxX:0,maxY:0};
+  const push=(id,p,type)=>cands.push({p:[p[0],p[1]],type,id});
+  const add=(id,a,b)=>edges.push({id,a:a.slice(),b:b.slice()});
+  const inBox=p=>!box||(p[0]>=box.minX&&p[0]<=box.maxX&&p[1]>=box.minY&&p[1]<=box.maxY);
+  for(const o of (st.objects||[])){
+    if(vis && !vis(o)) continue;
+    if(box && !boundsIntersect(objectSnapBounds(o,sb),box)) continue;   /* 指针邻域预筛：远处对象不物化 */
+    const isRect=o.kind==='rect', tt=isRect?areaShapeType(o):'';
+    const isLine=o.kind==='line'||o.kind==='dimension';
+    if(wantC){
+      if(o.kind==='point'||o.kind==='text'){
+        push(o.id,[o.x,o.y],'endpoint');
+      }else if(isLine){
+        const ps=o.points||[];
+        ps.forEach(p=>push(o.id,p,'endpoint'));
+        const segN=o.closed?ps.length:ps.length-1;
+        for(let k=0;k<segN;k++) push(o.id,[(ps[k][0]+ps[(k+1)%ps.length][0])/2,(ps[k][1]+ps[(k+1)%ps.length][1])/2],'midpoint');
+      }else if(isRect){
+        if(tt==='rect'){
+          const cs=rectPoints(o);
+          cs.forEach(p=>push(o.id,p,'endpoint'));
+          for(let k=0;k<4;k++) push(o.id,[(cs[k][0]+cs[(k+1)%4][0])/2,(cs[k][1]+cs[(k+1)%4][1])/2],'midpoint');
+          push(o.id,[(cs[0][0]+cs[2][0])/2,(cs[0][1]+cs[2][1])/2],'center');
+        }else{
+          const sh=o.shape;
+          push(o.id,[o.x,o.y],'center');
+          if(tt==='circle'||tt==='ellipse'){
+            const rx=tt==='circle'?sh.r:sh.rx, ry=tt==='circle'?sh.r:sh.ry;
+            const a=(o.angle||0)*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+            /* 象限点独立标记（椭圆旋转按其角度） */
+            [[rx,0],[-rx,0],[0,ry],[0,-ry]].forEach(q=>{
+              push(o.id,[o.x+q[0]*ca-q[1]*sa, o.y+q[0]*sa+q[1]*ca],'quadrant');
+            });
+          }
         }
       }
     }
-  });
+    if(wantE){
+      if(isLine){
+        const ps=o.points||[];
+        const n=o.closed?ps.length:ps.length-1;
+        for(let k=0;k<n;k++) add(o.id,ps[k],ps[(k+1)%ps.length]);
+      }else if(isRect&&tt==='rect'){
+        /* 垂足/交点仅取矩形四条直边；圆/椭圆/扇形由切点/圆心/象限点捕捉覆盖，
+           采样边会抢占切点，故不纳入 edges */
+        const ps=shapeWorldPoints(o);
+        for(let k=0;k<4;k++) add(o.id,ps[k],ps[(k+1)%4]);
+      }
+    }
+    if(wantCir&&isRect&&tt==='circle') circles.push({id:o.id,c:[o.x,o.y],r:o.shape.r});
+  }
   /* 矢量场地边角也参与捕捉（场地不在 objects，需单独追加）：
      折点→端点；圆/椭圆/扇形→圆心（center）。图层隐藏时不参与。 */
-  const site=st.site;
-  if(site){
-    const layer=(st.layers||[]).find(l=>l.id===site.layerId)||{visible:true};
-    if(site.visible!==false && layer.visible!==false){
-      const bp=siteBoundaryPoints(site);
-      if(bp) bp.forEach(p=>push('site',p,'endpoint'));
-      const sh=siteShapeOf(site);
-      if(sh.type==='circle'||sh.type==='ellipse'||sh.type==='sector') push('site',[Number(sh.cx)||0,Number(sh.cy)||0],'center');
+  if(wantC){
+    const site=st.site;
+    if(site){
+      const layer=(st.layers||[]).find(l=>l.id===site.layerId)||{visible:true};
+      if(site.visible!==false && layer.visible!==false){
+        const bp=siteBoundaryPoints(site);
+        if(bp) bp.forEach(p=>{ if(inBox(p)) push('site',p,'endpoint'); });
+        const sh=siteShapeOf(site);
+        if((sh.type==='circle'||sh.type==='ellipse'||sh.type==='sector')
+           && inBox([Number(sh.cx)||0,Number(sh.cy)||0]))
+          push('site',[Number(sh.cx)||0,Number(sh.cy)||0],'center');
+      }
     }
   }
-  return out;
+  return {cands, edges:wantE?edges.concat(guideEdges()):edges, circles};
 }
+/** 收集当前工程全部"特征点"候选（离散点）。
+ * endpoint 节点/角点；midpoint 边中点；center 中心或圆心；quadrant 圆/椭圆四象限点。 */
+function collectSnapCandidates(st,vis,box){ return collectSnap(st,vis,box,SNAP_CAND).cands; }
 /** 收集"可垂足/可交点"的线段边：折线含闭合边；非矩形区域以采样多边形近似；
  *  末尾附加运行时临时参考线（无限长，按 ±1e6 扩展用于求交/垂足） */
-function collectSnapEdges(st,vis){
-  const out=[];
-  const add=(id,a,b)=>out.push({id,a:a.slice(),b:b.slice()});
-  (st.objects||[]).forEach(o=>{
-    if(vis && !vis(o)) return;
-    if(o.kind==='line'||o.kind==='dimension'){
-      const ps=o.points||[];
-      const n=o.closed?ps.length:ps.length-1;
-      for(let k=0;k<n;k++) add(o.id,ps[k],ps[(k+1)%ps.length]);
-    }else if(o.kind==='rect'&&areaShapeType(o)==='rect'){
-      /* 垂足/交点仅取矩形四条直边；圆/椭圆/扇形由切点/圆心/象限点捕捉覆盖，
-         采样边会抢占切点，故不纳入 edges */
-      const ps=shapeWorldPoints(o);
-      for(let k=0;k<4;k++) add(o.id,ps[k],ps[(k+1)%4]);
-    }
-  });
-  return out.concat(guideEdges());
-}
+function collectSnapEdges(st,vis,box){ return collectSnap(st,vis,box,SNAP_EDGE).edges; }
 /* -------------------- 临时参考线（运行时，不持久化） -------------------- */
 let guideLines=[];   /* [{a:[x,y], b:[x,y]}]：两点定义方向，按无限长参与捕捉 */
 function addGuideLine(a,b){
@@ -120,14 +133,7 @@ function guideEdges(){
  */
 function directionalSnap(last,wp,opt){ return __geo.constrainDirectional(last,wp,opt); }
 /** 收集正圆（支持精确切点；椭圆切点不启用）@returns [{id,c,r}] */
-function collectSnapCircles(st,vis){
-  const out=[];
-  (st.objects||[]).forEach(o=>{
-    if(vis && !vis(o)) return;
-    if(o.kind==='rect'&&areaShapeType(o)==='circle') out.push({id:o.id,c:[o.x,o.y],r:o.shape.r});
-  });
-  return out;
-}
+function collectSnapCircles(st,vis,box){ return collectSnap(st,vis,box,SNAP_CIRCLE).circles; }
 function _segSegInt(a,b,c,d){ return __geo.segmentIntersection(a,b,c,d); }
 /* 捕捉类型优先级（数值越小越优先）：精确点 > 交点 > 垂足 > 切点。
    同优先级再按到鼠标的屏幕距离取最近；不同优先级时即使稍远也优先精确类型。 */
@@ -144,15 +150,17 @@ function findOsnap(st,raw,tol,excludeIds,vis,typeFilter){
       bd=dd; best={p:[p[0],p[1]],type,id};
     }
   };
-  for(const c of collectSnapCandidates(st,vis)){
+  /* 指针邻域盒子只算一次；三类候选合并为单趟扫描（N-22：把 O(N) 物化压到鼠标附近） */
+  const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
+  const snap=collectSnap(st,vis,box);
+  for(const c of snap.cands){
     if(excludeIds && c.id && excludeIds.has(c.id)) continue;
     consider(c.p,c.type,c.id);
   }
   /* 交点：仅跨对象的线段相交（同一对象相邻/闭合边共享端点，跳过）。
      性能：先按鼠标 tol 邻域做包围盒粗筛，只有包围盒与 [raw±tol] 方块相交的边
      才可能产生 tol 内的垂足/交点，把 O(E²) 压缩到鼠标附近少数边之间 */
-  const edges=collectSnapEdges(st,vis);
-  const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
+  const edges=snap.edges;
   const nearEdges=edges.filter(e=>!(
     Math.max(e.a[0],e.b[0])<box.minX||Math.min(e.a[0],e.b[0])>box.maxX||
     Math.max(e.a[1],e.b[1])<box.minY||Math.min(e.a[1],e.b[1])>box.maxY));
@@ -172,7 +180,7 @@ function findOsnap(st,raw,tol,excludeIds,vis,typeFilter){
   }
   /* 切点：鼠标贴近圆周时，取圆心→鼠标方向与圆周的交点（径向上正对的圆上点）。
      这是无"切线起点"上下文时最直观的切点语义；完整"从 P 引切线"在画线时由上一点判定 */
-  for(const c of collectSnapCircles(st,vis)){
+  for(const c of snap.circles){
     if(excludeIds && excludeIds.has(c.id)) continue;
     const dx=raw[0]-c.c[0], dy=raw[1]-c.c[1], D=Math.hypot(dx,dy);
     if(D<EPS) continue;
@@ -221,7 +229,7 @@ function objectCenter(o){
   return [ps.reduce((s,p)=>s+p[0],0)/ps.length, ps.reduce((s,p)=>s+p[1],0)/ps.length];
 }
 /** 点列包围盒：逐点循环，避免大数组 Math.min(...) 展开爆栈；忽略非有限坐标；空集返回 null */
-function pointBounds(points){
+function pointBounds(points,out){
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,ok=false;
   (points||[]).forEach(p=>{
     const x=Number(p&&p[0]), y=Number(p&&p[1]);
@@ -230,11 +238,52 @@ function pointBounds(points){
     if(x<minX) minX=x; if(x>maxX) maxX=x;
     if(y<minY) minY=y; if(y>maxY) maxY=y;
   });
-  return ok?{minX,minY,maxX,maxY}:null;
+  if(!ok) return null;
+  out=out||{};
+  out.minX=minX; out.minY=minY; out.maxX=maxX; out.maxY=maxY;
+  return out;
 }
 function objectBounds(o){
   const ps=objectPoints(o);
   return pointBounds(ps)||{minX:0,minY:0,maxX:0,maxY:0};
+}
+/**
+ * 捕捉预筛用的**保守**包围盒：允许比 objectBounds 偏大，绝不允许偏小，否则会漏捕捉。
+ * 圆/椭圆/扇形取「中心 ± 最大半径」外接盒；旋转矩形与平行四边形复用 rectPoints；
+ * 点/文字/折线/标注复用 pointBounds。热路径上只做 O(1) 加法与 Math.max，避免物化多边形。
+ */
+function objectSnapBounds(o,out){
+  out=out||{minX:0,minY:0,maxX:0,maxY:0};
+  if(!o){ out.minX=out.minY=out.maxX=out.maxY=0; return out; }
+  if(o.kind==='point'){ out.minX=out.maxX=o.x; out.minY=out.maxY=o.y; return out; }
+  if(o.kind==='text'){
+    if(pointBounds(textCorners(o),out)) return out;
+    out.minX=out.maxX=o.x; out.minY=out.maxY=o.y; return out;
+  }
+  if(o.kind==='rect'){
+    const tt=areaShapeType(o);
+    if(tt==='rect'||tt==='parallelogram'){
+      if(tt==='rect'&&!(o.angle||0)){
+        const x=Number(o.x)||0, y=Number(o.y)||0, w=Number(o.width)||0, h=Number(o.height)||0;
+        out.minX=Math.min(x,x+w); out.maxX=Math.max(x,x+w);
+        out.minY=Math.min(y,y+h); out.maxY=Math.max(y,y+h);
+        return out;
+      }
+      if(pointBounds(rectPoints(o),out)) return out;
+      out.minX=out.maxX=o.x||0; out.minY=out.maxY=o.y||0; return out;
+    }
+    const sh=o.shape||{};
+    const r=(tt==='circle'||tt==='sector')
+      ?Math.abs(Number(sh.r)||0)
+      :Math.max(Math.abs(Number(sh.rx)||0),Math.abs(Number(sh.ry)||0));
+    const cx=Number(o.x)||0, cy=Number(o.y)||0;
+    out.minX=cx-r; out.maxX=cx+r; out.minY=cy-r; out.maxY=cy+r;
+    return out;
+  }
+  if(o.points&&o.points.length&&pointBounds(o.points,out)) return out;
+  const x=Number(o.x)||0, y=Number(o.y)||0;
+  out.minX=out.maxX=x; out.minY=out.maxY=y;
+  return out;
 }
 /** 平移单个对象（点/区域移动锚点，折线与标注同步平移全部节点） */
 function translateObject(o,dx,dy){

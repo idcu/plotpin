@@ -137,7 +137,7 @@ function nearestReferenceEdge(raw,excl){
   const tol=14/state.viewport.zoom;
   let best=null,bd=tol;
   const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
-  for(const e of collectSnapEdges(state,isVisible)){
+  for(const e of collectSnapEdges(state,isVisible,box)){
     if(excl&&excl.has(e.id)) continue;
     if(!e.guide && (
       Math.max(e.a[0],e.b[0])<box.minX||Math.min(e.a[0],e.b[0])>box.maxX||

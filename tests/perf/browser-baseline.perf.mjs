@@ -16,6 +16,7 @@
 import { test, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { installScene } from './fixture.mjs';
 
 const OUT_DIR = join(process.cwd(), 'test-results');
 const REPORT_FILE = join(OUT_DIR, 'perf-browser-baseline.json');
@@ -43,6 +44,8 @@ async function collect(page, scale) {
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto('/index.html');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  /* 场景构造抽到 tests/perf/fixture.mjs，与 speed.perf.mjs 共用同一份夹具 */
+  await page.evaluate(installScene, scale);
 
   const data = await page.evaluate(async ({ scale }) => {
     const now = () => performance.now();
@@ -59,40 +62,6 @@ async function collect(page, scale) {
     };
     const heapMB = () => (performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(2) : null);
 
-    /* ---------- 场景构造：与 bench.mjs 相同的分布与构成，便于对照 ---------- */
-    state.background = createEmptyBackground();
-    state.site = createSiteSlot({ type: 'rect', w: 2000, h: 1500 });
-    state.layers = [{ id: 'layer.default', name: '默认图层', visible: true, locked: false }];
-    state.settings = Object.assign({}, state.settings, {
-      gridVisible: true, showLabels: true, showAreaTag: true, showSegLen: true,
-      showCursor: true, snap: true, markerScale: 1,
-      siteNodes: true, siteSegLen: true, siteArea: true, sitePerimeter: true
-    });
-    state.floors = [{ id: 'floor.default', name: '1F', updatedAt: nowISO() }];
-    state.activeFloorId = 'floor.default';
-    state.tombstones = [];
-
-    /* 模板来自 baseObject，避免手抄默认字段；每个对象浅拷贝并覆盖 id/name/z/几何 */
-    const pTpl = baseObject('point', 'point.marker', {});
-    const rTpl = baseObject('rect', 'rect.area', {});
-    const lTpl = baseObject('line', 'line.custom', {});
-    const objs = [];
-    for (let i = 0; i < scale; i++) {
-      const x = (i * 37) % 1900 + 20, y = (i * 53) % 1400 + 20;
-      let o;
-      if (i % 3 === 0) o = Object.assign({}, pTpl, { x, y });
-      else if (i % 3 === 1) o = Object.assign({}, rTpl, { x, y, width: 4 + (i % 7), height: 3 + (i % 5) });
-      else o = Object.assign({}, lTpl, { x, y, points: [[x, y], [x + 6, y], [x + 6, y + 4]] });
-      o.id = 'OBJ_PERF_' + i;
-      o.name = 'P' + i;
-      o.z = i;
-      objs.push(o);
-    }
-    state.objects = objs;
-    selectedIds.clear();
-    resetFrameRef();
-    resizeCanvas();
-    fitView();                       /* 全视野：最坏情况的静态层重建 */
     /* 让 resizeCanvas/fitView 排队的 rAF 先执行完，避免混进测量区间 */
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 

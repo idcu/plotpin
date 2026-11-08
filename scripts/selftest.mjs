@@ -105,7 +105,7 @@ code += `\n;globalThis.__api = {
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
-  translateObject, alignObjects, distributeObjects, objectBounds,
+  translateObject, alignObjects, distributeObjects, objectBounds, objectSnapBounds,
   renumberObjects, restackObjects, allObjectNames, nextObjectId, objectNameScopeFor, beginObjectNameScope, withObjectNameScope,
   get history(){ return history; },
   get clipboard(){ return clipboard; }, setClipboard(v){ clipboard=v; },
@@ -1343,6 +1343,118 @@ await section("25. 捕捉扩展：象限点/垂足/跨对象交点/切点", asyn
     return api.collectSnapEdges(s).length;
   })(), 4);
   eq('边-圆曲线收集1个', api.collectSnapCircles(st).length, 1);
+}
+
+});
+
+/* 25b. 捕捉包围盒预筛等价性（N-22） ----------------------------------------- */
+await section("25b. 捕捉包围盒预筛等价性", async () => {
+{
+  api.resetState();
+  const st=api.state;
+  const mk=(kind,typeId,props)=>api.baseObject(kind,typeId,props);
+  st.objects.push(
+    mk('point','point.marker',{x:5,y:5}),
+    mk('text','text.label',{x:9,y:7,text:'A'}),
+    mk('line','line.custom',{x:0,y:12,points:[[0,12],[20,12],[20,24]]}),
+    mk('line','line.custom',{x:30,y:2,points:[[30,2],[40,2],[36,9]],closed:true}),
+    mk('rect','rect.area',{x:50,y:5,width:8,height:6}),
+    mk('rect','rect.area',{x:60,y:20,width:10,height:4,angle:31}),
+    mk('rect','rect.area',{x:70,y:30,width:12,height:9,shape:{type:'parallelogram',skew:0.5}}),
+    mk('rect','rect.area',{x:20,y:40,shape:{type:'circle',r:6}}),
+    mk('rect','rect.area',{x:45,y:45,shape:{type:'ellipse',rx:7,ry:3},angle:20}),
+    mk('rect','rect.area',{x:70,y:55,shape:{type:'sector',r:9,a0:10,sweep:120}})
+  );
+  api.applyVectorSite('polygon', api.polygonShapeFromPoints([[0,0],[30,0],[30,25],[0,25]]));
+  api.clearGuideLines();
+  api.addGuideLine([2,28],[28,32]);
+  const vis=o=>o.visible!==false;
+  const inP=(p,b)=>p[0]>=b.minX&&p[0]<=b.maxX&&p[1]>=b.minY&&p[1]<=b.maxY;
+  const hitId=(id,b)=>{
+    if(id==='site') return null;
+    const o=st.objects.find(x=>x.id===id);
+    return o?api.boundsIntersect(api.objectSnapBounds(o),b):false;
+  };
+  const boxes=[
+    {minX:44,minY:4,maxX:56,maxY:10},{minX:18,minY:38,maxX:26,maxY:46},
+    {minX:58,minY:18,maxX:68,maxY:26},{minX:28,minY:0,maxX:42,maxY:12},
+    {minX:66,minY:52,maxX:76,maxY:60},{minX:0,minY:10,maxX:25,maxY:26},
+    {minX:100,minY:100,maxX:110,maxY:110}
+  ];
+  const fullC=api.collectSnapCandidates(st,vis);
+  const fullE=api.collectSnapEdges(st,vis);
+  const fullO=api.collectSnapCircles(st,vis);
+  boxes.forEach((b,i)=>{
+    eq('预筛-候选集等价 box'+i, api.collectSnapCandidates(st,vis,b),
+       fullC.filter(c=>c.id==='site'?inP(c.p,b):hitId(c.id,b)));
+    eq('预筛-边集等价 box'+i, api.collectSnapEdges(st,vis,b),
+       fullE.filter(e=>e.guide||hitId(e.id,b)));
+    eq('预筛-圆集等价 box'+i, api.collectSnapCircles(st,vis,b),
+       fullO.filter(c=>hitId(c.id,b)));
+  });
+
+  /* 端到端：测试内保留一份“不过滤”的全量实现作为 oracle，逐点比对新版 findOsnap */
+  const PRIO={endpoint:0,midpoint:1,quadrant:1,center:1,intersection:2,perpendicular:3,tangent:4};
+  const cr=(ax,ay,bx,by)=>ax*by-ay*bx;
+  const segInt=(a,b,c,d)=>{
+    const rx=b[0]-a[0], ry=b[1]-a[1], sx=d[0]-c[0], sy=d[1]-c[1];
+    const den=cr(rx,ry,sx,sy);
+    if(Math.abs(den)<1e-12) return null;
+    const t=cr(c[0]-a[0],c[1]-a[1],sx,sy)/den, u=cr(c[0]-a[0],c[1]-a[1],rx,ry)/den;
+    if(t<0||t>1||u<0||u>1) return null;
+    return [a[0]+t*rx,a[1]+t*ry];
+  };
+  const brute=(raw,tol,excludeIds,typeFilter)=>{
+    let best=null,bd=tol;
+    const consider=(p,type,id)=>{
+      if(typeFilter&&type!==typeFilter) return;
+      const dd=Math.hypot(p[0]-raw[0],p[1]-raw[1]);
+      if(dd>tol) return;
+      if(!best||(PRIO[type]??9)<(PRIO[best.type]??9)||((PRIO[type]??9)===(PRIO[best.type]??9)&&dd<bd)){
+        bd=dd; best={p:[p[0],p[1]],type,id};
+      }
+    };
+    fullC.forEach(c=>{ if(excludeIds&&c.id&&excludeIds.has(c.id)) return; consider(c.p,c.type,c.id); });
+    const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
+    const near=fullE.filter(e=>!(
+      Math.max(e.a[0],e.b[0])<box.minX||Math.min(e.a[0],e.b[0])>box.maxX||
+      Math.max(e.a[1],e.b[1])<box.minY||Math.min(e.a[1],e.b[1])>box.maxY));
+    for(let i=0;i<near.length;i++) for(let j=i+1;j<near.length;j++){
+      const e1=near[i],e2=near[j];
+      if(e1.id===e2.id) continue;
+      if(excludeIds&&excludeIds.has(e1.id)&&excludeIds.has(e2.id)) continue;
+      const sh=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1])<1e-9;
+      if(sh(e1.a,e2.a)||sh(e1.a,e2.b)||sh(e1.b,e2.a)||sh(e1.b,e2.b)) continue;
+      const ip=segInt(e1.a,e1.b,e2.a,e2.b);
+      if(ip) consider(ip,'intersection',e1.id+'|'+e2.id);
+    }
+    near.forEach(e=>{ if(excludeIds&&excludeIds.has(e.id)) return; consider(api.nearestPointOnSegment(raw,e.a,e.b),'perpendicular',e.id); });
+    fullO.forEach(c=>{
+      if(excludeIds&&excludeIds.has(c.id)) return;
+      const dx=raw[0]-c.c[0], dy=raw[1]-c.c[1], D=Math.hypot(dx,dy);
+      if(D<1e-9) return;
+      consider([c.c[0]+c.r*dx/D,c.c[1]+c.r*dy/D],'tangent',c.id);
+    });
+    return best;
+  };
+  const sameHit=(a,b)=>{
+    if(!a||!b) return !a&&!b;
+    return a.type===b.type&&a.id===b.id&&Math.abs(a.p[0]-b.p[0])<1e-9&&Math.abs(a.p[1]-b.p[1])<1e-9;
+  };
+  const excl=new Set([st.objects[2].id,st.objects[4].id]);
+  let seed=1234567;
+  const rnd=()=>((seed=(seed*1103515245+12345)&0x7fffffff)/0x7fffffff);
+  let diffs=0;
+  for(let i=0;i<200;i++){
+    const raw=[-10+rnd()*110,-10+rnd()*110];
+    const tol=[0.4,2,6][i%3];
+    if(!sameHit(api.findOsnap(st,raw,tol),brute(raw,tol))) diffs++;
+    if(!sameHit(api.findOsnap(st,raw,tol,excl,vis),brute(raw,tol,excl))) diffs++;
+    if(!sameHit(api.findOsnap(st,raw,tol,null,vis,'endpoint'),brute(raw,tol,null,'endpoint'))) diffs++;
+    if(!sameHit(api.findOsnap(st,raw,tol,null,vis,'tangent'),brute(raw,tol,null,'tangent'))) diffs++;
+  }
+  eq('预筛-findOsnap 200点×4变体逐点一致', diffs, 0);
+  api.clearGuideLines();
 }
 
 });

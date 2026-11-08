@@ -129,6 +129,19 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 | 20 条快照生成（1000 对象/条） | 170.8 ms（除首条） | — | 仅记录 |
 | 快照淘汰（21 条 → 20 条，selftest） | 计数与最旧删除断言通过 | — | 至少保留 1 条 |
 
+#### 4.1.3 10k 对象拖动捕捉热路径（2026-11-08，N-22 采集）
+
+命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-22"`（真实 Chromium，1920×1080@DPR1，10k 对象，真实 `page.mouse` 事件）。改造前基线用同一 harness、把 `js/core/geometry.js` + `js/core/interaction.js` `git stash` 回退后采集两次。
+
+| 指标 | 改造前 | 改造后 | 变化 | 结论 |
+|---|---|---|---|---|
+| 捕捉解析 P95 | 18.5 / 14.1 ms | 3.1~4.0 ms | −71%~−83% | 通过（阈值 8 ms） |
+| 拖动帧 P95（事件 → 应用渲染完成） | 34.3 / 34.4 ms | 22.5 / 22.6 / 21.9 ms | −34%~−36% | 通过（计划要求 ≥30%） |
+| 拖动整帧 P95（含强制光栅） | 37.0 / 38.3 ms | 25.1~26.5 ms | −28%~−34% | 仅记录 |
+| 拖动期 heapUsed 增量 | +0.32% | +0.62% / +0.63% | — | 通过（≤5%） |
+
+口径：帧耗时用 `PointerEvent.timeStamp` 到应用 rAF 回调完成的差值；每轮 96 个真实 `pointermove` 样本，拖动前预热 6 步并清空探针，测量区间内历史快照数必须为 1（`hist0` 断言）。
+
 ### 4.2 真实浏览器代理数据（2026-11-07，Chromium + SwiftShader）
 
 来源：[manual-acceptance-report-2026-11-07.md](manual-acceptance-report-2026-11-07.md) §M5；命令 `npm run perf:browser`（4 passed / 19.1 s）。
