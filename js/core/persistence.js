@@ -162,9 +162,10 @@ function stampObjects(ids){
   }
   return n;
 }
-function commitChange(message, ids){
+/** @param {string} [floorId] 需要打点的楼层；缺省当前楼层（CORE-P2-8：重命名非当前楼层时也要刷新该层） */
+function commitChange(message, ids, floorId){
   stampObjects(ids);
-  touchFloor();
+  touchFloor(floorId);
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
   markDirty('object');
@@ -548,7 +549,7 @@ function renameFloor(id,name){
   const nm=normalizeFloorName(name);
   if(!f||!nm||nm===f.name) return false;
   if(floorNameTaken(nm,id)) return false;
-  pushHistory(); f.name=nm; commitChange('楼层已重命名');
+  pushHistory(); f.name=nm; commitChange('楼层已重命名',null,id);
   return true;
 }
 

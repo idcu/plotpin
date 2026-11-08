@@ -7890,6 +7890,19 @@ await section("P2-CORE 批次 5：schema 与安全", async () => {
   eq('CORE-P2-1 启动兜底读取本机设置', api.state.settings.gridVisible, false);
   eq('CORE-P2-1 启动兜底 segLabelMinPx', api.state.settings.segLabelMinPx, 31);
   sandbox.localStorage.removeItem('offline-drawing-annotation.settings'); api.resetState();
+
+  /* CORE-P2-8：重命名非当前楼层必须刷新该层 updatedAt，否则 LWW 合并会丢重命名 */
+  api.resetState();
+  const floorInit2=api.createInitialState();
+  const curUpdated=api.state.floors[0].updatedAt;
+  api.state.floors.push({id:'floor.rename2',name:'2F',background:floorInit2.background,objects:[],viewport:{zoom:1,panX:0,panY:0},updatedAt:'2000-01-01T00:00:00.000Z'});
+  ok('CORE-P2-8 重命名非当前楼层成功', api.renameFloor('floor.rename2','二号层'));
+  ok('CORE-P2-8 被重命名楼层 updatedAt 已刷新', api.state.floors.find(f=>f.id==='floor.rename2').updatedAt>'2000-01-01T00:00:00.000Z');
+  eq('CORE-P2-8 未误触当前楼层 updatedAt', api.state.floors[0].updatedAt, curUpdated);
+  /* 重命名当前楼层仍走默认路径 */
+  ok('CORE-P2-8 重命名当前楼层成功', api.renameFloor('floor.default','首层'));
+  ok('CORE-P2-8 当前楼层 updatedAt 已刷新', api.state.floors[0].updatedAt>=curUpdated);
+  api.resetState();
 }
 });
 
