@@ -281,16 +281,27 @@ async function importPdfFile(f){
   catch(e){ return toast(L('PDF 解析失败：{msg}',{msg:e.message}),'error'); }
   const k=pdf.unitMeter;
   /* PDF 单位点→米：内容坐标已按 MediaBox 左下角归零（Y 向上），直接映射 */
-  if(!pdf.paths.length && !pdf.texts.length && !pdf.images.length){
-    return toast('PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）','error');
+  /* 只导入第 1 页：多页 PDF 不做静默合并，也不提供合并开关（RT/IO-P2-20 产品决策） */
+  const pageList=Array.isArray(pdf.pages)&&pdf.pages.length?pdf.pages:null;
+  const page1=pageList?pageList[0]:null;
+  const pagePaths=page1?page1.paths:pdf.paths;
+  const pageTexts=page1?page1.texts:pdf.texts;
+  const page1Nums=page1&&Array.isArray(page1.imageNums)?new Set(page1.imageNums):null;
+  /* 底图只认第 1 页实际绘制的内嵌图；仅 1 张图时允许兜底，避免资源映射缺失导致整页丢图 */
+  let img=null;
+  if(pdf.images.length){
+    img=page1Nums?pdf.images.find(x=>page1Nums.has(x.num))||null:pdf.images[0];
+    if(!img&&pdf.images.length===1) img=pdf.images[0];
   }
-  const pdfErrs=importLimitErrors({entities:pdf.paths.length+pdf.texts.length});
+  if(!pagePaths.length && !pageTexts.length && !img){
+    return toast('PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）','error');
+  }
+  const pdfErrs=importLimitErrors({entities:pagePaths.length+pageTexts.length});
   if(pdfErrs.length) return toast(L('PDF 导入失败：{msg}',{msg:importLimitMessage(pdfErrs)}),'error');
-  /* 扫描件/带底图的 PDF：最大内嵌图作为图片底图 */
+  /* 扫描件/带底图的 PDF：第 1 页内嵌图作为图片底图 */
   let bgNote='';
   let bgStored=true;
-  if(pdf.images.length){
-    const img=pdf.images[0];
+  if(img){
     const mime=img.mime;
     const bin=img.bytes;
     let dataUrl='data:'+mime+';base64,';
@@ -317,49 +328,40 @@ async function importPdfFile(f){
     bgNote=L('底图 {w}×{h}',{w:img.width,h:img.height});
     /* 矢量叠加仍以 PDF 页世界尺寸为场地，图片米/像素一致 */
   }
-  /* 矢量内容：路径转折线/区域，文本转文字对象。点→米。
-     多页：按页序沿 +X 排布（每页独立原点），不再把所有页叠在同一原点。 */
+  /* 矢量内容：路径转折线/区域，文本转文字对象。点→米。只取第 1 页。 */
   const counts={line:0,area:0,text:0};
-  const pageList=Array.isArray(pdf.pages)&&pdf.pages.length?pdf.pages:null;
-  const plan=pageList?ensureVendor('PdfRead').layoutPdfPages(pageList):[];
-  const layoutW=plan.length?plan[plan.length-1].x+plan[plan.length-1].width:pdf.pageWidth;
-  const layoutH=plan.length?plan.reduce((m,p)=>Math.max(m,p.height||0),0):pdf.pageHeight;
-  const wM=layoutW*k, hM=layoutH*k;
-  if((pdf.paths.length||pdf.texts.length)&&!pdf.images.length) pushHistory();
+  const wM=(page1?page1.width:pdf.pageWidth)*k, hM=(page1?page1.height:pdf.pageHeight)*k;
+  if((pagePaths.length||pageTexts.length)&&!img) pushHistory();
   /* 矢量内容批量建对象：同样使用编号作用域，避免逐个扫描全量 state */
   withObjectNameScope(allObjectNames(), () => {
-    const sources=pageList
-      ? pageList.map((pg,i)=>({paths:pg.paths||[],texts:pg.texts||[],ox:plan[i].x,oy:plan[i].y}))
-      : [{paths:pdf.paths,texts:pdf.texts,ox:0,oy:0}];
-    for(const src of sources){
-      for(const p of src.paths){
-        const pts=p.points.map(q=>[(q[0]+src.ox)*k,(q[1]+src.oy)*k]);
-        if(pts.length<2) continue;
-        const len=polylineLength(pts);
-        if(len<0.05) continue;   /* 去噪 */
-        const o=baseObject('line','line.custom',{points:pts,closed:!!p.closed,x:pts[0][0],y:pts[0][1]});
-        if(p.closed){
-          o.style={strokeWidth:.05};
-          counts.area++;
-        }else counts.line++;
-        state.objects.push(o);
-      }
-      for(const t of src.texts){
-        const h=(t.size||1)*k;
-        if(!(h>0)||!t.text) continue;
-        const o=baseObject('text',null,{x:(t.x+src.ox)*k,y:(t.y+src.oy)*k,text:t.text,height:h,style:{color:'#111827'}});
-        o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
-        state.objects.push(o); counts.text++;
-      }
+    for(const p of pagePaths){
+      const pts=p.points.map(q=>[q[0]*k,q[1]*k]);
+      if(pts.length<2) continue;
+      const len=polylineLength(pts);
+      if(len<0.05) continue;   /* 去噪 */
+      const o=baseObject('line','line.custom',{points:pts,closed:!!p.closed,x:pts[0][0],y:pts[0][1]});
+      if(p.closed){
+        o.style={strokeWidth:.05};
+        counts.area++;
+      }else counts.line++;
+      state.objects.push(o);
+    }
+    for(const t of pageTexts){
+      const h=(t.size||1)*k;
+      if(!(h>0)||!t.text) continue;
+      const o=baseObject('text',null,{x:t.x*k,y:t.y*k,text:t.text,height:h,style:{color:'#111827'}});
+      o.typeId='text.builtin'; if(!state.objectTypes.some(x=>x.id==='text.builtin')) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
+      state.objects.push(o); counts.text++;
     }
   });
-  /* 无内嵌图时，把矢量场地设为整套图纸的矩形域（单页=原页面尺寸），保证坐标框正确 */
-  if(!pdf.images.length && state.site && state.site.kind==='rect' && state.site.shape?.type==='rect'){
+  /* 无内嵌图时，把矢量场地设为第 1 页的矩形域，保证坐标框正确 */
+  if(!img && state.site && state.site.kind==='rect' && state.site.shape?.type==='rect'){
     state.site.shape.w=Math.max(state.site.shape.w,wM||100);
     state.site.shape.h=Math.max(state.site.shape.h,hM||70);
   }
   selectedIds.clear();
-  const pageNote=pageList&&pageList.length>1?L(' / {n} 页（独立原点）',{n:pageList.length}):'';
+  const totalPages=pageList?pageList.length:(Number(pdf.pageCount)||1);
+  const pageNote=totalPages>1?' / '+L('共 {n} 页，已导入第 1 页',{n:totalPages}):'';
   commitChange(L('PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}',
     {line:counts.line,area:counts.area,text:counts.text,notes:pageNote+(bgNote?' / '+bgNote:'')}));
   if(!bgStored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');

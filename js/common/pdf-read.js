@@ -277,6 +277,47 @@ function pagesInDocumentOrder(parsed){
   parsed.pages.forEach(p=>{ if(!order.includes(p.num)) out.push(p); });
   return out;
 }
+/** 解析直接引用对象号：`/Name 12 0 R` → 12 */
+function dictRefNum(dict,name){
+  const m=(dict||'').match(new RegExp('/'+name+'\\s+(\\d+)\\s+\\d+\\s*R'));
+  return m?+m[1]:0;
+}
+/** 取页面资源字典：内联优先，其次间接引用，再向 /Parent 继承（最多 4 层） */
+function pageResourcesDict(dict,objects,depth){
+  let res=dictRawBlock(dict,'Resources');
+  if(!res){
+    const n=dictRefNum(dict,'Resources');
+    const o=n?objects.get(n):null;
+    if(o) res=o.dict;
+  }
+  if(!res&&(depth||0)<4){
+    const pn=dictRefNum(dict,'Parent');
+    const po=pn?objects.get(pn):null;
+    if(po) return pageResourcesDict(po.dict||'',objects,(depth||0)+1);
+  }
+  return res||'';
+}
+/** 该页实际绘制的图像对象号：/Resources → /XObject 名称映射，且内容流出现 `/Name Do` */
+function pageImageNums(page,objects){
+  const res=pageResourcesDict(page.dict||'',objects,0);
+  if(!res) return [];
+  let xo=dictRawBlock(res,'XObject');
+  if(!xo){
+    const n=dictRefNum(res,'XObject');
+    const o=n?objects.get(n):null;
+    if(o) xo=o.dict;
+  }
+  if(!xo) return [];
+  const out=[];
+  for(const m of xo.matchAll(/\/([^\s/<>\[\]()]+)\s+(\d+)\s+\d+\s*R/g)){
+    const num=+m[2];
+    const o=objects.get(num);
+    if(!o||!/\/Subtype\s*\/Image/.test(o.dict)) continue;
+    const name=m[1].replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    if(new RegExp('/'+name+'\\s+Do\\b').test(page.contentText||'')) out.push(num);
+  }
+  return out;
+}
 /**
  * 多页落点规划：按文档页序沿 +X 依次排布，页间留 gap（默认最大页宽的 8%）。
  * 返回 [{pageNo,width,height,x,y,sourceOrigin}]，x/y 为页面在「整套图纸」中的 PDF 点偏移。
@@ -313,7 +354,7 @@ async function parsePdf(input,opt){
       points:p.points.map(q=>[q[0]-box.x,q[1]-box.y]),closed:p.closed,filled:p.filled}));
     const texts=interp.texts.map(t=>({x:t.x-box.x,y:t.y-box.y,size:t.size,text:t.text}));
     pages.push({pageNo:i+1,num:page.num,width:box.width,height:box.height,
-      origin:[box.x,box.y],paths,texts});
+      origin:[box.x,box.y],paths,texts,imageNums:pageImageNums(page,parsed.objects)});
     paths.forEach(p=>merged.paths.push(p));
     texts.forEach(t=>merged.texts.push(t));
   });
@@ -330,7 +371,7 @@ async function parsePdf(input,opt){
     try{
       if(isJpeg){
         const b=binaryToBytes(o.data);
-        if(b[0]===0xFF&&b[1]===0xD8) images.push({mime:'image/jpeg',bytes:b,width:w,height:h});
+        if(b[0]===0xFF&&b[1]===0xD8) images.push({num,mime:'image/jpeg',bytes:b,width:w,height:h});
       }else if(isFlate){
         const cs=dictName(o.dict,'ColorSpace');
         const bpc=dictNumber(o.dict,'BitsPerComponent')||8;
@@ -355,7 +396,7 @@ async function parsePdf(input,opt){
           rgb=new Uint8Array(h*w*3);
           for(let i=0;i<w*h;i++){ rgb[i*3]=gray[i];rgb[i*3+1]=gray[i];rgb[i*3+2]=gray[i]; }
         }
-        if(rgb&&rgb.length>=h*w*3) images.push({mime:'image/png',bytes:buildPng(w,h,rgb),width:w,height:h});
+        if(rgb&&rgb.length>=h*w*3) images.push({num,mime:'image/png',bytes:buildPng(w,h,rgb),width:w,height:h});
       }
     }catch(e){ /* 不支持的图像编码静默跳过 */ }
   }
