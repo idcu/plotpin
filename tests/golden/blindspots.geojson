@@ -1,0 +1,48 @@
+{
+  "type": "FeatureCollection",
+  "coverageSpec": {
+    "version": 2,
+    "targetCells": 4,
+    "gridCells": 4,
+    "cellMinM": 1,
+    "cellMaxM": 1,
+    "zoomIndependent": true
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "region": "R-01",
+        "regionId": "R-01",
+        "index": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              2,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              1,
+              1
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -19,10 +19,10 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 2982 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 断言 | 2991 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
 | selftest 分区 | 118 个 | `node scripts/selftest.mjs --list` | 输出 119 行（含 1 行标题） |
 | 加载脚本 | 45 个（35 项目 + 10 vendor） | `check.mjs` 输出「加载 45 个脚本」 | `js/` 下 35 个 `.js` |
-| e2e 用例 | 108 个（107 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
+| e2e 用例 | 110 个（109 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
 | e2e spec 文件 | 34 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 36 个 `.mjs`（含 2 个 helper） |
 | 契约判据 | 7 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/` |
 | 插件 API 面 | 23 键 / 清单 23 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
@@ -37,6 +37,11 @@
 | 文件 | 字节 | 采集命令 |
 |---|---|---|
 | `tests/golden/fixed-pages.pdf` | 1,128 | `Get-ChildItem tests/golden`；selftest 逐字节比对 |
+| `tests/golden/plain-scene.csv` | 619 | 同上（N-26 新增） |
+| `tests/golden/plain-scene.tsv` | 617 | 同上（N-26 新增） |
+| `tests/golden/plain-scene.xlsx` | 9,795 | 同上（N-26 新增，ZIP 容器） |
+| `tests/golden/blindspots.geojson` | 769 | 同上（N-26 新增） |
+| `tests/golden/plain-scene.png.meta.json` | 36 | e2e 语义 golden（PNG 签名 + 宽 2631 / 高 1860；不锁编码字节） |
 | `tests/golden/legacy-symbols.svg` | 56,839 | 同上 |
 | `tests/golden/plain-scene.dxf` | 900 | 同上 |
 | `tests/golden/plain-scene.svg` | 4,730 | 同上 |

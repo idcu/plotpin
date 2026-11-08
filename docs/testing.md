@@ -12,8 +12,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **118 个分区 / 2,982 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **34 个 spec / 108 个用例**（默认 107 跑 + 1 条件跳过） | **否** |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **118 个分区 / 2,991 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **34 个 spec / 110 个用例**（默认 109 跑 + 1 条件跳过） | **否** |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 9 种人为破坏 | 是 |
 
@@ -80,7 +80,7 @@
 | 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(3)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(6)、history-increment(4)、save-failure(2)、tab-lease(2)、snapshot(7) |
 | 协作 | collab(11)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(3)、title-block(1)、export-scope(2)、perf-render(1)、coverage(1) |
+| 导出与图面 | pdf-multipage(3)、title-block(1)、export-scope(4)、perf-render(1)、coverage(1) |
 | 符号与目录 | symbols(3)、catalog(1) |
 | 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(3) |
 | 插件 | plugin-sandbox(15)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
@@ -91,7 +91,7 @@
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
 
-合计 **108** 个用例、**34** 个 spec（逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
+合计 **110** 个用例、**34** 个 spec（逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 
@@ -118,10 +118,15 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | `symbol-scene.svg` | 5,012 | 含符号工程的 SVG 全量字节 |
 | `symbol-scene.dxf` | 4,753 | 含符号工程的 DXF 全量字节（折线近似） |
 | `legacy-symbols.svg` | 56,839 | 旧符号逐图标 path 几何哈希的汇总输出 |
+| `plain-scene.csv` | 619 | 台账 CSV 全量字节（N-26；含 BOM 与表头） |
+| `plain-scene.tsv` | 617 | 台账 TSV 全量字节（N-26；含 BOM 与表头） |
+| `plain-scene.xlsx` | 9,795 | XLSX 容器字节（N-26；stored ZIP，同输入两次构建一致后才比 golden） |
+| `blindspots.geojson` | 769 | 盲区 GeoJSON 全量文本（N-26；含 coverageSpec.version） |
+| `plain-scene.png.meta.json` | 36 | PNG 语义基线：签名与 2631×1860 尺寸（N-26；编码字节随浏览器变化，不锁字节） |
 
-- PDF 的 `UPDATE_GOLDEN=1` 可重建；SVG/DXF 的 golden 在同一环境变量下重建。
+- `UPDATE_GOLDEN=1` 可重建 PDF/SVG/DXF/CSV/TSV/XLSX/GeoJSON golden；PNG 语义基线（`plain-scene.png.meta.json`）在 e2e 下用同一环境变量重建。
 - **重建 golden 只能用于「确认改动是有意的」**：提交必须说明为什么输出变了、影响哪些导出格式；禁止为了让测试变绿而盲目重建。
-- 未被字节 golden 覆盖的格式（CSV/TSV/XLSX/JSON/GeoJSON/PNG/PDF 实际位图）由 selftest 的结构断言覆盖，见 §2.2 的「导出/导入产物」组。
+- 字节 golden 覆盖 SVG/DXF/PDF/CSV/TSV/XLSX/GeoJSON；PNG 只锁签名与尺寸（浏览器编码字节不稳定），JSON 由 selftest 结构断言覆盖，见 §2.2 的「导出/导入产物」组。
 - 无符号工程「导出字节不变」是硬回归项：不新增符号功能时不得改动既有 golden。
 
 ---
@@ -185,7 +190,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 无障碍 | 无 axe/可访问性扫描；只有 selftest 58 的 `aria-*` 标记断言与 e2e 零散 `toHaveAttribute('aria-…')` |
 | 多工程库 | `persistence.spec` 覆盖单工程保存/载入；**工程列表的批量管理、跨工程资产隔离无 e2e**（隔离由 selftest 32.1 覆盖） |
 | 图片变换手柄 | `calibration-precheck.spec` 只验入口禁用/提示；**拖拽平移/旋转/缩放/切变手柄没有 e2e** |
-| TSV / DXF 导出 | TSV 仅在 selftest 解析/往返；DXF **导出**只有 golden 与 selftest，e2e 只覆盖 DXF **导入**（`dxf-version.spec`） |
+| TSV / DXF 导入 | 导出链路已由 `export-scope.spec` 的 N-26 用例覆盖（下载内容、隐藏层不进图纸类导出）；**导入**仍只覆盖 DXF（`dxf-version.spec`），TSV 导入无 e2e |
 | Firefox / WebKit / Safari | Playwright 仅配 Chromium；Firefox 159 / WebKit 27 只做过 2026-11-07 的人工脚本验证，无回归自动化；Safari 原生未验证 |
 | 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证（代码固定 `iceServers: []`） |
 | 真实 GPU / 低端真机 | perf-browser 在本机为 SwiftShader；真机帧率、长跑内存未验证 |
@@ -203,3 +208,29 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 - 新功能必须同时有 selftest 与 e2e 覆盖；只有一处覆盖时在本文 §7 明确登记。
 - 测试样本跨用例共享，禁止每个 spec 各造一份不一致的工程状态。
 - 断言数量变化必须同步 README 计数锚点与 `scripts/dist-manifest.json`（若产物受影响）。
+
+---
+
+## 9. 功能域 × 层覆盖矩阵（N-26）
+
+> 每一行回答「这个功能域在四层里分别有没有覆盖」。`无覆盖`是明确结论，不等于已通过；分区名以 `selftest.mjs --list` 为准，spec 名以 `tests/e2e/` 文件名为准。
+
+| 功能域 | selftest 分区 | e2e spec | golden |
+|---|---|---|---|
+| 基础编码 / 文件容器 | 0 命名空间、1 几何、2 CRC32、3 ZIP、4 XLSX、5 CSV/TSV、6 XmlLite | 无覆盖（由 golden + selftest 兜底） | CSV / TSV / XLSX |
+| 资产与导入限值 | 7 内容寻址、8/8.1 表格批量、28/28.3/29/30/31 台账往返、50 解析器加固、70 导入限值 | table-batch、load-audit | 无覆盖 |
+| 场地 / 几何模型 | 9 场地、11 旧工程迁移、12/17 场地形状、14/15/46 区域形状、19 基点 | interaction、world-transform | 无覆盖 |
+| 编辑 / 捕捉 / 撤销 | 20/21 节点、23 精确约束、24/25/33 OSNAP、26 测距、54 方向约束、65 对齐分布、66 编号层级、68 提交判定 | history、history-increment、smoke | 无覆盖 |
+| 校准 / 底图 / 取景 | 39 仿射校准、D-02 校准前置状态机、41 场地节点编辑、47 分层渲染/裁剪 | calibration-precheck、world-transform、perf-render | 无覆盖 |
+| 标注 / 统计 / 覆盖率 | 27 面积长度、38/48 覆盖率、40/43/44/45 标注开关、63 多楼层汇总 | coverage | GeoJSON |
+| 台账 / 批量表格 | 32.1 台账往返、55 导出 | table-batch、batch-annot、batch-layout、catalog | CSV / TSV / XLSX |
+| 图纸导出（SVG/DXF/PDF/PNG） | 55 导出、57.7 违规 CSV | export-scope、pdf-multipage、title-block | SVG / DXF / PDF / CSV / TSV / XLSX / GeoJSON / PNG（语义） |
+| 持久化 / 历史 / 快照 / 多标签 | 32 存储 v2、57.x 版本快照、历史栈共享 | persistence、snapshot、save-failure、tab-lease | 无覆盖 |
+| 协作 / 合并 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰 | collab（含 1 个 soak 条件跳过） | 无覆盖 |
+| 插件 / 规则 | 57/57.1 注册点、57.2–57.9 规则框架、API 版本化 | plugin-sandbox、plugin-compat、plugin-manifest、rule-plugin、rules | 无覆盖 |
+| 安全 / 离线 / 移动端 | 49 能力探测、56.1 注入路径、69 转义白名单、70 导入事务 | csp、sw、mobile | 无覆盖 |
+| i18n / 帮助 / 引导 | 58 中英切换与无障碍标记、60 焦点管理、D-01 引导、D-03 帮助中心 | i18n-template、help-center、onboarding | 无覆盖 |
+| 符号库 | 符号库分区（见 `--list`） | symbols | legacy-symbols.svg |
+| 停车 / 布点 / 二维码 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划 | 无覆盖 | 无覆盖 |
+
+新增功能时必须在本表对应行补上覆盖层；新增一行为空时，必须写明「无覆盖」而不是留白。

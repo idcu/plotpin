@@ -7480,6 +7480,61 @@ await section("D-03 帮助中心：三页签与 i18n", async () => {
 
 });
 
+/* N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节锁基线 ----------------------
+ * 与既有 SVG/DXF/PDF golden 同口径：固定场景 → 纯序列化函数 → 逐字节比对。
+ * XLSX 为 ZIP 容器（stored），先断言同一输入两次构建字节一致，再比 golden。
+ * PNG 由浏览器 Canvas 编码，不锁字节；在 e2e 做尺寸/签名语义 golden（tests/golden/plain-scene.png.meta.json）。 */
+await section("N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节基线", async () => {
+{
+  const goldenRoot = join(root, 'tests', 'golden');
+  function fixture() {
+    api.resetState();
+    api.state.meta.name = 'N-26 导出基线';
+    api.state.site = { id: 'site.golden', name: '基准场地', layerId: 'layer.default', visible: true, locked: false, annot: {}, style: {}, updatedAt: '', kind: 'rect', shape: { type: 'rect', x: 0, y: 0, w: 100, h: 80 } };
+    api.state.background = { kind: 'empty', fileName: '', assetId: '', width: 0, height: 0, origin: [0, 0], metersPerPixel: 0.1, calibrated: false, transform: null };
+    api.state.objects = [
+      api.baseObject('point', 'point.marker', { name: 'P1', x: 12, y: 14, angle: 30 }),
+      api.baseObject('rect', 'rect.area', { name: 'R1', x: 30, y: 22, width: 18, height: 12, angle: 15 }),
+      api.baseObject('line', 'line.boundary', { name: 'L1', points: [[55, 10], [72, 14], [68, 40]], closed: false })
+    ];
+    /* 台账含「更新时间」列：必须固定，否则 golden 每次运行都不同 */
+    const fixed = '2026-01-01T00:00:00.000Z';
+    api.state.site.updatedAt = fixed;
+    for (const o of api.state.objects) o.updatedAt = fixed;
+  }
+  fixture();
+  const csv = api.delimitedText(',');
+  const tsv = api.delimitedText('\t');
+  const xlsxTable = api.xlsxExportTable();
+  const xlsx = api.Xlsx.build(xlsxTable, '图纸标注');
+  const xlsxAgain = api.Xlsx.build(xlsxTable, '图纸标注');
+  ok('N-26-XLSX 同输入两次构建字节一致', Buffer.compare(Buffer.from(xlsx), Buffer.from(xlsxAgain)) === 0);
+
+  const cov = { targetCells: 4, gridCells: 4, spec: { version: 2 },
+    regions: [{ id: 'R-01', name: 'R-01', minX: 0, minY: 0, nx: 2, ny: 2, cell: 1, grid: new Uint8Array([1, 1, 1, 0]) }] };
+  const geo = JSON.stringify(api.buildBlindSpotGeoJson(cov), null, 2);
+
+  const cases = [
+    ['plain-scene.csv', Buffer.from(csv, 'utf8')],
+    ['plain-scene.tsv', Buffer.from(tsv, 'utf8')],
+    ['plain-scene.xlsx', Buffer.from(xlsx)],
+    ['blindspots.geojson', Buffer.from(geo, 'utf8')]
+  ];
+  for (const [name, buf] of cases) {
+    const p = join(goldenRoot, name);
+    if (process.env.UPDATE_GOLDEN === '1') { writeFileSync(p, buf); continue; }
+    eq('golden-' + name + ' 逐字节一致', Buffer.compare(buf, readFileSync(p)), 0);
+  }
+
+  /* 语义前置：golden 之外再锁关键口径，避免「字节一致但语义错」 */
+  ok('N-26-CSV 含 BOM 且表头与 TABLE_COLUMNS 同源', csv.startsWith('\ufeff' + api.TABLE_COLUMNS.join(',')));
+  ok('N-26-TSV 用制表符分隔且不含逗号表头', tsv.startsWith('\ufeff' + api.TABLE_COLUMNS.join('\t')));
+  eq('N-26-GeoJSON 面数', JSON.parse(geo).features.length, 1);
+  eq('N-26-GeoJSON 口径版本', JSON.parse(geo).coverageSpec.version, 2);
+  api.resetState();
+}
+});
+
 /* ---------------- 结果汇总 ---------------- */
 if (listOnly) {
   console.log(`共 ${sectionNames.length} 个分区（--filter=<regex> 选择执行）：`);

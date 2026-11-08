@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · N-26 导出 golden 补齐与测试矩阵收口
+
+- **Commit Hash**：本段收尾统一回填。
+- **核心改动**：
+  - selftest 新增分区「N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节基线」：固定场景（时间戳固定避免台账「更新时间」漂移）+ 纯序列化函数；XLSX 先断言同输入两次构建字节一致，再比 golden；新增 `tests/golden/plain-scene.csv`（619 B）、`plain-scene.tsv`（617 B）、`plain-scene.xlsx`（9,795 B）、`blindspots.geojson`（769 B）。
+  - e2e `export-scope.spec.mjs` 新增 2 条：DXF/TSV 导出下载内容与可见性口径；PNG 语义 golden（签名 + 2631×1860，不锁编码字节），基线 `tests/golden/plain-scene.png.meta.json`（36 B）。
+  - `docs/testing.md` 新增 §9「功能域 × 层覆盖矩阵」（selftest 分区 / e2e spec / golden，空白显式写「无覆盖」）；§1、§3.2、§4、§7 按实测更新。
+  - `docs/facts.md`、`README.md` 同步断言数 2991、e2e 110、golden 清单与字节。
+  - `docs/modules.md` 核对：`js/` 35 个脚本在逐文件表中 0 缺失，本次不改结构。
+- **验证数据**：
+  - `node scripts/check.mjs --selftest`：2991 通过 / 0 失败（较 N-25 +9）；契约 7/0、插件 API 23/0/0、i18n 45.65%/缺口 6/UI 1/模板 0、SW VERSION=33。
+  - `node scripts/e2e.mjs`：109 passed / 1 skipped（110 用例 / 34 spec，较 N-25 +2 用例）。
+  - `node scripts/build.mjs --check`：811,021 B（792.0 KB）、gzip 252,205 B、SHA256 `16e81a6a…`，产物未变。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 破坏 9/9。
+  - `node scripts/check-discipline.mjs --strict`：13/13；链接/锚点 15 文件 0 断链。
+- **遗留 TODO / 风险**：
+  - **阻塞子项（计划 N-26 ⑤）**：CSS 结构门禁 9→10 未落地。加判据时发现真实缺陷 `css/style.css:213` 的 `@media print{` 未闭合，其后规则被吞进打印媒体查询；若加门禁，未破坏副本会直接变红。按「发现代码缺陷先报告、不擅自改业务逻辑」，本段未改 CSS、未加门禁，已登记 `docs/known-issues.md` 的 CSS-P1-1，待产品拍板后单独修复并补场景。
+  - PNG 只锁签名与尺寸；像素编码随浏览器版本变化，不锁字节。若要锁位图，需要固定浏览器版本并接受跨平台差异。
+
 ## 2026-11-08 · N-25 文档单一事实源与过期数字清理
 
 - **Commit Hash**：本段收尾统一回填。
