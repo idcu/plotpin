@@ -4,6 +4,41 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2 批次 9/10：目录/停车/UI 6 条 + 代码卫生/i18n 3 条
+
+- **Commit Hash**：
+  - 批次 9（目录/停车/UI，6 笔）：`4ec211f` IO-P2-22、`d02e8f8` IO-P2-23、`c994f5b` IO-P2-24、`1719ce6` IO-P2-25、`cafc822` RT-P2-15、`7afeb45` RT-P2-16。
+  - 批次 10（代码卫生/i18n，3 笔）：`b33a89a` CORE-P2-15、`48fcaf4` CORE-P2-16、`73a1b33` RT-P2-18。
+- **核心改动**：
+  - IO-P2-22：`catalogLoad` 拆分为「IDB 读取」与「schema 校验」两段；损坏/非法记录不再把 `currentCatalog` 置空，而是保留原目录并记录 `catalogLoadError`，`app.init` 启动后 toast 说明原因；IDB 不可用按降级路径处理，不误报损坏。
+  - IO-P2-23：`parkingSite` 在场地可见时返回 `siteBounds`，仅场地隐藏/缺失时回退 `worldDims`（图片∪场地取景框），修复图片底图大于场地时车位排到场地外。
+  - IO-P2-24：删除 `applyParkingLayout` 自写 `fresh()` 编号器，改为 `objectNameScopeFor(used,'P',3,1)` / `'A',3`；`used` 在清除前聚合，本批标记墓碑的对象名也纳入，避免协作合并后与墓碑对象重名。`objectNameScopeFor` 增加可选 `prefix/width/start`（默认 `'O'/4/自动起点` 不变），`beginObjectNameScope`/`nextObjectId` 行为不变。
+  - IO-P2-25：`exportJSON` 改为先 `persistableState()` 再在副本写 `nowISO()`，不再隐式改写 `state.meta.updatedAt`；导出键集与取值语义不变。
+  - RT-P2-15：对象清单类型色 dot 统一 `normalizeExportColor(t.color,'#666')` + `esc`，与类型管理页同源；脏色值（引号/分号/`url()`）回退安全色。
+  - RT-P2-16：`showConfirm`/`showPrompt` 改由 `openModal` 的 `onClose` 统一结算 Promise；Esc/遮罩按取消语义返回（`false`/`null`），按钮路径保持 `true`/输入值；确认值在关闭前捕获。修复 `await showConfirm/showPrompt` 永久挂起。
+  - CORE-P2-15：删除 3 处恒不可达分支——`shapePerimeter` 的扇形角度二次覆盖（`sectorSweep` 已保证起止角相等返回 360）、`buildProject` 活动楼层缺失后的补楼层（首层补默认层已保证命中）、`applyAffine` 的 `state.site.kind!=='image'`（`sanitizeSite` 只产出矢量 kind）。`geometry-site.js` 的 `site.kind==='image'/'empty'` 分支保留：被 selftest「场地节点-图片底图无手柄」直接断言。
+  - CORE-P2-16：核心层默认名与文案统一走 `L()`——`render.js` 文字默认名/面积/周长前缀；`persistence.js` 撤销/重做 toast 与工程/场地/图层/类型默认名；`model.js` 初始工程名/默认图层/场地槽/未知类型；`snapshot.js` 未命名工程/自动快照与 A/B 差异字段名、布尔值（`diffFieldLabel`/`diffValueText` 改为调用期翻译）。
+  - RT-P2-18：新增 `COLLAB_DEBUG`（`?debug=1`，`location` 缺失时安全降级）与 `collabDebugSet`；`__collabState`/`__collabLastError`/`__collabLastMerge`/`__collabForeignDropped`/`__collabLastForeignFrom` 仅调试开关下挂到 `window`；collab e2e 统一改走 `/index.html?debug=1`，原 13 处断言保留。
+  - 公共抽象（新增/调整，调用方影响面已核对）：
+    - `objectNameScopeFor(used, prefix='O', width=4, start=null)` 扩展可选参数；唯一调用方 `beginObjectNameScope` 不传新参，行为与签名兼容。
+    - `catalogLoadError`（`catalog.js`，selftest getter 暴露）；`collabDebugSet`（`collab.js`）；`normalizeExportColor` 复用方新增 `ui-panels.js` 两处 dot。
+    - 新增 23 条 en 词条，`PHRASES 978→1001`；未新增第二套校验或颜色工具。
+- **验证数据**：
+  - `selftest`：3186 通过 / 0 失败（批次前 3157，+29：IO-P2-22 +9、IO-P2-23 +3、IO-P2-24 +6、IO-P2-25 +3、CORE-P2-15 +3、CORE-P2-16 +5）。
+  - `e2e`：118 用例 / 117 通过 / 1 条件跳过（+3：RT-P2-15×1、RT-P2-16×1、RT-P2-18×1；未新增跳过，既有断言未删）。
+  - `check-gates`：正面 6/6、破坏 10/10；`check-discipline --strict`：13/13；`build.mjs --check`：一致。
+  - `check.mjs --selftest`：契约 7/0、插件 API 23/0/0、i18n 46.2%（+1.05pp；缺口 8 / UI 1 / 模板 0；PHRASES 1001 / TEMPLATES 112 / DICT.zh 193）、SW `VERSION=78`。
+  - 产物：820,884 B / gzip 255,006 B / 余量 18,796 B；相对批次 8 结束 819,766 B **+1,118 B / gzip +412 B / 余量 −1,118 B**（仍高于 15,000 B 止损线）。
+  - Golden：8 种导出 golden 均未变化；导出字段未改（JSON 仅时间戳来源改为副本，键集不变）。
+- **遗留 TODO / 风险**：
+  - 墓碑只持久化 id、不存名称，跨会话无法回填历史墓碑名（`markTombstone` 未改 schema）；本批只覆盖同一操作内被清除的名称。
+  - 场地隐藏时停车仍有意回退取景框（产品降级语义，已写入 user-guide/features）。
+  - 新工程/图层的默认名在创建时按当时语言落盘，切换语言不会重译历史数据；`L()` 只影响新建与渲染路径。
+  - `features` 层（如 `interaction.js`）与 `ui-shell.js` 仍有审计未列出的硬编码中文；UI 硬编码门禁维持 1/20，未扩大。
+  - 协作嵌套弹窗（一个弹窗未关时再打开）仍不会结算旧 Promise，属既有行为，本批未改。
+  - `?debug=1` 是唯一观测入口；生产 URL 下 `__collab*` 全局不再存在，外部脚本若依赖需显式开启。
+  - C 类 4 条（IO-P2-3/17/20、RT-P2-12）未排期、未改动。
+
 ## 2026-11-08 · P2 批次 7/8：插件沙箱 4 条 + 规则/统计 2 条
 
 - **Commit Hash**：
