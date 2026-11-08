@@ -303,7 +303,7 @@ canvas.addEventListener('pointerdown',e=>{
         if(e.shiftKey||e.ctrlKey||e.metaKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
         else if(!selectedIds.has(o.id)){ selectedIds.clear(); selectedIds.add(o.id); }
         drag={type:'move',start:wp,originals:new Map(),moved:false};
-        const idx=objectIndexById();
+        const idx=dragObjectIndex(drag);
         selectedIds.forEach(id=>{ const obj=idx.get(id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
       }else{
         selectedIds.clear(); selectedIds.add(o.id);
@@ -390,7 +390,7 @@ canvas.addEventListener('pointermove',e=>{
       if(Math.hypot(delta[0],delta[1])*state.viewport.zoom<2) return;
       pushHistory(); drag.moved=true;
     }
-    const moveIdx=objectIndexById();
+    const moveIdx=dragObjectIndex(drag);
     drag.originals.forEach((orig,id)=>{ moveObjectBy(moveIdx.get(id),orig,delta); });
     requestRender(); return;
   }
@@ -679,7 +679,7 @@ function objectMovedFrom(orig,o){
 function dragChangedIds(d){
   if(!d) return [];
   if(d.type==='move'){
-    const idx=objectIndexById();
+    const idx=dragObjectIndex(d);
     const ids=[];
     d.originals.forEach((orig,id)=>{ if(objectMovedFrom(orig,idx.get(id))) ids.push(id); });
     return ids;
@@ -704,7 +704,7 @@ function cancelActiveDrag(){
   if(d.type==='pan') return true;
   const changed=dragChanged(d);
   if(d.type==='move'){
-    const idx=objectIndexById();
+    const idx=dragObjectIndex(d);
     d.originals.forEach((orig,id)=>{ const o=idx.get(id); if(o) Object.assign(o,deepClone(orig)); });
     if(d.moved) history.past.pop();
   }else if(['node','rotate','rect','shapeHandle'].includes(d.type)){

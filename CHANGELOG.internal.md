@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 C（3/5）：拖拽期对象索引只建一次，pointermove 不再重建 Map
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/model.js` 新增 `dragObjectIndex(d)`：索引挂在 `d.index` 上，缺省才新建；
+  - `js/core/interaction.js` 的 pointerdown、move 的 pointermove 分支、`dragChangedIds()`、`cancelActiveDrag()` 四处统一改用它，去掉每次 pointermove 的 `objectIndexById()` 全量建表；
+  - `scripts/selftest.mjs` +3：同一拖拽只建一次、缓存索引仍反映最新坐标、无拖拽对象时每次新建；
+  - 同步 `docs/ARCHITECTURE.md` §6、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**（真实 Chromium 1920×1080@DPR1，`tests/perf/p2-render.perf.mjs` 的 `dragMoveRebuildIndex` / `dragMoveCachedIndex`，各 60 次）：
+  - 10,000 对象、8 个拖拽对象：每次 pointermove 建表 **P95 0.6 ms → 0 ms**（avg 0.4 → 0 ms）；按 60 次/秒指针事件折算，约省 24–36 ms/s 主线程，并消除每秒数十次 10k 条目 `Map` 分配。
+  - 2,000 对象同向（P95 0.1 → 0 ms）。
+  - selftest **3533 通过 / 0 失败**（基线 3530，+3）；e2e 123 通过 + 1 条件跳过（124）；bench 通过。
+  - dist **832,492 B**（本条 **+151 B**）/ gzip 258,346 B / 余量 **7,188 B**；SW `VERSION=103`；8 种 golden 未变。
+- **遗留 TODO / 风险**：
+  - 缓存的索引不含拖拽期间新增的对象；当前拖拽不增删对象，若未来引入「拖拽中复制」等操作，必须在新对象落地时刷新 `d.index`。
+  - `dragObjectIndex(null)` 仍走全量建表（无拖拽场景，调用方只在需要时用）。
+
 ## 2026-11-08 · 批次 C（2/5）：静态层裁剪预筛改用保守 O(1) 包围盒
 
 - **Commit Hash**：`5980ed6`

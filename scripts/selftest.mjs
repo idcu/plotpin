@@ -163,7 +163,7 @@ code += `\n;globalThis.__api = {
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg, exportFooterText, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
   normalizeExportColor, dxfSanitizeName,
-  outlineOf, objectIndexById, ensureVendor, siteDomainOf,
+  outlineOf, objectIndexById, dragObjectIndex, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
   PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
@@ -7496,6 +7496,14 @@ await section("72. A-15 公共抽象：outlineOf golden / objectIndexById / site
   eq('A-15 索引命中', idx.get('IDX_A')===api.state.objects[0], true);
   eq('A-15 索引大小', idx.size, 2);
   eq('A-15 索引缺失返回 undefined', idx.get('NOPE'), undefined);
+
+  /* P2-5 拖拽期索引复用：同一拖拽只建一次，且仍是活对象引用 */
+  const d={type:'move',originals:new Map()};
+  const i1=api.dragObjectIndex(d);
+  eq('P2-5 拖拽索引只建一次', api.dragObjectIndex(d), i1);
+  api.state.objects[0].x=123;
+  eq('P2-5 缓存索引反映对象最新坐标', i1.get('IDX_A').x, 123);
+  ok('P2-5 无拖拽对象时每次新建', api.dragObjectIndex(null)!==api.dragObjectIndex(null));
   api.resetState();
 }
 

@@ -205,6 +205,30 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
       });
       record('objectIndexById', size, idxCost);
 
+      /* 6) 拖拽 pointermove 索引成本（P2-5）：对比「每帧重建」与「复用缓存索引」 */
+      const dragLoop = await page.evaluate(() => {
+        const list = state.objects, pick = list.slice(0, 8).map(o => o.id);
+        const drag = { type: 'move', start: [0, 0], originals: new Map(), moved: true };
+        pick.forEach(id => drag.originals.set(id, deepClone(list.find(o => o.id === id))));
+        const rebuild = [], cached = [];
+        for (let i = 0; i < 60; i++) {
+          const t0 = performance.now();
+          const idx = objectIndexById();
+          pick.forEach(id => idx.get(id));
+          rebuild.push(performance.now() - t0);
+        }
+        dragObjectIndex(drag);
+        for (let i = 0; i < 60; i++) {
+          const t0 = performance.now();
+          const idx = dragObjectIndex(drag);
+          pick.forEach(id => idx.get(id));
+          cached.push(performance.now() - t0);
+        }
+        return { rebuild, cached };
+      });
+      record('dragMoveRebuildIndex', size, dragLoop.rebuild);
+      record('dragMoveCachedIndex', size, dragLoop.cached);
+
       /* 6) 强制 GC 后堆占用 */
       const heapAfter = await gcUsed();
       results.push({ case: 'heapUsed', objects: size, bytes: heapAfter, baseBytes: heapBase, deltaBytes: heapAfter - heapBase });

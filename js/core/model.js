@@ -566,6 +566,16 @@ function objectIndexById(list){
   return m;
 }
 
+/**
+ * 拖拽期对象索引：pointerdown 建一次，之后 pointermove、变更判定与取消回滚复用同一份（审计 P2-5）。
+ * 拖拽过程中只改坐标、不增删对象，引用稳定，因此可安全缓存；新拖拽对象自然换新索引。
+ */
+function dragObjectIndex(d){
+  if(!d||typeof d!=='object') return objectIndexById();
+  if(!d.index) d.index=objectIndexById();
+  return d.index;
+}
+
 /* -------------------- 折线节点编辑（纯数据，供面板与画布双击共用） -------------------- */
 /* 开放折线与测距链(ruler)可自由增删节点；闭合区域最少 3 点 */
 function isPolylineEditable(o){ return o && (o.kind==='line' || (o.kind==='dimension'&&o.subtype==='ruler')); }

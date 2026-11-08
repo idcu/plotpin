@@ -117,6 +117,7 @@ pointer/keyboard
 
 - **选择集不再进入缓存签名**（N-23）：选中对象保留在静态位图里，动态层只叠加 `drawSelection()` 的虚线框/手柄。悬停同样只叠加动态层。`staticDragIds()` 返回逐帧改形的对象（`move` 越过 2px 阈值后取 `drag.originals` 的键；`node/rotate/rect/shapeHandle` 在 `drag.dirty` 置位后取 `drag.id`），静态层排除它们、动态层重绘它们。因此**每次拖拽开始/结束各重建一次静态层**（选中/悬停为零次）。
 - **对象列表同步**：画布点选与框选的 UI 刷新走 `refreshSelectionUI()`（`renderProps()` + `syncListSelection()`），只切行的 `selected` class 与勾选态；10k 对象下重建 `tbody`（`renderList()`）约 240ms，不能进入点选热路径。需要重建行的场景仍走 `refreshUI()`。
+- **拖拽期对象索引**（P2-5）：`dragObjectIndex(drag)` 在 pointerdown 建一次 `Map` 并挂在 `drag.index` 上，pointermove、`dragChangedIds`、取消回滚共用；拖拽只改坐标不增删对象，引用稳定，因此缓存安全。此前每次 pointermove 都重建 10k 条目的 `Map`。
 - **缓存签名**拆成两级：`sceneStaticContentKey()` 只含「画什么」（画布 CSS 尺寸、DPR、`staticRev`、世界取景框、`state.settings`、`state.site`、底图 transform/资产/尺寸/比例、底图层可见性、拖拽排除集、覆盖率结果摘要）；`sceneStaticKey()` 再拼视口 `zoom/panX/panY`。
 - **纯平移帧走位图搬移（P2-1）**：内容签名与缩放都没变、且平移量是整数设备像素时，`panScrollDelta()` 返回位移，`scrollStaticLayer()` 把静态位图整体搬移并只重绘暴露出来的边缘条带（`drawStaticContent()` 带 clip 复用同一套绘制函数）；浮点平移（`fitView`、触控板小数位移）与缩放变化仍整层重建，避免重采样模糊与像素漂移。
 - **失效入口** `invalidateStatic()` 只做 `staticRev++` 与清空 key。对象增删改、载入/撤销/重做、切换楼层、覆盖率重算都必须调用；漏调会留下过期像素。
