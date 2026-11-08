@@ -102,16 +102,31 @@ function requestRender(){
   requestAnimationFrame(()=>{ renderQueued=false; drawScene(ctx,state.viewport,wrap.clientWidth,wrap.clientHeight,{interactive:true,markerScale:1}); });
 }
 /* -------------------- 分层离屏缓存 --------------------
- * 静态层：底图 / 网格 / 覆盖率 / 场地标注 / 坐标轴 / 未选中的可见对象（冻结为位图）。
- * 动态层：选中对象 / 草稿 / 校准 / 选择框 / 光标 / 捕捉标记等交互元素。
- * 拖拽时只重绘动态层，静态层按签名命中缓存；视口或场景变化时自动重建。
+ * 静态层：底图 / 网格 / 覆盖率 / 场地标注 / 坐标轴 / 全部可见对象（冻结为位图）。
+ * 动态层：正在拖拽改形的对象 / 草稿 / 校准 / 选择框 / 选择装饰 / 光标 / 捕捉标记。
+ * 选择集变化**不再**触发静态层重建：选中对象保留在位图里，动态层只叠加选择装饰。
+ * 只有开始/结束拖拽时改形集合变化，静态层才重建一次（N-23）。
  * 导出 / 打印走「直接全量绘制」路径，保证产物与旧行为一致。 */
 let staticCanvas=null, staticCtx=null, staticKey='', staticRev=0;
 /** 显式作废静态层：对象增删改、载入/撤销/重做、覆盖率结果变化时调用 */
 function invalidateStatic(){ staticRev++; staticKey=''; }
+/**
+ * 当前逐帧改形、必须从静态层排除的对象 id（N-23）。
+ * - move：越过 2px 阈值后才排除 originals 里的全部对象；
+ * - node/rotate/rect/shapeHandle：`drag.dirty` 置位后排除该对象。
+ * 返回 null 表示静态层包含全部可见对象。
+ */
+function staticDragIds(){
+  if(!drag) return null;
+  if(drag.type==='move') return drag.moved&&drag.originals?Array.from(drag.originals.keys()):null;
+  if(!drag.dirty) return null;
+  if(drag.type==='node'||drag.type==='rotate'||drag.type==='rect'||drag.type==='shapeHandle') return [drag.id];
+  return null;
+}
 /** 静态层缓存签名：任何影响静态层像素的输入都在此收敛 */
 function sceneStaticKey(v,cssW,cssH,d){
   const bg=state.background||{};
+  const dyn=staticDragIds();
   return [v.zoom,v.panX,v.panY,cssW,cssH,dpr||1,staticRev,
     d.minX,d.minY,d.maxX,d.maxY,
     JSON.stringify(state.settings),
@@ -120,7 +135,7 @@ function sceneStaticKey(v,cssW,cssH,d){
     bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,bg.metersPerPixel||0,
     bgImage?1:0,(bgDataUrl||'').length,
     (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
-    Array.from(selectedIds).sort().join(','),
+    dyn?dyn.slice().sort().join(','):'',   /* 只跟“正在拖拽改形”有关，与选中集无关 */
     coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0'
   ].join('|');
 }
@@ -147,6 +162,8 @@ function drawScene(c,v,cssW,cssH,opt={}){
   const iconBoost=exportGain*(Number(state.settings.markerScale)||1);
 
   if(cacheable){
+    /* 只有逐帧改形的对象从静态层排除；选中但静止的对象留在位图里（N-23） */
+    const dyn=staticDragIds(), dynSet=dyn?new Set(dyn):null;
     const key=sceneStaticKey(v,cssW,cssH,d);
     if(key!==staticKey){
       const sc=ensureStaticLayer(cssW,cssH);
@@ -158,18 +175,20 @@ function drawScene(c,v,cssW,cssH,opt={}){
       drawSiteAnnotations(sc,v,toS);
       drawAxes(sc,v,toS,cssH);
       const view=visibleWorldRect(v,d,cssW,cssH);
-      state.objects.filter(o=>isVisible(o)&&!selectedIds.has(o.id))
+      state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
         .sort((a,b)=>a.z-b.z)
         .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
       staticKey=key;
     }
     c.clearRect(0,0,cssW,cssH);
     c.drawImage(staticCanvas,0,0,cssW,cssH);
-    /* 选中对象单独绘制：拖拽/编辑时它们每帧变化，避免反复重建静态层 */
-    const view=visibleWorldRect(v,d,cssW,cssH);
-    state.objects.filter(o=>isVisible(o)&&selectedIds.has(o.id))
-      .sort((a,b)=>a.z-b.z)
-      .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
+    /* 拖拽中的对象逐帧变化，单独绘制在静态位图之上 */
+    if(dynSet){
+      const view=visibleWorldRect(v,d,cssW,cssH);
+      state.objects.filter(o=>dynSet.has(o.id)&&isVisible(o))
+        .sort((a,b)=>a.z-b.z)
+        .forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
+    }
     drawDiffOverlay(c,v,toS);
     drawDraft(c,v,d,toS);
     drawCalibration(c,toS);

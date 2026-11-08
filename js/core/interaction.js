@@ -308,10 +308,10 @@ canvas.addEventListener('pointerdown',e=>{
       }else{
         selectedIds.clear(); selectedIds.add(o.id);
       }
-      refreshUI(); requestRender(); return;
+      refreshSelectionUI(); requestRender(); return;
     }
     if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
-    rubber={a:sp,b:sp}; refreshUI(); requestRender(); return;
+    rubber={a:sp,b:sp}; refreshSelectionUI(); requestRender(); return;
   }
   if(currentTool==='point'){
     pushHistory();
@@ -395,9 +395,11 @@ canvas.addEventListener('pointermove',e=>{
     requestRender(); return;
   }
   if(drag?.type==='node'){
+    drag.dirty=true;
     const o=state.objects.find(x=>x.id===drag.id); if(o){ o.points[drag.handle.index]=wp; syncFirstPoint(o); requestRender(); } return;
   }
   if(drag?.type==='rotate'){
+    drag.dirty=true;
     const o=state.objects.find(x=>x.id===drag.id); if(!o) return;
     let deg=Math.atan2(wp[1]-o.y,wp[0]-o.x)*180/Math.PI;
     if(drag.handle.kind!=='pointRotate') deg-=90;
@@ -405,10 +407,12 @@ canvas.addEventListener('pointermove',e=>{
     requestRender(); return;
   }
   if(drag?.type==='rect'){
+    drag.dirty=true;
     resizeRectByHandle(state.objects.find(x=>x.id===drag.id),drag,wp);
     requestRender(); return;
   }
   if(drag?.type==='shapeHandle'){
+    drag.dirty=true;
     resizeShapeByHandle(state.objects.find(x=>x.id===drag.id),drag.handle,wp);
     requestRender(); return;
   }
@@ -468,7 +472,7 @@ canvas.addEventListener('pointerup',e=>{
     const changed=dragChanged(drag);
     if(drag.moved && !changed) history.past.pop();   /* 拖回原位：不落盘、不留空快照 */
     drag=null;
-    if(changed) commitChange('图片已变换'); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+    if(changed) commitChange('图片已变换'); else { updateHistoryButtons(); refreshSelectionUI(); requestRender(); }
     return;
   }
   if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
@@ -482,7 +486,7 @@ canvas.addEventListener('pointerup',e=>{
     if(isSite && changed && state.site) state.site.updatedAt=nowISO();
     const changedIds=dragChangedIds(drag);
     drag=null;
-    if(changed) commitChange(undefined, changedIds); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+    if(changed) commitChange(undefined, changedIds); else { updateHistoryButtons(); refreshSelectionUI(); requestRender(); }
     return;
   }
   if(draft && ['rect','areaParallelogram'].includes(draft.kind) && draft.pending===false){ finishDraft(); return; }
@@ -496,7 +500,7 @@ canvas.addEventListener('pointerup',e=>{
       if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
       state.objects.forEach(o=>{ if(isVisible(o)&&boundsIntersect(objectBounds(o),rb)) selectedIds.add(o.id); });
     }
-    rubber=null; refreshUI(); requestRender();
+    rubber=null; refreshSelectionUI(); requestRender();
   }
 });
 canvas.addEventListener('pointercancel',e=>{

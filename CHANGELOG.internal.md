@@ -2,6 +2,31 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-23 选中/悬停不再重建静态层
+
+- **Commit Hash**：`待回填`（perf(render)：选中与悬停只叠加动态层）。
+- **核心改动**
+  - `js/core/render.js`
+    - 静态层改为包含**全部可见对象**，仅排除 `staticDragIds()` 返回的「逐帧改形对象」；`sceneStaticKey()` 用拖拽排除集替换 `selectedIds`，选择集变化不再使缓存失效。
+    - 新增 `staticDragIds()`：`move` 越过 2px 阈值后返回 `drag.originals` 的键；`node/rotate/rect/shapeHandle` 在 `drag.dirty` 置位后返回 `drag.id`；其余返回 `null`。
+    - 动态层只重绘拖拽中的对象；选中装饰仍由 `drawSelection()` 叠加，避免 `globalAlpha` 双画加深。
+  - `js/core/interaction.js`
+    - `node`/`rotate`/`rect`/`shapeHandle` 分支置 `drag.dirty=true`，让静态层在改形开始时就排除该对象。
+    - 画布点选、框选、拖拽无变更收尾改用 `refreshSelectionUI()`。
+  - `js/features/ui-panels.js`：新增 `syncListSelection()`（只切行 class 与勾选）与 `refreshSelectionUI()`（`renderProps` + `syncListSelection`），避免 10k 行 `tbody` 重建进入点选热路径。
+  - `scripts/selftest.mjs`：§47 改为「选择集变化不再使签名失效」，新增拖动未越阈值 / 越阈值 / 控制点未改形 / 改形 / 结束恢复共 6 项断言。
+  - `tests/e2e/smoke.spec.mjs`：新增画布点选后 `#objectTbody` 行高亮与勾选同步断言。
+  - `tests/perf/speed.perf.mjs`：N-23 改为相对基线门禁，新增悬停重建数与静态层单次重建耗时断言。
+  - `sw.js`：`VERSION` 32 → 33；`scripts/sw-inputs.sha256`、`scripts/dist-manifest.json` 同步。
+  - 文档：`docs/ARCHITECTURE.md` §6 渲染分层、`docs/performance.md` §4.1.4、`README.md` 数字口径。
+- **性能数据**（真实 Chromium 1920×1080@DPR1，10k 对象，真实 `page.mouse.click`；改造前 = N-22 提交态 `556c205` stash 回退三文件后实测）
+  - 点选整帧 P95：**661.1 / 710.2 ms → 20.0 / 20.9 / 22.1 ms**（−97%，计划门禁 ≥30%）。
+  - 30 次点选期间静态层重建：**30 → 0**；10 次悬停：**0**。
+  - 静态层单次重建稳态 P95：246.2 ms → **213.1 / 226.0 ms**（未回退）。
+  - 选中→取消后画布哈希逐字节还原（`h0 === h2`，`h0 !== h1`）。
+- **验证数据**：selftest **2982 通过 / 0 失败（+6）**；e2e 真跑（含新增行高亮断言）；产物与 SW 版本见 `scripts/dist-manifest.json` / `sw.js`。
+- **遗留风险 / 已知代价**：每次拖拽开始与结束各重建一次静态层（10k 约 0.2 s），与改造前「选中即重建」的总重建次数相同；选中对象不再强制置顶，按 `z` 序参与静态层叠放，选择态只靠 `drawSelection()` 装饰标识。
+
 ## 2026-11-08 · N-22 捕捉热路径包围盒预筛与单趟收集
 
 - **Commit Hash**：`待回填`（perf(snap)：捕捉候选改为单趟扫描并按指针邻域预筛）。

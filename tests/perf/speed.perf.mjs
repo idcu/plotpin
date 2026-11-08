@@ -33,7 +33,8 @@ const SCALE = 10000;
 const BASELINE = {
   n22FrameP95: 34.3,        /* ms，改造前两次采样 34.4 / 34.3 */
   n22TotalP95: 37.0,        /* ms，改造前两次采样 37.0 / 38.3 */
-  n23ClickP95: 674.5,       /* ms，改造前（本文件基线采样） */
+  n23ClickP95: 661.1,       /* ms，改造前（N-22 提交态 556c205，30 次点选重建 30 次） */
+  n23RebuildP95: 246.2,     /* ms，改造前静态层单次重建稳态 P95（172.9 / 246.2 两次采样取较差） */
 };
 const GATES = {
   n22FrameDropPct: 30,      /* 拖动整帧 P95 相对基线下降比例（计划验收值） */
@@ -140,6 +141,12 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
       };
     });
     await page.mouse.move(target.x, target.y);
+    /* 静态层重建计数：N-23 后拖拽开始/结束各重建一次（调用点计数，不含绘制耗时） */
+    await page.evaluate(() => {
+      window.__rebuilds = 0;
+      const oe = ensureStaticLayer;
+      window.ensureStaticLayer = function () { window.__rebuilds++; return oe.apply(null, arguments); };
+    });
     await page.mouse.down();
     /* 预热 6 步（半径 20px，务必越过 2px 拖动阈值）：
        首次真实位移会触发 pushHistory 整份快照，必须落在测量区间之外 */
@@ -161,6 +168,7 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
     const out = await page.evaluate(() => ({
       probe: window.__probe,
       moves: window.__moves,
+      rebuilds: window.__rebuilds,
       drag: drag ? { type: drag.type, moved: !!drag.moved } : null
     }));
     const movedObj = await page.evaluate(id => {
@@ -180,7 +188,8 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
       heapAfterCommitMB: round(heapAfterCommit / 1048576),
       heapDeltaPct,
       dragMoved: !!movedObj && (Math.abs(movedObj.x - target.ox) > 1 || Math.abs(movedObj.y - target.oy) > 1),
-      moves: out.moves
+      moves: out.moves,
+      staticRebuilds: out.rebuilds
     };
     record(data);
     expect(data.dragMoved, '必须真实拖动成功（对象坐标发生变化）').toBe(true);
@@ -235,6 +244,14 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
       await page.mouse.click(targets[i].x, targets[i].y);
       await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     }
+    /* 悬停只叠加动态层：指针扫过对象不得触发静态层重建 */
+    const hoverBase = await page.evaluate(() => window.__rebuilds());
+    for (let i = 0; i < 10; i++) {
+      const t = targets[(i * 7 + 11) % targets.length];
+      await page.mouse.move(t.x, t.y);
+      await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+    }
+    const hoverRebuilds = await page.evaluate(b => window.__rebuilds() - b, hoverBase);
     const out = await page.evaluate(() => ({
       click: window.__click,
       rebuilds: window.__rebuilds() - window.__rebuildBase,
@@ -242,6 +259,22 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
     }));
     const total = stat(out.click.map(x => x.total));
     const toFrame = stat(out.click.map(x => x.toFrame));
+
+    /* 静态层单次重建耗时（N-23 后拖拽起止会触发）：直接 invalidate + 全量绘制 + 强制光栅。
+       先跑 2 次预热（首帧包含光栅管线冷启动），再记录 3 次稳态样本。 */
+    const rebuildCost = await page.evaluate(() => {
+      const one = () => {
+        invalidateStatic();
+        const t = performance.now();
+        drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
+        ctx.getImageData(0, 0, 1, 1);
+        return performance.now() - t;
+      };
+      one(); one();
+      const samples = [];
+      for (let i = 0; i < 3; i++) samples.push(one());
+      return samples;
+    });
 
     /* 视觉自洽：选中→取消选中后，画布 PNG 必须与初始逐字节一致（静态层无残留） */
     const vis = await page.evaluate(async () => {
@@ -269,8 +302,10 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
     const data = {
       case: 'N-23 10k 连续点选',
       scale: SCALE, viewport: '1920x1080@DPR1',
-      total, toFrame, rebuilds: out.rebuilds, samples: out.click.length,
+      total, toFrame, rebuilds: out.rebuilds, hoverRebuilds, samples: out.click.length,
       selectedAfterClicks: out.selected,
+      staticRebuildMs: rebuildCost.map(x => round(x, 1)),
+      staticRebuildP95: stat(rebuildCost).p95,
       visual: vis
     };
     record(data);
@@ -279,7 +314,11 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
     expect(vis.selectionVisible, '选中态必须产生可见变化').toBe(true);
     if (!NO_GATE) {
       expect(out.rebuilds, '连续点选期间静态层重建次数').toBeLessThanOrEqual(GATES.n23Rebuilds);
-      expect(total.p95, 'N-23 点选整帧 P95').toBeLessThanOrEqual(GATES.n23ClickP95);
+      expect(hoverRebuilds, '悬停期间静态层重建次数').toBeLessThanOrEqual(GATES.n23Rebuilds);
+      const drop = 1 - total.p95 / BASELINE.n23ClickP95;
+      expect(round(drop * 100, 1), 'N-23 点选整帧 P95 相对基线下降 %').toBeGreaterThanOrEqual(GATES.n23ClickDropPct);
+      /* 计划要求静态层重建耗时不得回退；留 10% 作为 GPU 光栅抖动容差，不是放宽阈值 */
+      expect(stat(rebuildCost).p95, 'N-23 静态层单次重建 P95').toBeLessThanOrEqual(round(BASELINE.n23RebuildP95 * 1.1, 1));
     }
   });
 

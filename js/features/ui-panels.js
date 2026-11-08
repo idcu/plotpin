@@ -85,6 +85,26 @@ function populateSelects(){
 }
 
 /* -------------------- 对象清单 -------------------- */
+/**
+ * 只同步列表的选中高亮/勾选，不重建行（N-23：画布点选热路径）。
+ * 10k 对象时重建 tbody 约 240ms/次，而选中变化只影响 class 与 checkbox。
+ */
+function syncListSelection(){
+  const body=$('objectTbody');
+  if(!body) return;
+  const rows=body.querySelectorAll('tr[data-id]');
+  let all=rows.length>0;
+  rows.forEach(tr=>{
+    const on=selectedIds.has(tr.dataset.id);
+    tr.classList.toggle('selected',on);
+    const chk=tr.querySelector('input[data-row-select]');
+    if(chk) chk.checked=on;
+    if(!on) all=false;
+  });
+  const head=$('headSelectChk'); if(head) head.checked=all;
+}
+/** 选中集变化的最小 UI 刷新：属性面板 + 列表高亮（不重建 10k 行、不刷图层/统计） */
+function refreshSelectionUI(){ renderProps(); syncListSelection(); }
 function renderList(){
   const q=$('filterText').value.trim().toLowerCase(), kf=$('filterKind').value, lf=$('filterLayer').value;
   const rows=state.objects.filter(o=>(!kf||o.kind===kf)&&(!lf||o.layerId===lf)&&(!q||[o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(q)));

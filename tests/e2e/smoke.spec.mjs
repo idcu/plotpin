@@ -77,6 +77,16 @@ test('基础绘制/选择：点工具落点、选择工具命中并打开属性�
   });
   expect(afterSelect.selected).toEqual([afterSelect.id]);
   expect(afterSelect.panelLen).toBeGreaterThan(0);
+  /* N-23：画布点选走 refreshSelectionUI（不重建 10k 行），但清单高亮/勾选必须同步 */
+  const rowState = await page.evaluate(id => {
+    const tr = document.querySelector(`#objectTbody tr[data-id="${id}"]`);
+    if (!tr) return null;
+    const chk = tr.querySelector('input[data-row-select]');
+    return { selected: tr.classList.contains('selected'), checked: !!(chk && chk.checked) };
+  }, afterSelect.id);
+  expect(rowState, '对象清单必须包含被选中对象的行').not.toBeNull();
+  expect(rowState.selected, '画布点选后清单行必须高亮').toBe(true);
+  expect(rowState.checked, '画布点选后清单勾选必须同步').toBe(true);
   expect(errors).toEqual([]);
 });
 

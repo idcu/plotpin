@@ -4031,7 +4031,18 @@ await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", a
   ok('缓存-显式作废使签名失效', api.sceneStaticKey(v,dims,800,600)!==k1);
   const k2=api.sceneStaticKey(v,dims,800,600);
   api.selectedIds.add('X1');
-  ok('缓存-选择集变化使签名失效', api.sceneStaticKey(v,dims,800,600)!==k2);
+  eq('缓存-选择集变化不再使签名失效（N-23）', api.sceneStaticKey(v,dims,800,600), k2);
+  api.setDrag({type:'move',moved:false,originals:new Map([['X1',{}]])});
+  eq('缓存-拖动未越2px阈值不排除静态层', api.sceneStaticKey(v,dims,800,600), k2);
+  api.setDrag({type:'move',moved:true,originals:new Map([['X1',{}]])});
+  ok('缓存-拖动越阈值后排除对象使签名失效', api.sceneStaticKey(v,dims,800,600)!==k2);
+  ok('缓存-拖拽集合稳定时签名稳定', api.sceneStaticKey(v,dims,800,600)===api.sceneStaticKey(v,dims,800,600));
+  api.setDrag({type:'node',id:'X1',handle:{index:0},dirty:false});
+  eq('缓存-控制点未改形不排除静态层', api.sceneStaticKey(v,dims,800,600), k2);
+  api.setDrag({type:'node',id:'X1',handle:{index:0},dirty:true});
+  ok('缓存-控制点改形后排除对象使签名失效', api.sceneStaticKey(v,dims,800,600)!==k2);
+  api.setDrag(null);
+  eq('缓存-结束拖拽后恢复包含全部对象', api.sceneStaticKey(v,dims,800,600), k2);
   api.resetState();
 }
 

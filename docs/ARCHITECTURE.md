@@ -113,9 +113,11 @@ pointer/keyboard
 - **交互路径**（`opt.interactive === true` 且 `markerScale === 1`）：静态层画到离屏 canvas，动态层画到主 canvas。
 - **直接路径**（导出/打印/离屏合成）：不读缓存，按同一顺序全量重绘，保证产物与旧行为一致。
 
-静态层内容：底图、场地、网格、覆盖率、场地标注、坐标轴、**未选中**的可见对象。动态层内容：选中对象、差异叠加、草稿、校准、参考线、选择框、橡皮筋、光标、追踪线、场地/图片手柄、节点焦点、拖拽 HUD、捕捉标记。
+静态层内容：底图、场地、网格、覆盖率、场地标注、坐标轴、全部可见对象（仅排除「正在拖拽改形」的对象，见下）。动态层内容：拖拽中的对象、差异叠加、草稿、校准、参考线、选择框、橡皮筋、光标、追踪线、场地/图片手柄、节点焦点、拖拽 HUD、捕捉标记、选择装饰。
 
-- **缓存签名** `sceneStaticKey()` 收敛所有影响静态层像素的输入：视口（zoom/pan）、画布 CSS 尺寸、DPR、`staticRev`、世界取景框、`state.settings`、`state.site`、底图 transform/资产/尺寸/比例、底图层可见性、`selectedIds`、覆盖率结果摘要。
+- **选择集不再进入缓存签名**（N-23）：选中对象保留在静态位图里，动态层只叠加 `drawSelection()` 的虚线框/手柄。悬停同样只叠加动态层。`staticDragIds()` 返回逐帧改形的对象（`move` 越过 2px 阈值后取 `drag.originals` 的键；`node/rotate/rect/shapeHandle` 在 `drag.dirty` 置位后取 `drag.id`），静态层排除它们、动态层重绘它们。因此**每次拖拽开始/结束各重建一次静态层**（选中/悬停为零次）。
+- **对象列表同步**：画布点选与框选的 UI 刷新走 `refreshSelectionUI()`（`renderProps()` + `syncListSelection()`），只切行的 `selected` class 与勾选态；10k 对象下重建 `tbody`（`renderList()`）约 240ms，不能进入点选热路径。需要重建行的场景仍走 `refreshUI()`。
+- **缓存签名** `sceneStaticKey()` 收敛所有影响静态层像素的输入：视口（zoom/pan）、画布 CSS 尺寸、DPR、`staticRev`、世界取景框、`state.settings`、`state.site`、底图 transform/资产/尺寸/比例、底图层可见性、拖拽排除集、覆盖率结果摘要。
 - **失效入口** `invalidateStatic()` 只做 `staticRev++` 与清空 key。对象增删改、载入/撤销/重做、切换楼层、覆盖率重算都必须调用；漏调会留下过期像素。
 - 静态层 canvas 尺寸随 CSS 尺寸与 DPR 重建，重建时必须调用 `markSurfaceSize()` 以维持统一的尺寸记账。
 - 可见性剔除用 `visibleWorldRect()`（外扩 48 CSS px），避免标签/图标在边界处被裁掉；对象按 `z` 升序绘制。
