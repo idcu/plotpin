@@ -43,7 +43,7 @@
 | `interaction.js` | 指针/触摸/键盘、工具切换、捕捉、草稿、校准、剪贴板、帮助面板 | `setTool / resolveWorldPoint / calibPrecheck / refreshCalibStatus / cancelActiveDrag / deleteSelected / duplicateSelected / copySelected / pasteClipboard / keyboardRegion / flushBeforeUnload / openShortcutsHelp` | 状态、几何、渲染、持久化 → 启动 | `calibPrecheck` 是所有校准入口的唯一判定源，三处入口不得各写一套条件。拖拽必须在 `pointercancel / lostcapture / Esc` 走 `cancelActiveDrag`，否则会残留并污染下一次历史。`sameSerializable` 忽略 `updatedAt`，用于拖拽起止比较，误改会导致"没动也落盘"。 |
 | `persistence.js` | 保存/恢复、迁移、楼层、资产回收、历史、墓碑、工程库副本、合并落盘、自测注入 | `pushHistory / undo / redo / markDirty / sanitizeReport / stampObjects / commitChange / commitObjectEdit / scheduleSave / auditProject / buildProject / migrateProject / buildDemoProject / mergeProjectJSON / switchFloorData / markTombstone / sanitizeObjects / sanitizeSite / reachableBgAssetIds` | `model`、`config`、`content-assets`、几何 → 启动、特性层 | `pushHistory()` 由调用方在变更前显式调用，不是自动钩子。`markDirty` 的 profile 决定"刷新 UI / 广播 / 入历史"，选错会导致过度重绘或协作漏发。保存失败必须分类：配额不重试，瞬时错误 1/3/9s 重试。资产回收的命名空间必须并集覆盖，漏一个就会删掉仍在用的图。 |
 | `render.js` | Canvas 渲染、静态层缓存、覆盖率/标注/手柄/差异叠加 | `drawScene / requestRender / invalidateStatic / sceneStaticKey / ensureStaticLayer / visibleWorldRect / markSurfaceSize / surfaceCssSize / drawBackground / drawSite / drawCoverage / drawSiteAnnotations / drawObject / drawDimension / drawDiffOverlay / drawCalibration` | 状态、视口、几何、符号、i18n → 启动、交互、导出 | `sceneStaticKey` 必须包含 `site`、底图 transform、设置、选中态与覆盖率摘要；漏字段会留下过期像素。导出走 `interactive=false` 的全量路径，不读缓存；`markerScale!=1` 也强制全量。静态层重建后必须 `markSurfaceSize()`。 |
-| `snapshot.js` | 版本快照的序列化/存取/淘汰/差异分类/叠加数据 | `SNAPSHOT_PREFIX / snapshotKey / snapshotProjectData / snapshotAssetRefs / diffSnapshots / diffOverlay / setDiffOverlay / diffCategoryOf / objectDiffFields` | `persistence`、`model` → 快照面板、导出 | 快照存 `assetId` 引用，不能复制 base64。上限 20 条 / 16MB，超出淘汰最旧且至少留 1 条。差异按对象 id 匹配，分类优先级为新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改；内部不可变字段必须忽略。 |
+| `snapshot.js` | 版本快照的序列化/存取/淘汰/差异分类/叠加数据 | `SNAPSHOT_PREFIX / snapshotKey / snapshotProjectData / snapshotAssetRefs / diffSnapshots / diffOverlay / setDiffOverlay / diffCategoryOf / objectDiffFields` | `persistence`、`model` → 快照面板、导出 | 快照存 `assetId` 引用，不能复制 base64。上限 20 条 / 16MB，超出淘汰最旧且至少留 1 条。差异按对象 id 匹配，分类优先级为新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改；场景级追加场地/底图/楼层名/图层名/类型表结构，旧快照缺 `objectTypes` 时跳过类型表对比；内部不可变字段必须忽略。 |
 | `tab-lease.js` | 同工程多标签的编辑租约（BroadcastChannel + localStorage 心跳） | `acquireEditorLease / releaseEditorLease / leaseSaveBlocked / leaseStatus / onLeaseConflict / LEASE_TTL_MS / LEASE_HEARTBEAT_MS` | `model`、持久化 → 启动、保存 | 租约按 `state.meta.projectId`（工程库绑定 id）归组；未绑定工程为空串，多个未绑定标签会被视为同一工程——是否符合预期**待确认**。租约冲突时只暂缓保存，不丢内存编辑。 |
 | `app.js` | 启动编排：设置、恢复工程、首启引导、能力探测、SW、租约、卸载前落盘 | 无对外函数（`DOMContentLoaded` 执行） | 全部 | 必须最后加载。启动顺序改变会影响 `afterStateLoaded`、首启引导与 SW 注册；新增启动步骤要同步 selftest/e2e 的"加载 45 个脚本"断言。 |
 
@@ -75,7 +75,7 @@
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
 | `check.mjs` | 零依赖工程质量门禁（13 步） | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
-| `selftest.mjs` | 逻辑层自测（3010 断言 / 118 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
+| `selftest.mjs` | 逻辑层自测（3023 断言 / 118 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
 | `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 10 种人为破坏并断言对应门禁变红 | 仓库副本 → 通过/失败 | CI |

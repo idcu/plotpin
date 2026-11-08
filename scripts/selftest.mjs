@@ -7040,6 +7040,30 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   eq('N-21-对象差异在前场景在后', [ord.items[0].scope||'object', ord.items[ord.items.length-1].scope], ['object','scene']);
   eq('N-21-场景项不计入未变对象', sd.unchanged, 0);
 
+  /* RT-P1-09：图层名与类型表结构变化必须单独成场景项，分类沿用对象优先级（新增>删除>…>属性修改） */
+  const L1={layers:[{id:'L1',name:'结构'},{id:'L3',name:'旧名'},{id:'L5',name:'仅A层'}],
+    objectTypes:[{id:'t.a',name:'A'},{id:'t.b',name:'B'},{id:'t.c',name:'C'}]};
+  const L2={layers:[{id:'L1',name:'结构'},{id:'L3',name:'新名'},{id:'L4',name:'仅B层'}],
+    objectTypes:[{id:'t.a',name:'A'},{id:'t.b',name:'B2'},{id:'t.d',name:'D'}]};
+  const ld=api.diffSnapshots(L1,L2);
+  const ls=Object.fromEntries(ld.items.map(it=>[it.id,it]));
+  eq('RT-P1-09 场景差异总数', ld.counts.total, 6);
+  eq('RT-P1-09 新增/删除/修改计数', [ld.counts.added,ld.counts.removed,ld.counts.modified], [2,2,2]);
+  eq('RT-P1-09 图层新增', ls['scene:layer:L4']&&ls['scene:layer:L4'].category, 'added');
+  eq('RT-P1-09 图层删除', ls['scene:layer:L5']&&ls['scene:layer:L5'].category, 'removed');
+  eq('RT-P1-09 图层改名', ls['scene:layer:L3']&&[ls['scene:layer:L3'].category,ls['scene:layer:L3'].fields.join()], ['modified','layerName']);
+  eq('RT-P1-09 未变图层不报', !!ls['scene:layer:L1'], false);
+  eq('RT-P1-09 类型新增', ls['scene:type:t.d']&&ls['scene:type:t.d'].category, 'added');
+  eq('RT-P1-09 类型删除', ls['scene:type:t.c']&&ls['scene:type:t.c'].category, 'removed');
+  eq('RT-P1-09 类型定义变更', ls['scene:type:t.b']&&[ls['scene:type:t.b'].category,ls['scene:type:t.b'].fields.join()], ['modified','typeDef']);
+  eq('RT-P1-09 未变类型不报', !!ls['scene:type:t.a'], false);
+  eq('RT-P1-09 字段可读名', [api.diffFieldLabel('layerName'),api.diffFieldLabel('typeDef')], ['图层名','类型定义']);
+  eq('RT-P1-09 场景项仍后置', ld.items[0]&&ld.items[0].scope, 'scene');
+  /* 旧快照没有 objectTypes：缺表是 schema 差异，不当作整表新增，避免全量误报 */
+  const legacy=api.diffSnapshots({layers:[{id:'L1',name:'x'}]},
+    {layers:[{id:'L1',name:'x'}],objectTypes:[{id:'t.a',name:'A'}]});
+  eq('RT-P1-09 旧快照缺类型表不误报', legacy.counts.total, 0);
+
   /* N-21：元数据索引只读 meta；数量/字节淘汰至少保留 1 条（临时内存 IDB 桩） */
   const store=new Map();
   const prevIdb={get:sandbox.idbGetKey,put:sandbox.idbPutKey,del:sandbox.idbDeleteKey,keys:sandbox.idbAllKeys};

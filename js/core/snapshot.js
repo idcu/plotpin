@@ -152,7 +152,8 @@ const DIFF_FIELD_LABELS={
   x:'X', y:'Y', width:'宽', height:'高', angle:'旋转', points:'节点', shape:'形状',
   phys:'物理尺寸', text:'文字', props:'属性', style:'样式', annot:'标注', iconSize:'图标倍率',
   closed:'闭合', subtype:'子类型', floorId:'楼层',
-  siteShape:'场地形状', siteName:'场地名称', background:'底图', floorName:'楼层名'
+  siteShape:'场地形状', siteName:'场地名称', background:'底图', floorName:'楼层名',
+  layerName:'图层名', typeDef:'类型定义'
 };
 function diffFieldLabel(key){ return DIFF_FIELD_LABELS[key]||key; }
 function diffValueText(v){
@@ -214,9 +215,26 @@ function snapshotFloorMetas(p){
   const floors=Array.isArray(p&&p.floors)?p.floors:[];
   return floors.map(f=>({id:String(f&&f.id||''),name:String(f&&f.name||'')}));
 }
+/** 图层元数据（只取 id/name）：对象换层已由对象项的 layerId 字段覆盖，这里只比图层名称 */
+function snapshotLayerMetas(p){
+  const layers=Array.isArray(p&&p.layers)?p.layers:[];
+  return layers.map(l=>({id:String(l&&l.id||''),name:String(l&&l.name||'')}));
+}
 /**
- * 场景级差异：场地（顶点/尺寸/名称）、底图、楼层名。
- * 追加在对象差异之后，保持「新增/删除/属性修改/移动/换楼层/类型变更」既有分类顺序契约。
+ * 类型表（id → 完整定义）。任一侧不是数组（旧快照没有 objectTypes）时返回 null：
+ * 缺表是快照 schema 差异，不是用户改动，整表对比会把全部内置类型误报成「新增」。
+ */
+function snapshotTypeDefs(p){
+  const list=p&&p.objectTypes;
+  if(!Array.isArray(list)) return null;
+  const out=new Map();
+  list.forEach(t=>{ if(t&&t.id) out.set(String(t.id),t); });
+  return out;
+}
+/**
+ * 场景级差异：场地（顶点/尺寸/名称）、底图、楼层名、图层名、类型表结构。
+ * 追加在对象差异之后；单项分类沿用对象项的优先级：
+ * 新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改（场景项无楼层/类型/移动维度，落到 新增/删除/属性修改）。
  */
 function diffSceneItems(a,b,items){
   const add=(id,sceneKind,name,category,fields)=>{
@@ -248,6 +266,27 @@ function diffSceneItems(a,b,items){
     else if(!x&&y) add('scene:floor:'+id,'floor',y.name||id,'added',['floorName']);
     else if(x&&y&&x.name!==y.name) add('scene:floor:'+id,'floor',y.name||id,'modified',['floorName']);
   });
+  /* 图层名称：对象的 layerId 变化仍归对象项；这里只补「图层本体」的增删改名 */
+  if(Array.isArray(a&&a.layers)&&Array.isArray(b&&b.layers)){
+    const la=new Map(snapshotLayerMetas(a).map(l=>[l.id,l]));
+    const lb=new Map(snapshotLayerMetas(b).map(l=>[l.id,l]));
+    new Set([].concat(Array.from(la.keys()),Array.from(lb.keys()))).forEach(id=>{
+      const x=la.get(id), y=lb.get(id);
+      if(x&&!y) add('scene:layer:'+id,'layer',x.name||id,'removed',['layerName']);
+      else if(!x&&y) add('scene:layer:'+id,'layer',y.name||id,'added',['layerName']);
+      else if(x&&y&&x.name!==y.name) add('scene:layer:'+id,'layer',y.name||id,'modified',['layerName']);
+    });
+  }
+  /* 类型表结构：新增/删除类型或类型定义变化（名称、图标、默认尺寸等）都单独成项 */
+  const ta=snapshotTypeDefs(a), tb=snapshotTypeDefs(b);
+  if(ta&&tb){
+    new Set([].concat(Array.from(ta.keys()),Array.from(tb.keys()))).forEach(id=>{
+      const x=ta.get(id), y=tb.get(id);
+      if(x&&!y) add('scene:type:'+id,'type',x.name||id,'removed',['typeDef']);
+      else if(!x&&y) add('scene:type:'+id,'type',y.name||id,'added',['typeDef']);
+      else if(x&&y&&!sameJson(x,y)) add('scene:type:'+id,'type',y.name||id,'modified',['typeDef']);
+    });
+  }
 }
 /**
  * 对比两个快照的工程数据（纯函数，便于自测）。

@@ -307,8 +307,8 @@ test('资产可达集性能：快照 1 条 vs 20 条（各 1000 对象）的全�
   expect(r.scan20).toBeLessThan(1000);   /* 记录实测；超过 1s 才需要索引优化 */
 });
 
-/* N-21：场景级差异与列表元数据索引 */
-test('N-21：仅改场地形状/底图/楼层名时差异可见，场景项排在对象项之后', async ({ page }) => {
+/* N-21 / RT-P1-09：场景级差异与列表元数据索引 */
+test('N-21：仅改场地形状/底图/楼层名/图层名/类型定义时差异可见，场景项排在对象项之后', async ({ page }) => {
   await openApp(page);
   const r = await page.evaluate(async () => {
     state = createInitialState();
@@ -322,6 +322,8 @@ test('N-21：仅改场地形状/底图/楼层名时差异可见，场景项排�
       kind: state.background.kind === 'blank' ? 'image' : 'blank', fileName: 'changed.png'
     });
     state.floors[0].name = '一层改名';
+    state.layers[0].name = '结构层改名';
+    getType('point.camera').name = '摄像头改名';
     syncActiveFloor();
     const b = await createSnapshot({ label: 'B' });
     const ra = await getSnapshot(pid, a.snapshotId);
@@ -339,16 +341,22 @@ test('N-21：仅改场地形状/底图/楼层名时差异可见，场景项排�
   expect(r.scenes.some(s => s.id === 'scene:site' && s.category === 'moved')).toBe(true);
   expect(r.scenes.some(s => s.id === 'scene:background' && s.category === 'modified')).toBe(true);
   expect(r.scenes.some(s => s.sceneKind === 'floor' && s.category === 'modified')).toBe(true);
+  expect(r.scenes.some(s => s.sceneKind === 'layer' && s.category === 'modified')).toBe(true);
+  expect(r.scenes.some(s => s.sceneKind === 'type' && s.category === 'modified')).toBe(true);
   expect(r.counts.total).toBe(r.scenes.length);       /* 对象均未变，只有场景项 */
   expect(r.firstScene).toBe(0);
   expect(r.sceneAliases.join('|')).toContain('场地形状');
   expect(r.sceneAliases.join('|')).toContain('底图');
   expect(r.sceneAliases.join('|')).toContain('楼层名');
+  expect(r.sceneAliases.join('|')).toContain('图层名');
+  expect(r.sceneAliases.join('|')).toContain('类型定义');
 
   await page.evaluate(({ pid, aId, bId }) => openSnapshotCompare(pid, aId, bId, 'E2E 场景差异'), r);
   await expect(page.locator('#modalBody')).toContainText('场地');
   await expect(page.locator('#modalBody')).toContainText('底图');
   await expect(page.locator('#modalBody')).toContainText('楼层名');
+  await expect(page.locator('#modalBody')).toContainText('图层名');
+  await expect(page.locator('#modalBody')).toContainText('类型定义');
   await page.evaluate(() => closeModal());
 });
 
