@@ -155,7 +155,7 @@ code += `\n;globalThis.__api = {
   EXPORT_FIELD_DEFS, PDF_COLS, REPORT_LIST_COLS,
   formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
-  buildSceneSvg, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
+  buildSceneSvg, exportFooterText, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
   normalizeExportColor, dxfSanitizeName,
   outlineOf, objectIndexById, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
@@ -7687,6 +7687,19 @@ await section("P2 表格真实往返：列集/列序/取值一致", async () => 
   eq('往返-圆半径不变', [cAfter.x, cAfter.y, cAfter.shape.r], [5, 6, 3]);
   api.resetState();
 }
+});
+
+/* ---------------- P2 批次 3：DXF/PNG 一致性 ---------------- */
+await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
+{
+  api.resetState();
+  api.state.meta.name='批三工程';
+  api.state.site={shape:{type:'rect',w:40,h:20}};
+  const footer=api.exportFooterText();
+  ok('IO-P2-14 页脚=工程名·场地描述', footer.startsWith('批三工程 · ')&&footer.includes('·'));
+  ok('IO-P2-14 SVG 与 PNG 共用同一页脚表达式', api.buildSceneSvg().includes(footer.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')));
+}
+
 });
 
 /* ---------------- 结果汇总 ---------------- */

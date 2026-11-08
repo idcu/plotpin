@@ -348,6 +348,10 @@ function exportTitleBlockSvg(spec){
   }
   return out.join('\n');
 }
+/** 图纸页脚文案：PNG 与 SVG/PDF 共用同一表达式，避免两套口径（IO-P2-14） */
+function exportFooterText(){
+  return `${state.meta.name} · ${siteDescription()}`;
+}
 function renderToDataURL(scale=2){
   const d=worldDims(), margin=30;
   const z=Math.min(2600/d.w,1800/d.h,60);
@@ -356,6 +360,12 @@ function renderToDataURL(scale=2){
   markSurfaceSize(c,cw,ch);
   const cc=c.getContext('2d'); cc.scale(scale,scale);
   drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6});
+  /* PNG 补齐与 SVG/PDF 相同的页脚（IO-P2-14）；只画有效可见内容由 drawScene 统一走 isVisible */
+  const footer=exportFooterText();
+  if(footer){
+    cc.save(); cc.font='11px sans-serif'; cc.fillStyle='#666'; cc.textBaseline='alphabetic';
+    cc.fillText(footer,margin,ch-8); cc.restore();
+  }
   drawTitleBlockOnCanvas(cc,cw,ch,titleBlockSpec(cw,ch,z,'png'));
   return c.toDataURL('image/png');
 }
@@ -588,7 +598,7 @@ function buildSceneSvg(){
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${sw}" height="${sh}" viewBox="0 0 ${sw} ${sh}">
 <rect width="100%" height="100%" fill="white"/>
 <g>${shapes.join('\n')}</g><g font-family="Microsoft YaHei,Arial,sans-serif">${markers.join('\n')}</g>
-<text x="${margin}" y="${sh-8}" font-size="11" fill="#666">${esc(state.meta.name)} · ${esc(siteDescription())}</text>${tbSvg?'\n'+tbSvg:''}
+<text x="${margin}" y="${sh-8}" font-size="11" fill="#666">${esc(exportFooterText())}</text>${tbSvg?'\n'+tbSvg:''}
 </svg>`;
   return svg;
 }
