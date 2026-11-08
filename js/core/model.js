@@ -268,15 +268,16 @@ function resetTransientInteractionState(opts){
 /**
  * 编号作用域：一次性聚集合法的已占用编号，作用域内 reserve() 只做集合查找。
  * 起点沿用旧 nextObjectId 的语义：从“已占用数量 + 1”开始找空位并跳过已占用编号。
+ * 可选 prefix/width/start 供专用前缀的批量场景复用（默认 'O'/4/自动起点，既有调用不变）。
  * @param {Set<string>|string[]} used 已占用编号（会被就地写入新编号，调用方需自备集合）
  */
-function objectNameScopeFor(used){
+function objectNameScopeFor(used, prefix='O', width=4, start=null){
   const set = used instanceof Set ? used : new Set(Array.isArray(used) ? used : []);
-  let seq = set.size + 1;
+  let seq = start===null ? set.size + 1 : Math.max(0, Math.floor(Number(start)||0));
   return {
     reserve(){
       let name;
-      do{ name = 'O' + String(seq).padStart(4, '0'); seq++; } while(set.has(name));
+      do{ name = prefix + String(seq).padStart(width, '0'); seq++; } while(set.has(name));
       set.add(name);
       return name;
     }

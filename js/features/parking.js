@@ -138,21 +138,19 @@ function applyParkingLayout(){
   if(!res.stalls.length){ toast(L('没有可生成的车位'),'warn'); return; }
   pushHistory();
   const layer=ensureParkingLayer();
+  /* IO-P2-24：清除前先聚合全部已占用编号（含本批将被标记墓碑的停车场对象名），
+     再复用统一编号作用域 P/A 取号；避免与墓碑对象在协作合并后重名。 */
+  const used=allObjectNames();
   if($('parkingClear') && $('parkingClear').checked){
     state.objects.filter(o=>o.layerId===layer.id).forEach(o=>markTombstone(o.id,'object'));
     state.objects=state.objects.filter(o=>o.layerId!==layer.id);
   }
-  const used=new Set(state.objects.map(o=>o.name));
-  (state.floors||[]).forEach(f=>{ if(f.id!==state.activeFloorId) (f.objects||[]).forEach(o=>{ if(o&&o.name) used.add(o.name); }); });
-  let pSeq=0,aSeq=0;
-  const fresh=(prefix,seq)=>{ let n=seq,name; do{ n++; name=prefix+String(n).padStart(3,'0'); }while(used.has(name)); used.add(name); return {name,n}; };
+  const pScope=objectNameScopeFor(used,'P',3,1), aScope=objectNameScopeFor(used,'A',3,1);
   res.stalls.forEach((s,i)=>{
-    const nm=fresh('P',pSeq); pSeq=nm.n;
-    state.objects.push(baseObject('rect','rect.parking',{name:nm.name,layerId:layer.id,x:s.x,y:s.y,width:s.width,height:s.height,angle:s.angle,props:{parkingSlot:i+1}}));
+    state.objects.push(baseObject('rect','rect.parking',{name:pScope.reserve(),layerId:layer.id,x:s.x,y:s.y,width:s.width,height:s.height,angle:s.angle,props:{parkingSlot:i+1}}));
   });
   res.aisles.forEach((a,i)=>{
-    const nm=fresh('A',aSeq); aSeq=nm.n;
-    state.objects.push(baseObject('rect','rect.aisle',{name:nm.name,layerId:layer.id,x:a.x,y:a.y,width:a.width,height:a.height,angle:a.angle,props:{parkingAisle:i+1}}));
+    state.objects.push(baseObject('rect','rect.aisle',{name:aScope.reserve(),layerId:layer.id,x:a.x,y:a.y,width:a.width,height:a.height,angle:a.angle,props:{parkingAisle:i+1}}));
   });
   selectedIds.clear();
   commitChange(`${L('已生成')} ${res.stats.stallCount} ${L('个车位')}、${res.stats.aisleCount} ${L('条通道')}（${L('停车场')}）`);

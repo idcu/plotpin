@@ -6163,6 +6163,16 @@ await section("61. 停车规划：双面垂直车位/通道布局、净宽检查
   eq('停车-撤销移除车位', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 0);
   api.redo();
   eq('停车-重做恢复车位', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 312);
+  /* IO-P2-24：编号复用统一作用域，P/A 前缀三位定宽且全局唯一；清除再生成须避开墓碑名 */
+  const pNames=api.state.objects.filter(o=>o.typeId==='rect.parking').map(o=>o.name);
+  ok('停车-车位编号 P+三位', pNames.every(n=>/^P\d{3}$/.test(n)));
+  eq('停车-车位编号唯一', new Set(pNames).size, pNames.length);
+  eq('停车-首个车位编号', pNames[0], 'P001');
+  eq('停车-首条通道编号', api.state.objects.find(o=>o.typeId==='rect.aisle').name, 'A001');
+  api.applyParkingLayout();
+  const p2=api.state.objects.filter(o=>o.typeId==='rect.parking').map(o=>o.name);
+  eq('停车-清除再生成避开墓碑名', p2[0], 'P313');
+  eq('停车-清除再生成总数不变', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 312);
   api.history.past=[]; api.history.future=[];
   api.resetState();
 }
