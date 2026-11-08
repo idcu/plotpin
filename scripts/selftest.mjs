@@ -50,6 +50,9 @@ function makeUniversal() {
 const ctxStub = makeUniversal();
 const elMap = new Map();
 const elStub = id => { if (!elMap.has(id)) elMap.set(id, makeUniversal()); return elMap.get(id); };
+/* N-16：此前 localStorage 桩引用了未声明的 lsMap，任何真实读写都会抛错并被调用方吞掉；
+   补上底层 Map，断线待发队列的落盘/读回断言才有意义。 */
+const lsMap = new Map();
 const localStorageStub = {
   getItem: k => (lsMap.has(k) ? lsMap.get(k) : null),
   setItem: (k, v) => lsMap.set(k, String(v)),
@@ -171,6 +174,11 @@ code += `\n;globalThis.__api = {
   collabChunkText, collabCleanSDP,
   collabInviteEncode, collabInviteDecode, collabQrFit, collabSweepInbound,
   collabInboundBytes, collabHelloDup, mergeHistoryNeeded,
+  collabBackoffDelay, collabPendingStore, collabPendingLoad, collabPendingClear,
+  collabFlushPending, collabCheckTransport, collabBroadcastFloor,
+  COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY,
+  get collabMode(){ return collabMode; }, set collabMode(v){ collabMode=v; },
+  get collabReconnectAttempt(){ return collabReconnectAttempt; },
   get collabInbound(){ return collabInbound; },
   get collabHelloSeen(){ return collabHelloSeen; },
   get collabState(){ return collabState; },
@@ -2937,6 +2945,44 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     eq('N-15-切层清空草稿', tr.draft, null);
     eq('N-15-切层复位捕捉热键', tr.osnapMode, null);
     eq('N-15-切层清空跟踪线', tr.trackLine, null);
+    api.resetState();
+  }
+
+  /* 39.13 N-16：断线待发队列 / 指数退避 / 楼层同步消息类型 */
+  {
+    eq('N-16-退避首次', api.collabBackoffDelay(0), 1000);
+    eq('N-16-退避翻倍', api.collabBackoffDelay(1), 2000);
+    ok('N-16-退避单调不减', [0,1,2,3,4,5,6,7].every(i=>api.collabBackoffDelay(i)<=api.collabBackoffDelay(i+1)));
+    eq('N-16-退避封顶5分钟', api.collabBackoffDelay(20), 300000);
+    eq('N-16-退避非法输入按0', api.collabBackoffDelay(-5), 1000);
+    /* 待发队列：最新一份可落盘、可读回、可清除 */
+    api.resetState();
+    api.state.meta.name='N16';
+    const proj=api.persistableState();
+    ok('N-16-待发快照落盘', api.collabPendingStore(proj));
+    const rec=api.collabPendingLoad();
+    ok('N-16-待发快照可读回', !!rec&&rec.v===1);
+    eq('N-16-待发快照内容一致', rec.project.meta.name, 'N16');
+    ok('N-16-无传输不补发', api.collabFlushPending()===false);
+    ok('N-16-无传输仍保留待发', !!api.collabPendingLoad());
+    api.collabPendingClear();
+    eq('N-16-待发快照清除', api.collabPendingLoad(), null);
+    /* 超限显式拒绝且不写坏数据 */
+    const huge={schema:api.SCHEMA,meta:{name:'x'.repeat(2*1024*1024)}};
+    eq('N-16-待发超限拒绝', api.collabPendingStore(huge), false);
+    eq('N-16-待发超限不落盘', api.collabPendingLoad(), null);
+    /* 坏记录不当作待发 */
+    sandbox.localStorage.setItem(api.COLLAB_PENDING_KEY,'{bad');
+    eq('N-16-坏待发记录忽略', api.collabPendingLoad(), null);
+    sandbox.localStorage.removeItem(api.COLLAB_PENDING_KEY);
+    /* 楼层消息类型：发送表与接收表互逆 */
+    ok('N-16-楼层消息add', api.COLLAB_FLOOR_OPS.add==='floor-add'&&api.COLLAB_FLOOR_TYPES['floor-add']==='add');
+    ok('N-16-楼层消息delete', api.COLLAB_FLOOR_OPS.delete==='floor-delete'&&api.COLLAB_FLOOR_TYPES['floor-delete']==='delete');
+    ok('N-16-楼层消息clear', api.COLLAB_FLOOR_OPS.clear==='floor-clear'&&api.COLLAB_FLOOR_TYPES['floor-clear']==='clear');
+    /* 未启用协作：楼层广播不排队、不发消息 */
+    api.collabMode=null;
+    eq('N-16-未协作不广播楼层', api.collabBroadcastFloor('add'), false);
+    eq('N-16-未协作不产生待发', api.collabPendingLoad(), null);
     api.resetState();
   }
 }

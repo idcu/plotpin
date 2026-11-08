@@ -2,6 +2,24 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-16 协作断线补发、自动重连与楼层广播
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/features/collab.js`
+    - 断线待发队列：`collabOnLocalChange()` 在已启用协作但传输不可用时，把 `persistableState()` 写入 localStorage `plotpin.collab.pending`（只保留最新一份整工程快照，上限 2 MB）；超限或写盘失败通过 `collabRecordError` + `collabNotifyThrottled` 显式提示，不静默丢弃。
+    - 补发：传输就绪（`collabStartLocal` / DataChannel `onopen`）先 `collabFlushPending()`，发送成功才清队列，失败保留待下次重连。
+    - 自动重连：`collabBackoffDelay()` 纯函数（1s 起翻倍、封顶 5 分钟）；`collabScheduleReconnect()` 仅对本机频道重建 `BroadcastChannel`，WebRTC 无信令通道时明确提示「请重新交换邀请串」，不做假重连；`collabCheckTransport()` + 15s 看门狗兜底。用户主动停用会清空模式、停止重连与看门狗。
+    - 楼层广播：新增 `floor-add`/`floor-delete`/`floor-clear` 消息，发送/接收共用 `COLLAB_FLOOR_OPS`/`COLLAB_FLOOR_TYPES`；消息携带整份可持久化工程，接收端复用 `collabQueueApply → mergeProjectJSON` 的墓碑与场地 LWW，不另写合并逻辑。
+  - `js/core/persistence.js`：`addFloor` / `deleteFloor` / `clearCurrentFloor` 在原有落盘后显式调用 `collabBroadcastFloor()`；`MARK_DIRTY_PROFILES` 的 `floor`/`clear` 仍只负责落盘与 UI，注释同步说明广播由上方显式调用承担。`touchFloor()`/`stampObjects()` 打点路径未改动，楼层与对象 `updatedAt` 语义保持单调递增。
+  - `js/common/i18n.js`：新增 4 条中英文案（离线队列超限/写盘失败、退避倒计时、WebRTC 断开指引、无法识别的楼层消息）。
+  - `scripts/selftest.mjs`：新增 39.13 节 19 项断言（退避单调/封顶/非法输入、队列落盘/读回/清空/无传输不补发/超限拒绝/坏记录忽略、楼层消息类型双向映射、未协作不排队）；同时修复测试桩：`localStorageStub` 引用的 `lsMap` 此前未声明，真实读写会抛错并被调用方吞掉。
+  - `tests/e2e/collab.spec.mjs`：新增两条用例——①异常断线后改动落盘，`collabCheckTransport()` 退避重连，1~6s 内对端收到改动且队列清空，并验证楼层新增/清空/删除三类消息与对端一致；②断线改动落盘后刷新页面，待发队列仍在，重连后补发到对端。
+  - `sw.js`：`VERSION` 24 → 25；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` §10 能力/限制重写（移除 RT-P1-01/02）；`docs/ARCHITECTURE.md` §8 补充待发队列、退避重连与楼层消息；`docs/known-issues.md` 标记 RT-P1-01/02 已修复。
+- **验证数据**：selftest 2904 通过 / 0 失败（+19）；e2e 101 passed / 1 skipped（35 spec / 102 用例，新增 2 条用例）；产物 801,684 B（gzip 249,284 B，余量 37,996 B）；`check.mjs --selftest` 通过；`check-gates` 正面基线 6/6 + 9/9 破坏场景；`check-discipline --strict` 13/13。
+- **遗留风险**：WebRTC 真实双设备断线自动重连未实现（无信令通道，只能重新交换邀请串），本机 e2e 仅覆盖 BroadcastChannel；离线 ≥5 分钟的真实等待未实测，退避上限由 `collabBackoffDelay(20)=300000` 断言；localStorage 与页面自动保存在同一存储域，极端配额压力下队列可能写失败（已显式提示）。
+
 ## 2026-11-08 · N-15 交互瞬态统一清理
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

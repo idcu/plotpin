@@ -848,6 +848,14 @@
     '协作消息发送失败（分块中断）':'Collaboration message send failed (chunk interrupted)',
     '协作消息解析失败':'Failed to parse collaboration message',
     '收到无法识别的工程快照':'Received an unrecognized project snapshot',
+    '收到无法识别的楼层同步消息':'Received an unrecognized floor sync message',
+    /* N-16：断线待发队列与自动重连 */
+    '离线待发快照超过 {n} KB，未写入本地队列（仍在内存，重连后补发）':
+      'Offline pending snapshot exceeds {n} KB and was not written to the local queue (kept in memory; will be sent after reconnect)',
+    '离线待发队列写入失败：':'Failed to write the offline pending queue: ',
+    '{s} 秒后自动重连（第 {n} 次）':'Reconnecting automatically in {s}s (attempt {n})',
+    '跨设备连接已断开：请重新交换邀请串（WebRTC 无信令通道，无法自动重连）':
+      'Cross-device connection lost: exchange invite strings again (WebRTC has no signaling channel, so auto-reconnect is unavailable)',
     '邀请串':'Invite string',
     '字节，超过内置二维码上限':'bytes, exceeding the built-in QR limit of',
     '字节：请复制邀请串文本发送，未生成无效二维码。':'bytes. Copy the invite text instead; no invalid QR was generated.',

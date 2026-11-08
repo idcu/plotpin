@@ -122,9 +122,9 @@ function touchFloor(id){
  * 各调用点用 kind 选择差异化的 UI 刷新粒度，避免改变既有行为：
  *  - object      ：新增/删除/移动后全量刷新（refreshUI）
  *  - objectEdit  ：属性编辑中只刷清单/图层/统计，避免重建正在编辑的属性面板
- *  - clear       ：清空楼层后全量刷新（保持既有：不广播）
+ *  - clear       ：清空楼层后全量刷新（楼层同步由 clearCurrentFloor 显式 collabBroadcastFloor('clear')）
  *  - restore     ：载入/撤销/重做后由 afterStateLoaded 负责静态层与 UI，这里只补落盘+广播
- *  - floor       ：删除楼层分支只补落盘（保持既有：不广播）
+ *  - floor       ：删除楼层分支只补落盘（楼层同步由 deleteFloor 显式 collabBroadcastFloor('delete')）
  * 所有 kind 都会清覆盖率并重新安排保存；差异仅在 UI 刷新与广播范围内。
  */
 const MARK_DIRTY_PROFILES=Object.freeze({
@@ -197,7 +197,8 @@ function clearCurrentFloor(){
   resetTransientInteractionState();
   syncActiveFloor();
   resetFrameRef(); fitView();
-  markDirty('clear');               /* 覆盖率/静态层/落盘/UI 统一走提交协议（保持既有：不广播） */
+  markDirty('clear');               /* 覆盖率/静态层/落盘/UI 统一走提交协议 */
+  if(typeof collabBroadcastFloor==='function') collabBroadcastFloor('clear');
   return summary;
 }
 let dbPromise=null;
@@ -512,6 +513,7 @@ async function addFloor(name){
   state.floors.push({id,name:nm,updatedAt:nowISO(),background:init.background,site:init.site,objects:[],viewport:init.viewport});
   const ok=await switchFloor(id);
   if(ok) scheduleSave();           /* 新增楼层必须立刻落盘，刷新后不能消失（审计 P0-4） */
+  if(ok&&typeof collabBroadcastFloor==='function') collabBroadcastFloor('add');
   return ok?id:null;
 }
 /** 删除楼层：至少保留一层；删除当前楼层时自动切到第一层 */
@@ -535,6 +537,7 @@ async function deleteFloor(id){
     await afterStateLoaded(false); fitView();
     markDirty('floor');            /* 删除当前楼层后落盘，刷新不能复活（审计 P0-4） */
   }else commitChange('已删除楼层');
+  if(typeof collabBroadcastFloor==='function') collabBroadcastFloor('delete');
   return true;
 }
 /** 重命名楼层：空名/同名不生效，与既有楼层重名时拒绝（N-08） */

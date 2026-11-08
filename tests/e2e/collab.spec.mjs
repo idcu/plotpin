@@ -305,6 +305,107 @@ test('离线重连：本地未同步修改不丢且对端可见（短间隔确�
   expect(await page.evaluate(() => state.objects.some(o => o.id === 'OBJ_OFFLINE'))).toBe(true);
 });
 
+test('N-16：断线自动重连补发与楼层增删清空广播', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-n16');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+  await page.evaluate(() => collabPendingClear());
+
+  /* ① 模拟传输异常丢失（协作模式仍在、频道对象没了）→ 本地改动落盘 → 退避重连后自动补发 */
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+  const lost = await page.evaluate(() => {
+    try { collabBC.close(); } catch (_) {}
+    collabBC = null;
+    collabActive = false;
+    const o = state.objects[0];
+    o.x = 66; o.updatedAt = nowISO();
+    commitObjectEdit();
+    const queued = !!collabPendingLoad();
+    collabCheckTransport();                 /* 触发第一次退避重连（1s） */
+    return { queued, attempt: collabReconnectAttempt };
+  });
+  expect(lost.queued).toBe(true);
+  expect(lost.attempt).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => page.evaluate(() => window.__collabState), { timeout: 6000 }).toMatch(/waiting|connected/);
+  await expect.poll(() => p2.evaluate(() => state.objects[0] && state.objects[0].x), { timeout: 6000 }).toBe(66);
+  expect(await page.evaluate(() => collabPendingLoad())).toBe(null);   /* 补发成功后清空队列 */
+
+  /* ② 楼层新增/清空/删除：显式消息类型，且对端在超时内一致 */
+  await page.evaluate(() => {
+    const orig = collabSendObject;
+    window.__sentTypes = [];
+    collabSendObject = o => { window.__sentTypes.push(o && o.t); return orig(o); };
+  });
+  const floorId = await page.evaluate(() => addFloor('N16层'));
+  expect(floorId).toBeTruthy();
+  await expect.poll(() => p2.evaluate(() => state.floors.length), { timeout: 6000 }).toBe(2);
+  await expect.poll(() => p2.evaluate(() => state.floors.some(f => f.name === 'N16层'))).toBe(true);
+  expect(await page.evaluate(() => window.__sentTypes.includes('floor-add'))).toBe(true);
+
+  /* 楼层内容按各自的活动楼层同步：先让对端切到该层，才能观察该层对象变化 */
+  await p2.evaluate(id => switchFloor(id), floorId);
+  await expect.poll(() => p2.evaluate(() => state.activeFloorId)).toBe(floorId);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(0);
+
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+  await page.evaluate(() => { pushHistory(); clearCurrentFloor(); });
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 6000 }).toBe(0);
+  expect(await page.evaluate(() => window.__sentTypes.includes('floor-clear'))).toBe(true);
+
+  await page.evaluate(id => deleteFloor(id), floorId);
+  await expect.poll(() => p2.evaluate(() => state.floors.length), { timeout: 6000 }).toBe(1);
+  expect(await page.evaluate(() => window.__sentTypes.includes('floor-delete'))).toBe(true);
+});
+
+test('N-16：断线待发队列刷新页面后仍补发', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-n16-reload');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* 断线：停掉看门狗避免测试中途自动重连，改动只落盘到待发队列 */
+  const queued = await page.evaluate(() => {
+    try { collabBC.close(); } catch (_) {}
+    collabBC = null;
+    collabActive = false;
+    collabStopWatchdog();
+    const o = state.objects[0];
+    o.name = 'OFFLINE_N16';
+    o.updatedAt = nowISO();
+    commitObjectEdit();
+    return !!collabPendingLoad();
+  });
+  expect(queued).toBe(true);
+
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  await page.evaluate(() => { window.scheduleSave = () => {}; });
+  const stillQueued = await page.evaluate(() => !!collabPendingLoad());
+  console.log(`[N-16] reload pending kept=${stillQueued}`);
+  expect(stillQueued).toBe(true);
+
+  await startLocal(page, ch);
+  await expect.poll(() => p2.evaluate(() => state.objects[0] && state.objects[0].name), { timeout: 8000 }).toBe('OFFLINE_N16');
+  await expect.poll(() => page.evaluate(() => collabPendingLoad()), { timeout: 4000 }).toBe(null);
+});
+
 test('邀请串三步建连与二维码容量提示（同机双标签，非双设备）', async ({ page, context }) => {
   const p2 = await context.newPage();
   await openApp(page);

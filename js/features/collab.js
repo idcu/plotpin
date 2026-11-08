@@ -8,11 +8,21 @@ const COLLAB_INBOUND_MAX_BYTES=COLLAB_MAX*2;
 const COLLAB_HELLO_DEDUP_MS=1500;
 const COLLAB_DC_BUFFER_LIMIT=2*1024*1024;
 const COLLAB_ID_MAX=96;
+/* N-16：断线待发队列（localStorage 只保留最新整工程快照）与自动重连退避 */
+const COLLAB_PENDING_KEY='plotpin.collab.pending';
+const COLLAB_PENDING_MAX=2*1024*1024;
+const COLLAB_RECONNECT_BASE_MS=1000;
+const COLLAB_RECONNECT_MAX_MS=5*60*1000;
+const COLLAB_WATCHDOG_MS=15000;
+/* N-16：楼层同步消息类型 ↔ 操作名，发送与接收共用同一张表，避免字符串两处漂移 */
+const COLLAB_FLOOR_OPS=Object.freeze({add:'floor-add',delete:'floor-delete',clear:'floor-clear'});
+const COLLAB_FLOOR_TYPES=Object.freeze({'floor-add':'add','floor-delete':'delete','floor-clear':'clear'});
 const collabPeerId='U'+Math.random().toString(36).slice(2,8).toUpperCase();
 let collabBC=null, collabPC=null, collabDC=null, collabMode=null, collabActive=false;
 let collabTimer=null, collabApplyChain=Promise.resolve(), collabLastStatus='', collabLastError='';
 let collabState='idle', collabClosing=false, collabPendingSnapshot=false, collabSendRetry=null;
 let collabLastMerge=null, collabNotifyAt=0;
+let collabLocalChannel='', collabReconnectAttempt=0, collabReconnectTimer=null, collabWatchdog=null;
 const collabPeers=new Map();
 const collabInbound=new Map();
 const collabHelloSeen=new Map();
@@ -111,6 +121,98 @@ function collabHelloDup(sender,name,now=Date.now()){
     for(const [k] of olds){ if(extra<=0) break; collabHelloSeen.delete(k); extra--; }
   }
   return false;
+}
+
+/* -------------------- 断线待发队列与重连退避（N-16） -------------------- */
+/** 指数退避：1s 起翻倍，封顶 5 分钟；attempt 非法按 0 处理。纯函数，便于自测。 */
+function collabBackoffDelay(attempt){
+  const n=Math.max(0,Math.floor(Number(attempt)||0));
+  return Math.min(COLLAB_RECONNECT_MAX_MS, COLLAB_RECONNECT_BASE_MS*Math.pow(2,n));
+}
+/** 断线期间的本地改动落盘为「最新一份整工程快照」：快照幂等，重连后走 LWW 合并。
+ *  超过上限或 localStorage 写不进时必须显式提示，不得静默丢弃（仍在内存/下次全量快照补发）。 */
+function collabPendingStore(project){
+  if(!project) return false;
+  let payload='';
+  try{ payload=JSON.stringify({v:1,at:nowISO(),project}); }
+  catch(_){ return false; }
+  if(payload.length>COLLAB_PENDING_MAX){
+    const text=L('离线待发快照超过 {n} KB，未写入本地队列（仍在内存，重连后补发）',{n:Math.round(COLLAB_PENDING_MAX/1024)});
+    collabRecordError(text); collabNotifyThrottled(text,'warn');
+    return false;
+  }
+  try{ localStorage.setItem(COLLAB_PENDING_KEY,payload); return true; }
+  catch(e){
+    const text=L('离线待发队列写入失败：{msg}',{msg:(e&&e.message)||e});
+    collabRecordError(text); collabNotifyThrottled(text,'error');
+    return false;
+  }
+}
+/** 读取并校验待发记录；版本或工程结构不符时视为无待发（不把坏数据发出去） */
+function collabPendingLoad(){
+  let raw='';
+  try{ raw=localStorage.getItem(COLLAB_PENDING_KEY)||''; }
+  catch(_){ return null; }
+  if(!raw) return null;
+  try{
+    const rec=JSON.parse(raw);
+    if(!rec||rec.v!==1||!rec.project||!isReadableSchema(rec.project.schema)) return null;
+    return rec;
+  }catch(_){ return null; }
+}
+function collabPendingClear(){
+  try{ localStorage.removeItem(COLLAB_PENDING_KEY); }catch(_){}
+}
+/** 传输就绪后先补发离线快照；发送成功才清队列，失败留待下次重连 */
+function collabFlushPending(){
+  if(!collabTransportReady()) return false;
+  const rec=collabPendingLoad();
+  if(!rec) return false;
+  const ok=collabSendObject({t:'snapshot',project:rec.project});
+  if(ok) collabPendingClear();
+  return ok;
+}
+function collabReconnectClear(){
+  if(collabReconnectTimer){ clearTimeout(collabReconnectTimer); collabReconnectTimer=null; }
+  collabReconnectAttempt=0;
+}
+/** 传输异常后的自动重连：本机频道按退避重建；WebRTC 无信令通道，只能明确提示重新交换邀请串 */
+function collabScheduleReconnect(){
+  if(collabClosing||!collabMode||collabReconnectTimer) return;
+  if(collabMode!=='local'){
+    collabSetState('error',L('跨设备连接已断开：请重新交换邀请串（WebRTC 无信令通道，无法自动重连）'),'error');
+    collabRefreshUI();
+    return;
+  }
+  const delay=collabBackoffDelay(collabReconnectAttempt++);
+  collabSetState('disconnected',L('{s} 秒后自动重连（第 {n} 次）',{s:Math.round(delay/1000),n:collabReconnectAttempt}),'warn');
+  collabReconnectTimer=setTimeout(()=>{
+    collabReconnectTimer=null;
+    if(collabClosing||!collabMode) return;
+    collabStartLocal(collabLocalChannel,{reconnect:true});
+  },delay);
+}
+/** 传输自检：本机频道对象丢失，或 WebRTC 曾连接后通道不再 open 时触发重连。
+ *  等待应答阶段（connecting/waiting）不触发，避免打断正常的手动信令流程。 */
+function collabCheckTransport(){
+  if(collabClosing||!collabMode) return false;
+  if(collabMode==='local'){
+    if(collabBC) return false;
+    collabScheduleReconnect();
+    return true;
+  }
+  if(collabState!=='connected'&&collabState!=='disconnected'&&collabState!=='error') return false;
+  if(collabDC&&collabDC.readyState==='open') return false;
+  collabScheduleReconnect();
+  return true;
+}
+function collabStartWatchdog(){
+  if(collabWatchdog) return;
+  collabWatchdog=setInterval(collabCheckTransport,COLLAB_WATCHDOG_MS);
+  if(collabWatchdog&&typeof collabWatchdog.unref==='function') collabWatchdog.unref();
+}
+function collabStopWatchdog(){
+  if(collabWatchdog){ clearInterval(collabWatchdog); collabWatchdog=null; }
 }
 
 /* -------------------- 状态机与提示 -------------------- */
@@ -226,6 +328,15 @@ function collabSendObject(obj,to='*'){
   }
   return ok;
 }
+/** 楼层新增/删除/清空显式广播（N-16）：消息带上整份快照，接收端仍走 mergeProjectJSON，
+ *  复用对象墓碑、楼层墓碑与场地 LWW，不另写一套合并逻辑；断线时同样进入待发队列。 */
+function collabBroadcastFloor(op){
+  const type=COLLAB_FLOOR_OPS[op];
+  if(!type||!collabMode) return false;
+  const project=persistableState();
+  if(!collabTransportReady()){ collabPendingStore(project); return false; }
+  return collabSendObject({t:type,project});
+}
 function collabReceiveRaw(raw){
   let m;
   try{ m=typeof raw==='string'?JSON.parse(raw):raw; }
@@ -284,6 +395,11 @@ function collabHandleMessage(msg,from){
     collabRefreshUI();
     return;
   }
+  if(COLLAB_FLOOR_TYPES[msg.t]){
+    if(msg.project&&isReadableSchema(msg.project.schema)) collabQueueApply(msg.project,from);
+    else collabRecordError(L('收到无法识别的楼层同步消息'));
+    return;
+  }
   if(msg.t==='snapshot'&&msg.project&&isReadableSchema(msg.project.schema)){
     collabQueueApply(msg.project,from);
     return;
@@ -335,13 +451,16 @@ function collabNotifyOverwrite(stats){
   toast(`${L('协作覆盖')}：${parts.join(' ')}，${L('可按 Ctrl+Z 回滚')}`,'warn');
 }
 
-/** 本地提交后防抖广播整份可持久化工程（LWW 合并保证幂等） */
+/** 本地提交后防抖广播整份可持久化工程（LWW 合并保证幂等）。
+ *  N-16：已启用协作但传输不可用时，把最新快照写入待发队列；重连后先补发再发当前快照。
+ *  用户主动「断开」会清空 collabMode，此时不排队，避免无协作时反复写盘。 */
 function collabOnLocalChange(){
-  if(!collabActive||!collabTransportReady()) return;
+  if(!collabMode) return;
+  if(!collabTransportReady()){ collabPendingStore(persistableState()); return; }
   clearTimeout(collabTimer);
   collabTimer=setTimeout(()=>{
     collabTimer=null;
-    if(collabActive&&collabTransportReady()) collabSendObject({t:'snapshot',project:persistableState()});
+    if(collabMode&&collabTransportReady()) collabSendObject({t:'snapshot',project:persistableState()});
   },500);
 }
 
@@ -351,10 +470,13 @@ function collabStopAll(reason){
   collabClosing=true;
   clearTimeout(collabTimer); collabTimer=null;
   clearTimeout(collabSendRetry); collabSendRetry=null;
+  collabStopWatchdog();
+  collabReconnectClear();
   try{ if(collabDC){ collabDC.onclose=null; collabDC.onerror=null; collabDC.close(); } }catch(_){}
   try{ if(collabPC) collabPC.close(); }catch(_){}
   try{ if(collabBC) collabBC.close(); }catch(_){}
   collabDC=null; collabPC=null; collabBC=null; collabMode=null; collabActive=false;
+  collabLocalChannel='';
   collabPeers.clear(); collabInbound.clear(); collabHelloSeen.clear();
   collabPendingSnapshot=false;
   if(reason==='peer') collabSetState('disconnected',L('对端已断开'),'warn');
@@ -362,26 +484,44 @@ function collabStopAll(reason){
   collabRefreshUI();
   collabClosing=false;
 }
-function collabStartLocal(name){
+function collabStartLocal(name,opts){
+  opts=opts||{};
   if(typeof BroadcastChannel!=='function'){
     toast(L('当前环境不支持 BroadcastChannel，请使用跨设备直连或工程 JSON 合并'),'error');
     return false;
   }
+  const channelName=String(name||'draft').trim().slice(0,60);
+  const attempt=opts.reconnect?collabReconnectAttempt:0;
   collabStopAll();
-  const channel=COLLAB_PREFIX+String(name||'draft').trim().slice(0,60);
-  try{ collabBC=new BroadcastChannel(channel); }
-  catch(e){ toast(L('启用本机同步失败：{msg}',{msg:e.message}),'error'); collabStopAll(); return false; }
+  let bc=null;
+  try{ bc=new BroadcastChannel(COLLAB_PREFIX+channelName); }
+  catch(e){
+    const text=L('启用本机同步失败：{msg}',{msg:e.message});
+    if(opts.reconnect){
+      /* 自动重连失败：保留协作模式与退避计数，等下一次退避再试，不能静默停摆 */
+      collabMode='local'; collabLocalChannel=channelName; collabReconnectAttempt=attempt;
+      collabSetState('disconnected',text,'warn'); collabScheduleReconnect();
+    }else{
+      toast(text,'error');
+    }
+    return false;
+  }
+  collabBC=bc;
   collabBC.onmessage=e=>collabReceiveRaw(e.data);
   collabBC.onmessageerror=()=>{
     collabRecordError(L('本机频道消息解析失败'));
     collabNotifyThrottled(L('本机频道消息解析失败'),'error');
   };
-  collabMode='local'; collabActive=true;
-  collabSetState('waiting',`${L('频道')} ${channel}`);
+  collabMode='local'; collabActive=true; collabLocalChannel=channelName;
+  if(opts.reconnect) collabReconnectAttempt=attempt; else collabReconnectAttempt=0;
+  collabSetState('waiting',`${L('频道')} ${COLLAB_PREFIX+channelName}`);
   try{ localStorage.setItem('plotpin.collab.channel',String(name||'draft')); }catch(_){}
-  /* hello + 自己的快照：重连时对端可能只回 hello-ack，若不主动带快照，离线期间的本地修改会传不出去 */
+  /* 重连后先补发断线期间落盘的修改，再 hello + 当前快照；
+     对端可能只回 hello-ack，因此必须主动带快照，否则离线期间的本地修改传不出去 */
+  collabFlushPending();
   collabSendObject({t:'hello',name:collabPeerId});
   collabSendObject({t:'snapshot',project:persistableState()});
+  collabStartWatchdog();
   collabRefreshUI();
   return true;
 }
@@ -414,9 +554,13 @@ function collabWireDC(dc){
   dc.onopen=()=>{
     collabActive=true;
     collabPeers.set('webrtc','WebRTC');
+    collabReconnectClear();
     collabSetState('connected',L('实时同步已就绪'),'ok');
+    /* 重连/首次就绪都先补发断线期间落盘的快照，再握手与全量同步 */
+    collabFlushPending();
     collabSendObject({t:'hello',name:collabPeerId});
     collabSendObject({t:'snapshot',project:persistableState()});
+    collabStartWatchdog();
     collabRefreshUI();
   };
   dc.onmessage=e=>collabReceiveRaw(e.data);
@@ -427,6 +571,7 @@ function collabWireDC(dc){
     if(!collabClosing){
       collabSetState('error',`${L('连接异常断开')}（DataChannel closed）`,'error');
       toast(L('连接异常断开'),'error');
+      collabScheduleReconnect();   /* WebRTC 无信令通道：明确提示重新交换邀请串，不假装自动重连 */
     }else{
       collabSetState('disconnected',null);
     }
