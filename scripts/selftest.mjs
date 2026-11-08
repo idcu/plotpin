@@ -183,11 +183,13 @@ code += `\n;globalThis.__api = {
   collabBackoffDelay, collabPendingStore, collabPendingLoad, collabPendingClear,
   collabFlushPending, collabCheckTransport, collabBroadcastFloor,
   collabHandleMessage, collabProjectToken, collabMergeChanged, collabMergeOverwritten,
+  collabSweepPeers, COLLAB_PEER_TTL_MS,
   COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY,
   get collabMode(){ return collabMode; }, set collabMode(v){ collabMode=v; },
   get collabReconnectAttempt(){ return collabReconnectAttempt; },
   get collabForeignDropped(){ return collabForeignDropped; },
   get collabPeerCount(){ return collabPeers.size; },
+  get collabPeerSeen(){ return collabPeerSeen; },
   get collabInbound(){ return collabInbound; },
   get collabHelloSeen(){ return collabHelloSeen; },
   get collabState(){ return collabState; },
@@ -3507,6 +3509,17 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
       api.collabHandleMessage({t:'hello',name:'PEER-D'},'PEER-D');
       eq('B6-旧版 hello 仍可建连', api.collabPeerCount, before+3);
     } finally { sandbox.mergeProjectJSON=origMerge; }
+    /* B7：对端在线表心跳 TTL，异常关闭标签页后不残留幽灵成员 */
+    const base=api.collabPeerCount;
+    api.collabHandleMessage({t:'hello',name:'PEER-T',pid:'p:P-A'},'PEER-T');
+    eq('B7-心跳登记对端', api.collabPeerCount, base+1);
+    eq('B7-TTL 内不清理', api.collabSweepPeers(), 0);
+    api.collabHandleMessage({t:'ping',name:'GHOST',pid:'p:P-A'},'GHOST');
+    eq('B7-未知 ping 不登记', api.collabPeerCount, base+1);
+    api.collabPeerSeen.set('PEER-T', Date.now()-api.COLLAB_PEER_TTL_MS-1000);
+    eq('B7-超时清理对端', api.collabSweepPeers(), 1);
+    eq('B7-在线表移除幽灵', api.collabPeerCount, base);
+    eq('B7-再次清理为空', api.collabSweepPeers(), 0);
     ok('N-17-纯冲突算作有变化', api.collabMergeChanged({conflicts:1}));
     ok('N-17-空统计无变化', !api.collabMergeChanged({}));
     ok('N-17-纯冲突不算覆盖', !api.collabMergeOverwritten({conflicts:1}));

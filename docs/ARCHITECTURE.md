@@ -186,6 +186,7 @@ Schema 为 `offline-drawing-annotation/v2`；`v1` 只读兼容，读取时迁移
 实时通道在 [collab.js](file:///f:/proj/plotpin/js/features/collab.js)：
 
 - 同机多标签用 `BroadcastChannel`（前缀 `plotpin-collab-`），跨设备用 WebRTC DataChannel；**无服务器**。
+- 对端在线表（B7）：每个已知对端记录 `lastSeen`，watchdog 每 15s 发送 `ping` 控制消息（不重发快照），超过 45s 无任何入站活动的对端被移出在线表；移除后若在线表为空且状态为 `connected`，迁移到 `disconnected`（「心跳超时」）。`bye`、`stopAll` 与 WebRTC `onclose` 同步清理 `lastSeen`。
 - 消息按 48,000 字符分片，单条载荷上限 8MB；入站分片有 30s TTL、64 个键与 16MB 上限，防止内存放大。TTL 淘汰只在收到新消息时触发，没有空闲定时器；断线后残留分片最长保留 30 s（RT-P2-19）。
 - 发邀请串 `PLOTPIN-COLLAB:1:...`，SDP 为 ASCII 所以用 base64；超过内置二维码容量（固定 Version 3-M，42 字节）时不渲染假二维码，改为可粘贴文本。
 - 收到远端工程后按 §8 合并；本地未同步修改不因断线丢失：`collabOnLocalChange()` 在传输不可用时把最新整工程快照写入 localStorage 待发队列（单条上限 2 MB，超限/写盘失败显式提示），传输就绪后先 `collabFlushPending()` 再握手与全量快照，成功才清队列。

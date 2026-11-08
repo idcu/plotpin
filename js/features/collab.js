@@ -28,6 +28,9 @@ let collabLastMerge=null, collabNotifyAt=0;
 let collabLocalChannel='', collabReconnectAttempt=0, collabReconnectTimer=null, collabWatchdog=null;
 let collabForeignDropped=0;
 const collabPeers=new Map();
+/* B7：对端在线表带心跳过期，避免异常关闭标签页后幽灵成员永久残留（3 个 watchdog 周期） */
+const COLLAB_PEER_TTL_MS=3*15000;
+const collabPeerSeen=new Map();
 const collabInbound=new Map();
 const collabHelloSeen=new Map();
 
@@ -210,9 +213,36 @@ function collabCheckTransport(){
   collabScheduleReconnect();
   return true;
 }
+function collabTouchPeer(from,name){
+  if(name) collabPeers.set(from,name);
+  collabPeerSeen.set(from,Date.now());
+}
+/** B7：心跳——向已登记对端周期性发 ping（不触发快照重发），让接收端刷新 lastSeen。 */
+function collabSendHeartbeat(){
+  if(!collabPeers.size) return;
+  collabPeers.forEach((_,id)=>collabSendObject({t:'ping',name:collabPeerId},id));
+}
+/** B7：清理超过 TTL 未活动的对端；返回移除数量（自测可观测）。 */
+function collabSweepPeers(){
+  const now=Date.now(); let removed=0;
+  collabPeerSeen.forEach((ts,id)=>{
+    if(now-ts<COLLAB_PEER_TTL_MS) return;
+    collabPeerSeen.delete(id); collabPeers.delete(id);
+    collabHelloSeen.delete(id); collabHelloSeen.delete('ack:'+id);
+    removed++;
+  });
+  if(!removed) return 0;
+  if(!collabPeers.size&&collabState==='connected')
+    collabSetState('disconnected',L('心跳超时'),'warn');
+  collabRefreshUI();
+  return removed;
+}
 function collabStartWatchdog(){
   if(collabWatchdog) return;
-  collabWatchdog=setInterval(collabCheckTransport,COLLAB_WATCHDOG_MS);
+  collabWatchdog=setInterval(()=>{
+    collabCheckTransport();
+    if(collabMode){ collabSendHeartbeat(); collabSweepPeers(); }
+  },COLLAB_WATCHDOG_MS);
   if(collabWatchdog&&typeof collabWatchdog.unref==='function') collabWatchdog.unref();
 }
 function collabStopWatchdog(){
@@ -413,12 +443,15 @@ function collabHandleMessage(msg,from){
      其余业务消息必须双方都有 pid 且一致——草稿或空 projectId 不再跨工程放行。 */
   const got=typeof msg.pid==='string'?msg.pid.trim():'';
   const want=collabProjectToken();
-  const control=msg.t==='hello'||msg.t==='hello-ack'||msg.t==='bye';
+  const control=msg.t==='hello'||msg.t==='hello-ack'||msg.t==='bye'||msg.t==='ping';
   if((got&&want&&got!==want)||(!control&&(!got||!want))){ collabNoteForeign(from,got); return; }
+  /* B7：任何来自已登记对端的消息都刷新 lastSeen；ping 仅维持在线表，不触发快照也不登记新对端 */
+  if(collabPeers.has(from)) collabTouchPeer(from);
+  if(msg.t==='ping') return;
   if(msg.t==='hello'){
     const name=String(msg.name||from).slice(0,80);
     const dup=collabHelloDup(from,name);
-    collabPeers.set(from,msg.name||from);
+    collabTouchPeer(from,msg.name||from);
     /* 重复 hello 只刷新在线表，不再重复回 hello-ack/整份快照，避免对端反复被覆盖 */
     if(!dup){
       collabSendObject({t:'hello-ack',name:collabPeerId},from);
@@ -431,13 +464,13 @@ function collabHandleMessage(msg,from){
   if(msg.t==='hello-ack'){
     const name=String(msg.name||from).slice(0,80);
     collabHelloDup('ack:'+from,name);
-    collabPeers.set(from,msg.name||from);
+    collabTouchPeer(from,msg.name||from);
     collabSetState('connected',L('已连接对端：{name}',{name:(msg.name||from)}),'ok');
     collabRefreshUI();
     return;
   }
   if(msg.t==='bye'){
-    collabPeers.delete(from);
+    collabPeers.delete(from); collabPeerSeen.delete(from);
     collabHelloSeen.delete(from); collabHelloSeen.delete('ack:'+from);
     collabSetState('disconnected',L('对端已断开'),'warn');
     collabRefreshUI();
@@ -527,7 +560,7 @@ function collabStopAll(reason){
   try{ if(collabBC) collabBC.close(); }catch(_){}
   collabDC=null; collabPC=null; collabBC=null; collabMode=null; collabActive=false;
   collabLocalChannel='';
-  collabPeers.clear(); collabInbound.clear(); collabHelloSeen.clear();
+  collabPeers.clear(); collabPeerSeen.clear(); collabInbound.clear(); collabHelloSeen.clear();
   collabPendingSnapshot=false;
   if(reason==='peer') collabSetState('disconnected',L('对端已断开'),'warn');
   else collabSetState('disconnected',null);
@@ -603,7 +636,7 @@ function collabWireDC(dc){
   collabDC=dc;
   dc.onopen=()=>{
     collabActive=true;
-    collabPeers.set('webrtc','WebRTC');
+    collabTouchPeer('webrtc','WebRTC');
     collabReconnectClear();
     collabSetState('connected',L('实时同步已就绪'),'ok');
     /* 重连/首次就绪都先补发断线期间落盘的快照，再握手与全量同步 */
@@ -617,7 +650,7 @@ function collabWireDC(dc){
   dc.onclose=()=>{
     if(collabDC===dc) collabDC=null;
     collabActive=false;
-    collabPeers.delete('webrtc');
+    collabPeers.delete('webrtc'); collabPeerSeen.delete('webrtc');
     if(!collabClosing){
       collabSetState('error',`${L('连接异常断开')}（DataChannel closed）`,'error');
       toast(L('连接异常断开'),'error');

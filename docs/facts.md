@@ -9,17 +9,17 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 825,999 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 256,344 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 827,041 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 256,591 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 13,681 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=95` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 12,639 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=96` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3497 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 断言 | 3503 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
 | selftest 分区 | 127 个 | `node scripts/selftest.mjs --list` | 输出 128 行（含 1 行标题） |
 | 加载脚本 | 45 个（35 项目 + 10 vendor） | `check.mjs` 输出「加载 45 个脚本」 | `js/` 下 35 个 `.js` |
 | e2e 用例 | 121 个（120 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |

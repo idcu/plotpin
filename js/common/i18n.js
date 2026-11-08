@@ -804,7 +804,7 @@
     '实时协作':'Live collaboration',
     '本机标签页同步':'Local tab sync', '频道名称':'Channel name', '启用本机同步':'Enable local sync',
     '停用本机同步':'Disable local sync', '断开':'Disconnect',
-    '已连接对端':'Peer connected', '对端已断开':'Peer disconnected',
+    '已连接对端':'Peer connected', '对端已断开':'Peer disconnected', '心跳超时':'heartbeat timeout',
     '已同步':'Synced', '同步失败：':'Sync failed: ',
     '已断开':'Disconnected', '连接已断开':'Connection closed',
     '当前环境不支持 BroadcastChannel，请使用跨设备直连或工程 JSON 合并':

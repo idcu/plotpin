@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 B（2/6）：对端在线表心跳 TTL，异常关闭不再残留幽灵成员
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/collab.js` 新增 `collabPeerSeen` 在线时间表与 `COLLAB_PEER_TTL_MS=45s`：hello/hello-ack 登记时写入 `lastSeen`，任何已登记对端的后续消息刷新；`bye`/`stopAll`/WebRTC `onclose` 同步清理。
+  - watchdog 每 15s 发送 `ping` 控制消息（不重发快照、不登记陌生对端），并在同周期执行 `collabSweepPeers()` 清理超过 45s 的对端；在线表清空且状态为 connected 时迁移到 disconnected（「心跳超时」）。
+  - i18n 新增「心跳超时」，同步更新 `docs/features.md` 与 `docs/ARCHITECTURE.md`。
+- **验证数据**：
+  - selftest **3503 通过 / 0 失败**（基线 3497，+6）：心跳登记、TTL 内不清理、未知 ping 不登记、超时移除、在线表清空、重复清理为 0。
+  - dist **827,041 B**（本条 **+1,042 B**）/ gzip 256,591 B / 余量 **12,639 B**；SW `VERSION=96`；8 种 golden 与导出字段未变。
+  - e2e / build --check / check-gates / discipline 见提交前完整门禁记录。
+- **遗留 TODO / 风险**：
+  - 心跳每 15s 产生一条 `ping`（分片协议封装），空闲时段也有少量消息；跨工程同频道 tab 的 ping 会被 pid 过滤器计入跨工程丢弃数（仅影响计数展示）。
+  - TTL 固定 45s，未做可配置；后台标签页定时器节流可能使其晚于 45s 清理（下一次 watchdog 触发即恢复）。
+
 ## 2026-11-08 · 批次 B（1/6）：草稿/空 projectId 业务消息不再跨工程放行
 
 - **Commit Hash**：`待回填`
