@@ -4,6 +4,37 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2 批次 7/8：插件沙箱 4 条 + 规则/统计 2 条
+
+- **Commit Hash**：
+  - 批次 7（插件沙箱，4 笔）：`0395043` RT-P2-07、`2920db5` RT-P2-08、`30ade59` RT-P2-09、`3199958` RT-P2-11。
+  - 批次 8（规则/统计，2 笔）：`bd7d55f` RT-P2-13、`f746b2f` RT-P2-14。
+- **核心改动**：
+  - RT-P2-07：新增 `PLUGIN_MANIFEST_MAX_BYTES=196608`、`PLUGIN_CODE_MAX_BYTES=65536`，`validatePluginManifest` 的清单与 code 上限改用既有 `utf8Length`；多字节文案不再能按字符数绕过。
+  - RT-P2-08：`loadPlugin` 直调路径在任何 Worker/URL 创建之前校验 code 字节上限，与清单导入共用同一常量；旧插件 API 版本不兼容仍返回 `{ok:false,reason}`。
+  - RT-P2-09：`addType` 允许 `prevOwner===ownerId` 的同 owner 覆盖，`installType` 由「不存在才追加」改为「同 id 替换」，`list` 同 id 替换而非重复 push；卸载时仍被对象引用的类型保留注册，未被引用的仍由 `removeType` 清理。
+  - RT-P2-11：`handleDownload` 强制 `rec.pending.get(d.callId)` 命中，否则 `disablePlugin('下载请求不在调用期内（callId 未授权）')`；下载字节复用 `APP_LIMITS.IMPORT_FILE_MAX_BYTES`（32 MB），文本按 `utf8Length`、二进制按视图 `byteLength`，Blob 不再取整个底层 `buffer`；超限禁用并给原因。N-02 逃逸矩阵由 5 项扩到 10 项（补 `onmessageerror`/`document`/`parent`/`indexedDB`/`fetch`），原有面未删。
+  - RT-P2-13：新增 `ruleMaxPolygonIntersection(polyA,polyB)`，`ruleOverlapCheck` 由 `polygons[0]` 改为全部轮廓对取最大交面积；`tolerance` 贴合语义与 `minArea` 阈值不变，规则页「几何检查，不是消防/规范审图」提示未改。
+  - RT-P2-14：新增 `issueBoundsFrame()`（场地可见取 `siteBounds`，否则 `worldDims`）与 `issueBoundsTolerance()`（`ruleTolerance(state.rules.bounds.tolerance,0.05)`）；越界判据改用 `minX/minY/maxX/maxY`，新增 `STATS_ISSUE_VERSION=2`，统计页标题与 PDF 报告几何检查行输出 `v2`。
+  - 公共抽象（新增/调整，调用方影响面已核对）：
+    - 新增 `PLUGIN_MANIFEST_MAX_BYTES`、`PLUGIN_CODE_MAX_BYTES`（`plugins.js`），复用 `utf8Length`（`snapshot.js`）与 `APP_LIMITS.IMPORT_FILE_MAX_BYTES`（`config.js`）。
+    - 新增 `ruleMaxPolygonIntersection`（`rules.js`）、`issueBoundsFrame`/`issueBoundsTolerance`（`ui-panels.js`）、`STATS_ISSUE_VERSION`（`model.js`）；复用 `siteBounds`/`worldDims`/`siteIsVisible`/`ruleTolerance`。
+    - `installType` 语义由「缺省追加」改为「同 id 替换」；唯一调用方 `addType` 已核对，可信路径在重复 id 时仍先抛错，行为不变。
+- **验证数据**：
+  - `selftest`：3157 通过 / 0 失败（批次前 3146，+11；新增 57.1b 3 条、57.1c 6 条、57.4 2 条）。
+  - `e2e`：115 用例 / 114 通过 / 1 条件跳过（+4：RT-P2-08/09/11×2；逃逸矩阵在原用例上扩断言，未新增跳过）。
+  - `check-gates`：正面 6/6、破坏 10/10；`check-discipline --strict`：13/13；`build.mjs --check`：一致。
+  - `check.mjs --selftest`：契约 7/0、插件 API 23/0/0、i18n 45.15%（缺口 8 / UI 1 / 模板 0）、SW `VERSION=69`（49 个预缓存输入一致）。
+  - 产物：819,766 B / gzip 254,594 B / 余量 19,914 B；相对批次 6 结束 817,873 B **+1,893 B / gzip +453 B / 余量 −1,893 B**（仍高于 15,000 B 止损线）。
+  - Golden：8 种导出 golden 均未变化；导出字段未改，CSV/TSV 仍 CRLF、XLSX 角度仍 `30.00`。
+- **遗留 TODO / 风险**：
+  - 下载上限在入站消息完成结构化克隆之后才校验，33 MB 级消息的峰值内存仍会发生一次。
+  - 同 owner 重载会替换仍在使用中的类型定义，已引用对象的外观会随新定义变化。
+  - 统计 v2 只做版本标注，不迁移历史报告；与 v1 数值不可直接比较。
+  - 重叠仍把「任一边小于贴合容差」的浅交视为贴合，极细长重叠按该语义不报（本批未改阈值）。
+  - 插件层调用 `utf8Length` 依赖脚本顺序（`snapshot.js` 先于 `plugins.js`），与现有全量 `selftest` 拼接顺序一致。
+  - C 类 4 条（IO-P2-3/17/20、RT-P2-12）未排期、未改动。
+
 ## 2026-11-08 · P2 批次 5/6：核心 schema/安全 5 条 + 快照/协作 5 条
 
 - **Commit Hash**：
