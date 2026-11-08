@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 批次 B（6/6）：插件调用限流 + 清单解析前字节校验
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`46b761e`
 - **核心改动**：
   - `js/core/config.js` 新增 `PLUGIN_MANIFEST_MAX_BYTES` / `PLUGIN_CODE_MAX_BYTES` / `PLUGIN_GETSTATE_PER_MIN` / `PLUGIN_ADD_OBJECTS_PER_MIN` / `PLUGIN_ADD_ANNOTATION_PER_MIN` / `PLUGIN_RATE_WINDOW_MS`，供插件宿主与导入面板共用，避免两处硬编码。
   - `js/features/plugins.js`：`pluginRateLimit(rec, method)` 固定 60s 窗口，`getState` 60 / `addObjects` 30 / `addAnnotation` 60 次每分钟；超限抛 `rateLimited` 错误，RPC 只回本次错误、**不禁用插件**（其它异常仍禁用）。`pluginGetState`/`pluginAddObjects` 统一走守卫。
@@ -24,7 +24,7 @@
 
 ## 2026-11-08 · 批次 B（5/6）：插件冻结改微任务，载入期 clearTimeout 无法取消
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`885b660`
 - **核心改动**：
   - `js/features/plugins.js` 沙箱 bootstrap：冻结动作由 `later(freeze,0)`（可被插件枚举 id 后 `clearTimeout` 取消）改为 `queueMicrotask(freeze)`；微任务在插件顶层同步代码结束后、任何插件微任务/定时器之前执行，且不占用可枚举的定时器 id。
   - 无 `queueMicrotask` 的旧环境退回 0ms 定时器时，`clearTimeout` 包装对 `freezeId` 直接拒绝，插件即使遍历 id 也无法取消冻结。
@@ -39,7 +39,7 @@
 
 ## 2026-11-08 · 批次 B（4/6）：插件类型注册/注销接入持久化与协作广播
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`487f8fc`
 - **核心改动**：
   - `js/features/plugins.js` 新增 `markTypesChanged()`：`installType()` 与 `unregisterObjectType()` 修改当前工程 `state.objectTypes` 后调用 `markDirty('settings')`，进入自动保存与协作广播；无 `markDirty` 环境降级到 `scheduleSave()`。
   - `js/core/persistence.js` 增加 `settings` 写盘画像（全量 UI 刷新 + 广播），避免未知 kind 静默落到默认分支。
@@ -54,7 +54,7 @@
 
 ## 2026-11-08 · 批次 B（3/6）：入站时间戳校验，未来时间不再永久压制本地编辑
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`77a87db`
 - **核心改动**：
   - `js/common/merge.js` 新增 `mergeClampTimestamps(raw, nowMs)`：遍历 `meta` / 顶层对象 / 楼层 / 场地 / 楼层对象 / 墓碑，`Date.parse` 失败或晚于本机 `now+5s` 的 `updatedAt`/`deletedAt` 一律置空（置空在 LWW 中必然输给本地有效时间）。
   - `js/core/persistence.js` `mergeProjectJSON()` 在 `mergeBlankMissingTimestamps` 之后、迁移之前调用，异常条数写入 `stats.clockClamped` 并 `console.warn`；协作信息栏新增「时间戳异常 N 条已置空」。
@@ -71,7 +71,7 @@
 
 ## 2026-11-08 · 批次 B（2/6）：对端在线表心跳 TTL，异常关闭不再残留幽灵成员
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`2df33c8`
 - **核心改动**：
   - `js/features/collab.js` 新增 `collabPeerSeen` 在线时间表与 `COLLAB_PEER_TTL_MS=45s`：hello/hello-ack 登记时写入 `lastSeen`，任何已登记对端的后续消息刷新；`bye`/`stopAll`/WebRTC `onclose` 同步清理。
   - watchdog 每 15s 发送 `ping` 控制消息（不重发快照、不登记陌生对端），并在同周期执行 `collabSweepPeers()` 清理超过 45s 的对端；在线表清空且状态为 connected 时迁移到 disconnected（「心跳超时」）。
@@ -86,7 +86,7 @@
 
 ## 2026-11-08 · 批次 B（1/6）：草稿/空 projectId 业务消息不再跨工程放行
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`d5de0ff`
 - **核心改动**：
   - `js/features/collab.js` `collabHandleMessage` 收紧 pid 校验：双方都有 `pid` 且不一致 → 丢弃；**新增**——除 `hello`/`hello-ack`/`bye` 控制消息外，任一侧缺失 `pid`（草稿/空 `projectId`）同样丢弃并计数，不再按旧行为放行。
   - `tests/e2e/collab.spec.mjs` 的 `openApp` 显式绑定 `state.meta.projectId='E2E_PROJ'`（reload 后同样重设），让既有协作用例继续验证同工程合并；草稿拦截由 selftest 断言覆盖。
@@ -101,7 +101,7 @@
 
 ## 2026-11-08 · P2-A3 补漏：新建工程与 JSON 导入前同样强制落盘
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`dbc066b`
 - **核心改动**：
   - `js/features/io.js` 新建工程按钮改为 async：确认后先 `await flushPendingSave()`，失败 toast「操作失败：…」并中止，不再覆盖待保存的旧草稿。
   - `js/features/io-import.js` `importJsonFile()` 入口先 `await flushPendingSave()`，失败 toast「工程导入失败：…」并直接返回；旧工程已落盘成功后才进入原有事务化导入（候选构建/限值校验/资产转存/现场替换）。
