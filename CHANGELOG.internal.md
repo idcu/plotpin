@@ -2,6 +2,19 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-18 插件写入可撤销与载入后定时器逃逸封堵
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/features/plugins.js`
+    - `pluginAddObjects()` 在 `st.objects.push(...clean)` 前调用 `pushHistory()`，与手动绘制共用撤销栈；`undo` 完全移除、`redo` 恢复。
+    - `sandboxSource()` 的 bootstrap 包装 `setTimeout/setInterval/clearTimeout/clearInterval/queueMicrotask`，用 `frozen` + `tmo`/`tmi` 追踪初始化期定时器；`loaded` 调度时置 `frozen=true`、清空全部初始化期定时器，并从 `self` 及其原型链删除定时器入口（含 `requestAnimationFrame`/`requestIdleCallback`/`setImmediate`）。插件持有的旧包装引用因 `frozen` 直接返回，无法续命。
+  - `tests/e2e/plugin-sandbox.spec.mjs`：新增 2 条用例——插件 `addObjects` 后 `undo` 归零 / `redo` 恢复；载入后 `setInterval`、初始化期捕获的 `setTimeout` 与死循环 interval 均不再生效，主线程仍可绘制。
+  - `sw.js`：`VERSION` 26 → 27；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` §12、`docs/known-issues.md` RT-P1-05/06 同步。
+- **验证数据**：selftest 2914 通过 / 0 失败（未变）；e2e 单 spec 15 passed（新增 2 条）；产物 804,399 B（gzip 250,109 B，上限 839,680 B，余量 35,281 B）；`check.mjs --selftest`、`check-gates` 6/6 + 9/9、`check-discipline --strict` 13/13 全绿。
+- **遗留风险**：`frozen` 只覆盖初始化完成后的异步回调；初始化期内的忙循环仍依赖既有 2 s 单次调用上限 terminate。`queueMicrotask` 在 loaded 前注册的微任务仍可在初始化期执行（与同步初始化写入同权），loaded 后同样被冻结。
+
 ## 2026-11-08 · N-17 冲突可见性与跨工程消息隔离
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

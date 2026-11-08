@@ -317,3 +317,47 @@ test('覆写 onerror 后插件异常仍走禁用路径', async ({ page }) => {
   await expect.poll(() => page.locator('#toastWrap').innerText()).toContain('插件已禁用');
   await drawPoint(page);
 });
+
+/* N-18：插件写入必须与手动绘制共用撤销栈；载入完成后的定时器不能再改工程。 */
+test('插件写入进入撤销栈：undo 后对象完全移除、redo 恢复', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'write.undo',
+    apiVersion: '1.0',
+    capabilities: ['state:write'],
+    code: 'PlotPin.addObjects([{kind:"point",x:100,y:100,name:"PLUG-1"}],"插件写入");'
+  });
+  expect(r.ok).toBe(true);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  expect(await page.evaluate(() => state.objects[0].name)).toBe('PLUG-1');
+  expect(await page.evaluate(() => history.past.length)).toBeGreaterThan(0);
+
+  await page.evaluate(() => undo());
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+  expect(await page.evaluate(() => state.objects.some(o => o.name === 'PLUG-1'))).toBe(false);
+
+  await page.evaluate(() => redo());
+  expect(await page.evaluate(() => state.objects.length)).toBe(1);
+  expect(await page.evaluate(() => state.objects[0].name)).toBe('PLUG-1');
+  await page.evaluate(() => window.PlotPin.unloadPlugin('write.undo'));
+  await drawPoint(page);
+});
+
+test('定时器逃逸：载入后 setInterval 与初始化期捕获的 setTimeout 均失效，主线程仍可用', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'evil.timer',
+    apiVersion: '1.0',
+    capabilities: ['state:write'],
+    code: [
+      'var keep=globalThis.setTimeout;',
+      'globalThis.setInterval(function(){ PlotPin.addObjects([{kind:"point",x:1,y:1}]); },50);',
+      'keep(function(){ PlotPin.addObjects([{kind:"point",x:2,y:2}]); },120);',
+      'globalThis.setInterval(function(){ while(true){} },80);'
+    ].join('\n')
+  });
+  expect(r.ok).toBe(true);
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+  await drawPoint(page);
+});

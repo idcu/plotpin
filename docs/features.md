@@ -97,7 +97,7 @@
 
 - **入口**：`设置 → 插件面板`；导入插件清单，仅当前会话有效，不持久化。
 - **能力**：插件在独立后台线程中运行，通过消息调用声明过的能力（读取状态、添加对象/标注、导出器、规则等）；声明 API 版本，主版本不兼容或次版本高于宿主会被拒绝并给出原因；单次调用 2 s 超时后终止。
-- **限制**：不是完整语言级沙箱（K9）；插件写入的对象不在撤销栈（RT-P1-05）；初始化后的定时器/忙循环不受 2 s 限制（RT-P1-06）。Worker 内的 `fetch`/`indexedDB`/`WebSocket`/`localStorage` 等直连 API 已置空，`BroadcastChannel`/`MessageChannel`/`MessagePort` 与 `onmessage`/`onerror` 一并封堵（无法加入协作频道、无法旁路 token 校验）；端口通道不在插件契约内。只应加载可信来源的插件。
+- **限制**：不是完整语言级沙箱（K9）。插件写入的对象与手动绘制共用撤销栈，Ctrl+Z 可完全移除、Ctrl+Shift+Z 可恢复（N-18）。初始化完成后 Worker 会冻结并清除初始化期注册的 `setTimeout`/`setInterval`、删除全局定时器入口，插件无法在载入后继续改工程或长时间占用（N-18）；初始化期的忙循环仍受 2 s 单次调用上限约束。Worker 内的 `fetch`/`indexedDB`/`WebSocket`/`localStorage` 等直连 API 已置空，`BroadcastChannel`/`MessageChannel`/`MessagePort` 与 `onmessage`/`onerror` 一并封堵（无法加入协作频道、无法旁路 token 校验）；端口通道不在插件契约内。只应加载可信来源的插件。
 
 ## 13. 几何规则检查
 
