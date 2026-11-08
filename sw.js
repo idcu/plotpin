@@ -3,7 +3,7 @@
  * 缓存清单从 index.html 动态解析，新增脚本无需手工维护。
  * 版本策略：CACHE 名带版本号；activate 删除所有非当前版本缓存。
  * 更新失败不阻断：单个资源 404/失败不影响安装（Promise.allSettled），注册失败也不影响界面。 */
-const VERSION = '51';
+const VERSION = '52';
 const CACHE = 'plotpin-v' + VERSION;
 const OFFLINE_HTML = '<!doctype html><html lang="zh-CN"><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1"><title>PlotPin 离线</title>' +

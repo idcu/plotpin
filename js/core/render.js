@@ -454,6 +454,13 @@ function drawSite(c,v,toS){
  * 图片底图渲染：像素(u,v y-down) → 世界(x,y y-up) → 屏幕在 render 层用一次 canvas 变换完成，
  * 支持仿射校准后的旋转 / 不等比缩放 / 轻微切变（直线仍保持直线）。缺省无 transform 时退化为轴对齐矩形。
  */
+/** CORE-P2-18：底图绘制失败不再静默吞掉，置错误态并只提示一次，避免每帧刷 toast */
+function noteBgImageError(){
+  if(bgImageState==='error'&&bgImageErrorNotified) return false;
+  bgImageState='error'; bgImageErrorNotified=true;
+  if(typeof toast==='function') toast('底图绘制失败：图片可能已损坏，请重新导入','warn');
+  return true;
+}
 function drawImageBackground(c,v,d,bg){
   if(!(bgImage&&bgDataUrl)) return;
   const t=validImageTransform(bg.transform)||defaultImageTransform(bg);
@@ -461,7 +468,7 @@ function drawImageBackground(c,v,d,bg){
   c.save();
   c.transform(t.a*v.zoom, -t.d*v.zoom, t.b*v.zoom, -t.e*v.zoom,
     v.panX+(t.c-d.minX)*v.zoom, v.panY+(d.maxY-t.f)*v.zoom);
-  try{ c.drawImage(bgImage,0,0); }catch(_){}
+  try{ c.drawImage(bgImage,0,0); }catch(_){ noteBgImageError(); }
   c.restore();
   /* 四角按世界点独立描边，保证旋转后包围轮廓正确 */
   const corners=imageCornerWorld(bg).map(p=>w2s(p,v,d));

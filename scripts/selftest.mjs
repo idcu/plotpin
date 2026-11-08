@@ -111,6 +111,8 @@ code += `\n;globalThis.__api = {
   get clipboard(){ return clipboard; }, setClipboard(v){ clipboard=v; },
   get drag(){ return drag; }, setDrag(v){ drag=v; },
   resetTransientInteractionState, escapeInterrupt, handleWindowBlur,
+  drawImageBackground,
+  get bgImageState(){ return bgImageState; }, setBgImage(v){ bgImage=v; }, setBgDataUrl(v){ bgDataUrl=v; },
   get transient(){ return {draft,drag,rubber,affinePairs,calibPoints,trackLine,refEdge,osnapMode,coverageResult}; },
   setTransient(v){ ['draft','drag','rubber','affinePairs','calibPoints','trackLine','refEdge','osnapMode','coverageResult'].forEach(k=>{ if(Object.prototype.hasOwnProperty.call(v,k)) eval(k+'=v[k]'); }); },
   switchFloor,
@@ -7829,6 +7831,20 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   eq('CORE-P2-10 回滚清空仿射草稿', api.transient.affinePairs.length, 0);
   eq('CORE-P2-10 回滚保留校准点', api.transient.calibPoints.length, 2);
   api.resetState();
+
+  /* CORE-P2-18：底图绘制抛错不再静默；置 error 且只提示一次 */
+  const badBg={x:0,y:0,width:10,height:10,transform:null};
+  const badDim={minX:0,minY:0,maxX:10,maxY:10,w:10,h:10};
+  const badCtx={save(){},restore(){},transform(){},drawImage(){throw new Error('boom');},
+    beginPath(){},moveTo(){},lineTo(){},closePath(){},stroke(){}};
+  let toastCount=0; const prevToast=sandbox.toast; sandbox.toast=()=>{ toastCount++; };
+  api.setBgImage({width:10,height:10}); api.setBgDataUrl('data:image/png;base64,AA==');
+  api.drawImageBackground(badCtx,{zoom:1,panX:0,panY:0},badDim,badBg);
+  eq('CORE-P2-18 绘制失败置 error', api.bgImageState, 'error');
+  eq('CORE-P2-18 首次失败提示一次', toastCount, 1);
+  api.drawImageBackground(badCtx,{zoom:1,panX:0,panY:0},badDim,badBg);
+  eq('CORE-P2-18 连续失败不刷屏', toastCount, 1);
+  sandbox.toast=prevToast; api.setBgImage(null); api.setBgDataUrl(''); api.resetState();
 }
 
 });
