@@ -98,11 +98,10 @@ function exportBlindSpotsGeoJson(){
     {n:fc.features.length,area:fmt(blindSpotArea(coverageResult)),version:fc.coverageSpec.version}),'success');
 }
 async function exportJSON(){
-  state.meta.updatedAt=nowISO();
-  // 工程文件保持可移植：底图字节虽存于 IndexedDB，导出 JSON 时内嵌 dataURL 一并带走。
-  // 只要运行时有已装载的图片数据就内嵌——IDB 不可用的降级路径 assetId 为空，同样必须带走（评估报告 5.4）
+  /* IO-P2-25：导出只更新副本时间戳，不改写实时 state——避免“导出后内存时间与已落盘工程不一致”的隐式副作用。
+     导出字段与取值语义不变（updatedAt 仍为导出时刻）。 */
   const copy=persistableState();
-  copy.meta.updatedAt=state.meta.updatedAt;
+  copy.meta.updatedAt=nowISO();
   if(bgDataUrl && isImageBackground(copy.background)) copy.background.dataUrl=bgDataUrl;
   /* 设备照片同样内嵌 dataUrl：遍历全楼层，同一 photoId 只读一次资产（A-10） */
   const photoDataUrls=new Map();

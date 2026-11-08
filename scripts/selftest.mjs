@@ -195,7 +195,7 @@ code += `\n;globalThis.__api = {
   applyLedgerCells, LEDGER_FIELDS,
   dimensionMeasure, BLIND_SPOT_FIELDS, buildBlindSpotGeoJson,
   csvCell: (v,d)=>csvCell(v,d),
-  formulaGuard, delimitedText,
+  formulaGuard, delimitedText, exportJSON,
   TABLE_COLUMNS,
   cameraFootprint, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotArea,
   optimizeCameraPlacement,
@@ -4658,6 +4658,19 @@ await section("导出双槽与场地标注证据：JSON / SVG / DXF 真实产物
   eq('导出DXF-场地闭合折线', edxf[0].closed, true);
   ok('导出DXF-场地顶点由圆轮廓采样', edxf[0].points.length>=8);
   eq('导出DXF-不进对象台账', api.objectRowsAll().filter(r=>r['编号']==='SITE').length, 0);
+
+  /* IO-P2-25：exportJSON 纯函数化——只改副本时间戳，不改写实时 state（导出字段不变） */
+  api.state.meta.updatedAt='2000-01-01T00:00:00.000Z';
+  const realBlob=sandbox.Blob, realDl=sandbox.downloadBlob, realToast=sandbox.toast;
+  let exported=null;
+  sandbox.Blob=function(parts){ this.parts=parts; };
+  sandbox.downloadBlob=blob=>{ exported=JSON.parse(blob.parts.join('')); };
+  sandbox.toast=()=>{};
+  await api.exportJSON();
+  eq('导出JSON-不改实时更新时间', api.state.meta.updatedAt, '2000-01-01T00:00:00.000Z');
+  ok('导出JSON-副本时间戳为导出时刻', typeof exported.meta.updatedAt==='string'&&exported.meta.updatedAt!=='2000-01-01T00:00:00.000Z');
+  eq('导出JSON-字段结构不变', Object.keys(exported).sort(), Object.keys(api.persistableState()).sort());
+  sandbox.Blob=realBlob; sandbox.downloadBlob=realDl; sandbox.toast=realToast;
   api.resetState();
 }
 
