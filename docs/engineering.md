@@ -93,12 +93,12 @@ npm run ci  =  node scripts/check.mjs --selftest
 |---|---|---|---|
 | `npm run lint` / `node scripts/check.mjs` | 不带 `--selftest` 的快速自检 | 否 | 否 |
 | `node scripts/check.mjs --selftest` | 12 步总闸（见 3.2），契约与插件 API 面总是真实核对 | 是 | `test` job |
-| `node scripts/check-contracts.mjs` | 契约四条真实核对（`--selftest` 只额外验证判据自己会红） | 经总闸 | `test` job（独立步骤） |
+| `node scripts/check-contracts.mjs` | 契约结构校验 + 四条真实核对（规则删空即红；`--selftest` 额外验证判据自己会红） | 经总闸 | `test` job（独立步骤） |
 | `node scripts/check-plugin-api.mjs` | `PlotPin` 顶层键 ↔ `contracts/plugin-api.json` 双向真实比对 | 经总闸 | `test` job（独立步骤） |
 | `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
 | `node scripts/bench.mjs` | Node 桩渲染/覆盖率/规则/符号阈值 | 是 | `test` job |
 | `node scripts/build.mjs --check` | 单文件产物重建与登记比对 | 是 | `test` job |
-| `node scripts/check-gates.mjs` | 正面基线 + 10 种人为破坏 | 是 | `test` job |
+| `node scripts/check-gates.mjs` | 正面基线 + 11 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
 | `node scripts/e2e.mjs` | Chromium 功能 e2e | 否 | **不跑** |
@@ -114,7 +114,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | 3 | 入口引用完整 | 总是 | `js/**` 每个脚本都必须被 `index.html` 引用 |
 | 4 | 离线承诺 | 总是 | 入口不得出现 `http(s)://` 远程脚本/样式/资源 |
 | 5 | 断言数一致 | 总是 | `scripts/badge.mjs --check`：README 三处锚点必须存在且等于 selftest 实际断言数 |
-| 6 | 契约 | 总是 | `check-contracts.mjs` 真实核对四类约定；`--selftest` 额外跑判据自检（证明判据会红），不替代真实核对 |
+| 6 | 契约 | 总是 | `check-contracts.mjs` 先校验契约结构（规则被删空即红），再真实核对四类约定；`--selftest` 额外跑判据自检（证明判据会红），不替代真实核对 |
 | 7 | 插件 API 面 | 总是 | `check-plugin-api.mjs`：`PlotPin` 顶层键 ↔ `contracts/plugin-api.json` 双向一致；`--selftest` 额外验证解析器 |
 | 8 | 删除账本 | 总是 | `check-deletions.mjs`：`docs/deletions.md` 字段齐全、能抓假删除 |
 | 9 | 模块分层 | 总是 | 目录白名单 + 加载顺序按层非递减 |
@@ -197,7 +197,11 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 文件头唯一 | 每个 `js/**/*.js` 恰好一行 `/* 文件名.js —— 职责 */` |
 | 枚举同源 | `POINT_SCALE_SHAPES` 的键集 = `TYPE_SHAPES` |
 
-`check-contracts.mjs --selftest` 造一棵必然违约的临时树，断言四类漂移各被识别一次。
+`check-contracts.mjs --selftest` 造一棵必然违约的临时树，断言四类漂移各被识别一次，并断言「规则清空」会被拒绝（不是 0 项核对退 0）。
+
+契约文件既是判据来源又是被检查对象，因此逐条核对前先做结构校验：`versionSources` 至少 3 条、`i18n`（`source` + `html`）、
+`headers.root`、`enums` 至少 1 条缺一即报违约；全部核对完成后读数还须 ≥ 6，低于基线同样报违约。
+`check-gates` 场景 11 在临时副本里清空契约并断言 `check-contracts.mjs` 非 0 退出。
 
 ### 4.2 `contracts/plugin-api.json`（23 个顶层键）
 

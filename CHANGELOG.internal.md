@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 审计 P1 批次三（1/4）：契约门禁拒绝空契约
+
+- **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(contracts): 契约规则删空即判红`）
+- **核心改动**：
+  - `check-contracts.mjs` 在逐条核对前新增契约结构校验：`versionSources` ≥ 3 条、`i18n`（`source` + `html`）、`headers.root`、`enums` ≥ 1 条；任一缺失直接记为违约并返回，不再继续得出「0 项核对，0 处违约」。
+  - 全部核对完成后增加读数下限（`MIN_READINGS = 6`），规则被逐条削减时同样判红。
+  - `--selftest` 增加空契约负例：清空规则后必须报违约且输出含「契约」，否则自检失败。
+  - `check-gates` 新增场景 11「契约规则被清空」：在临时副本清空 `contracts/conventions.json` 四个规则段，断言 `check-contracts.mjs` 非 0 且命中关键字。旧实现在同一破坏下输出「0 项核对，0 处违约」并退 0。
+- **验证数据**：
+  - 契约门禁：真实仓库 **11 项核对 / 0 违约**（原 7 项；新增 4 项结构校验）；空契约破坏下 **4 项核对 / 4 处违约**、退出码 1。
+  - `check-contracts.mjs --selftest`：原有 6 类漂移全部识别（9 条违约）+ 空契约被拒绝。
+  - selftest **3456/0**（未变）；e2e **120 通过 + 1 条件跳过（121，未变）**。
+  - check-gates **正面基线 6/6 + 人为破坏 11/11**；discipline 13/13；dist **824,682 B**（本条 0 B，仅改 scripts/ 与 docs/）/ 余量 14,998 B；SW `VERSION=88`（scripts 不在预缓存输入，无需 bump）；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 结构校验阈值（`versionSources ≥ 3`、`MIN_READINGS = 6`）与当前契约形态耦合：未来合法新增规则不会红，但删除任何既有规则都会红，需同 commit 调整阈值并说明理由。
+  - 结构校验只覆盖段落存在性与最小数量，不校验 `enums` 内部字段（如 `a/b` 是否齐全）——缺失时仍会落入「匹配不到集合」的真实核对分支。
+
 ## 2026-11-08 · 审计 P1 批次二（3/3）：多楼层导出等待切层与底图就绪
 
 - **Commit Hash**：待收尾 `docs(changelog)` 回填（`fix(export): withFloor 等待切层与底图就绪`）

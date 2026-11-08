@@ -17,6 +17,7 @@
  *   8. PlotPin 新增未登记私有键       → node scripts/check.mjs --selftest 必须非 0（API 面真实判据）
  *   9. sw.js VERSION 回退             → node scripts/check-sw.mjs      必须非 0
  *  10. CSS 花括号未配平（@media 未闭合）→ node scripts/check.mjs --selftest 必须非 0
+ *  11. 契约规则被清空                 → node scripts/check-contracts.mjs 必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
@@ -184,6 +185,18 @@ const scenarios = [
       const m = text.match(/const VERSION\s*=\s*'(\d+)'/);
       if (!m) throw new Error('sw.js 找不到 VERSION');
       writeFileSync(p, text.replace(m[0], `const VERSION = '${Math.max(0, Number(m[1]) - 1)}'`));
+    }
+  },
+  {
+    name: '契约规则被清空（空文件静默关闭）',
+    expected: 'node scripts/check-contracts.mjs 退出码非 0',
+    args: ['scripts/check-contracts.mjs'],
+    expect: /契约 versionSources|契约 i18n|契约 headers|契约 enums/,
+    sabotage(dir) {
+      /* 契约文件既是判据来源又是被检查对象：把规则数组清空后，旧实现会输出
+         「0 项核对，0 处违约」并退 0，等于门禁被合法地关掉。 */
+      writeFileSync(join(dir, 'contracts', 'conventions.json'),
+        JSON.stringify({ schemaVersion: 1, versionSources: [], i18n: null, headers: null, enums: [] }, null, 2));
     }
   },
   {

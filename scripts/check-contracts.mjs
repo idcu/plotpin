@@ -11,6 +11,9 @@
  *   3. 文件头唯一且与文件名一致（每个 js 脚本恰好一行）
  *   4. 枚举同源（契约里列出的两处集合必须相等）
  *
+ * 在逐条核对之前先做契约结构校验：契约文件既是判据来源又是被检查对象，
+ * 规则被删空时若只看 violations，会以「0 项核对，0 处违约」退 0，等于门禁被静默关闭。
+ *
  * 用法：
  *   node scripts/check-contracts.mjs              检查本仓库
  *   node scripts/check-contracts.mjs --root=<dir> 检查任意根（自检用）
@@ -51,6 +54,25 @@ function pick(obj, dotted) {
   return dotted.split('.').reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
 }
 
+/** 逐条核对的最低读数：低于这个数说明规则被削弱，而不是「恰好没有违约」。 */
+const MIN_READINGS = 6;
+
+/** 契约结构校验：规则数量/必备段落是否还在。规则被删空同样算违约。 */
+function validateContract(c) {
+  const violations = [];
+  let readings = 0;
+  const require = (ok, msg) => { readings++; if (!ok) violations.push(msg); };
+  require(Array.isArray(c.versionSources) && c.versionSources.length >= 3,
+    `契约 versionSources 少于 3 条（实有 ${Array.isArray(c.versionSources) ? c.versionSources.length : 0} 条），版本锚点无法交叉校验`);
+  require(c.i18n && typeof c.i18n.source === 'string' && typeof c.i18n.html === 'string',
+    '契约 i18n 规则缺失：必须同时声明 source 与 html');
+  require(c.headers && typeof c.headers.root === 'string',
+    '契约 headers 规则缺失：必须声明 root');
+  require(Array.isArray(c.enums) && c.enums.length >= 1,
+    '契约 enums 规则为空：枚举同源检查被关闭');
+  return { readings, violations };
+}
+
 /** i18n 字典：用 vm 跑一遍源文件，取它自己挂到全局的导出面。
  *  不另写一个解析器——两份实现必然漂移，而"检查器与产品不一致"比没有检查器更糟。 */
 function loadDict(file) {
@@ -64,9 +86,14 @@ function loadDict(file) {
 }
 
 function check(root) {
-  const violations = [];
   const contract = readJson(join(root, 'contracts', 'conventions.json'));
+  let violations = [];
   let readings = 0;
+
+  /* 契约规则本身还在不在：删空规则必须红，而不是「0 项核对，0 处违约」全绿。 */
+  const shape = validateContract(contract);
+  readings += shape.readings;
+  if (shape.violations.length) return { readings, violations: shape.violations };
 
   /* 1. 版本号三处一致 */
   const versions = [];
@@ -157,6 +184,11 @@ function check(root) {
     }
   }
 
+  /* 读数下限：规则被逐条删减但仍能跑完时，最终读数会低于基线。 */
+  if (readings < MIN_READINGS) {
+    violations.push(`契约核对读数 ${readings} < 最低要求 ${MIN_READINGS}（判据被削弱）`);
+  }
+
   return { readings, violations };
 }
 
@@ -182,6 +214,7 @@ function selftest() {
       schemaVersion: 1,
       versionSources: [
         { file: 'package.json', path: 'version' },
+        { file: 'ngm.json', path: 'version' },
         { file: 'js/features/plugins.js', pattern: "version:\\s*'([0-9.]+)'" }
       ],
       i18n: { source: 'js/common/i18n.js', html: 'index.html' },
@@ -193,6 +226,7 @@ function selftest() {
       }]
     }, null, 2));
     write('package.json', JSON.stringify({ version: '1.0.0' }));
+    write('ngm.json', JSON.stringify({ version: '1.0.0' }));
     write('js/features/plugins.js', '/* plugins.js —— x */\nconst PlotPin = { version: \'0.9.0\' };\n');
     write('js/common/i18n.js', '(function (g) { g.I18N = { dict: { zh: { a: \'A\' }, en: {} } }; })(this)\n');
     write('index.html', '<button data-i18n="nope">x</button>\n');
@@ -218,7 +252,21 @@ function selftest() {
       process.exitCode = 1;
       return;
     }
-    console.log(`contracts selftest：6 类违约全部被识别（${r.violations.length} 条）`);
+
+    /* 空契约不得静默变绿（审计 P2-01）：规则删空后必须报违约，而不是 0 项核对退 0。 */
+    write('contracts/conventions.json', JSON.stringify({
+      schemaVersion: 1, versionSources: [], i18n: null, headers: null, enums: []
+    }, null, 2));
+    const empty = check(dir);
+    if (!empty.violations.length || !/契约/.test(empty.violations.join('\n'))) {
+      console.error('SELFTEST FAILED：空契约没有变红（读数 ' + empty.readings
+        + '，违约 ' + empty.violations.length + '）——0 项核对被当成了通过');
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(`contracts selftest：6 类违约全部被识别（${r.violations.length} 条）；`
+      + `空契约被拒绝（读数 ${empty.readings}，违约 ${empty.violations.length} 条）`);
     process.exitCode = 0;
   } finally {
     rmSync(dir, { recursive: true, force: true });
