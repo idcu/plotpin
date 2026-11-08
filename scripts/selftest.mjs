@@ -1677,6 +1677,15 @@ await section("28.3 导出字段表 + 行渲染器单一来源（B-08）：列/�
   eq('盲区GeoJSON-序号从1开始', fc.features[0].properties.index, 1);
   ok('盲区GeoJSON-多边形闭合', fc.features[0].geometry.coordinates[0].length===5);
   eq('盲区GeoJSON-口径版本', fc.coverageSpec.version, 2);
+  /* IO-P2-13：坐标按 precision 取整，外环逆时针且闭合 */
+  const covDec={targetCells:2,gridCells:2,spec:{version:2},
+    regions:[{id:'R-02',name:'R-02',minX:0.333,minY:0.333,nx:2,ny:1,cell:0.333,grid:new Uint8Array([0,1])}]};
+  const ringDec=api.buildBlindSpotGeoJson(covDec).features[0].geometry.coordinates[0];
+  ok('盲区GeoJSON-坐标按精度取整', ringDec.every(pt=>pt.every(v=>Number.isFinite(v)&&Math.abs(v*100-Math.round(v*100))<1e-9)));
+  let twice=0;
+  for(let i=0;i<ringDec.length-1;i++) twice+=ringDec[i][0]*ringDec[i+1][1]-ringDec[i+1][0]*ringDec[i][1];
+  ok('盲区GeoJSON-外环逆时针', twice>0);
+  eq('盲区GeoJSON-取整后仍闭合', ringDec[0], ringDec[ringDec.length-1]);
 }
 
 });

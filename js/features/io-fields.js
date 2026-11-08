@@ -161,15 +161,24 @@ function buildBlindSpotGeoJson(cov){
   if(!cov||!cov.regions||!cov.regions.length) return null;
   const rects=blindSpotRects(cov);
   if(!rects.length) return null;
-  const features=rects.map((r,i)=>{
+  /* IO-P2-13：坐标按导出精度取整，外环统一逆时针（RFC 7946），退化面跳过 */
+  const p=Math.max(0,Math.min(6,Number(state.settings.precision??2)));
+  const q=Math.pow(10,p), rnd=v=>Math.round(v*q)/q;
+  const features=[];
+  rects.forEach(r=>{
+    const ring=r.points.map(pt=>[rnd(pt[0]),rnd(pt[1])]);
+    const uniq=ring.filter((pt,k)=>k===0||pt[0]!==ring[k-1][0]||pt[1]!==ring[k-1][1]);
+    if(uniq.length<3) return;
+    let twice=0;
+    for(let k=0;k<uniq.length;k++){ const a=uniq[k],b=uniq[(k+1)%uniq.length]; twice+=a[0]*b[1]-b[0]*a[1]; }
+    if(!twice) return;
+    if(twice<0) uniq.reverse();
     const properties={};
-    BLIND_SPOT_FIELDS.forEach(f=>{ properties[f.key]=f.get(r,i); });
-    return {
-      type:'Feature',
-      properties,
-      geometry:{type:'Polygon',coordinates:[r.points.concat([r.points[0]])]}
-    };
+    BLIND_SPOT_FIELDS.forEach(f=>{ properties[f.key]=f.get(r,features.length); });
+    features.push({type:'Feature',properties,
+      geometry:{type:'Polygon',coordinates:[uniq.concat([uniq[0]])]}});
   });
+  if(!features.length) return null;
   /* 导出的报告必须自带口径，避免与历史 v1（随缩放变化）数值混用 */
   const cells=cov.regions.map(r=>r.cell);
   const spec=cov.spec||{version:2};
