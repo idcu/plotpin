@@ -160,6 +160,7 @@
 | IO-P2-6 | 已降级为限制：导入对所有单元格 `trim()`，名称/备注首尾空格不保留；表格往返不是逐字节无损 | [features.md](features.md) §8、[user-guide.md](user-guide.md) 9.2 |
 | IO-P2-10 | 已降级为限制：坐标/宽高按 `settings.precision` 量化（默认 2 位，即 1 cm）；首次往返漂移上界 0.5×10⁻ᵖ | [features.md](features.md) §8/§20、[user-guide.md](user-guide.md) 9.2 |
 | IO-P2-12 | 已降级为限制：PDF 清单列是台账子集（无楼层/备注/更新时间）；多楼层按层分页；打印报告单页不标楼层 | [features.md](features.md) §6、[user-guide.md](user-guide.md) §12 |
+| CORE-P2-5 | 已降级为限制：面板盲区面积=多边形面积×(1-ratio)；GeoJSON 面面积=盲格数×cell²；两者差异上界约 周长×格宽/2，均为栅格口径 | [features.md](features.md) §6、[user-guide.md](user-guide.md) 10.2 |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 
