@@ -39,6 +39,12 @@ const APP_LIMITS = Object.freeze({
   TOMBSTONE_MAX: 100000,                    /* 删除墓碑硬上限：与 OBJECTS_MAX 同量级，保证每个已删对象都有墓碑（否则离线合并会复活） */
   TOMBSTONE_EVICT_BATCH: 2000,              /* 增量淘汰批量：攒够一批才压缩一次，避免每次删除都全量排序 */
   TOMBSTONE_RETENTION_DAYS: 730,            /* 墓碑保留窗口：只有超过该天数的旧墓碑才允许按时间淘汰 */
+  PLUGIN_MANIFEST_MAX_BYTES: 192 * 1024,    /* 插件清单字节上限（UTF-8），解析前先按原文长度拦截 */
+  PLUGIN_CODE_MAX_BYTES: 64 * 1024,         /* 插件源码字节上限（UTF-8） */
+  PLUGIN_GETSTATE_PER_MIN: 60,              /* 沙箱 getState 每分钟调用上限：每次都会克隆整工程 */
+  PLUGIN_ADD_OBJECTS_PER_MIN: 30,           /* 沙箱 addObjects 每分钟调用上限（单次仍≤500 对象） */
+  PLUGIN_ADD_ANNOTATION_PER_MIN: 60,        /* 沙箱 addAnnotation 每分钟调用上限 */
+  PLUGIN_RATE_WINDOW_MS: 60 * 1000,         /* 插件限流窗口 */
   COVERAGE_TARGET_CELLS: 18000,             /* 覆盖率栅格固定目标总格数（按区域面积分配，与视口缩放无关） */
   COVERAGE_MAX_CELLS: 200000,               /* 单次覆盖率分析的栅格总格数上限（大场地性能护栏） */
   COVERAGE_CELL_MIN_M: 0.03,                /* 覆盖率格边下限（m），防止极小区域产生过量格 */

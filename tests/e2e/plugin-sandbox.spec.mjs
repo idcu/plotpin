@@ -462,3 +462,39 @@ test('F07：载入期用 clearTimeout 暴力取消冻结定时器无效，初始
   expect(await page.evaluate(() => state.objects.length)).toBe(0);
   await drawPoint(page);
 });
+
+test('B11：插件 getState 每分钟 61 次被限流且不禁用插件', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'rate.getstate',
+    apiVersion: '1.0',
+    capabilities: ['state:read', 'state:write'],
+    code: [
+      '(async function(){',
+      '  var err=false;',
+      '  for(var i=0;i<61;i++){ try{ await PlotPin.getState(); }catch(e){ err=true; } }',
+      '  if(err) await PlotPin.addObjects([{kind:"point",x:5,y:5}]);',
+      '})();'
+    ].join('\n')
+  });
+  expect(r.ok).toBe(true);
+  await expect.poll(() => page.evaluate(() => state.objects.length), { timeout: 5000 }).toBe(1);
+  /* 限流只拒绝调用，插件仍应保持 active（可继续执行未超限的写操作） */
+  expect(await page.evaluate(() => PlotPin.listPlugins().find(p => p.id === 'rate.getstate').status)).toBe('active');
+});
+
+test('B11：插件 addObjects 每分钟 31 次被限流，只落 30 批', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'rate.addobjects',
+    apiVersion: '1.0',
+    capabilities: ['state:write'],
+    code: [
+      '(async function(){',
+      '  for(var i=0;i<31;i++){ try{ await PlotPin.addObjects([{kind:"point",x:i,y:1}]); }catch(e){} }',
+      '})();'
+    ].join('\n')
+  });
+  expect(r.ok).toBe(true);
+  await expect.poll(() => page.evaluate(() => state.objects.length), { timeout: 5000 }).toBe(30);
+});

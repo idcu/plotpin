@@ -4,6 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 B（6/6）：插件调用限流 + 清单解析前字节校验
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/config.js` 新增 `PLUGIN_MANIFEST_MAX_BYTES` / `PLUGIN_CODE_MAX_BYTES` / `PLUGIN_GETSTATE_PER_MIN` / `PLUGIN_ADD_OBJECTS_PER_MIN` / `PLUGIN_ADD_ANNOTATION_PER_MIN` / `PLUGIN_RATE_WINDOW_MS`，供插件宿主与导入面板共用，避免两处硬编码。
+  - `js/features/plugins.js`：`pluginRateLimit(rec, method)` 固定 60s 窗口，`getState` 60 / `addObjects` 30 / `addAnnotation` 60 次每分钟；超限抛 `rateLimited` 错误，RPC 只回本次错误、**不禁用插件**（其它异常仍禁用）。`pluginGetState`/`pluginAddObjects` 统一走守卫。
+  - `validatePluginManifest` 对字符串原文先按 UTF-8 字节拦截再 `JSON.parse`，`JSON.stringify` 用 try/catch 处理循环引用并返回明确原因，不再抛异常。
+  - `js/features/ui-shell.js` 导入面板在 `File.text()` 之前按 `File.size` 拦截超 192 KB 清单。
+  - 同步 `docs/features.md`、`docs/user-guide.md`、`docs/engineering.md`、`docs/testing.md`（122→124 用例）。
+- **验证数据**：
+  - selftest **3516 通过 / 0 失败**（基线 3514，+2）：超大原文在解析前按字节拒绝、循环引用清单返回原因且不抛异常。
+  - 插件沙箱 e2e **22 通过**（+2：getState 第 61 次被限流且插件保持 active、addObjects 31 次只落 30 批）；完整 e2e 见提交前门禁记录。
+  - dist **830,029 B**（本条 **+1,320 B**）/ gzip 257,641 B / 余量 **9,651 B**；SW `VERSION=100`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 限流是固定窗口（60s 重置），非滑动窗口；窗口边界突发 2× 上限仍可接受。
+  - 阈值写死在 `APP_LIMITS`，未提供插件级配额；高频但合法的批量插件需自行合并调用。
+  - `pluginRateLimit` 与 `pluginGetState`/`pluginAddObjects` 为内部函数，selftest 只能覆盖清单前置校验，限流由 e2e 行为覆盖。
+
 ## 2026-11-08 · 批次 B（5/6）：插件冻结改微任务，载入期 clearTimeout 无法取消
 
 - **Commit Hash**：`待回填`

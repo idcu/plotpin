@@ -5447,6 +5447,12 @@ await section("57.1 插件 API 版本化与能力白名单（C-01）", async () 
   ok('清单-code 空拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{code:'  '}));return !r.ok&&/code/.test(r.reason);})());
   ok('清单-code 超 64 KB 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{code:'x'.repeat(65537)}));return !r.ok&&/64 KB/.test(r.reason);})());
   ok('清单-超过 192 KB 拒绝', (()=>{const r=PP.validatePluginManifest(Object.assign({},mo,{filler:'x'.repeat(200000)}));return !r.ok&&/192 KB/.test(r.reason);})());
+  /* B11：超大原文在 JSON.parse 之前按字节拒绝；循环引用清单不抛异常 */
+  ok('B11-超大原文先按字节拒绝', (()=>{const r=PP.validatePluginManifest('x'.repeat(200000));return !r.ok&&/192 KB/.test(r.reason);})());
+  ok('B11-循环引用清单不抛异常', (()=>{
+    const c={schema:'plotpin.plugin/v1'}; c.self=c;
+    try { const r=PP.validatePluginManifest(c); return !r.ok&&/循环引用/.test(r.reason); } catch(_) { return false; }
+  })());
 }
 
 });

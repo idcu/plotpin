@@ -35,8 +35,8 @@
   const PLUGIN_API_VERSION = '1.1.0';
   const PLUGIN_CALL_TIMEOUT = 2000;   /* 单次调用/初始化上限，超时直接 terminate */
   /* RT-P2-07：上限按 UTF-8 字节而非字符数，避免多字节文案绕过（复用 snapshot.js 的 utf8Length） */
-  const PLUGIN_MANIFEST_MAX_BYTES = 196608;   /* 清单 192 KB */
-  const PLUGIN_CODE_MAX_BYTES = 65536;        /* 插件源码 64 KB */
+  const PLUGIN_MANIFEST_MAX_BYTES = APP_LIMITS.PLUGIN_MANIFEST_MAX_BYTES;   /* 清单 192 KB */
+  const PLUGIN_CODE_MAX_BYTES = APP_LIMITS.PLUGIN_CODE_MAX_BYTES;           /* 插件源码 64 KB */
   const PLUGIN_CAPABILITIES = Object.freeze({
     'state:read': '读取工程对象快照',
     'state:write': '新增对象（经主工程清洗后提交）',
@@ -100,10 +100,15 @@
   function validatePluginManifest(raw) {
     let m = raw;
     if (typeof raw === 'string') {
+      /* B11：先按原文 UTF-8 字节拦截，避免超大清单先 JSON.parse 再 stringify 造成 2~3 倍内存峰值 */
+      if (utf8Length(raw) > PLUGIN_MANIFEST_MAX_BYTES) return { ok: false, reason: '清单超过 192 KB（UTF-8 字节）上限' };
       try { m = JSON.parse(raw); } catch (_) { return { ok: false, reason: '清单不是合法 JSON' }; }
     }
     if (!m || typeof m !== 'object' || Array.isArray(m)) return { ok: false, reason: '清单必须是 JSON 对象' };
-    if (utf8Length(JSON.stringify(m)) > PLUGIN_MANIFEST_MAX_BYTES) return { ok: false, reason: '清单超过 192 KB（UTF-8 字节）上限' };
+    let total;
+    try { total = utf8Length(JSON.stringify(m)); }
+    catch (_) { return { ok: false, reason: '清单包含循环引用，无法序列化' }; }
+    if (total > PLUGIN_MANIFEST_MAX_BYTES) return { ok: false, reason: '清单超过 192 KB（UTF-8 字节）上限' };
     if (m.schema !== 'plotpin.plugin/v1') return { ok: false, reason: 'schema 必须为 plotpin.plugin/v1' };
     const id = String(m.id == null ? '' : m.id).trim();
     if (!PLUGIN_ID_RE.test(id)) return { ok: false, reason: 'id 需为 2–64 位字母、数字、点、下划线或短横线' };
@@ -403,7 +408,33 @@
     return s || fallback;
   }
 
-  function pluginAddObjects(list, msg, annotationOnly) {
+  /** B11：沙箱调用限流（固定 60s 窗口）。超限抛带 rateLimited 标记的错误，调用方只回错误而不禁用插件。 */
+  function pluginRateLimit(rec, method) {
+    const maxMap = {
+      getState: APP_LIMITS.PLUGIN_GETSTATE_PER_MIN,
+      addObjects: APP_LIMITS.PLUGIN_ADD_OBJECTS_PER_MIN,
+      addAnnotation: APP_LIMITS.PLUGIN_ADD_ANNOTATION_PER_MIN
+    };
+    const max = maxMap[method] || 60;
+    const now = Date.now();
+    if (!rec.rate) rec.rate = Object.create(null);
+    let w = rec.rate[method];
+    if (!w || now - w.since >= APP_LIMITS.PLUGIN_RATE_WINDOW_MS) { w = { since: now, n: 0 }; rec.rate[method] = w; }
+    w.n++;
+    if (w.n > max) {
+      const e = new Error(method + ' 调用过于频繁（上限 ' + max + ' 次/分钟）');
+      e.rateLimited = true;
+      throw e;
+    }
+  }
+  /** getState RPC：限流 + 能力校验 + 深拷贝快照 */
+  function pluginGetState(rec) {
+    needCap(rec, 'state:read');
+    pluginRateLimit(rec, 'getState');
+    return cloneJSON(global.persistableState ? global.persistableState() : appState());
+  }
+  function pluginAddObjects(rec, list, msg, annotationOnly) {
+    pluginRateLimit(rec, annotationOnly ? 'addAnnotation' : 'addObjects');
     if (!Array.isArray(list)) throw new Error('addObjects 需传入对象数组');
     if (list.length > 500) throw new Error('单次最多添加 500 个对象');
     const st = appState();
@@ -446,16 +477,15 @@
       const a0 = args[0];
       switch (d.method) {
         case 'getState':
-          needCap(rec, 'state:read');
-          value = cloneJSON(global.persistableState ? global.persistableState() : appState());
+          value = pluginGetState(rec);
           break;
         case 'addObjects':
           needCap(rec, 'state:write');
-          value = pluginAddObjects(a0, args[1], false);
+          value = pluginAddObjects(rec, a0, args[1], false);
           break;
         case 'addAnnotation':
           needCap(rec, 'annotate');
-          value = pluginAddObjects([a0], args[1], true);
+          value = pluginAddObjects(rec, [a0], args[1], true);
           break;
         case 'registerObjectType':
           needCap(rec, 'types');
@@ -497,8 +527,9 @@
       ok = false;
       value = undefined;
       replyRpc(rec, d, false, undefined, e && e.message || e);
+      /* B11：限流只拒绝本次调用，不禁用插件；其它异常仍按既有策略禁用 */
       if (rec.status === 'loading') rec.errors.push(String(e && e.message || e));
-      else if (rec.status === 'active') disablePlugin(rec, '插件异常：' + String(e && e.message || e));
+      else if (rec.status === 'active' && !(e && e.rateLimited)) disablePlugin(rec, '插件异常：' + String(e && e.message || e));
       return;
     }
     replyRpc(rec, d, ok, value);

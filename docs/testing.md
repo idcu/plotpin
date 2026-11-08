@@ -12,8 +12,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **127 个分区 / 3,456 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **35 个 spec / 122 个用例**（默认 121 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **127 个分区 / 3,516 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **35 个 spec / 124 个用例**（默认 123 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 12 种人为破坏 | 是 |
 
@@ -73,7 +73,7 @@
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
 - CI 侧新增 `e2e` job（`npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`，Node 20 / `ubuntu-latest`）。
-  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 122 用例通过，无法复现 runner 的网络、系统库与浏览器下载；
+  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 124 用例通过，无法复现 runner 的网络、系统库与浏览器下载；
   首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
@@ -86,7 +86,7 @@
 | 导出与图面 | pdf-multipage(6)、title-block(1)、export-scope(4)、perf-render(1)、coverage(1) |
 | 符号与目录 | symbols(3)、catalog(1) |
 | 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(4) |
-| 插件 | plugin-sandbox(20)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
+| 插件 | plugin-sandbox(22)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
 | 规则 | rules(1) |
 | 校准前置 | calibration-precheck(3)（只验入口可用性与提示，不拖手柄） |
 | 移动端/离线 | mobile(2)、sw(1) |
@@ -95,9 +95,9 @@
 | DXF 导入 | dxf-version(4) |
 | 界面加固 | ui-hardening(2)（触控尺寸/溢出等界面回归） |
 
-合计 **122** 个用例、**35** 个 spec（逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
+合计 **124** 个用例、**35** 个 spec（逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
 口径校正（2026-11-08）：旧表写 110/34，实际同版本检出为 119/35（collab 12、plugin-sandbox 19、table-batch 4、pdf-multipage 4、ui-hardening 2 此前漏计）；
-本轮 P1-6 再为 pdf-multipage 增 2 条多楼层导出用例；B10 为 plugin-sandbox 增 1 条冻结定时器用例，故当前为 122/35。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
+本轮 P1-6 再为 pdf-multipage 增 2 条多楼层导出用例；B10/B11 为 plugin-sandbox 增 3 条（冻结定时器、getState/addObjects 限流），故当前为 124/35。新增 spec 必须更新本表；只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 
