@@ -79,11 +79,27 @@
 | CORE-B | CORE-P2-3/4/19 | 活动楼层对象在历史中双份拷贝；快照列表/淘汰全量读入；清空覆盖率后离屏画布不释放 |
 | CORE-C | CORE-P2-5/6/7 | 盲区面积按格统计与多边形面积口径不一致；布点优化前后百分比分母不同；椭圆转矩形丢旋转角 |
 | CORE-D | CORE-P2-8/9/10/11/12 | 重命名非当前楼层不更新时间戳；载入/回滚残留校准点与草稿；重复图层标识不合并；场地标识/标注未按对象规则清洗 |
-| CORE-E | CORE-P2-13/14/15/16/17/18/20 | 选中每帧多算点数组、历史比较函数未用于生产、死分支、核心层硬编码中文、多标签心跳时间未钳制、底图解码静默失败、协作合并无上限 |
+| CORE-E | CORE-P2-13/14/15/16/17/18/20 | 选中每帧多算点数组（N-27 已删，见 §2.4）、历史比较函数未用于生产（N-27 保留并归档，见 §2.4）、死分支、核心层硬编码中文、多标签心跳时间未钳制、底图解码静默失败、协作合并无上限 |
 | RT-A | RT-P2-01~06 | 快照键分隔符可被工程名污染、字节按 UTF-8 估算偏低、恢复未校验工程、键序敏感 diff 误报、差异截断 2000 条但文案称“完整”、创建快照的资产化副作用 |
 | RT-B | RT-P2-07~11/20 | 插件清单按字符数而非 UTF-8 字节、直调代码无上限、卸载未清理类型注册、导出器无 read 时的 site 传递待确认、下载无 pending/大小校验、消息/错误处理器未硬化 |
 | RT-C | RT-P2-12~14 | 未配置阈值的类型对漏报间距、多轮廓重叠漏检、统计页与规则页容差口径不同 |
 | RT-D | RT-P2-15~19 | 清单颜色未转义、模态 Esc/遮罩未 resolve、楼层广播注释失真、协作调试全局常驻、入站分块仅接收驱动淘汰 |
+
+### 2.4 N-27 公共抽象审计归档（9 项）
+
+> 结论只记录当前代码事实；「已收敛」项均可用对应文件行号复跑核对，未收敛项不得改写成「已知限制」。
+
+| 审计项 | 结论 | 依据 / 影响调用方 |
+|---|---|---|
+| `historyValueEqual` 两套比较语义 | 保留（仅自测入口） | 生产路径无调用；`scripts/selftest.mjs:7095-7096` 两条断言直接覆盖，删除即删断言（本段硬边界禁止）。生产快照仍用 `sharedHistoryValue` 的「引用相等 + 变更即复制」 |
+| `mergeStable` 仅此处使用 | 无重复，不改 | `js/common/merge.js:352` 单一定义；调用方 `merge.js:260/346/349`、`js/core/persistence.js:925` |
+| `buildSnapCandidates` 双重分配 | 已收敛（N-22） | `js/core/geometry.js:32` 单趟 `collectSnap`；`collectSnapCandidates`（`:107`）与 `collectSnapEdges`（`:110`）只是按位掩码的薄包装 |
+| `drawSelection` 无用分配 | 已删除 | `js/core/render.js:947` 的 `drawSelection` 原先每帧执行 `objectPoints(o).map(toS)` 且结果未被任何分支使用；现已删除，产物 −36 B，画布像素不变（e2e 109 通过） |
+| `normalizeColor` 分散 | 已收敛（N-10） | 唯一实现 `normalizeExportColor`（`js/features/io-export.js:371`），SVG 图例/对象/文字/标记 4 处调用同源 |
+| 覆盖率口径常量未收敛 | 已收敛（N-20） | `APP_LIMITS.COVERAGE_TARGET_CELLS/MAX_CELLS/CELL_MIN_M/CELL_MAX_M`（`js/core/config.js:42-45`）；`geometry-coverage.js` 全部引用，无重复字面量 |
+| 门禁脚本 CSS/MJS 解析器两套 | 前提不成立，不抽取 | `check-discipline.mjs` 不含 CSS/MJS 解析器；`check-ngm.mjs` 的 `walkFiles`/`readJson` 与前者遍历范围、容错语义不同，抽到 `scripts/lib/` 会改变行为且无断言覆盖 |
+| `sanitizeLayers` 多份 | 无重复，不改 | `js/core/persistence.js:1063` 单一定义，`:778` 单一调用 |
+| `objectIndexById` 调用点未统一 | 已统一 | `js/core/model.js:523` 单一定义；5 处调用（`js/core/interaction.js:306/393/681/706`、`js/core/persistence.js:154`） |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 

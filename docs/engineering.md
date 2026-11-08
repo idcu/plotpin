@@ -73,7 +73,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 
 - 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/dist-manifest.json.maxBytes`）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-08 实测：`bytes = 811,021`、gzip `252,205`、余量 `28,659 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-08 实测：`bytes = 810,985`、gzip `252,199`、余量 `28,695 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---
@@ -284,7 +284,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 ### 6.1 提交信息
 
 - 约定式提交：`feat(scope): …` / `fix(scope): …` / `perf(scope): …` / `test(scope): …` / `docs(scope): …`。
-- Body 必须带**实测数据**（例如 `heapUsed +2.20MB`、`P95 < 3ms`、`产物 -30%`、`体积 +3,444 B / 余量 28,659 B`）。
+- Body 必须带**实测数据**（例如 `heapUsed +2.20MB`、`P95 < 3ms`、`产物 -30%`、`体积 -36 B / 余量 28,695 B`）。
 - 禁止 `fix bug`、`update`、`optimize` 之类无信息提交。
 - 禁止私自 `git push`：除非明确授权，只能本地 `git commit`。
 - `CHANGELOG.internal.md`（不对外发布）每次提交记录：Commit Hash、核心改动、验证数据、遗留 TODO/风险。

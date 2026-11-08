@@ -1,7 +1,7 @@
 # 事实源（FACTS）
 
 > 本文件是仓库内**数量类指标的唯一事实源**。其他文档只引用本文件，不复制具体数字；历史文档中的旧值一律标注「历史值」。
-> 采集日期：2026-11-08；代码基线：`2df8b3c`（M2 验收后 HEAD）。
+> 采集日期：2026-11-08；代码基线：`2df8b3c`（M2 验收后 HEAD）；N-25～N-27 收口段在其上增量修订，数值以最近一次门禁实测为准。
 > 采集环境：本机 Windows + Node（selftest/门禁）+ Playwright Chromium（e2e）。
 > 边界：性能读数（P95 / heapUsed）以 [performance.md](performance.md) 为准；`CHANGELOG.internal.md` 与本地未跟踪的 `audit-out/` 是历史/过程材料，其中数字不代表当前状态。
 
@@ -9,11 +9,11 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 811,021 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 252,205 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 810,985 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 252,199 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 28,659 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=33` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 28,695 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=34` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 

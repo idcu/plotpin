@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · N-27 公共抽象收敛与 P2 审计归档
+
+- **Commit Hash**：本段收尾统一回填。
+- **核心改动**：
+  - `js/core/render.js`：删除 `drawSelection` 中每帧执行且结果未被任何分支使用的 `objectPoints(o).map(toS)`（审计 CORE-P2-13）。影响调用方：无（函数内局部变量）；`objectPoints` 仍由 `geometry.js` 的 `objectBounds`/捕捉路径使用。
+  - 其余 8 项按代码现状归档，未强行收敛：`historyValueEqual` 保留（生产无调用，但 `selftest:7095-7096` 两条断言直接覆盖，删除即删断言）；`mergeStable`/`sanitizeLayers`/`objectIndexById` 均单一定义、无重复；`collectSnap`（N-22）、`normalizeExportColor`（N-10）、`APP_LIMITS.COVERAGE_*`（N-20）已由前置任务收敛；`scripts/lib/*` 抽取放弃（`check-discipline.mjs` 无 CSS/MJS 解析器，`check-ngm.mjs` 遍历/容错语义不同，抽取会改变门禁行为且无断言覆盖）。
+  - `sw.js` VERSION 33 → 34（`render.js` 属预缓存输入，按版本纪律递增）；`scripts/sw-inputs.sha256` 同步刷新。
+  - 文档：`docs/known-issues.md` 新增 §2.4（9 项逐条结论与调用方）、CORE-E 组标注 N-27 已收敛子项；`docs/plans/next-phase-2026-11.md` §5 记录结论并标注 `scripts/lib/*` 未新增；`docs/facts.md`、`docs/engineering.md` 更新体积与 SW 版本；`docs/plans/README.md` 更新 N-27 状态。
+- **验证数据**：
+  - `node scripts/check.mjs --selftest`：2991 通过 / 0 失败（与 N-26 持平，未删断言）；契约 7/0、插件 API 23/0/0、i18n 45.65%/缺口 6/UI 1/模板 0、SW VERSION=34。
+  - `node scripts/e2e.mjs`：109 passed / 1 skipped（110 用例 / 34 spec，与 N-26 持平）。
+  - `node scripts/build.mjs --check`：810,985 B（792.0 KB）、gzip 252,199 B、余量 28,695 B；较 N-26 **−36 B / gzip −6 B / 余量 +36 B**；SHA256 `fcfc7f68…`，二次构建一致。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 破坏 9/9。
+  - `node scripts/check-discipline.mjs --strict`：13/13（L4）；最大文档 51.1KB/418L。
+- **遗留 TODO / 风险**：
+  - 审计前提与当前代码不一致的项（`scripts/lib/*`）已就地放弃，不改门禁脚本、不加无断言覆盖的新库。
+  - `historyValueEqual` 仍为「仅自测入口」的生产代码；后续如需删除，必须在同一提交把两条断言迁入测试辅助，不得直接删断言。
+  - CSS-P1-1（`css/style.css:213` 的 `@media print{` 未闭合）仍阻塞 N-26 ⑤，需产品拍板后单独修复。
+
 ## 2026-11-08 · N-26 导出 golden 补齐与测试矩阵收口
 
 - **Commit Hash**：本段收尾统一回填。

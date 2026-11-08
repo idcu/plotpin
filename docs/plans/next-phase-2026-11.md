@@ -380,9 +380,17 @@ node scripts/check-discipline.mjs --strict  # 13/13 L4
 | `coverageCellPlan` / `regionMetric` | N-20 | 覆盖率统计、图表、优化器共用的格数与面积口径 |
 | `resetTransientInteractionState(opts)` | N-15 | 载入/切层/撤销/回滚/合并统一瞬态复位 |
 | `mergeFloorMeta` 扩充字段 | N-04 | `siteDeleted`/`siteCleared` 计入冲突统计与历史判定 |
-| `scripts/lib/*` | N-27 | CSS/MJS 结构解析、facts 校验、golden 对比的公共门禁库 |
+| `scripts/lib/*`（未新增） | N-27 | 审计前提不成立：`check-discipline.mjs` 不含 CSS/MJS 解析器，`check-ngm.mjs` 的遍历范围/容错语义不同；抽取会改变门禁行为且无断言覆盖，本段放弃 |
 
 约束：新增抽象前先检索现有实现（`objectIndexById`、`outlineOf`、`siteBounds`、`ensureVendor`、`esc/xmlEscape`、`objectNameScopeFor`、`coverageGridPlan` 等），禁止复制粘贴；改变签名必须保留旧重载或显式列出受影响调用方。
+
+**N-27 收敛结论（9 项，逐条依据见 [known-issues.md](../known-issues.md) §2.4）**
+
+- 已删除死代码：`drawSelection` 每帧 `objectPoints(o).map(toS)` 结果未被使用；影响调用方：无（局部变量），产物 −36 B。
+- 已由前置任务收敛：`collectSnap` 单趟扫描（N-22）、`normalizeExportColor`（N-10）、`APP_LIMITS.COVERAGE_*`（N-20）。
+- 已统一 / 无重复：`mergeStable`、`sanitizeLayers`、`objectIndexById`。
+- 保留：`historyValueEqual`（生产无调用，但 selftest 两条断言直接覆盖；删除即删断言，本段硬边界禁止）。
+- 放弃：`scripts/lib/*` 抽取（原因见上表）。
 
 ## 6. 待拍板取舍（执行到对应任务时必须先停下列出选项，不得自行决定）
 

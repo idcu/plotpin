@@ -946,7 +946,6 @@ function drawDiffOverlay(c,v,toS){
 }
 function drawSelection(c,v,toS){
   state.objects.filter(o=>selectedIds.has(o.id)&&isVisible(o)).forEach(o=>{
-    const pts=objectPoints(o).map(toS);
     if(o.kind==='point'){
       const s=toS([o.x,o.y]); c.save(); c.strokeStyle='#2563eb'; c.lineWidth=1.5; c.beginPath(); c.arc(s[0],s[1],15*pointIconScale(o),0,Math.PI*2); c.stroke(); c.restore();
     }else{
