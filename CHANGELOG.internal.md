@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · C 类决策落地：IO-P2-20 多页 PDF 单页化 + RT-P2-12 未配置阈值计数
+
+- **Commit Hash**：
+  - IO-P2-20：`dd5f3cb`
+  - RT-P2-12：`8a9314b`
+  - 收尾 `docs(changelog)`：本提交
+- **核心改动**：
+  - IO-P2-20：PDF 导入只取 `pages[0]`，删除多页沿 +X 合并；多页时提示「共 N 页，已导入第 1 页」，单页不提示；`pdf-read` 为每页新增 `imageNums`（`/Resources → /XObject → /Name Do`），底图只取第 1 页内嵌图，仅单图文档兜底；不新增合并开关。
+  - RT-P2-12：`ruleSpacingCheck` 收集未配置阈值的类型，`runRuleCheck` 跨楼层去重后写入 `stats.unconfiguredTypes`；结果面板显示「未配置阈值类型 N 个」，不回退全局阈值、不静默跳过。
+- **验证数据**：
+  - IO-P2-20（真实 Chromium e2e）：2 页 PDF 仅留第 1 页 190pt 线与 P1，提示「共 2 页，已导入第 1 页」；3 页 PDF 同场景提示「共 3 页」且无 P2/P3；单页 PDF 无页数提示、无「独立原点」；N-03 底图入库用例保持通过。
+  - RT-P2-12：selftest 新增 3 断言（跳过时 0 违规 + 计数 1；配置后计数 0 + 同场景违规 1）；e2e 首轮面板计数 2、配置 `point.marker` 后计数 1。
+  - 门禁：selftest **3210/0**；e2e **118 通过 + 1 条件跳过（119 项）**；check-gates 6/6 + 10/10；discipline 13/13；i18n 46.16%（缺口 9 ≤ 10）；dist **823,137 B** / gzip 255,615 B / 余量 **16,543 B**（本批 +1,812 B）；SW `VERSION=82`；8 种 golden 与导出字段未变。
+- **遗留 TODO / 风险**：
+  - 多页 PDF 的第 1 页底图映射依赖页资源可解析；资源为深层间接引用且内容流未出现 `/Name Do` 时不设底图，不回退取其他页图片。
+  - IO-P2-3（Excel 实机引号）与 IO-P2-17（DXF mm/m 在 CAD 中读数）仍为「未验证」，所需条件已写入 `known-issues` §2.3；`7afeb45` + `61932b2` 双提交标注经核对准确，未改写历史。
+
 ## 2026-11-08 · 真实浏览器基线复跑（browser-baseline.perf.mjs 四组 × 2 轮）
 
 - **Commit Hash**：本提交

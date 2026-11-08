@@ -1,7 +1,7 @@
 # 事实源（FACTS）
 
 > 本文件是仓库内**数量类指标的唯一事实源**。其他文档只引用本文件，不复制具体数字；历史文档中的旧值一律标注「历史值」。
-> 采集日期：2026-11-08；代码基线：`5eec209`（P2 批次 11 修复代码 HEAD）；N-25～N-27 收口段与 P2 批次 1~11（B 类文档、表格往返、DXF/PNG 一致性、核心瞬态边界、核心 schema/安全、快照/协作、插件沙箱、规则/统计、目录/停车/UI、代码卫生/i18n、性能打点）及批次 11 修复（CORE-P2-3 历史内存、IO-P2-11 导出去重）在其上增量修订，数值以最近一次门禁实测为准。
+> 采集日期：2026-11-08；代码基线：`8a9314b`（C 类 IO-P2-20 多页 PDF 单页化、RT-P2-12 未配置阈值计数的代码 HEAD）；N-25～N-27 收口段与 P2 批次 1~11（B 类文档、表格往返、DXF/PNG 一致性、核心瞬态边界、核心 schema/安全、快照/协作、插件沙箱、规则/统计、目录/停车/UI、代码卫生/i18n、性能打点）、批次 11 修复（CORE-P2-3 历史内存、IO-P2-11 导出去重）在其上增量修订，数值以最近一次门禁实测为准。
 > 采集环境：本机 Windows + Node（selftest/门禁）+ Playwright Chromium（e2e）。
 > 边界：性能读数（P95 / heapUsed）以 [performance.md](performance.md) 为准；`CHANGELOG.internal.md` 与本地未跟踪的 `audit-out/` 是历史/过程材料，其中数字不代表当前状态。
 
@@ -9,25 +9,25 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 821,325 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 255,136 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 823,137 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 255,615 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 18,355 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=80` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 16,543 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=82` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3207 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 断言 | 3210 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
 | selftest 分区 | 127 个 | `node scripts/selftest.mjs --list` | 输出 128 行（含 1 行标题） |
 | 加载脚本 | 45 个（35 项目 + 10 vendor） | `check.mjs` 输出「加载 45 个脚本」 | `js/` 下 35 个 `.js` |
-| e2e 用例 | 118 个（117 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
+| e2e 用例 | 119 个（118 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
 | e2e spec 文件 | 35 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 36 个 `.mjs`（含 1 个 helper） |
 | 契约判据 | 7 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/` |
 | 插件 API 面 | 23 键 / 清单 23 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
-| i18n 覆盖率 | 46.2% / 缺口 8 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
-| i18n 字典规模 | PHRASES 1001 / TEMPLATES 112 / DICT.zh 193 | 同上 | |
+| i18n 覆盖率 | 46.16% / 缺口 9 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
+| i18n 字典规模 | PHRASES 1003 / TEMPLATES 112 / DICT.zh 193 | 同上 | |
 | 门禁牙齿 | 正面基线 6/6 + 人为破坏 10/10 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10 场景为 CSS 花括号未配平 |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
 | Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **Node 桩数据，不能作为浏览器性能结论** |
