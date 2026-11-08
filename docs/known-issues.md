@@ -215,6 +215,24 @@
 > 本批统一验证：selftest 3097 通过 / 0 失败；e2e 111 用例（110 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 45.3%（缺口 8）；dist 816,632 B / 余量 23,048 B；SW `VERSION=53`。
 > 仍保留的「未验证/限制」：PNG 页脚无逐字节 golden；DXF 多色图层表色只代表首对象；R12 凸度未做圆弧保真；快照不持久化校准点；`visibilitychange` 未单独处理（由 blur 兜底）；覆盖率缓存无 LRU；椭圆→圆仍按面积近似。
 
+### 2.8 批次 5/6：核心 schema/安全与快照/协作（10 条）
+
+| 编号 | 状态 | 修复/收敛要点 | 提交 | 验证依据 |
+|---|---|---|---|---|
+| CORE-P2-1 | 已修复 | 新增 `SETTINGS_KEYS`（从默认设置派生）、`sanitizeSettings`、`settingsForStorage`；`buildProject` 与启动兜底共用同一清洗；仅无已保存工程时应用本机设置，`__proto__` 等非白名单键不入设置 | `a72318a` | selftest +13；原型污染、白名单、越界夹取、存储视图、启动兜底 |
+| CORE-P2-8 | 已修复 | `commitChange` 增加可选 `floorId`，`renameFloor` 传入被重命名楼层，刷新该层 `updatedAt` | `fc9f04c` | selftest +5；非当前楼层刷新、当前层不误触 |
+| CORE-P2-11 | 已修复 | `sanitizeLayers` 按 id 去重保留首个定义；默认图层补插不变 | `8f2867b` | selftest +3；重复 id 折叠、首个名称生效、默认层唯一 |
+| CORE-P2-12 | 已修复 | `site.id` 统一走 `safeId`；新增 `sanitizeSiteAnnot` 复用 `SITE_ANNOT_SETTING_KEYS`，只保留布尔已知键 | `ee61281` | selftest +5；特殊字符 id、未知键/非布尔丢弃、缺失回落 |
+| CORE-P2-17 | 已修复 | `leaseIngest` 校验 tabId 为非空字符串并截断 64 字符；对端 ts 钳制 `[now−TTL, now+5s]`，非法值回落 now | `309d199` | selftest +5；伪造未来心跳、非字符串 tabId、非法/过期 ts |
+| RT-P2-01 | 已修复 | `snapshotKey`/`snapshotIndexKey` 两段 `encodeURIComponent`；新增 `snapshotProjectPrefix` 统一过滤；`snapshotIdOfKey` 解码 | `7fcabbf` | selftest +6；普通 id 不变、冒号隔离、索引键、后缀还原 |
+| RT-P2-03 | 已修复 | `snapshotProjectData` 改为异步：先深拷贝再在副本上 `ensureObjectPhotoAssets` 并剥离 dataUrl；不再改写实时 state | `c413ea8` | selftest +4；实时对象保留内嵌照片、快照无 dataUrl、B-04 改 await |
+| RT-P2-04 | 已修复 | `restoreSnapshotById` 在归属/schema 校验后增加 `state.meta.projectId===pid` 守卫 | `57c1488` | selftest +1；非当前工程恢复被拒；N-15/CORE-P2-10 补工程绑定 |
+| RT-P2-05 | 已修复 | 快照 `sameJson` 与拖拽 `sameSerializable` 改用 `mergeStable` 稳定序列化 | `b1f7c2f` | selftest +4；键序不同判定相等、真差异仍不等 |
+| CORE-P2-20 | 已修复 | 新增 `assertProjectWithinLimits`，打开工程复用；`mergeProjectJSON` 在输入与合并结果两处复用导入限额 | `2459b59` | selftest +3；超限输入/结果拒绝、拒绝后现场未替换 |
+
+> 本批统一验证：selftest 3146 通过 / 0 失败；e2e 111 用例（110 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 45.15%（缺口 8）；dist 817,873 B / 余量 21,807 B；SW `VERSION=63`；8 种 golden 均未变化。
+> 仍保留的「未验证/限制」：含特殊字符工程 id 的历史快照不迁移（不可见但不误删）；协作合并超限只报错不做部分合并；租约时间钳制依赖本机时钟单调性；合并结果上限校验在构造并集后执行，极端超限输入仍有一次深拷贝开销。
+
 ## 3. 已降级为限制（10 条，不是缺陷）
 
 | 编号 | 限制 | 为什么按限制处理 |

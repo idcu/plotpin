@@ -4,6 +4,43 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · P2 批次 5/6：核心 schema/安全 5 条 + 快照/协作 5 条
+
+- **Commit Hash**：
+  - 批次 5（schema/安全，5 笔）：`a72318a` CORE-P2-1、`fc9f04c` CORE-P2-8、`8f2867b` CORE-P2-11、`ee61281` CORE-P2-12、`309d199` CORE-P2-17。
+  - 批次 6（快照/协作，5 笔）：`7fcabbf` RT-P2-01、`c413ea8` RT-P2-03、`57c1488` RT-P2-04、`b1f7c2f` RT-P2-05、`2459b59` CORE-P2-20。
+- **核心改动**：
+  - CORE-P2-1：新增 `SETTINGS_KEYS`（由 `createInitialState().settings` 派生，21 键）、`sanitizeSettings()`、`settingsForStorage()`；`buildProject` 不再 `Object.assign` 原始设置，启动仅在「没有已保存工程」时 `applyLocalSettings()`。白名单读取自有键，`__proto__` 不进入赋值；补齐 `gridVisible`/`segLabelMinPx`/`precision`/`unit` 的持久化。写入入口（载入/启动/保存视图）共用同一清洗，渲染层未加兜底。
+  - CORE-P2-8：`commitChange(message,ids,floorId)` 增加可选楼层参数并传给 `touchFloor(floorId)`；`renameFloor` 传入被重命名楼层 id，非当前楼层重命名也会刷新 `updatedAt`。
+  - CORE-P2-11：`sanitizeLayers` 用 `seen` 集合按 id 去重，保留首个定义；默认图层补插逻辑不变。
+  - CORE-P2-12：`site.id` 统一走 `safeId`；新增 `sanitizeSiteAnnot()`，复用 `SITE_ANNOT_SETTING_KEYS` 只保留布尔已知键，未知键与非布尔值丢弃。
+  - CORE-P2-17：`leaseIngest` 要求 `tabId` 为非空字符串（截断 64 字符）；`ts` 钳制到 `[now−LEASE_TTL_MS, now+5s]`，非法值回落 `now`；新增常量 `LEASE_FUTURE_SKEW_MS=5000`。阈值未放宽，TTL 仍 15s。
+  - RT-P2-01：`snapshotKey`/`snapshotIndexKey` 对工程与快照 id 分别 `encodeURIComponent`；新增 `snapshotProjectPrefix()` 供 `snapshotRecords`/`deleteSnapshotsForProject` 共用；`snapshotIdOfKey` 解码后缀。命名空间仍是 `snap:<工程>:<快照>`，索引仍是 `snapidx:<工程>`。
+  - RT-P2-03：`snapshotProjectData` 改异步，先 `persistableState` 深拷贝，再在副本上 `ensureObjectPhotoAssets` 并剥离残留 `photoDataUrl`；`createSnapshot` 不再直接资产化实时 state。
+  - RT-P2-04：`restoreSnapshotById` 在记录归属与 schema 校验后新增 `state.meta.projectId===pid` 守卫，跨工程恢复直接拒绝。
+  - RT-P2-05：快照 `sameJson` 与拖拽 `sameSerializable` 改用既有 `mergeStable` 稳定序列化，键序不同但内容相同不再误报变化。
+  - CORE-P2-20：新增 `assertProjectWithinLimits(raw,label)`，`openProjectById` 内联判据替换为调用；`mergeProjectJSON` 在输入（`合并工程`）与合并结果（`合并结果`）两处复用导入限额，超限抛错且不替换现场。
+  - 公共抽象（新增/调整，调用方影响面已核对）：
+    - 新增 `SETTINGS_KEYS`、`sanitizeSettings`、`settingsForStorage`、`applyLocalSettings`（`model.js`/`persistence.js`/`app.js`，设置清洗唯一真源）。
+    - 新增 `sanitizeSiteAnnot`（`persistence.js`）、`snapshotProjectPrefix`（`snapshot.js`）、`assertProjectWithinLimits`（`persistence.js`）。
+    - `commitChange` 新增可选第三参 `floorId`（默认当前楼层，既有调用方不变）；`snapshotProjectData` 由同步改异步（唯一调用方 `createSnapshot` 与 B-04 断言已同步）。
+    - `LEASE_FUTURE_SKEW_MS` 常量新增；`SITE_ANNOT_SETTING_KEYS`、`mergeStable`、`importLimitErrors`/`importLimitMessage`、`safeId` 均为复用，未新增第二套校验/序列化。
+- **验证数据**：
+  - `selftest`：3146 通过 / 0 失败（批次前 3097，+49；新增「P2-CORE 批次 5」31 条与「P2-RT 批次 6」18 条，另 B-04 由同步改 await 不增删断言）。
+  - `e2e`：111 用例 / 110 通过 / 1 条件跳过（未新增跳过）。
+  - `check-gates`：正面基线 6/6、人为破坏 10/10；`check-discipline --strict`：13/13；`build.mjs --check`：二次构建一致。
+  - `check.mjs --selftest`：契约 7/0、插件 API 23/0/0、i18n 45.15%（缺口 8 / UI 1 / 模板 0）、SW `VERSION=63`（49 个预缓存输入一致）。
+  - 产物：817,873 B / gzip 254,141 B / 余量 21,807 B；相对批次 4 结束 816,632 B **+1,241 B / gzip +241 B / 余量 −1,241 B**（仍高于 15,000 B 止损线）。
+  - Golden：8 种导出 golden 均未变化（导出字段未改）；CSV/TSV 仍为 CRLF、XLSX 角度仍 `30.00`，无第三种行尾。
+- **遗留 TODO / 风险**：
+  - 含特殊字符工程 id 的历史快照键不迁移：新前缀下不可见，但不会被误删；应用自生成 id 为字母数字，正常工程不受影响。
+  - 协作合并超限只做整批拒绝，不做部分合并；极端超限输入在合并前仍会经历一次深拷贝与并集构造。
+  - 租约 ts 钳制依赖本机 `Date.now()` 单调性；系统时钟回拨时以本地 now 为准。
+  - 打开工程时不再用本机设置覆盖工程内设置（工程记录为唯一真源），跨工程语言/显示偏好可能与该工程保存值一致而非上一工程。
+  - 快照不再顺手归一化实时工程的内嵌照片；若资产库不可用，`photoDataUrl` 会留在实时工程与自动保存中（此前也会在快照失败时保留）。
+  - 图层去重保留首个定义：重复 id 的后者名称/显隐/锁定被丢弃；对象按同一 id 引用不受影响。
+  - C 类 4 条（IO-P2-3/17/20、RT-P2-12）未排期、未改动。
+
 ## 2026-11-08 · P2 批次 3/4：DXF/PNG 一致性 6 条 + 核心瞬态边界 6 条
 
 - **Commit Hash**：
