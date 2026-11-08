@@ -376,8 +376,18 @@ function objectLength(o){
   if(o.closed) l+=dist(o.points.at(-1),o.points[0]);
   return l;
 }
+/** RT-P2-14：统计页越界与规则页共用场地包围盒和容差；无可见场地时退回图片/世界取景框 */
+function issueBoundsFrame(){
+  const site=state.site;
+  if(site&&site.shape&&siteIsVisible(site)) return siteBounds(site);
+  return worldDims();
+}
+function issueBoundsTolerance(){
+  const raw=state.rules&&state.rules.bounds?state.rules.bounds.tolerance:undefined;
+  return ruleTolerance(raw,0.05);
+}
 function findIssues(){
-  const issues=[]; const d=worldDims();
+  const issues=[]; const d=issueBoundsFrame(); const tol=issueBoundsTolerance();
   state.objects.forEach(o=>{
     if(o.kind==='rect'){
       const tt=areaShapeType(o), sh=o.shape||{};
@@ -397,7 +407,7 @@ function findIssues(){
     if(o.kind==='point'&&(o.phys||0)>0&&o.phys>Math.max(d.w,d.h))
       issues.push(`${o.name} ${L('物理尺寸')} ${fmt(o.phys)}m ${L('超过场地长边')} ${fmt(Math.max(d.w,d.h))}m`);
     const b=objectBounds(o);
-    if(b.maxX<-.2||b.minX>d.w+.2||b.maxY<-.2||b.minY>d.h+.2) issues.push(`${o.name} ${L('超出场地范围')}`);
+    if(b.maxX<d.minX-tol||b.minX>d.maxX+tol||b.maxY<d.minY-tol||b.minY>d.maxY+tol) issues.push(`${o.name} ${L('超出场地范围')}`);
   });
   return issues;
 }
@@ -431,7 +441,7 @@ function renderStats(){
       <span>${esc(L('场地参数'))}</span><b>${esc(siteDescription().split('：').slice(1).join('：'))}</b>
       <span>${esc(L('对象总数'))}</span><b>${state.objects.length}</b><span>${esc(L('最近更新'))}</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
     </div></div>
-    <div class="section"><h3>${esc(L('几何检查'))}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>
+    <div class="section"><h3>${esc(L('几何检查'))} v${STATS_ISSUE_VERSION}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>
     <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>`;
   $('statsPanel').querySelectorAll('tr[data-floor-sum]').forEach(tr=>{
     tr.onclick=async()=>{

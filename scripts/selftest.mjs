@@ -126,7 +126,7 @@ code += `\n;globalThis.__api = {
   TABLE_MATCH_COLUMNS, tableImportColumns, formulaUnguard,
   siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints,
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
-  siteDescription, worldDims,
+  siteDescription, worldDims, findIssues, STATS_ISSUE_VERSION,
   hitPhysicalPoint, siteKindName,
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter,
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
@@ -5141,6 +5141,31 @@ await section("57.1b RT-P2-07 插件清单/源码上限按 UTF-8 字节", async 
   ok('RT-P2-07 code 多字节内容按字节拒绝', !rc.ok && /64 KB/.test(rc.reason));
   const okc = PP.validatePluginManifest(Object.assign({}, mo, { code:'x'.repeat(65536) }));
   ok('RT-P2-07 code 恰好 64 KB（单字节）通过', okc.ok === true);
+}
+});
+
+/* 57.1c RT-P2-14 统计越界与规则页共用场地包围盒/容差 -------------------- */
+await section("57.1c RT-P2-14 统计越界与规则页共用场地包围盒/容差", async () => {
+{
+  api.resetState(); api.resetFrameRef();
+  const st=api.state;
+  /* 100.1 超出场地 0.1 m：旧口径 ±0.2 不报，新口径沿用规则容差 0.05 应报 */
+  st.objects=[{ id:'o1', kind:'rect', typeId:'rect.area', name:'R1', x:100.1, y:10, width:5, height:5, angle:0, shape:null, visible:true }];
+  ok('RT-P2-14 越界按规则容差 0.05 命中', api.findIssues().some(x=>x.includes('R1')&&x.includes('超出')));
+  st.rules=api.normalizeRuleConfig({ bounds:{ tolerance:0.5 } });
+  ok('RT-P2-14 规则容差 0.5 时不命中', !api.findIssues().some(x=>x.includes('R1')&&x.includes('超出')));
+  st.rules=api.normalizeRuleConfig({});
+  /* 图片 200m 宽、场地 100m 宽：旧口径用 worldDims(200) 不报，新口径按场地包围盒应报 */
+  st.background={ kind:'image', fileName:'x.png', assetId:'', width:200, height:70, origin:[0,0],
+    metersPerPixel:1, calibrated:false, transform:null };
+  st.objects=[{ id:'o2', kind:'rect', typeId:'rect.area', name:'R2', x:150, y:10, width:5, height:5, angle:0, shape:null, visible:true }];
+  api.resetFrameRef();
+  ok('RT-P2-14 图片大于场地时按场地判越界', api.findIssues().some(x=>x.includes('R2')&&x.includes('超出')));
+  eq('RT-P2-14 取景框仍覆盖图片（worldDims 不变）', api.worldDims().maxX, 200);
+  st.site.visible=false; api.resetFrameRef();
+  ok('RT-P2-14 场地隐藏时退回取景框不误报', !api.findIssues().some(x=>x.includes('R2')&&x.includes('超出')));
+  eq('RT-P2-14 统计口径版本', api.STATS_ISSUE_VERSION, 2);
+  api.resetState(); api.resetFrameRef();
 }
 });
 

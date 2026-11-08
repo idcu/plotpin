@@ -834,7 +834,7 @@ function reportFloorPageHtml(name,img){
       <h2>${esc(L('统计摘要'))}</h2>
       <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${counts.point} ｜ ${esc(L('区域：'))}${counts.rect} ｜ ${esc(L('折线：'))}${counts.line}</p>
       <p>${esc(L('标注总长：'))}${fmt(len)} m ｜ ${esc(L('区域总面积：'))}${fmt(area)} ㎡</p>
-      <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
+      <p>${esc(L('几何检查：'))}v${STATS_ISSUE_VERSION} ${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
       ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
     </div>`;
 }
@@ -852,7 +852,7 @@ $('printBtn').onclick=async()=>{
           <img src="${img}" style="width:100%;max-height:58vh;object-fit:contain;border:1px solid #ccc">
           <h2>${esc(L('统计摘要'))}</h2>
           <p>${esc(L('对象总数：'))}${state.objects.length} ｜ ${esc(L('点设备：'))}${state.objects.filter(o=>o.kind==='point').length} ｜ ${esc(L('区域：'))}${state.objects.filter(o=>o.kind==='rect').length} ｜ ${esc(L('折线：'))}${state.objects.filter(o=>o.kind==='line').length}</p>
-          <p>${esc(L('几何检查：'))}${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
+          <p>${esc(L('几何检查：'))}v${STATS_ISSUE_VERSION} ${issues.length?issues.length+' '+L('项提示'):L('未发现明显问题')}</p>
           ${issues.map(x=>`<div>• ${esc(x)}</div>`).join('')}
         </div>
         ${reportListPageHtml(rows,L('对象清单'))}`;

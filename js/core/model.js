@@ -8,6 +8,8 @@ const $ = id => document.getElementById(id);
 const RULE_CONFIG_VERSION = 1;
 const RULE_TOLERANCE_MAX = 1000;
 const RULE_TYPE_LIMIT = 200;
+/* 统计页越界口径版本（RT-P2-14）：与规则页共用场地包围盒/容差，口径变化时递增并标注 */
+const STATS_ISSUE_VERSION = 2;
 
 let state = createInitialState();
 let bgImage = null;
