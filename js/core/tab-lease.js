@@ -5,6 +5,8 @@ const LEASE_CHANNEL='plotpin:editor-lease';
 const LEASE_STORAGE_KEY='plotpin:editor-lease';
 const LEASE_TTL_MS=15000;
 const LEASE_HEARTBEAT_MS=5000;
+/** 对端时钟最多允许超前本地 5s；超出部分按本地 now 钳制，避免伪造未来心跳长期占租约（CORE-P2-17） */
+const LEASE_FUTURE_SKEW_MS=5000;
 let leaseMode='none',leaseTabId='',leaseProjectId='',leaseActive=false,leaseConfirmed=false,leaseConflict=false,leaseLastSent=0,leaseChannel=null,leaseTimer=null,leaseHandler=null;
 const leasePeers=new Map();
 function leaseCurProject(){ return String((state&&state.meta&&state.meta.projectId)||''); }
@@ -48,10 +50,15 @@ function leaseApply(now){
 /** 收到对端消息（BC onmessage / storage 事件 / 自测注入）：合并快照并复算冲突 */
 function leaseIngest(msg,now){
   now=now||Date.now();
-  if(!msg||typeof msg!=='object'||msg.tabId===leaseTabId) return leaseConflictAt(now);
-  if(msg.type==='release') leasePeers.delete(msg.tabId);
+  /* CORE-P2-17：结构校验先行；tabId 必须是非空字符串，避免对象键/原型键混入对端表 */
+  if(!msg||typeof msg!=='object'||typeof msg.tabId!=='string'||!msg.tabId||msg.tabId===leaseTabId) return leaseConflictAt(now);
+  const tabId=msg.tabId.slice(0,64);
+  if(msg.type==='release') leasePeers.delete(tabId);
   else if(msg.type==='lease'){
-    leasePeers.set(msg.tabId,{projectId:String(msg.projectId||''),ts:Number(msg.ts)||now});
+    const rawTs=Number(msg.ts);
+    /* 对端 ts 不可信：钳制到 [now−TTL, now+5s]；非法值回落本地 now */
+    const ts=Number.isFinite(rawTs)?Math.min(now+LEASE_FUTURE_SKEW_MS,Math.max(now-LEASE_TTL_MS,rawTs)):now;
+    leasePeers.set(tabId,{projectId:String(msg.projectId||'').slice(0,80),ts});
     if(msg.claim) leaseConfirmed=false;
     leaseSend(now);
   }

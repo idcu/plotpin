@@ -231,7 +231,7 @@ code += `\n;globalThis.__api = {
   classifySaveError, reportSaveFailure, writeLocalDraft, SAVE_RETRY_MS,
   get saveHealth(){ return saveHealth; },
   resetSaveHealth(){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0}; },
-  LEASE_CHANNEL, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, acquireEditorLease, releaseEditorLease, leaseIngest,
+  LEASE_CHANNEL, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, LEASE_FUTURE_SKEW_MS, acquireEditorLease, releaseEditorLease, leaseIngest,
   leaseConflictAt, leaseClaim, leaseSyncProject, leaseStatus, onLeaseConflict,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
@@ -7921,6 +7921,24 @@ await section("P2-CORE 批次 5：schema 与安全", async () => {
   ok('CORE-P2-12 场地标注丢弃未知键', !('evil' in bpSite.site.annot));
   ok('CORE-P2-12 场地标注丢弃非布尔值', !('siteArea' in bpSite.site.annot));
   eq('CORE-P2-12 缺失 id 回落默认槽', api.buildProject({schema:api.SCHEMA,site:{shape:{type:'rect',w:1,h:1}}}).site.id, 'site.default');
+
+  /* CORE-P2-17：对端心跳结构校验 + ts 钳制，伪造未来时间不能长期占租约 */
+  const leaseFresh=(pid,now)=>{ api.state.meta.projectId=pid; api.leaseSyncProject(now); };
+  api.resetState();
+  leaseFresh('PRJ_LEASE_A',1000);
+  api.leaseIngest({type:'lease',tabId:'PEER_FUT',projectId:'PRJ_LEASE_A',ts:99999999},1000);
+  ok('CORE-P2-17 伪造未来心跳仍计入冲突', api.leaseConflictAt(1000)===true);
+  ok('CORE-P2-17 未来 ts 钳制到 now+5s 后过期', api.leaseConflictAt(1000+api.LEASE_FUTURE_SKEW_MS+api.LEASE_TTL_MS+1)===false);
+  leaseFresh('PRJ_LEASE_B',1000);
+  api.leaseIngest({type:'lease',tabId:42,projectId:'PRJ_LEASE_B',ts:1000},1000);
+  ok('CORE-P2-17 非字符串 tabId 被拒绝', api.leaseConflictAt(1000)===false);
+  leaseFresh('PRJ_LEASE_C',1000);
+  api.leaseIngest({type:'lease',tabId:'PEER_STR',projectId:'PRJ_LEASE_C',ts:'not-a-number'},1000);
+  ok('CORE-P2-17 非法 ts 回落本地 now', api.leaseConflictAt(1000)===true);
+  leaseFresh('PRJ_LEASE_D',1000);
+  api.leaseIngest({type:'lease',tabId:'PEER_PAST',projectId:'PRJ_LEASE_D',ts:-999999},1000);
+  ok('CORE-P2-17 过期 ts 不产生新鲜心跳', api.leaseConflictAt(1000)===false);
+  api.resetState();
 }
 });
 
