@@ -238,7 +238,7 @@ function rowsToObjectsPlan(rows){
   /* 公式防护的导引号在导入侧还原，保证「导出→再导入」名称/备注等文本不变形 */
   const cell=(r,name)=>idx[name]!==undefined?formulaUnguard(String(r[idx[name]]??'').trim()):'';
   syncActiveFloor();
-  const floors=(state.floors||[]).map(f=>({id:f.id,name:f.name,active:f.id===state.activeFloorId,objects:Array.isArray(f.objects)?f.objects:[]}));
+  const floors=(state.floors||[]).map(f=>({id:f.id,name:f.name,active:f.id===state.activeFloorId,objects:Array.isArray(f.objects)?f.objects:null}));
   const current=floors.find(f=>f.active);
   if(!current) floors.push({id:state.activeFloorId||'',name:currentFloorName(),active:true,objects:state.objects});
   /* N-08：楼层名重复则「楼层」列无法定位目标，整批拒绝（errors 通道 → 预览不提供合并导入） */
@@ -252,7 +252,7 @@ function rowsToObjectsPlan(rows){
     return {updates:[],creates:[],replaces:[],warnings,errors,strict};
   }
   const floorByName=new Map(floors.map(f=>[normalizeFloorName(f.name),f]));
-  const codeMaps=new Map(floors.map(f=>[f.id,new Map((f.objects||[]).map(o=>[o.name,o]))]));
+  const codeMaps=new Map(floors.map(f=>[f.id,Array.isArray(f.objects)?new Map(f.objects.map(o=>[o.name,o])):null]));
   const updates=[],creates=[],replaces=[];
   const problem=msg=>{ (strict?errors:warnings).push(msg); };
   const check=(where,c,cnd)=>checkRowGeom(where,c,cnd).forEach(w=>warnings.push(w));
@@ -302,6 +302,8 @@ function rowsToObjectsPlan(rows){
     const where='第 '+lineNo+' 行'+(code?'（编号 '+code+'）':'')+(rowFloor?'［楼层 '+rowFloor+'］':'');
     checkBool(where,c);
     const floorCodes=codeMaps.get(ctx.id);
+    /* IO-P2-9：目标楼层 objects 不是数组时拒绝该行，绝不回退到当前楼层写入 */
+    if(floorCodes===null){ problem(where+'：目标楼层「'+ctx.name+'」的对象数据异常（objects 不是数组），已跳过该行'); return; }
     let op=TABLE_OP_BY_LABEL[opRaw]||'';
     if(opRaw&&!op){ problem(where+'：操作「'+opRaw+'」无法识别（可用：新增 / 更新 / 替换）'); return; }
     if(!op){

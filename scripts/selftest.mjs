@@ -550,6 +550,13 @@ await section("8.1 B-08 原义：批量布点 + 条件批量替换（严格模�
   const keepGeom = api.state.objects.find(o => o.name === 'O0300');
   eq('非法形状-几何不变', [keepGeom.x, keepGeom.y, keepGeom.width, keepGeom.height], [1, 2, 5, 6]);
 
+  /* IO-P2-9：目标楼层 objects 非数组时拒绝该行，不回退当前层 */
+  api.resetState();
+  api.state.floors.push({ id: 'bad-floor', name: '异常层', objects: null });
+  const badFloorPlan = api.rowsToObjectsPlan([['编号', '对象类型', 'X', 'Y', '楼层'], ['O0900', '点设备', '1', '1', '异常层']]);
+  ok('异常楼层-规划告警', badFloorPlan.warnings.some(w => w.includes('对象数据异常')));
+  eq('异常楼层-不新增', badFloorPlan.creates.length, 0);
+
   /* 大表（≥500 行）实测 */
   api.resetState();
   const big = [['对象类型','X','Y']];
