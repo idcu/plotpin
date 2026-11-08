@@ -75,14 +75,14 @@ function heapProbe(cdp) {
 test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
   test.use({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
 
-  test('CORE-P2-3 历史快照活动楼层别名复制的堆占用', async ({ page }) => {
+  test('CORE-P2-3 历史快照活动楼层别名归一化的堆占用', async ({ page }) => {
     test.setTimeout(240000);
     await openApp(page);
     const cdp = await page.context().newCDPSession(page);
     const gcUsed = heapProbe(cdp);
     const CFG = { scale: 10000, steps: 20 };
 
-    /* ---- 当前实现：state.objects 与 floors[active].objects 指向同一数组，快照按两条路径各复制一次 ---- */
+    /* ---- 当前实现：快照内 objects 与 floors[active].objects 必须指向同一数组（别名归一化） ---- */
     await page.evaluate(installScene, CFG.scale);
     await page.evaluate(() => { syncActiveFloor(); history = { past: [], future: [] }; });
     const curBase = await gcUsed();
@@ -99,13 +99,13 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
         const top = snap.objects;
         const f = (snap.floors || []).find(x => x.id === active);
         const flo = f && Array.isArray(f.objects);
-        if (flo) { dual++; if (f.objects !== top) distinct++; instances += top.length + f.objects.length; }
+        if (flo) { dual++; if (f.objects !== top) distinct++; instances += top.length + (f.objects === top ? 0 : f.objects.length); }
         else instances += top.length;
       });
       return { snapshots: history.past.length, dual, distinct, instances };
     });
 
-    /* ---- 对照实现：快照前临时移除活动楼层别名（仅测试内构造，生产代码未改） ---- */
+    /* ---- 对照布局：快照前临时移除活动楼层别名（等价旧行为的内存上限，仅测试内构造） ---- */
     await page.evaluate(installScene, CFG.scale);
     await page.evaluate(() => { syncActiveFloor(); history = { past: [], future: [] }; });
     const ctlBase = await gcUsed();
@@ -128,7 +128,7 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
       history.past.forEach(snap => {
         const top = snap.objects;
         const f = (snap.floors || []).find(x => x.id === active);
-        if (f && Array.isArray(f.objects)) { dual++; instances += top.length + f.objects.length; }
+        if (f && Array.isArray(f.objects)) { dual++; instances += top.length; }
         else instances += top.length;
       });
       return { snapshots: history.past.length, dual, instances };
@@ -157,10 +157,13 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
     expect(ctlProbe.snapshots, '对照组历史上限 20 条').toBe(20);
     expect(data.current.heapDeltaB, '当前实现堆增量必须为正').toBeGreaterThan(0);
     expect(data.control.heapDeltaB, '对照组堆增量必须为正').toBeGreaterThan(0);
-    /* 打点目标：确认两条路径确实各存一份对象（改造前缺陷可见），不是断言它“正确” */
-    expect(data.current.dualPathSnapshots, '当前实现每条快照都含活动楼层别名').toBe(20);
-    expect(data.current.distinctArrays, '两条路径是不同数组实例').toBe(20);
-    expect(data.control.dualPathSnapshots, '对照组不复制第二份活动楼层对象').toBe(0);
+    /* 归一化判据：两条路径共用同一数组，每条快照只保留一份对象实例 */
+    expect(data.current.dualPathSnapshots, '每条快照都保留活动楼层别名键').toBe(20);
+    expect(data.current.distinctArrays, '活动楼层别名必须与顶层 objects 同数组').toBe(0);
+    expect(data.current.objectInstances, '20 条快照只保留 20×10k 个对象实例').toBe(200000);
+    /* 内存与耗时不得高于“去掉别名”的对照布局（允许 15% 抖动，不是阈值放宽） */
+    expect(curDelta, '堆增量不得高于对照布局 15%').toBeLessThan(ctlDelta * 1.15);
+    expect(curMs, '20 次 pushHistory 不得高于对照布局 50%').toBeLessThan(ctlMs * 1.5);
   });
 
   test('CORE-P2-4 快照列表/淘汰的 IDB 读取次数与耗时', async ({ page }) => {

@@ -383,40 +383,54 @@ function historyValueEqual(a, b){
  * @returns {object} 不可变快照（顶层带不可枚举标记）
  */
 function snapshotHistoryState(src, prev){
-  const shared = sharedHistoryValue(src, isHistorySnapshot(prev) ? prev : undefined);
+  const shared = sharedHistoryValue(src, isHistorySnapshot(prev) ? prev : undefined, new WeakMap());
   if(shared && typeof shared === 'object' && !isHistorySnapshot(shared)){
     try{ Object.defineProperty(shared, HISTORY_SNAPSHOT_TAG, { value: HISTORY_SNAPSHOT_TAG, enumerable: false }); }catch(_){}
   }
   return shared;
 }
-function sharedHistoryValue(src, prev){
+/**
+ * @param {*} src @param {*} prev @param {WeakMap} memo src 容器 → 已生成的快照容器
+ *
+ * memo 是活动楼层别名归一化的关键：live state 的 `objects` 与
+ * `floors[activeFloorId].objects` 是同一数组，两条路径必须映射到同一份快照数组，
+ * 否则每个对象会被存两份（CORE-P2-3）。
+ */
+function sharedHistoryValue(src, prev, memo){
   if(src === null || typeof src !== 'object') return src;   /* 原始值（含字符串）天然按引用共享 */
+  if(!memo) memo = new WeakMap();
+  if(memo.has(src)) return memo.get(src);
   if(Array.isArray(src)){
     const prevArr = Array.isArray(prev) ? prev : null;
     const out = new Array(src.length);
     let same = !!prevArr && prevArr.length === src.length;
     for(let i = 0; i < src.length; i++){
-      out[i] = sharedHistoryValue(src[i], prevArr ? prevArr[i] : undefined);
+      out[i] = sharedHistoryValue(src[i], prevArr ? prevArr[i] : undefined, memo);
       if(same && out[i] !== prevArr[i]) same = false;
     }
-    return same && prevArr ? prevArr : out;
+    const result = same && prevArr ? prevArr : out;
+    memo.set(src, result);
+    return result;
   }
   const keys = Object.keys(src);
   const prevObj = (prev && typeof prev === 'object' && !Array.isArray(prev)) ? prev : null;
   if(!prevObj){
     const out = {};
-    for(const k of keys) out[k] = sharedHistoryValue(src[k], undefined);
+    memo.set(src, out);
+    for(const k of keys) out[k] = sharedHistoryValue(src[k], undefined, memo);
     return out;
   }
   const prevKeys = Object.keys(prevObj);
   let same = prevKeys.length === keys.length;
   const out = {};
   for(const k of keys){
-    const v = sharedHistoryValue(src[k], prevObj[k]);
+    const v = sharedHistoryValue(src[k], prevObj[k], memo);
     out[k] = v;
     if(same && (!Object.prototype.hasOwnProperty.call(prevObj, k) || v !== prevObj[k])) same = false;
   }
-  return same ? prevObj : out;
+  const result = same ? prevObj : out;
+  memo.set(src, result);
+  return result;
 }
 /**
  * 把历史快照物化为可安全就地编辑的 live state：
@@ -425,13 +439,26 @@ function sharedHistoryValue(src, prev){
  */
 function materializeHistoryState(snap){
   if(!isHistorySnapshot(snap)) return snap;
-  return copySnapshotContainers(snap);
+  return copySnapshotContainers(snap, new WeakMap());
 }
-function copySnapshotContainers(v){
+/**
+ * memo 保证别名结构在物化后仍成立：快照里 `objects` 与
+ * `floors[activeFloorId].objects` 是同一数组时，恢复出的 live state 也指向同一数组，
+ * 与 `syncActiveFloor()` 建立的实时结构一致（CORE-P2-3）。
+ */
+function copySnapshotContainers(v, memo){
   if(v === null || typeof v !== 'object') return v;
-  if(Array.isArray(v)) return v.map(copySnapshotContainers);
+  if(!memo) memo = new WeakMap();
+  if(memo.has(v)) return memo.get(v);
+  if(Array.isArray(v)){
+    const out = new Array(v.length);
+    memo.set(v, out);
+    for(let i = 0; i < v.length; i++) out[i] = copySnapshotContainers(v[i], memo);
+    return out;
+  }
   const out = {};
-  for(const k of Object.keys(v)) out[k] = copySnapshotContainers(v[k]);
+  memo.set(v, out);
+  for(const k of Object.keys(v)) out[k] = copySnapshotContainers(v[k], memo);
   return out;
 }
 /** @returns {string} ISO 时间 */

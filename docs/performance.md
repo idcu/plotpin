@@ -159,22 +159,28 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 
 基准代价：每次**拖拽开始/结束**各触发一次静态层重建（选中/悬停为零次）。10k 对象时约 0.2 s，与改造前「选中即重建」的总次数相同，只是把成本从点选移到了真正开始改形时。
 
-#### 4.1.6 历史快照活动楼层别名复制（2026-11-08，CORE-P2-3 打点）
+#### 4.1.6 历史快照活动楼层别名归一化（2026-11-08，CORE-P2-3 修复）
 
-命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs --repeat-each=2`（真实 Chromium 1920×1080@DPR1，headless/SwiftShader，10,000 对象，20 次 `pushHistory`；堆读数经 CDP `HeapProfiler.collectGarbage` 强制 GC 两次后取 `Runtime.getHeapUsage`）。两次独立复跑读数一致到 0.01 MB。
+命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-3" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，headless/SwiftShader，10,000 对象，20 次 `pushHistory`；堆读数经 CDP `HeapProfiler.collectGarbage` 强制 GC 两次后取 `Runtime.getHeapUsage`）。
 
-| 指标 | 当前实现 | 对照布局（快照前临时去掉活动楼层别名，仅测试内构造） | 变化 | 结论 |
+| 指标 | 改造前（`6bf2bf5` 实测） | 改造后（本次） | 变化 | 结论 |
 |---|---|---|---|---|
-| 20 条历史堆增量 | 19.657 MB（20,611,612 B） | 9.788 MB（10,263,472 B） | **2.01×** | 活动楼层对象被存两份 |
-| 20 次 `pushHistory` 同步耗时 | 826.1 / 840.5 ms | 420.5 / 423.1 ms | 2.00× | 与堆增量同比例 |
-| 每条快照对象实例数 | 400,000（顶层 200,000 + 楼层 200,000） | 200,000 | 2× | 两条路径是不同数组实例 |
-| 单条快照堆占用 | 1,006.43 KB | — | — | 仅记录 |
+| 20 条历史堆增量 | 19.657 MB（20,611,612 B） | **8.912 MB（9,344,656 B）** | **−54.7%** | 达到约 9.8 MB 量级目标 |
+| 20 次 `pushHistory` 同步耗时 | 826.1 / 840.5 ms | **505.2 / 488.3 ms** | **−39% / −42%** | 与对照布局 484.2 / 479.8 ms 持平 |
+| 每条快照对象实例数 | 400,000 | **200,000** | −50% | 两条路径共用同一数组 |
+| 每条快照独立数组数（活动楼层） | 20/20 快照为两个不同数组 | **0/20** | — | `objects === floors[active].objects` |
+| 单条快照堆占用 | 1,006.43 KB | **456.28 KB** | −54.7% | 仅记录 |
 
-根因：`state.objects` 与 `state.floors[activeFloorId].objects` 指向同一数组（`syncActiveFloor()` 建立），
-`snapshotHistoryState` 按 `src.objects` 与 `src.floors[*].objects` 两条路径分别遍历，未按对象 id / 引用去重，
-因此每条历史快照保留两份内容相同的对象实例。N-24 的结构共享只消除了「跨快照复制」与照片 base64 复制，未消除这条路径重复。
+对照布局（同一 harness 内临时去掉活动楼层别名）：8.885 MB / 484.2 / 479.8 ms；改造后与对照比值 1.00。
 
-本项只补打点，未改业务代码；对照列是同一 harness 下的量化上限，不作为已修复证据。
+根因与修法：`state.objects` 与 `state.floors[activeFloorId].objects` 指向同一数组（`syncActiveFloor()` 建立），
+`snapshotHistoryState` 原先按两条路径分别遍历，未按引用去重。现在快照与物化都带 `WeakMap` 记忆：
+同一 live 容器只生成一份快照容器（`sharedHistoryValue`），物化时同一快照容器只复制一份（`copySnapshotContainers`），
+因此快照与恢复后的 live state 都保持 `objects === floors[active].objects`，别名结构不变、对象实例不翻倍。
+
+语义保持：20 条上限、`past/future` 消费方式、切层后撤销/重做、资产保活、`markDirty('restore')` 落盘时机均未改动；
+selftest 74b 覆盖「双楼层 + F1 编辑 → 切 F2 编辑 → 两次撤销 → 重做」与资产可达集（21 项断言）。
+
 
 #### 4.1.8 导出字段「长度/面积」逐行重复计算（2026-11-08，IO-P2-11 打点）
 

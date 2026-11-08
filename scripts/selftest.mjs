@@ -7325,6 +7325,80 @@ await section("74. B-10 历史栈结构共享/增量：未变子树与 base64 �
 
 });
 
+/* 74b. CORE-P2-3 历史快照活动楼层别名归一化（多楼层 + 切换后撤销） ---------------- */
+await section("74b. CORE-P2-3 历史快照活动楼层别名归一化（多楼层 + 切换后撤销）", async () => {
+{
+  const st = api.resetState();
+  api.history.past = []; api.history.future = [];
+  const clone = v => (v ? JSON.parse(JSON.stringify(v)) : v);
+  const A1 = api.baseObject('point','point.marker',{ id:'P23A1', name:'A1', x:1, y:1 });
+  const A2 = api.baseObject('point','point.marker',{ id:'P23A2', name:'A2', x:2, y:2 });
+  const B1 = api.baseObject('point','point.marker',{ id:'P23B1', name:'B1', x:3, y:3 });
+  st.floors = [
+    { id:'floor.default', name:'1F', updatedAt:new Date().toISOString(), background:clone(st.background), site:clone(st.site), viewport:clone(st.viewport), objects:[A1, A2] },
+    { id:'floor.P23', name:'2F', updatedAt:new Date().toISOString(), background:clone(st.background), site:clone(st.site), viewport:clone(st.viewport), objects:[B1] }
+  ];
+  st.activeFloorId = 'floor.default';
+  st.objects = st.floors[0].objects;
+  api.syncActiveFloor();
+
+  /* 快照结构：活动楼层别名键保留，但必须与顶层 objects 是同一数组（不再复制第二份） */
+  api.pushHistory();
+  const s0 = api.history.past[0];
+  const f0 = s0.floors.find(f => f.id === 'floor.default');
+  ok('CORE-P2-3 快照保留活动楼层别名键', !!f0 && Array.isArray(f0.objects));
+  ok('CORE-P2-3 别名与顶层 objects 同数组', s0.objects === f0.objects);
+  eq('CORE-P2-3 活动楼层对象只存一份', new Set([...s0.objects, ...f0.objects]).size, 2);
+  eq('CORE-P2-3 非活动楼层对象保留', s0.floors.find(f => f.id === 'floor.P23').objects.map(o => o.id), ['P23B1']);
+
+  /* 多楼层编辑：F1 改值 → 切到 F2 → 改值 → 再压栈 */
+  api.state.objects[0].x = 10;
+  api.pushHistory();
+  ok('CORE-P2-3 切层成功', api.switchFloorData('floor.P23'));
+  eq('CORE-P2-3 切层后活动对象', api.state.objects.map(o => o.id), ['P23B1']);
+  api.state.objects[0].x = 30;
+  api.pushHistory();
+  const s2 = api.history.past[api.history.past.length - 1];
+  eq('CORE-P2-3 切层后快照记录活动楼层', s2.activeFloorId, 'floor.P23');
+  ok('CORE-P2-3 切层后快照仍保留别名', s2.objects === s2.floors.find(f => f.id === 'floor.P23').objects);
+  eq('CORE-P2-3 非活动层已编辑值随快照保存', s2.floors.find(f => f.id === 'floor.default').objects[0].x, 10);
+
+  /* 撤销：恢复 F2 编辑态，且 live state 的别名关系必须重建 */
+  api.undo();
+  const u1 = api.state;
+  eq('CORE-P2-3 撤销恢复活动楼层', u1.activeFloorId, 'floor.P23');
+  eq('CORE-P2-3 撤销恢复 F2 对象', u1.objects.map(o => o.id), ['P23B1']);
+  eq('CORE-P2-3 撤销恢复 F2 编辑值', u1.objects[0].x, 30);
+  ok('CORE-P2-3 撤销后 live 别名重建', u1.objects === u1.floors.find(f => f.id === 'floor.P23').objects);
+  eq('CORE-P2-3 撤销后非活动层值保留', u1.floors.find(f => f.id === 'floor.default').objects[0].x, 10);
+  eq('CORE-P2-3 撤销后 future 长度', api.history.future.length, 1);
+
+  /* 二次撤销：回到 F1 编辑态 */
+  api.undo();
+  const u2 = api.state;
+  eq('CORE-P2-3 二次撤销恢复 F1', [u2.activeFloorId, u2.objects.map(o => o.id).join(',')], ['floor.default', 'P23A1,P23A2']);
+  eq('CORE-P2-3 二次撤销恢复 F1 编辑值', u2.objects[0].x, 10);
+  eq('CORE-P2-3 二次撤销后 F2 回到切层前', u2.floors.find(f => f.id === 'floor.P23').objects[0].x, 3);
+
+  /* 重做：回到 F2 编辑态 */
+  api.redo();
+  eq('CORE-P2-3 重做回到 F2', [api.state.activeFloorId, api.state.objects[0].x], ['floor.P23', 30]);
+
+  /* 20 条上限不变 */
+  for(let i = 0; i < 25; i++) api.pushHistory();
+  eq('CORE-P2-3 历史上限仍为 20', api.history.past.length, 20);
+
+  /* 资产保活：归一化不丢活动楼层内照片与底图引用 */
+  api.state.objects[0].props = { photoId: 'P23_PHOTO' };
+  api.state.background = { assetId: 'P23_BG' };
+  api.pushHistory();
+  const refs = api.reachableBgAssetIds();
+  ok('CORE-P2-3 快照资产仍可达', refs.includes('P23_BG') && refs.includes('P23_PHOTO'));
+
+  api.resetState(); api.history.past = []; api.history.future = [];
+}
+});
+
 /* 75. B-05 产品目录校验 / BOM 聚合 / 报价字段表与数值往返 ---------------- */
 await section("75. B-05 产品目录校验 / BOM 聚合 / 报价字段表与数值往返", async () => {
 {
