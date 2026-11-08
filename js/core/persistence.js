@@ -1082,10 +1082,14 @@ function sanitizeShape(raw,kind,legacyW,legacyH){
   return {type:'rect',x:0,y:0,w:100,h:70};
 }
 function sanitizeLayers(arr){
-  const out=[];
+  const out=[], seen=new Set();
   if(Array.isArray(arr)) arr.forEach(raw=>{
     if(!raw||typeof raw!=='object') return;
-    out.push({id:safeId(raw.id,'layer'),name:String(raw.name||'图层').slice(0,40),visible:raw.visible!==false,locked:!!raw.locked});
+    const id=safeId(raw.id,'layer');
+    /* CORE-P2-11：重复 id 保留首个，避免图层面板重复与对象归属二义；对象引用同一 id 不受影响 */
+    if(seen.has(id)) return;
+    seen.add(id);
+    out.push({id,name:String(raw.name||'图层').slice(0,40),visible:raw.visible!==false,locked:!!raw.locked});
   });
   if(!out.some(l=>l.id==='layer.default')) out.unshift({id:'layer.default',name:'默认图层',visible:true,locked:false});
   return out;

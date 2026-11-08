@@ -7903,6 +7903,16 @@ await section("P2-CORE 批次 5：schema 与安全", async () => {
   ok('CORE-P2-8 重命名当前楼层成功', api.renameFloor('floor.default','首层'));
   ok('CORE-P2-8 当前楼层 updatedAt 已刷新', api.state.floors[0].updatedAt>=curUpdated);
   api.resetState();
+
+  /* CORE-P2-11：重复图层 id 保留首个，图层面板不重复、对象归属不二义 */
+  const bpLayers=api.buildProject({schema:api.SCHEMA,layers:[
+    {id:'layer.default',name:'默认图层',visible:true,locked:false},
+    {id:'layer.dup',name:'甲层',visible:true,locked:false},
+    {id:'layer.dup',name:'乙层',visible:false,locked:true}
+  ]});
+  eq('CORE-P2-11 重复图层 id 去重', bpLayers.layers.filter(l=>l.id==='layer.dup').length, 1);
+  eq('CORE-P2-11 保留首个图层定义', bpLayers.layers.find(l=>l.id==='layer.dup').name, '甲层');
+  ok('CORE-P2-11 默认图层仍唯一', bpLayers.layers.filter(l=>l.id==='layer.default').length===1);
 }
 });
 
