@@ -495,16 +495,34 @@
 
   function handleDownload(rec, d) {
     const pending = rec.pending.get(d.callId);
-    const fallback = pending ? pending.fallback : '插件导出.bin';
-    const name = safeFileName(d.name, fallback);
+    /* RT-P2-11：只接受仍在调用期内的下载。旧 callId / 伪造 callId 已越过 SDK 调用边界，
+       直接禁用并保留原因，而不是静默落盘。 */
+    if (!pending) {
+      disablePlugin(rec, '下载请求不在调用期内（callId 未授权）');
+      return;
+    }
+    /* 复用导入文件上限，不新增第二套阈值：文本按 UTF-8 字节、二进制按视图字节数 */
+    const maxBytes = (typeof APP_LIMITS !== 'undefined' && APP_LIMITS.IMPORT_FILE_MAX_BYTES)
+      ? APP_LIMITS.IMPORT_FILE_MAX_BYTES : 32 * 1024 * 1024;
+    const isText = d.kind === 'text';
+    const text = isText ? String(d.text == null ? '' : d.text) : '';
+    const bytes = d.bytes;
+    const size = isText
+      ? utf8Length(text)
+      : ((typeof ArrayBuffer !== 'undefined' && bytes instanceof ArrayBuffer) ? bytes.byteLength
+        : (bytes && typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(bytes) ? bytes.byteLength : 0));
+    if (size > maxBytes) {
+      disablePlugin(rec, '下载超过上限 ' + Math.round(maxBytes / 1048576) + ' MB');
+      return;
+    }
+    const name = safeFileName(d.name, pending.fallback);
     let blob;
-    if (d.kind === 'text') {
-      blob = new Blob([String(d.text == null ? '' : d.text)], { type: 'text/plain;charset=utf-8' });
+    if (isText) {
+      blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     } else {
-      const bytes = d.bytes;
       const buf = (typeof ArrayBuffer !== 'undefined' && bytes instanceof ArrayBuffer)
         ? bytes
-        : (bytes && typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(bytes) ? bytes.buffer : new ArrayBuffer(0));
+        : (bytes && typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(bytes) ? bytes : new ArrayBuffer(0));
       blob = new Blob([buf], { type: String(d.mime || 'application/octet-stream') });
     }
     if (typeof global.downloadBlob === 'function') global.downloadBlob(blob, name);

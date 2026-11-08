@@ -206,6 +206,48 @@ test('RT-P2-09：卸载后仍被使用的类型保留，同一插件重载可覆
   await page.evaluate(() => window.PlotPin.unloadPlugin('demo.reload'));
 });
 
+test('RT-P2-11：复用旧 callId 的下载被拒并禁用插件，给出明确原因', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { window.__dlCount = 0; window.downloadBlob = () => { window.__dlCount++; }; });
+  const spec = {
+    id: 'demo.stale',
+    apiVersion: '1.0',
+    capabilities: ['export', 'import'],
+    code: [
+      'var saved=null;',
+      'PlotPin.registerExporter({id:"stale.export",label:"Stale",ext:".txt",run:function(ctx){saved=ctx;return null;}});',
+      'PlotPin.registerImporter({ext:"stale",label:"Stale",run:function(ctx){if(saved)saved.download("forged","stale.txt");return null;}});'
+    ].join('\n')
+  };
+  expect((await loadPlugin(page, spec)).ok).toBe(true);
+  expect(await page.evaluate(() => window.exportViaPlugin('stale.export'))).toMatchObject({ ok: true });
+  await page.evaluate(async () => {
+    const imp = window.PlotPin.findImporter('stale');
+    const file = new File([new Uint8Array([1, 2, 3])], 'x.stale');
+    await window.importViaPlugin(imp, file);
+  });
+  const rec = await waitDisabled(page, 'demo.stale');
+  expect(rec.reason).toMatch(/callId|调用期/);
+  expect(await page.evaluate(() => window.__dlCount)).toBe(0);
+  await expect.poll(() => page.locator('#toastWrap').innerText()).toContain('插件已禁用');
+});
+
+test('RT-P2-11：超过 32 MB 的下载被拒并禁用插件', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { window.__dlCount = 0; window.downloadBlob = () => { window.__dlCount++; }; });
+  const r = await loadPlugin(page, {
+    id: 'demo.bigdl',
+    apiVersion: '1.0',
+    capabilities: ['export'],
+    code: 'PlotPin.registerExporter({id:"big.export",label:"Big",ext:".bin",run:function(ctx){ctx.download(new Uint8Array(32*1024*1024+1));}});'
+  });
+  expect(r.ok).toBe(true);
+  await page.evaluate(() => window.exportViaPlugin('big.export'));
+  const rec = await waitDisabled(page, 'demo.bigdl');
+  expect(rec.reason).toMatch(/32 MB/);
+  expect(await page.evaluate(() => window.__dlCount)).toBe(0);
+});
+
 test('原型污染：Worker 域内改原型不影响主工程', async ({ page }) => {
   await openApp(page);
   const r = await loadPlugin(page, {
@@ -303,22 +345,22 @@ test('示例插件：加载后可导出 Markdown，卸载后撤销注册', async
 /* N-02：第二条通信通道与事件处理器旁路。旧实现只删 fetch/indexedDB/...，
    BroadcastChannel 可直接加入 plotpin-collab-* 协作频道，onmessage/onerror 可在
    token 校验之外截获消息、吞掉异常。 */
-test('沙箱逃逸：BroadcastChannel / MessageChannel / MessagePort / onmessage / onerror 均不可用', async ({ page }) => {
+test('沙箱逃逸：BroadcastChannel / MessageChannel / MessagePort / onmessage / onerror / onmessageerror / DOM / parent / indexedDB / fetch 均不可用', async ({ page }) => {
   await openApp(page);
   const r = await loadPlugin(page, {
     id: 'evil.channels',
     apiVersion: '1.0',
     capabilities: [],
     code: [
-      'var probe=[typeof BroadcastChannel,typeof MessageChannel,typeof MessagePort,typeof onmessage,typeof onerror].join(",");',
-      'try{globalThis.onmessage=function(){};globalThis.onerror=function(){return true;};}catch(e){}',
-      'var wrote=(typeof globalThis.onmessage==="function")||(typeof globalThis.onerror==="function");',
+      'var probe=[typeof BroadcastChannel,typeof MessageChannel,typeof MessagePort,typeof onmessage,typeof onerror,typeof onmessageerror,typeof document,typeof parent,typeof indexedDB,typeof fetch].join(",");',
+      'try{globalThis.onmessage=function(){};globalThis.onerror=function(){return true;};globalThis.onmessageerror=function(){};}catch(e){}',
+      'var wrote=(typeof globalThis.onmessage==="function")||(typeof globalThis.onerror==="function")||(typeof globalThis.onmessageerror==="function");',
       'PlotPin.toast("probe="+probe+";wrote="+wrote);'
     ].join('\n')
   });
   expect(r.ok).toBe(true);
   await expect.poll(() => page.locator('#toastWrap').innerText())
-    .toContain('probe=undefined,undefined,undefined,undefined,undefined;wrote=false');
+    .toContain('probe=undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined;wrote=false');
   await drawPoint(page);
 });
 
