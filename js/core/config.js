@@ -33,6 +33,8 @@ const APP_LIMITS = Object.freeze({
   IMPORT_ROWS_MAX: 20000,                   /* 表格导入行数上限 */
   IMPORT_ENTITIES_MAX: 100000,              /* DXF/PDF 实体上限 */
   OBJECTS_MAX: 100000,                      /* 单工程对象上限（含所有楼层） */
+  SHAPE_POINTS_MAX: 10000,                  /* 单个折线/多边形对象的顶点上限（防病态点列） */
+  SHEAR_MAX: 50,                            /* 图片切变斜率上限（约 88.9°），避免近 90° 时产生非有限变换 */
   HISTORY_MAX: 20,                          /* 撤销栈深度 */
   TOMBSTONE_MAX: 20000,                     /* 删除墓碑硬上限：按对象 id 长期保留，仅在超限时淘汰 */
   TOMBSTONE_EVICT_BATCH: 2000,              /* 增量淘汰批量：攒够一批才压缩一次，避免每次删除都全量排序 */

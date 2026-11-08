@@ -2,6 +2,22 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-14 边界防护：切变退化 / fitView 缩放 / 顶点上限 / 大点列包围盒
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/core/config.js`：`APP_LIMITS` 新增 `SHAPE_POINTS_MAX=10000`、`SHEAR_MAX=50`。
+  - `js/core/geometry-site.js`：图片切变斜率 `(wp.x-start.x)/hgt` 夹取到 ±50，非有限值归零；`imageHandleDragTo` 出参前统一校验，任一非有限分量拒绝应用并保持原变换；`siteBounds` 改用逐点包围盒。
+  - `js/core/viewport.js`：`fitView()` 缩放夹取到 `ZOOM_MIN~ZOOM_MAX`，非有限回退 1。
+  - `js/core/geometry.js`：新增 `pointBounds()`，`objectBounds()` 与场地包围盒共用，避免大点列 `Math.min(...points)` 展开爆栈。
+  - `js/core/model.js`：`insertLineNode()` 在达到 `SHAPE_POINTS_MAX` 时拒绝。
+  - `js/core/interaction.js`：新增 `pushDraftPoint()`，折线/多边形/标注草稿超限拒绝并提示；`js/common/i18n.js` 新增对应中英文案。
+  - `scripts/selftest.mjs`：api 新增 `fitView`、`pointBounds`；39.11 节 8 项断言覆盖近 90° 切变有限性、fitView 夹取与有限性、顶点上限拒绝、12 万点列包围盒。
+  - `sw.js`：`VERSION` 22 → 23；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` 新增「边界防护（N-14）」。
+- **验证数据**：selftest 2871 通过 / 0 失败（+8）；e2e 98 passed / 1 skipped；产物 795,913 B（gzip 247,752 B，余量 43,767 B）；`check.mjs --selftest` 通过；`check-gates` 9/9；`check-discipline --strict` 13/13。
+- **遗留风险**：`SHEAR_MAX=50` 与 `SHAPE_POINTS_MAX=10000` 为保守上限，极端但合法的超大点列会被拒绝；图片旋转接近 90° 时切变仍不直观（已消除非有限值，交互退化保留，见 CORE-P1-8）。
+
 ## 2026-11-08 · N-13 跨 0° 扇形画布与 SVG 外圈方向不一致
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

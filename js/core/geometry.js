@@ -220,9 +220,21 @@ function objectCenter(o){
   const ps=objectPoints(o);
   return [ps.reduce((s,p)=>s+p[0],0)/ps.length, ps.reduce((s,p)=>s+p[1],0)/ps.length];
 }
+/** 点列包围盒：逐点循环，避免大数组 Math.min(...) 展开爆栈；忽略非有限坐标；空集返回 null */
+function pointBounds(points){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,ok=false;
+  (points||[]).forEach(p=>{
+    const x=Number(p&&p[0]), y=Number(p&&p[1]);
+    if(!Number.isFinite(x)||!Number.isFinite(y)) return;
+    ok=true;
+    if(x<minX) minX=x; if(x>maxX) maxX=x;
+    if(y<minY) minY=y; if(y>maxY) maxY=y;
+  });
+  return ok?{minX,minY,maxX,maxY}:null;
+}
 function objectBounds(o){
   const ps=objectPoints(o);
-  return {minX:Math.min(...ps.map(p=>p[0])),maxX:Math.max(...ps.map(p=>p[0])),minY:Math.min(...ps.map(p=>p[1])),maxY:Math.max(...ps.map(p=>p[1]))};
+  return pointBounds(ps)||{minX:0,minY:0,maxX:0,maxY:0};
 }
 /** 平移单个对象（点/区域移动锚点，折线与标注同步平移全部节点） */
 function translateObject(o,dx,dy){

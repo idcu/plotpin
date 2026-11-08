@@ -185,7 +185,7 @@ code += `\n;globalThis.__api = {
   applyWorldTransform, siteShapeByAffine, scaleWorldAround,
   affineLinearSummary, affineEllipseImage, affineShapeTransform,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
-  worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s,
+  worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s, fitView, pointBounds,
   siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
   siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
   sitePropsHTML, imagePropsHTML,
@@ -2858,6 +2858,40 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     const m=svg.match(/A[-\d.]+,[-\d.]+ 0 (\d) 1 /);
     ok('N-13-SVG 扇形弧存在', !!m);
     eq('N-13-SVG 弧跨0不反向', m?m[1]:null, '0');
+    api.resetState();
+  }
+
+  /* 39.11 N-14：边界防护（切变退化 / fitView 夹取 / 顶点上限 / 大点列包围盒） */
+  {
+    /* 切变退化：图片旋转 90° 后顶/底边投影高度趋 0，斜率不得产生非有限变换 */
+    api.resetState(); api.resetFrameRef();
+    const bg={kind:'image',fileName:'t.png',assetId:'a',width:100,height:50,origin:[0,0],metersPerPixel:0.1,calibrated:true,transform:null};
+    const bc=api.imageCornerWorld(bg), bo=api.imageTransformOf(bg);
+    const rot=api.imageHandleDragTo(bg,{mode:'rotate',start:[10,2.5],origin:bo,originCorners:bc},[5,10]);
+    const bg2=Object.assign({},bg,{transform:rot.T});
+    const sk=api.imageHandleDragTo(bg2,{mode:'skew',start:[0,0],origin:api.imageTransformOf(bg2),originCorners:api.imageCornerWorld(bg2)},[10,0]);
+    ok('N-14-近90°切变仍为有限变换', ['a','b','c','d','e','f'].every(k=>Number.isFinite(sk.T[k])));
+    /* fitView：极小场地时缩放夹取到 ZOOM_MAX，不出现超大/非有限值 */
+    api.resetState();
+    api.state.site={kind:'rect',layerId:'layer.default',visible:true,locked:false,shape:{type:'rect',x:0,y:0,w:0.001,h:0.001}};
+    api.resetFrameRef(); api.fitView();
+    ok('N-14-fitView缩放夹取', api.state.viewport.zoom<=api.APP_LIMITS.ZOOM_MAX&&api.state.viewport.zoom>=api.APP_LIMITS.ZOOM_MIN);
+    api.fitView();
+    ok('N-14-fitView结果有限', Number.isFinite(api.state.viewport.zoom));
+    /* 顶点上限：模型层拒绝越界插入，点列长度不变 */
+    const line=api.baseObject('line','line.line',{points:[[0,0],[1,0]]});
+    while(line.points.length<api.APP_LIMITS.SHAPE_POINTS_MAX) line.points.push([line.points.length,0]);
+    const before=line.points.length;
+    eq('N-14-顶点上限拒绝', api.insertLineNode(line,before-1,[9,9]), false);
+    eq('N-14-顶点上限点列不变', line.points.length, before);
+    /* 大点列包围盒：不展开参数、不爆栈，返回有限值 */
+    const big=[]; for(let i=0;i<120000;i++) big.push([i%1000,-(i%777)]);
+    const bb=api.pointBounds(big);
+    eq('N-14-大点列包围盒', [bb.minX,bb.maxX,bb.minY,bb.maxY], [0,999,-776,0]);
+    const sb=api.siteBounds({type:'polygon',points:big});
+    ok('N-14-大点列场地包围盒有限', [sb.minX,sb.minY,sb.maxX,sb.maxY].every(Number.isFinite));
+    const ob=api.objectBounds(api.baseObject('line','line.line',{points:big}));
+    ok('N-14-大点列对象包围盒有限', [ob.minX,ob.minY,ob.maxX,ob.maxY].every(Number.isFinite));
     api.resetState();
   }
 }

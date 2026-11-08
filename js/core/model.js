@@ -524,6 +524,7 @@ function setNodeCoord(o,i,axis,v){
 /** 在第 at 个节点之后插入节点 p（at 为末节点时追加到末尾） */
 function insertLineNode(o,at,p){
   if(!isPolylineEditable(o) || !Array.isArray(o.points) || !Array.isArray(p)) return false;
+  if(o.points.length>=APP_LIMITS.SHAPE_POINTS_MAX) return false;
   const i=Math.min(Math.max(0,at+1),o.points.length);
   o.points.splice(i,0,[Number(p[0]),Number(p[1])]);
   o.x=o.points[0][0]; o.y=o.points[0][1]; o.updatedAt=nowISO(); return true;

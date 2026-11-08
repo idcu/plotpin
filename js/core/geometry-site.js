@@ -38,17 +38,17 @@ function siteBounds(bg){
   if(sh.type==='sector'){
     const r=positiveNum(sh.r,50), cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
     const pts=sectorArcPoints(cx,cy,r,Number(sh.a0)||0,sectorSweep(sh)).concat([[cx,cy]]);
-    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
-    return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
+    const b=pointBounds(pts)||{minX:cx-r,minY:cy-r,maxX:cx+r,maxY:cy+r};
+    return mk(b.minX,b.minY,b.maxX,b.maxY);
   }
   if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3){
-    const xs=sh.points.map(p=>Number(p[0])||0), ys=sh.points.map(p=>Number(p[1])||0);
-    return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
+    const b=pointBounds(sh.points);
+    if(b) return mk(b.minX,b.minY,b.maxX,b.maxY);
   }
   if(sh.type==='parallelogram'){
     const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
-    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
-    return mk(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys));
+    const b=pointBounds(pts);
+    if(b) return mk(b.minX,b.minY,b.maxX,b.maxY);
   }
   const w=positiveNum(sh.w,100), h=positiveNum(sh.h,70), x=Number(sh.x)||0, y=Number(sh.y)||0;
   return mk(x,y,x+w,y+h);
@@ -412,7 +412,11 @@ function imageHandleDragTo(bg,drag,wp){
     out=affMul(affScaleAbout(k,anchor[0],anchor[1]),T);
   }else if(drag.mode==='skew'){
     const hgt=(top[1]-bot[1])||1;
-    out=affMul(affShearX((wp[0]-drag.start[0])/hgt,bot[1]),T);
+    const raw=(wp[0]-drag.start[0])/hgt;
+    /* 近 90° 时投影高度趋 0，斜率会发散为非有限值：夹取到 SHEAR_MAX，非有限直接归零 */
+    const k=Number.isFinite(raw)?Math.max(-APP_LIMITS.SHEAR_MAX,Math.min(APP_LIMITS.SHEAR_MAX,raw)):0;
+    out=affMul(affShearX(k,bot[1]),T);
   }
+  if(!out.every(Number.isFinite)) out=T.slice();  /* 任何非有限结果都拒绝应用，保持原变换 */
   return {T:{a:out[0],b:out[1],c:out[2],d:out[3],e:out[4],f:out[5]}, snap};
 }

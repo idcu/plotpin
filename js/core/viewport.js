@@ -64,7 +64,8 @@ window.addEventListener('resize',()=>{
 });
 function fitView(){
   const r=wrap.getBoundingClientRect(), d=resetFrameRef();
-  const z=Math.min((r.width-44)/d.w,(r.height-44)/d.h);
+  let z=Math.min((r.width-44)/d.w,(r.height-44)/d.h);
+  z=Number.isFinite(z)?Math.max(APP_LIMITS.ZOOM_MIN,Math.min(APP_LIMITS.ZOOM_MAX,z)):1;
   state.viewport.zoom=z;
   state.viewport.panX=(r.width-d.w*z)/2;
   state.viewport.panY=(r.height-d.h*z)/2;

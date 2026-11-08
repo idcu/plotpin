@@ -609,6 +609,7 @@
     '工程导入失败：{msg}': 'Project import failed: {msg}',
     '工程导入失败（已回滚）：{msg}': 'Project import failed (rolled back): {msg}',
     '导入失败：{msg}': 'Import failed: {msg}',
+    '顶点数已达上限 {n}': 'Vertex limit reached: {n}',
     '表格导入失败：{msg}': 'Table import failed: {msg}',
     '表格导入失败：存在非法行，已整批取消': 'Table import failed: invalid rows; batch cancelled',
     'PDF 解析失败：{msg}': 'PDF parse failed: {msg}',

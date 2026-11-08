@@ -30,6 +30,14 @@ const TOOL_TITLES={
 };
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
 function updateToolTitle(){ $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||''); }
+/** 草稿顶点入列：达到 SHAPE_POINTS_MAX 后拒绝并提示，避免病态点列拖垮包围盒/渲染 */
+function pushDraftPoint(points,wp){
+  if(points.length>=APP_LIMITS.SHAPE_POINTS_MAX){
+    toast(L('顶点数已达上限 {n}',{n:APP_LIMITS.SHAPE_POINTS_MAX}),'error');
+    return false;
+  }
+  points.push(wp); return true;
+}
 function setTool(tool){
   /* 独立「测距」按钮 = 标注工具的 ruler 子模式：复用 dimension 全部交互，仅入口更醒目；
      点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
@@ -262,7 +270,7 @@ canvas.addEventListener('pointerdown',e=>{
   }
   if(currentTool==='site-polygon'){
     if(!draft) draft={kind:'sitePolygon',points:[wp],current:wp};
-    else draft.points.push(wp);
+    else if(!pushDraftPoint(draft.points,wp)) return;
     requestRender(); return;
   }
   if(currentTool==='site-node'){
@@ -326,13 +334,13 @@ canvas.addEventListener('pointerdown',e=>{
   }
   if(currentTool==='line'){
     if(!draft){ draft={kind:'line',points:[wp],current:wp}; }
-    else draft.points.push(wp);
+    else if(!pushDraftPoint(draft.points,wp)) return;
     requestRender(); return;
   }
   if(currentTool==='dimension'){
     const subtype=$('dimensionType').value;
     if(!draft){ draft={kind:'dimension',subtype,points:[wp],current:wp}; }
-    else draft.points.push(wp);
+    else if(!pushDraftPoint(draft.points,wp)) return;
     /* distance/angle 点数够了自动结束；ruler（测距链）与 area 手动 Enter/双击结束 */
     if((subtype==='distance'&&draft.points.length>=2)||(subtype==='angle'&&draft.points.length>=3)) finishDraft();
     else requestRender();
