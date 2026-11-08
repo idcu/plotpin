@@ -247,7 +247,7 @@ function updateSiteStats(box){
 }
 function bindSiteNodeEvents(box){
   /* 场地属性/顶点编辑走统一提交协议：touchFloor + 落盘 + 协作广播 + 撤销栈（bindPropHistory 在首次输入前压快照） */
-  const changed=()=>{ coverageResult=null; syncFramePan(); updateSiteStats(box); commitObjectEdit(); };
+  const changed=()=>{ clearCoverageResult(); syncFramePan(); updateSiteStats(box); commitObjectEdit(); };
   box.querySelectorAll('[data-site-field]').forEach(el=>el.addEventListener('input',()=>{
     if(applySiteField(el.dataset.siteField,el.value)){ state.site.updatedAt=nowISO(); changed(); }
   }));

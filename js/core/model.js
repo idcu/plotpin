@@ -28,6 +28,11 @@ let spaceDown = false;
 let saveTimer = null;
 let dpr = 1;
 let coverageResult = null;   /* 视场覆盖率分析结果（含逐区域栅格），供画布叠加层与报告弹窗；对象/底图变更后清空 */
+/* CORE-P2-19：清空结果与离屏缓存走同一入口，避免只置 null 导致栅格 canvas 常驻 */
+function clearCoverageResult(){
+  coverageResult=null;
+  if(typeof releaseCoverageLayers==='function') releaseCoverageLayers();
+}
 let affinePairs = [];        /* 仿射校准对应点集：[{u,v,x,y}]，像素(u,v y-down) → 实地(x,y y-up) */
 let calibSelection = null;   /* 校准中选中的控制点：{kind:'calibrate'|'affine',part?,index} */
 let calibUndoStack = [];     /* 校准控制点专用撤销栈（增/删/拖拽提交前快照；不污染工程撤销历史） */
@@ -250,7 +255,7 @@ function resetTransientInteractionState(opts){
   const keepGuides=!!(opts&&opts.keepGuides);
   draft=null; drag=null; rubber=null;
   activeOsnap=null; trackLine=null; refEdge=null; osnapMode=null;
-  if(!keepCoverage) coverageResult=null;
+  if(!keepCoverage) clearCoverageResult();
   if(!keepGuides&&typeof clearGuides==='function') clearGuides();
   if(!keepCalib) calibPoints=[];
   affinePairs=[]; calibSelection=null; calibUndoStack=[];

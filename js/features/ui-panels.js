@@ -504,7 +504,7 @@ function runCoverageAnalysis(){
   openModal(L('视场覆盖率分析'), body, [
     {text:L('布点优化…'),class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
     {text:L('导出盲区 GeoJSON'),class:'',click:exportBlindSpotsGeoJson},
-    {text:L('清除叠加层'),class:'',click:()=>{ coverageResult=null; invalidateStatic(); closeModal(); requestRender(); }},
+    {text:L('清除叠加层'),class:'',click:()=>{ clearCoverageResult(); invalidateStatic(); closeModal(); requestRender(); }},
     {text:L('关闭'),class:'primary',click:closeModal}
   ]);
 }

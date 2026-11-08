@@ -136,7 +136,7 @@ const MARK_DIRTY_PROFILES=Object.freeze({
 });
 function markDirty(kind){
   const p=MARK_DIRTY_PROFILES[kind]||MARK_DIRTY_PROFILES.object;
-  coverageResult=null;               /* 对象/楼层变更后覆盖率叠加层失效，需重新分析 */
+  clearCoverageResult();               /* 对象/楼层变更后覆盖率叠加层失效，需重新分析 */
   invalidateStatic();                /* 静态层（非选中对象）需要重建 */
   scheduleSave();
   requestRender();
@@ -471,7 +471,7 @@ function switchFloorData(id){
   state.viewport=target.viewport||state.viewport;
   state.activeFloorId=id;
   selectedIds.clear();
-  coverageResult=null;
+  clearCoverageResult();
   invalidateStatic();
   resetFrameRef();
   return true;

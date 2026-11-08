@@ -113,6 +113,8 @@ code += `\n;globalThis.__api = {
   resetTransientInteractionState, escapeInterrupt, handleWindowBlur,
   drawImageBackground,
   get bgImageState(){ return bgImageState; }, setBgImage(v){ bgImage=v; }, setBgDataUrl(v){ bgDataUrl=v; },
+  clearCoverageResult, buildCoverageLayers,
+  coverageLayerCache(){ return [coverageLayers,coverageLayersFor]; },
   get transient(){ return {draft,drag,rubber,affinePairs,calibPoints,trackLine,refEdge,osnapMode,coverageResult}; },
   setTransient(v){ ['draft','drag','rubber','affinePairs','calibPoints','trackLine','refEdge','osnapMode','coverageResult'].forEach(k=>{ if(Object.prototype.hasOwnProperty.call(v,k)) eval(k+'=v[k]'); }); },
   switchFloor,
@@ -7845,6 +7847,20 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   api.drawImageBackground(badCtx,{zoom:1,panX:0,panY:0},badDim,badBg);
   eq('CORE-P2-18 连续失败不刷屏', toastCount, 1);
   sandbox.toast=prevToast; api.setBgImage(null); api.setBgDataUrl(''); api.resetState();
+
+  /* CORE-P2-19：清空覆盖率结果必须同步释放离屏图层缓存 */
+  const covRes={regions:[{nx:2,ny:1,grid:[1,0]}]};
+  const covLayers=api.buildCoverageLayers(covRes);
+  eq('CORE-P2-19 离屏图层已构建', covLayers.length, 1);
+  ok('CORE-P2-19 同结果命中缓存', api.buildCoverageLayers(covRes)===covLayers);
+  eq('CORE-P2-19 清空前缓存驻留', api.coverageLayerCache()[0].length, 1);
+  api.clearCoverageResult();
+  eq('CORE-P2-19 清空结果置 null', api.transient.coverageResult, null);
+  eq('CORE-P2-19 离屏缓存同步释放', api.coverageLayerCache()[0], null);
+  eq('CORE-P2-19 缓存键同步释放', api.coverageLayerCache()[1], null);
+  api.buildCoverageLayers(covRes);
+  api.markDirty('object');
+  eq('CORE-P2-19 变更路径同样释放缓存', api.coverageLayerCache()[0], null);
 }
 
 });

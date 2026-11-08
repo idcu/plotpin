@@ -482,6 +482,8 @@ function drawImageBackground(c,v,d,bg){
  * 避免逐格 fillRect 在高分辨率下产生上万次绘制调用。
  */
 let coverageLayers=null, coverageLayersFor=null;
+/* CORE-P2-19：覆盖率结果清空时必须同步释放离屏图层缓存，否则栅格 canvas 会一直驻留到下次分析 */
+function releaseCoverageLayers(){ coverageLayers=null; coverageLayersFor=null; }
 function buildCoverageLayers(res){
   if(coverageLayersFor===res&&coverageLayers) return coverageLayers;
   const layers=[];
