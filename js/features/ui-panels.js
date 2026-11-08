@@ -461,7 +461,7 @@ function renderStats(){
       <p class="hint-text">${esc(L('点击楼层行可切换；汇总覆盖全部楼层。'))}</p></div>`:''}
     <div class="section" style="margin-top:10px"><h3>${esc(L('工程信息'))}</h3><div class="kv-list">
       <span>${esc(L('工程名称'))}</span><b>${esc(state.meta.name)}</b><span>${esc(L('场地'))}</span><b>${esc(L(siteKindName(state.site?.kind||state.background.kind)))}</b>
-      <span>${esc(L('场地参数'))}</span><b>${esc(siteDescription().split('：').slice(1).join('：'))}</b>
+      <span>${esc(L('场地参数'))}</span><b>${esc(siteDescriptionParts().detail)}</b>
       <span>${esc(L('对象总数'))}</span><b>${state.objects.length}</b><span>${esc(L('最近更新'))}</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
     </div></div>
     <div class="section"><h3>${esc(L('几何检查'))} v${STATS_ISSUE_VERSION}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>

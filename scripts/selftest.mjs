@@ -126,7 +126,7 @@ code += `\n;globalThis.__api = {
   TABLE_MATCH_COLUMNS, tableImportColumns, formulaUnguard,
   siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints,
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
-  siteDescription, worldDims, findIssues, STATS_ISSUE_VERSION,
+  siteDescription, siteDescriptionParts, worldDims, findIssues, STATS_ISSUE_VERSION,
   hitPhysicalPoint, siteKindName,
   areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter, rotateShapeByHandle,
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
@@ -749,6 +749,22 @@ await section("12. 场地形状：默认值、规整、健壮性与描述文案"
   ok('描述-圆形含半径', api.siteDescription({kind:'circle',shape:{type:'circle',cx:30,cy:30,r:30}}).includes('半径 30.00'));
   ok('描述-多边形含边数', api.siteDescription({kind:'polygon',shape:{type:'polygon',points:[[0,0],[1,0],[1,1],[0,1]]}}).includes('4 条边'));
   eq('场地中文名覆盖四种', ['image','rect','circle','polygon'].map(api.siteKindName), ['图片底图','矩形场地','圆形场地','多边形场地']);
+  /* F18：结构化取值——中文与旧切分逐字节一致，英文不再为空 */
+  const rectSite={kind:'rect',shape:{type:'rect',w:120,h:80}};
+  const zhParts=api.siteDescriptionParts(rectSite);
+  eq('F18-中文标题为场地名+冒号', zhParts.title, '矩形场地：');
+  eq('F18-中文参数与旧切分逐字一致', zhParts.detail, api.siteDescription(rectSite).split('：').slice(1).join('：'));
+  ok('F18-中文拼接等于旧整串', api.siteDescription(rectSite)===zhParts.title+zhParts.detail);
+  const noBgParts=api.siteDescriptionParts(null);
+  eq('F18-未设置标题', noBgParts.title, '矢量场地：');
+  eq('F18-未设置参数', noBgParts.detail, '未设置');
+  api.I18N.setLang('en');
+  const enRect=api.siteDescriptionParts(rectSite);
+  ok('F18-英文参数非空', enRect.detail.trim().length>0);
+  ok('F18-英文参数含尺寸', enRect.detail.includes('120.00×80.00'));
+  ok('F18-英文参数不含全角冒号', !enRect.detail.includes('：'));
+  eq('F18-英文未设置参数', api.siteDescriptionParts(null).detail, 'not set');
+  api.I18N.setLang('zh');
 }
 
 });

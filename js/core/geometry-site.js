@@ -278,20 +278,24 @@ function polygonShapeFromPoints(points){
   return {type:'polygon',points:points.map(p=>[p[0]-minX,p[1]-minY])};
 }
 function siteKindName(k){ return ({image:'图片底图',rect:'矩形场地',circle:'圆形场地',ellipse:'椭圆场地',sector:'扇形场地',parallelogram:'平行四边形场地',polygon:'多边形场地'})[k]||k; }
-function siteDescription(bg){
+/** 场地描述的结构化拆分（F18）：title 是「XX场地：」标签，detail 是其后的参数。
+ *  展示层按字段取值，不再依赖中英文冒号切分；siteDescription 仍返回 title+detail，
+ *  既有调用方与中文文案逐字节不变。 */
+function siteDescriptionParts(bg){
   bg=bg===undefined?state.site:bg;
-  if(!bg) return L('矢量场地：未设置');
+  if(!bg) return {kind:'', title:L('矢量场地：'), detail:L('未设置')};
   const d=siteDomainOf(bg);
-  if(bg.kind==='image') return `${L('图片底图：')}${bg.fileName||L('未命名')} ${bg.width}×${bg.height}px ｜ ${fmt(bg.metersPerPixel)} m/px${bg.calibrated?L('（已校准）'):L('（未校准）')} ｜ ${L('实地')} ${fmt(d.w)}×${fmt(d.h)} m`;
-  if(bg.kind==='circle') return `${L('圆形场地：')}${L('半径')} ${fmt(bg.shape.r)} m ｜ ${L('占地')} ${fmt(d.w)}×${fmt(d.h)} m`;
+  if(bg.kind==='image') return {kind:'image', title:L('图片底图：'), detail:`${bg.fileName||L('未命名')} ${bg.width}×${bg.height}px ｜ ${fmt(bg.metersPerPixel)} m/px${bg.calibrated?L('（已校准）'):L('（未校准）')} ｜ ${L('实地')} ${fmt(d.w)}×${fmt(d.h)} m`};
+  if(bg.kind==='circle') return {kind:'circle', title:L('圆形场地：'), detail:`${L('半径')} ${fmt(bg.shape.r)} m ｜ ${L('占地')} ${fmt(d.w)}×${fmt(d.h)} m`};
   if(bg.kind==='ellipse'){
     const sh=bg.shape, rot=Number(sh.angle)||0;
-    return `${L('椭圆场地：')}${L('半径')} ${fmt(sh.rx)}×${fmt(sh.ry)} m${rot?` ｜ ${L('旋转')} ${Math.round(rot)}°`:''} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`;
+    return {kind:'ellipse', title:L('椭圆场地：'), detail:`${L('半径')} ${fmt(sh.rx)}×${fmt(sh.ry)} m${rot?` ｜ ${L('旋转')} ${Math.round(rot)}°`:''} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
   }
-  if(bg.kind==='sector') return `${L('扇形场地：')}${L('半径')} ${fmt(bg.shape.r)} m ｜ ${Math.round(sectorSweep(bg.shape))}° ${L('扇区')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`;
-  if(bg.kind==='polygon') return `${L('多边形场地：')}${bg.shape.points.length} ${L('条边')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`;
-  return `${L('矩形场地：')}${fmt(d.w)}×${fmt(d.h)} m${L('（世界坐标，无需比例尺校准）')}`;
+  if(bg.kind==='sector') return {kind:'sector', title:L('扇形场地：'), detail:`${L('半径')} ${fmt(bg.shape.r)} m ｜ ${Math.round(sectorSweep(bg.shape))}° ${L('扇区')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
+  if(bg.kind==='polygon') return {kind:'polygon', title:L('多边形场地：'), detail:`${bg.shape.points.length} ${L('条边')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
+  return {kind:bg.kind||'rect', title:L('矩形场地：'), detail:`${fmt(d.w)}×${fmt(d.h)} m${L('（世界坐标，无需比例尺校准）')}`};
 }
+function siteDescription(bg){ const p=siteDescriptionParts(bg); return p.title+p.detail; }
 
 /* -------------------- 点设备物理尺寸命中（世界坐标） -------------------- */
 /**

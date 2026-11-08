@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 D（3/5）：「场地参数」改结构化取值，英文模式不再恒为空
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/geometry-site.js`：把 `siteDescription()` 拆成 `siteDescriptionParts(bg)` → `{kind,title,detail}` 与 `siteDescription()=title+detail`；六类场地（图片/矩形/圆/椭圆/扇形/多边形）与「未设置」都给出结构化 `title`/`detail`，所有文案仍走 `L()`。
+  - `js/features/ui-panels.js`：统计页「场地参数」由 `siteDescription().split('：').slice(1).join('：')` 改为 `siteDescriptionParts().detail`，不再依赖中文全角冒号。
+  - `js/common/i18n.js`：补 `'矢量场地：'`、`'未设置'` 两条英文条目，使「未设置」英文仍拼成 `Vector site: not set`（与旧整串一致）。
+  - `scripts/selftest.mjs` +9：中文标题/参数/拼接逐字等价、未设置标题与参数、英文参数非空/含尺寸/不含全角冒号、英文未设置参数。
+  - 同步 `docs/features.md` §5、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**：
+  - 中文逐字节一致：`siteDescriptionParts(rect).detail === siteDescription(rect).split('：').slice(1).join('：')`；`siteDescription()===title+detail` 均在 selftest 断言通过。
+  - 英文：`detail` 为 `120.00×80.00 m(world coordinates…)`，非空且不含 `：`；未设置为 `not set`。
+  - selftest **3552 通过 / 0 失败**（基线 3543，+9）；e2e **123 通过 + 1 条件跳过（124）**；i18n **46.21% / 缺口 9 / UI 硬编码 1 / 模板内 0**。
+  - dist **833,376 B**（本条 **+345 B**）/ gzip 258,741 B / 余量 **6,304 B**；SW `VERSION=107`；8 种 golden 未变。
+- **遗留 TODO / 风险**：
+  - `'未命名'` 等少数图片底图短语仍无英文条目，英文下会回退中文——属于既有 i18n 缺口，本条未扩面。
+  - `siteDescription()` 的返回值保持「title+detail」拼接，未加分隔符；若未来英文标题不带尾随空格，整串会出现粘连，需在词条侧保证。
+  - 只覆盖统计页展示，导出产物里的场地描述文案未改（本就没有该字段）。
+
 ## 2026-11-08 · 批次 D（2/5）：统计基础问题只统计可见对象，自交检测改扫描
 
 - **Commit Hash**：`edbd236`

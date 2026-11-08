@@ -242,6 +242,7 @@
     '点':'pts', '条边':'edges', '扇区':'sector', '旋转':'rotation', '占地':'footprint',
     '图片底图：':'Image base map: ', '圆形场地：':'Circle site: ', '椭圆场地：':'Ellipse site: ',
     '扇形场地：':'Sector site: ', '多边形场地：':'Polygon site: ', '矩形场地：':'Rectangle site: ',
+    '矢量场地：':'Vector site: ', '未设置':'not set',
     '（世界坐标，无需比例尺校准）':'(world coordinates, no scale calibration needed)',
     '（已校准）':'(calibrated)', '（未校准）':'(not calibrated)',
     ' m ｜ ':' m | ', ' m，外接 ':' m, bounding ',
