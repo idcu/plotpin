@@ -158,6 +158,7 @@
 | 编号 | 结论 | 文档落点 / 依据 |
 |---|---|---|
 | IO-P2-6 | 已降级为限制：导入对所有单元格 `trim()`，名称/备注首尾空格不保留；表格往返不是逐字节无损 | [features.md](features.md) §8、[user-guide.md](user-guide.md) 9.2 |
+| IO-P2-10 | 已降级为限制：坐标/宽高按 `settings.precision` 量化（默认 2 位，即 1 cm）；首次往返漂移上界 0.5×10⁻ᵖ | [features.md](features.md) §8/§20、[user-guide.md](user-guide.md) 9.2 |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 
