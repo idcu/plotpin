@@ -35,8 +35,10 @@ function parkingLayout(cfg){
   const usedW=perRow*stallWidth, usedD=modules*moduleD;
   const u0=margin+(usableW-usedW)/2;
   const v0=margin+(usableH-usedD)/2;
+  /* angle=90 的矩形绕基点逆时针转 90°，实际包围盒 x∈[x-h,x]、y∈[y,y+w]；
+     因此纵向排布时基点 x 必须是车位右边界（v+h），不能把 v 当成左边界（P1-3）。 */
   const mapRect=(u,v,w,h)=>swap
-    ?{x:siteX+v,y:siteY+(localW-u-w),width:w,height:h,angle:90}
+    ?{x:siteX+v+h,y:siteY+(localW-u-w),width:w,height:h,angle:90}
     :{x:siteX+u,y:siteY+v,width:w,height:h,angle:0};
   const stalls=[], aisles=[];
   for(let i=0;i<modules;i++){

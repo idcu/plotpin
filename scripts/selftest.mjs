@@ -6207,7 +6207,7 @@ await section("61. 停车规划：双面垂直车位/通道布局、净宽检查
   eq('停车-纵向车位总数', y.stats.stallCount, 270);
   eq('停车-纵向通道数', y.stats.aisleCount, 5);
   eq('停车-纵向车位角度', y.stalls[0].angle, 90);
-  approx('停车-纵向首个车位 X', y.stalls[0].x, 8.5, 1e-9);
+  approx('停车-纵向首个车位 X', y.stalls[0].x, 13.8, 1e-9);
   approx('停车-纵向首个车位 Y', y.stalls[0].y, 66.25, 1e-9);
 
   const inside=(rect2,site)=>rect2.angle===90
@@ -6215,6 +6215,18 @@ await section("61. 停车规划：双面垂直车位/通道布局、净宽检查
     :rect2.x>=-1e-9&&rect2.x+rect2.width<=site.siteW+1e-9&&rect2.y>=-1e-9&&rect2.y+rect2.height<=site.siteH+1e-9;
   ok('停车-横向车位均在场地内', r.stalls.every(s=>inside(s,base)) && r.aisles.every(a=>inside(a,base)));
   ok('停车-纵向车位均在场地内', y.stalls.every(s=>inside(s,base)) && y.aisles.every(a=>inside(a,base)));
+
+  /* P1-3 贴边回归：usableD 恰好等于 modules*moduleD 时 v0=margin=1，旧实现 x=v0 使
+     包围盒落到 x∈[-4.3,1]，左侧车位出场 4.3 m。纵向/横向各取一个贴边场地。 */
+  const flushBase=Object.assign({},base,{siteW:18.6,siteH:70,orientation:'y'});
+  const flush=api.parkingLayout(flushBase);
+  eq('停车-纵向贴边可生成', flush.error, null);
+  approx('停车-纵向贴边首个车位 X', flush.stalls[0].x, 6.3, 1e-9);
+  ok('停车-纵向贴边车位不出场地', flush.stalls.every(s=>inside(s,flushBase)) && flush.aisles.every(a=>inside(a,flushBase)));
+  approx('停车-纵向贴边左侧余量=边距', Math.min(...flush.stalls.map(s=>s.x-s.height)), 1, 1e-9);
+  const flushX=api.parkingLayout(Object.assign({},base,{siteH:18.6,orientation:'x'}));
+  eq('停车-横向贴边可生成', flushX.error, null);
+  ok('停车-横向贴边车位不出场地', flushX.stalls.every(s=>inside(s,Object.assign({},base,{siteH:18.6}))));
 
   eq('停车-通道过窄拒绝生成', api.parkingLayout(Object.assign({},base,{aisleWidth:2})).error, 'aisleTooSmall');
   eq('停车-场地过小拒绝生成', api.parkingLayout(Object.assign({},base,{siteW:3,siteH:3})).error, 'siteTooSmall');
