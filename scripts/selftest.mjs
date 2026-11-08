@@ -1553,6 +1553,9 @@ await section("28. 表格导入导出往返：节点坐标/闭合/形状/标注�
   eq('公式-负数保持数值', api.csvCell('-12.5',','), '-12.5');
   ok('公式-坐标列表不被加前缀', !api.csvCell('-1.00,-2.00;3.00,4.00',',').includes("'"));
   eq('公式-整表写出同样防护', api.DSV.formatRows([['=cmd|calc','-2']],{delimiter:',',eol:'\n',bom:false,guardFormula:api.formulaGuard}), "'=cmd|calc,-2");
+  /* IO-P2-1：表头与数据行共用 quoteCell，列名含分隔符/引号/危险前缀时同样转义 */
+  const hdrText=api.delimitedFromTable([['a,b','c"d','=x'],['1','2','3']],',').replace(/^\ufeff/,'');
+  eq('CSV 表头与数据行同一转义', api.DSV.parseRows(hdrText,',')[0], ['a,b','c"d',"'=x"]);
   /* 真实导出路径：编号/备注危险前缀被加引号，负坐标保持数值语义 */
   const fst=api.resetState();
   fst.objects.push(api.baseObject('point','point.marker',{name:'=cmd|calc',x:-12.5,y:3,props:{note:'@SUM(1)'}}));
