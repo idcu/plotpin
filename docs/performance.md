@@ -36,6 +36,7 @@ node scripts/bench.mjs --json    # 机器可读，便于贴入 commit / 报告
 ```text
 node scripts/perf-browser.mjs              # 采数 + 门禁
 node scripts/perf-browser.mjs --no-gate    # 只采数（PERF_NO_GATE=1）
+node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs   # P2 打点专项（§4.1.6~§4.1.8）
 ```
 
 - 配置：`playwright.perf.config.mjs`，**1920×1080 CSS 视口**、DPR1 与 DPR2 两组；世界域 2000×1500 m；
@@ -264,7 +265,7 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 | 真实 GPU 帧率与长跑 | **未验证**：本机无独立 GPU，Chromium 走 SwiftShader |
 | 低端 Android/iOS 真机 | **未验证**：无真机、无 HTTPS 站点；`adb` 不存在 |
 | 真实双设备 WebRTC 性能 | **未验证**：仅同机双标签；代码固定 `iceServers: []` |
-| 2026-11-08 浏览器基线复跑 | **未执行**：本轮只复核 Node bench；浏览器数据引用 2026-11-07 报告值 |
+| 2026-11-08 浏览器基线复跑 | **部分执行**：`browser-baseline.perf.mjs` 四组基线未复跑，仍引用 2026-11-07 报告值；当日已跑 N-22/N-23/N-24 与 P2 打点专项（§4.1.3~§4.1.8） |
 | 10000 对象以上 | **未实测**：导入上限 100000 对象，但性能只测到 10000 |
 | 长事务/soak 内存曲线 | **未实测**：只有单次 `heapUsed` 峰值 |
 | 5000×5000 m 覆盖率在真实浏览器 | **未实测**：Node v3 实测 6 ms（2026-11-08，N-20）；浏览器端未单独采集 |

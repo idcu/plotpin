@@ -7,10 +7,10 @@
 ## 2026-11-08 · P2 批次 11：性能打点 3 条
 
 - **Commit Hash**：
-  - CORE-P2-3：`待回填`
-  - CORE-P2-4：`待回填`
-  - IO-P2-11：`待回填`
-  - 本批收尾 `docs(changelog)`：`待回填`
+  - CORE-P2-3：`15bd54f`
+  - CORE-P2-4：`60736c5`
+  - IO-P2-11：`987f594`
+  - 本批收尾 `docs(changelog)`：本提交
 - **核心改动**：
   - CORE-P2-3：新增 `tests/perf/p2-perf.perf.mjs` 真实 Chromium 用例，量化「历史快照按 `objects` 与 `floors[active].objects` 两条路径各复制一份」的堆占用；对照组仅测试内临时移除活动楼层别名，生产代码未改。
   - CORE-P2-4：同一用例新增 `idbGetKey` 计数打点，覆盖 `listSnapshots` / `pruneSnapshots` / `snapshotRecords` 三条路径；生产代码未改。
@@ -19,6 +19,7 @@
   - CORE-P2-3：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs --repeat-each=2`（1920×1080@DPR1，10k 对象，20 次 pushHistory，CDP 强制 GC ×2）：当前 19.657 MB / 826.1~840.5 ms；对照布局 9.788 MB / 420.5~423.1 ms；比值 2.01×；快照对象实例 400,000 vs 200,000。两次复跑堆读数一致到 0.01 MB。
   - CORE-P2-4：20 条快照 × 10k 对象：`listSnapshots` P95 0.9 / 0.6 ms、每次 1 次 IDB get；`pruneSnapshots` P95 0.3 / 0.3 ms、1 次；`snapshotRecords` P95 360.1 / 349.8 ms、20 次。证明列表/淘汰已走 `snapidx:` 元数据索引（N-21）。
   - IO-P2-11：10k 行（3334 point/3333 rect/3333 line）：构建 P50 18.9 / 17.4 ms；`objectLength`、`objectArea` 各调用 13,333 次（1.33 次/行，仅非零时短路第二次）；单次 10k 调用耗时 len 0.3/0.3 ms、area 1.3/0.9 ms；去重可回收 1.6/1.2 ms（占 6.9%~8.5%）。
+  - 全批门禁：selftest 3186 通过 / 0 失败；e2e 118（117 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 46.2%（缺口 8）；dist 820,884 B / gzip 255,006 B / 余量 18,796 B（本批增量 0 B）；SW `VERSION=78`；8 种 golden 与导出字段未变；`tests/perf/p2-perf.perf.mjs` 6 passed（14.7 s）。
 - **遗留 TODO / 风险**：
   - CORE-P2-3 缺陷仍存在（每条历史快照多存一份活动楼层对象），本批按约束只打点不改业务逻辑；修复需在快照前按引用/对象 id 归一化活动楼层别名。
   - IO-P2-11 的重复计算仍存在，10k 行可回收 1.2~1.6 ms（小于机器抖动），本批未改；如需修，应在字段表内按行缓存一次长度/面积，避免第二套计算。 
