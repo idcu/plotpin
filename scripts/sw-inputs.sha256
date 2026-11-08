@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=29
+version=30
 1fecc4f066001b783b73c3c6500fc2f0e916739821f671daeda8fcd2ecfcebf8  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -24,7 +24,7 @@ a5730c0dfeab6474682ce4147089f9a1f0cf40e7a69823e0174829363deec158  js/core/geomet
 af25f0585af7d5bf06ab4bbd09f155b395f1c0c7dbeb5ff86246abad9d9fd825  js/core/model.js
 a8527ffa39db9cddd5a43fc5f969828c85e76b0419a65bebed10a3662281f19a  js/core/persistence.js
 36ffa4dc8081e9c4d9e0094de90af75c47fbd7c34d1b5055b97f95a800435307  js/core/render.js
-0c430f6533b3ca58fc199e4661f97e2371ffaedd94747f593bc972e65fab1569  js/core/snapshot.js
+86b083febebdc103a17155adc9057bdba9d65a2fb02ab99ef19843927af22a14  js/core/snapshot.js
 7d993922b0b0f81a7a668c3c6ea7dbc9c4f02bf2725cdc8165d60116f6c72e73  js/core/tab-lease.js
 90b47b297c7348093e760d4aa501ad6e71e524db8fe3b599cee4eedc40cba1fe  js/core/viewport.js
 2c8807de25dc960165b8dc7123c408f83f2927ea9294c924a863875c3bce9717  js/features/catalog.js
@@ -38,7 +38,7 @@ ecf35b8e125e22079aff8eb9d52680df2584bd07570bf82e0c38f16d3dff91e7  js/features/io
 e6c5caeb1653c0121c0be80e81e295bfb6dc621622ab0eb7cc8d48f7d596144e  js/features/plugins.js
 103672e3d5071256f9688a07a616b42afaefcdc3392693e167abec9824beff76  js/features/props.js
 2941b39eb9e71fc7ac48b0575c203422bc3c045b1cf82c8d5c00f61f1bfb5e78  js/features/rules.js
-573aff7de2ff6e39e071338851d61d018756cf957e4548ba6a20223d73928696  js/features/snapshot-ui.js
+423ee24cf1ff09d4e575e5160a9afa3fd2e6f937f3f45df16cf631515dbbaca5  js/features/snapshot-ui.js
 2eeb4b52d084632935a44f6d7cb8aabd038a317e2402d9d33d4d1fd33096d356  js/features/ui-panels.js
 a2522523831e35bb35355a13fa930b5c3840f40486814baf80a76dbb6a67f782  js/features/ui-shell.js
 34d4ca019bf4e3e7f7e8bb648d46a2c7d9ebe6b4eca0a11f9e1203ceeba47e40  manifest.webmanifest

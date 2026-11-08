@@ -2,6 +2,23 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-21 快照场景级差异、恢复守卫与元数据索引
+
+- **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。
+- **核心改动**
+  - `js/core/snapshot.js`
+    - `diffSceneItems()`：新增场景级差异（场地形状/名称、底图、楼层名），追加在对象差异之后，保持既有分类顺序契约；场地形状变化归 `moved`，底图/楼层名归 `modified`，另一方缺失归 `added`/`removed`。
+    - `restoreSnapshotById()`：恢复前校验 `meta.projectId` 归属与 `data.schema` 版本，跨工程或缺版本记录直接拒绝。
+    - 新增 `snapidx:<projectId>` 元数据索引：`listSnapshots`/`pruneSnapshots` 只读 meta，不逐条反序列化 data；索引缺失时回退扫描并重建。`createSnapshot`/`deleteSnapshot`/`deleteSnapshotsForProject` 同步维护；删除工程时连索引一起清理。
+    - 淘汰仍按 UTF-8 字节与 20 条上限，至少保留 1 条。
+  - `js/features/snapshot-ui.js`：场景项显示「场地形状/场地名称/底图/楼层名」，不展示对象字段值。
+  - `tests/e2e/snapshot.spec.mjs`：新增 2 条用例——仅改场地形状/底图/楼层名时场景项分类正确并排在对象项之后；20 条快照列表走索引且耗时不随对象规模线性增长。
+  - `scripts/selftest.mjs`：新增 20 条断言（场景差异分类、索引读写/回退重建、数量/字节淘汰、跨工程与缺 schema 恢复拒绝）。
+  - `sw.js`：`VERSION` 29 → 30；指纹与 dist 清单同步。
+  - 文档：`docs/features.md` §11、`docs/known-issues.md` RT-P1-09、`docs/performance.md` §4.1.2 同步。
+- **验证数据**（2026-11-08，Chromium / 本机）：20 条 × 1000 对象，`listSnapshots` **0.6 ms** vs 全量 `snapshotRecords` **41.4 ms**；单条快照生成 16.8 ms（阈值 2000 ms）；20 条生成 170.8 ms。selftest **2943 通过 / 0 失败（+20）**；e2e **107 passed / 1 skipped（35 spec / 108 用例，新增 2 条）**；产物 **808,134 B**（gzip 251,280 B，上限 839,680 B，余量 31,546 B）；`check.mjs --selftest`、`check-gates` 正面 6/6 + 破坏 9/9、`check-discipline --strict` 13/13 全绿；SW `VERSION=30`，49 个预缓存输入指纹已更新。
+- **遗留风险**：图层名称/类型表结构变化不单独成场景项（对象 `layerId`/`typeId` 变更仍可见）；索引与快照记录靠写路径同步维护，若浏览器在两次 IDB 写之间崩溃，索引可能短暂缺项，下次 `listSnapshots` 只在索引整键缺失时回退扫描，单条缺失需删除/重建索引恢复。
+
 ## 2026-11-08 · N-20 统一覆盖率面积口径（v3）
 
 - **Commit Hash**：待回填（本批 N-12~N-21 完成后统一 `docs(changelog)` 补齐）。

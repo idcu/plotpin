@@ -11,6 +11,7 @@ function snapTimeText(iso){
 }
 function snapLabel(meta){ return (meta&&meta.label)||'自动快照'; }
 function snapDiffFieldText(it){
+  if(it.scope==='scene') return it.fields.map(k=>diffFieldLabel(k)).join('；')||'—';
   if(it.category==='added') return L('新增于 {floor}',{floor:it.bFloorId});
   if(it.category==='removed') return L('删除于 {floor}',{floor:it.aFloorId});
   const parts=it.fields.filter(k=>k!=='floorId').map(k=>{

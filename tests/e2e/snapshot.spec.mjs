@@ -306,3 +306,81 @@ test('资产可达集性能：快照 1 条 vs 20 条（各 1000 对象）的全�
   expect(r.snapNs1).toBe(1);
   expect(r.scan20).toBeLessThan(1000);   /* 记录实测；超过 1s 才需要索引优化 */
 });
+
+/* N-21：场景级差异与列表元数据索引 */
+test('N-21：仅改场地形状/底图/楼层名时差异可见，场景项排在对象项之后', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(async () => {
+    state = createInitialState();
+    state.site = createSiteSlot({ type: 'rect', w: 20, h: 10 });
+    state.objects = [baseObject('point', 'point.camera', { id: 'C', name: 'C', x: 1, y: 1 })];
+    await saveProjectAs('E2E 场景差异');
+    const pid = state.meta.projectId;
+    const a = await createSnapshot({ label: 'A' });
+    state.site.shape.w = 25;
+    state.background = Object.assign({}, state.background, {
+      kind: state.background.kind === 'blank' ? 'image' : 'blank', fileName: 'changed.png'
+    });
+    state.floors[0].name = '一层改名';
+    syncActiveFloor();
+    const b = await createSnapshot({ label: 'B' });
+    const ra = await getSnapshot(pid, a.snapshotId);
+    const rb = await getSnapshot(pid, b.snapshotId);
+    const diff = diffSnapshots(ra.data, rb.data);
+    const scenes = diff.items.filter(it => it.scope === 'scene');
+    return {
+      pid, aId: a.snapshotId, bId: b.snapshotId,
+      counts: diff.counts, scenes,
+      sceneAliases: scenes.map(it => snapDiffFieldText(it)),
+      firstScene: diff.items.findIndex(it => it.scope === 'scene')
+    };
+  });
+  console.log(`[N-21] 场景差异 counts=${JSON.stringify(r.counts)} scenes=${JSON.stringify(r.scenes.map(s => s.id + ':' + s.category))}`);
+  expect(r.scenes.some(s => s.id === 'scene:site' && s.category === 'moved')).toBe(true);
+  expect(r.scenes.some(s => s.id === 'scene:background' && s.category === 'modified')).toBe(true);
+  expect(r.scenes.some(s => s.sceneKind === 'floor' && s.category === 'modified')).toBe(true);
+  expect(r.counts.total).toBe(r.scenes.length);       /* 对象均未变，只有场景项 */
+  expect(r.firstScene).toBe(0);
+  expect(r.sceneAliases.join('|')).toContain('场地形状');
+  expect(r.sceneAliases.join('|')).toContain('底图');
+  expect(r.sceneAliases.join('|')).toContain('楼层名');
+
+  await page.evaluate(({ pid, aId, bId }) => openSnapshotCompare(pid, aId, bId, 'E2E 场景差异'), r);
+  await expect(page.locator('#modalBody')).toContainText('场地');
+  await expect(page.locator('#modalBody')).toContainText('底图');
+  await expect(page.locator('#modalBody')).toContainText('楼层名');
+  await page.evaluate(() => closeModal());
+});
+
+test('N-21：列表走元数据索引，20 条打开耗时不随对象规模线性增长', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(async () => {
+    state = createInitialState();
+    state.objects = Array.from({ length: 1000 }, (_, i) =>
+      baseObject('point', 'point.camera', { id: 'L' + i, name: 'L' + i, x: i * 2, y: i }));
+    await saveProjectAs('E2E 快照索引');
+    const pid = state.meta.projectId;
+    for (let i = 0; i < 20; i++) await createSnapshot({ label: 'S' + i });
+    const t0 = performance.now();
+    const metas = await listSnapshots(pid);
+    const listMs = performance.now() - t0;
+    const t1 = performance.now();
+    await snapshotRecords(pid);                       /* 旧路径：逐条读取并反序列化 20 份 data */
+    const recordsMs = performance.now() - t1;
+    const indexKey = snapshotIndexKey(pid);
+    const idx = await idbGetKey(indexKey);
+    return {
+      count: metas.length, listMs, recordsMs,
+      indexMetas: idx && Array.isArray(idx.metas) ? idx.metas.length : -1,
+      indexKeys: (await idbAllKeys()).filter(k => k.startsWith('snapidx:')).length,
+      newest: metas[0] && metas[0].label
+    };
+  });
+  console.log(`[N-21] 列表 ${r.count} 条 listSnapshots=${r.listMs.toFixed(1)}ms 全量 records=${r.recordsMs.toFixed(1)}ms index=${r.indexMetas}`);
+  expect(r.count).toBe(20);
+  expect(r.indexMetas).toBe(20);
+  expect(r.indexKeys).toBe(1);
+  expect(r.newest).toBe('S19');
+  expect(r.listMs).toBeLessThan(r.recordsMs);
+  expect(r.listMs).toBeLessThan(50);
+});

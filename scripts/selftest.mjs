@@ -209,6 +209,8 @@ code += `\n;globalThis.__api = {
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
   snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
+  snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById,
+  snapshotFloorMetas, diffSceneItems,
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
@@ -6810,6 +6812,65 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   eq('B-04 叠加 A/B 标记', [api.diffOverlay.aId,api.diffOverlay.bId], ['A1','B1']);
   api.clearDiffOverlay();
   eq('B-04 叠加关闭后条目清空', [api.diffOverlay.on,api.diffOverlay.items.length], [false,0]);
+
+  /* N-21：场景级差异——场地顶点/底图/楼层名必须可见，且排在对象差异之后 */
+  const S1={site:{name:'S',shape:{type:'rect',w:100,h:50,points:[[0,0],[100,0],[100,50],[0,50]]}},background:{type:'blank'},floors:[{id:'f1',name:'1F'}]};
+  const S2={site:{name:'S',shape:{type:'rect',w:100,h:50,points:[[0,0],[100,0],[100,60],[0,50]]}},background:{type:'image',assetId:'bg_new'},floors:[{id:'f1',name:'一层'}]};
+  const sd=api.diffSnapshots(S1,S2);
+  const scene=Object.fromEntries(sd.items.filter(it=>it.scope==='scene').map(it=>[it.id,it]));
+  eq('N-21-场景差异总数', sd.counts.total, 3);
+  eq('N-21-场地顶点变化归为移动', scene['scene:site']&&scene['scene:site'].category, 'moved');
+  eq('N-21-场地变化字段', scene['scene:site']&&scene['scene:site'].fields, ['siteShape']);
+  eq('N-21-底图变化归为属性修改', scene['scene:background']&&scene['scene:background'].category, 'modified');
+  eq('N-21-楼层名变化归为属性修改', scene['scene:floor:f1']&&scene['scene:floor:f1'].category, 'modified');
+  eq('N-21-楼层名变化字段', scene['scene:floor:f1']&&scene['scene:floor:f1'].fields, ['floorName']);
+  eq('N-21-场景新增/删除', [api.diffSnapshots({},{site:{name:'S'}}).counts.added, api.diffSnapshots({site:{name:'S'}},{}).counts.removed], [1,1]);
+  const ord=api.diffSnapshots(
+    {objects:[{id:'O',kind:'point',typeId:'point.marker',x:0,y:0}],site:{shape:{type:'rect'}}},
+    {objects:[{id:'O',kind:'point',typeId:'point.marker',x:9,y:0}],site:{shape:{type:'circle'}}});
+  eq('N-21-对象差异在前场景在后', [ord.items[0].scope||'object', ord.items[ord.items.length-1].scope], ['object','scene']);
+  eq('N-21-场景项不计入未变对象', sd.unchanged, 0);
+
+  /* N-21：元数据索引只读 meta；数量/字节淘汰至少保留 1 条（临时内存 IDB 桩） */
+  const store=new Map();
+  const prevIdb={get:sandbox.idbGetKey,put:sandbox.idbPutKey,del:sandbox.idbDeleteKey,keys:sandbox.idbAllKeys};
+  sandbox.idbGetKey=async k=>store.get(k);
+  sandbox.idbPutKey=async(k,v)=>{store.set(k,v);};
+  sandbox.idbDeleteKey=async k=>{store.delete(k);};
+  sandbox.idbAllKeys=async()=>Array.from(store.keys());
+  const PID='PRJ_N21';
+  for(let i=0;i<21;i++){
+    const meta={snapshotId:'SNAP-'+i,projectId:PID,createdAt:new Date(2026,0,1,0,i).toISOString(),bytes:1024,objectCount:1};
+    store.set(api.snapshotKey(PID,meta.snapshotId),{meta,data:{schema:'1',objects:[]}});
+  }
+  eq('N-21-淘汰后数量', await api.pruneSnapshots(PID), 20);
+  eq('N-21-淘汰最旧', store.has(api.snapshotKey(PID,'SNAP-0')), false);
+  eq('N-21-保留最新', store.has(api.snapshotKey(PID,'SNAP-20')), true);
+  ok('N-21-索引已写入', store.has(api.snapshotIndexKey(PID)));
+  const listed=await api.listSnapshots(PID);
+  eq('N-21-列表 20 条', listed.length, 20);
+  eq('N-21-列表新到旧', listed[0].snapshotId, 'SNAP-20');
+  store.delete(api.snapshotIndexKey(PID));
+  ok('N-21-索引缺失时回退重建', (await api.snapshotIndexLoad(PID)).length===20&&store.has(api.snapshotIndexKey(PID)));
+  store.clear();
+  for(let i=0;i<3;i++){
+    const meta={snapshotId:'BIG-'+i,projectId:PID,createdAt:new Date(2026,0,1,0,i).toISOString(),bytes:15*1048576,objectCount:1};
+    store.set(api.snapshotKey(PID,meta.snapshotId),{meta,data:{schema:'1',objects:[]}});
+  }
+  eq('N-21-字节超限只留 1 条', await api.pruneSnapshots(PID), 1);
+  eq('N-21-字节超限保留最新', Array.from(store.keys()).filter(k=>k.startsWith('snap:'+PID+':')), [api.snapshotKey(PID,'BIG-2')]);
+  const prevGet=sandbox.getSnapshot;
+  sandbox.getSnapshot=async()=>({data:{schema:'1',objects:[]},meta:{projectId:'OTHER',projectName:'X'}});
+  let denied='';
+  try{ await api.restoreSnapshotById(PID,'BIG-2'); }catch(e){ denied=e.message; }
+  ok('N-21-跨工程快照恢复被拒', /不属于当前工程/.test(denied));
+  sandbox.getSnapshot=async()=>({data:{objects:[]},meta:{projectName:'X'}});
+  let noSchema='';
+  try{ await api.restoreSnapshotById(PID,'BIG-2'); }catch(e){ noSchema=e.message; }
+  sandbox.getSnapshot=prevGet;
+  ok('N-21-缺少 schema 快照恢复被拒', /缺少 schema/.test(noSchema));
+  sandbox.idbGetKey=prevIdb.get; sandbox.idbPutKey=prevIdb.put;
+  sandbox.idbDeleteKey=prevIdb.del; sandbox.idbAllKeys=prevIdb.keys;
 
   api.resetState();
 }

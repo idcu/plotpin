@@ -9,7 +9,9 @@
  * - 对比忽略运行时字段（id/createdAt/updatedAt/z），避免误报。
  */
 const SNAPSHOT_PREFIX='snap:';
+const SNAPSHOT_INDEX_PREFIX='snapidx:';
 const snapshotKey=(pid,sid)=>SNAPSHOT_PREFIX+pid+':'+sid;
+const snapshotIndexKey=pid=>SNAPSHOT_INDEX_PREFIX+pid;
 const snapshotIdOfKey=key=>{ const i=key.lastIndexOf(':'); return i>=0?key.slice(i+1):''; };
 
 /** 快照数据：当前楼层写回后深拷贝；剥离照片内嵌 dataUrl，保留 photoId / 底图 assetId 引用 */
@@ -42,22 +44,41 @@ async function snapshotRecords(pid){
   }
   return recs.sort((a,b)=>String(a.meta.createdAt).localeCompare(String(b.meta.createdAt))||String(a.meta.snapshotId).localeCompare(String(b.meta.snapshotId)));
 }
-/** 快照摘要列表（新→旧），供 UI 展示 */
+/** 快照摘要列表（新→旧），供 UI 展示。只读元数据索引，避免为列表面板逐条反序列化 data。 */
 async function listSnapshots(pid){
-  return (await snapshotRecords(pid)).map(r=>r.meta).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+  return (await snapshotIndexLoad(pid)).slice().sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+/**
+ * 快照元数据索引 `snapidx:<pid>`：列表/淘汰只依赖 meta，不解析快照 data。
+ * 索引缺失（旧版本数据或索引损坏）时回退扫描并重建；单条索引很小。
+ */
+async function snapshotIndexLoad(pid){
+  try{
+    const idx=await idbGetKey(snapshotIndexKey(pid));
+    if(idx&&Array.isArray(idx.metas)) return idx.metas;
+  }catch(_){}
+  const metas=(await snapshotRecords(pid)).map(r=>r.meta);
+  try{ await idbPutKey(snapshotIndexKey(pid),{metas}); }catch(_){}
+  return metas;
+}
+async function snapshotIndexSave(pid,metas){
+  try{ await idbPutKey(snapshotIndexKey(pid),{metas}); }catch(_){}
 }
 async function getSnapshot(pid,sid){ return idbGetKey(snapshotKey(pid,sid)); }
-/** 按数量与总字节上限淘汰最旧（至少保留最新一条） */
+/** 按数量与总字节上限淘汰最旧（至少保留最新一条）；基于元数据索引，不读快照 data */
 async function pruneSnapshots(pid){
-  const recs=await snapshotRecords(pid);
+  const metas=await snapshotIndexLoad(pid);
   const maxCount=APP_LIMITS.SNAPSHOT_MAX_PER_PROJECT, maxBytes=APP_LIMITS.SNAPSHOT_MAX_BYTES_PER_PROJECT;
-  let total=recs.reduce((s,r)=>s+(Number(r.meta.bytes)||0),0);
-  while(recs.length>1&&(recs.length>maxCount||total>maxBytes)){
-    const old=recs.shift();
-    await idbDeleteKey(snapshotKey(pid,old.meta.snapshotId));
-    total-=Number(old.meta.bytes)||0;
+  let total=metas.reduce((s,m)=>s+(Number(m.bytes)||0),0);
+  let changed=false;
+  while(metas.length>1&&(metas.length>maxCount||total>maxBytes)){
+    const old=metas.shift();
+    await idbDeleteKey(snapshotKey(pid,old.snapshotId));
+    total-=Number(old.bytes)||0;
+    changed=true;
   }
-  return recs.length;
+  if(changed) await snapshotIndexSave(pid,metas);
+  return metas.length;
 }
 /**
  * 生成当前工程快照。未绑定工程库时抛错（快照链必须有稳定的工程归属）。
@@ -77,7 +98,10 @@ async function createSnapshot(opts={}){
     floorId:state.activeFloorId||'', floorName:currentFloorName(),
     objectCount:countProjectObjects(data), bytes:utf8Length(json), schema:data.schema
   };
+  const metas=await snapshotIndexLoad(pid);      /* 先取旧索引，避免把刚写入的新记录重复入索引 */
   await idbPutKey(snapshotKey(pid,meta.snapshotId),{meta,data});
+  metas.push(meta);
+  await snapshotIndexSave(pid,metas);
   await pruneSnapshots(pid);
   meta.elapsedMs=+((typeof performance!=='undefined'&&performance.now?performance.now():Date.now())-t0).toFixed(1);
   return meta;
@@ -85,6 +109,8 @@ async function createSnapshot(opts={}){
 /** 删除单个快照（只删 `snap:` 键，不动工程主记录） */
 async function deleteSnapshot(pid,sid){
   await idbDeleteKey(snapshotKey(pid,sid));
+  const metas=(await snapshotIndexLoad(pid)).filter(m=>m&&m.snapshotId!==sid);
+  await snapshotIndexSave(pid,metas);
   return true;
 }
 /** 删除某工程的全部快照（删除工程时清理孤儿记录；只扫 `snap:<pid>:`，不影响其它工程） */
@@ -92,6 +118,7 @@ async function deleteSnapshotsForProject(pid){
   let keys=[];
   try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(SNAPSHOT_PREFIX+pid+':')); }catch(_){ return 0; }
   for(const k of keys){ try{ await idbDeleteKey(k); }catch(_){} }
+  try{ await idbDeleteKey(snapshotIndexKey(pid)); }catch(_){}
   return keys.length;
 }
 /**
@@ -101,6 +128,9 @@ async function deleteSnapshotsForProject(pid){
 async function restoreSnapshotById(pid,sid){
   const rec=await getSnapshot(pid,sid);
   if(!rec||!rec.data) throw new Error('快照不存在或已损坏');
+  /* 归属守卫：键里带 pid，但记录本身可能被移动/伪造；以 meta.projectId 为准二次校验 */
+  if(rec.meta&&rec.meta.projectId&&rec.meta.projectId!==pid) throw new Error('快照不属于当前工程，已拒绝恢复');
+  if(!rec.data.schema) throw new Error('快照缺少 schema 版本，已拒绝恢复');
   const errs=importLimitErrors({objects:countProjectObjects(rec.data)});
   if(errs.length) throw new Error('快照超出上限：'+importLimitMessage(errs));
   const next=buildProject(rec.data);
@@ -121,7 +151,8 @@ const DIFF_FIELD_LABELS={
   name:'名称', kind:'对象类别', typeId:'类型', layerId:'图层', visible:'可见', locked:'锁定',
   x:'X', y:'Y', width:'宽', height:'高', angle:'旋转', points:'节点', shape:'形状',
   phys:'物理尺寸', text:'文字', props:'属性', style:'样式', annot:'标注', iconSize:'图标倍率',
-  closed:'闭合', subtype:'子类型', floorId:'楼层'
+  closed:'闭合', subtype:'子类型', floorId:'楼层',
+  siteShape:'场地形状', siteName:'场地名称', background:'底图', floorName:'楼层名'
 };
 function diffFieldLabel(key){ return DIFF_FIELD_LABELS[key]||key; }
 function diffValueText(v){
@@ -178,6 +209,46 @@ function diffCategoryOf(a,b,fa,fb,fields){
   if(fields.some(k=>DIFF_MOVE_KEYS.includes(k))) return 'moved';
   return fields.length?'modified':'same';
 }
+/** 楼层元数据（只取 id/name）：对象归属变化已由 floorChanged 覆盖，这里只比场景元数据 */
+function snapshotFloorMetas(p){
+  const floors=Array.isArray(p&&p.floors)?p.floors:[];
+  return floors.map(f=>({id:String(f&&f.id||''),name:String(f&&f.name||'')}));
+}
+/**
+ * 场景级差异：场地（顶点/尺寸/名称）、底图、楼层名。
+ * 追加在对象差异之后，保持「新增/删除/属性修改/移动/换楼层/类型变更」既有分类顺序契约。
+ */
+function diffSceneItems(a,b,items){
+  const add=(id,sceneKind,name,category,fields)=>{
+    items.push({id,scope:'scene',sceneKind,category,fields,name,
+      floorId:'',floorName:'',a:null,b:null,aFloorId:'',bFloorId:''});
+  };
+  const sa=a&&a.site, sb=b&&b.site;
+  if(sa||sb){
+    if(!sa||!sb) add('scene:site','site','场地',sa?'removed':'added',[]);
+    else{
+      const shapeSame=sameJson(sa.shape||null,sb.shape||null);
+      const nameSame=(sa.name||'')===(sb.name||'');
+      if(!shapeSame||!nameSame){
+        add('scene:site','site','场地',shapeSame?'modified':'moved',
+          [].concat(shapeSame?[]:['siteShape'],nameSame?[]:['siteName']));
+      }
+    }
+  }
+  const ba=a&&a.background, bb=b&&b.background;
+  if(ba||bb){
+    if(!ba||!bb) add('scene:background','background','底图',ba?'removed':'added',[]);
+    else if(!sameJson(ba,bb)) add('scene:background','background','底图','modified',['background']);
+  }
+  const ma=new Map(snapshotFloorMetas(a).map(f=>[f.id,f]));
+  const mb=new Map(snapshotFloorMetas(b).map(f=>[f.id,f]));
+  new Set([].concat(Array.from(ma.keys()),Array.from(mb.keys()))).forEach(id=>{
+    const x=ma.get(id), y=mb.get(id);
+    if(x&&!y) add('scene:floor:'+id,'floor',x.name||id,'removed',['floorName']);
+    else if(!x&&y) add('scene:floor:'+id,'floor',y.name||id,'added',['floorName']);
+    else if(x&&y&&x.name!==y.name) add('scene:floor:'+id,'floor',y.name||id,'modified',['floorName']);
+  });
+}
 /**
  * 对比两个快照的工程数据（纯函数，便于自测）。
  * @returns {{items:Array,counts:object,unchanged:number}}
@@ -202,6 +273,7 @@ function diffSnapshots(a,b){
       aFloorId:ea?ea.floorId:'', bFloorId:eb?eb.floorId:''
     });
   });
+  diffSceneItems(a||{},b||{},items);   /* 场景级项排在对象级之后 */
   const counts={added:0,removed:0,modified:0,moved:0,floorChanged:0,typeChanged:0};
   items.forEach(it=>{ counts[it.category]++; });
   counts.total=items.length;

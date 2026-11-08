@@ -118,6 +118,17 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 | 统计/面板/导出区域面积一致性 | 解析面积严格相等（selftest 1e-9） | 0 偏差 | 通过 |
 | 优化器基准覆盖率与面板覆盖率 | 严格相等（selftest 1e-12，同 targetCells） | 0 偏差 | 通过 |
 
+#### 4.1.2 快照列表与淘汰（2026-11-08，N-21 采集）
+
+命令：`node node_modules/@playwright/test/cli.js test tests/e2e/snapshot.spec.mjs`（Chromium，本机）。20 条快照 × 1000 对象/条。
+
+| 指标 | 实测 | 对照 | 结论 |
+|---|---|---|---|
+| `listSnapshots`（元数据索引） | 0.6 ms | 全量 `snapshotRecords` 41.4 ms | 列表不再解析快照 data |
+| 单条快照生成（1000 对象） | 16.8 ms | — | 阈值 2000 ms |
+| 20 条快照生成（1000 对象/条） | 170.8 ms（除首条） | — | 仅记录 |
+| 快照淘汰（21 条 → 20 条，selftest） | 计数与最旧删除断言通过 | — | 至少保留 1 条 |
+
 ### 4.2 真实浏览器代理数据（2026-11-07，Chromium + SwiftShader）
 
 来源：[manual-acceptance-report-2026-11-07.md](manual-acceptance-report-2026-11-07.md) §M5；命令 `npm run perf:browser`（4 passed / 19.1 s）。
