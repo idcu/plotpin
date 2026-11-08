@@ -7698,6 +7698,24 @@ await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
   const footer=api.exportFooterText();
   ok('IO-P2-14 页脚=工程名·场地描述', footer.startsWith('批三工程 · ')&&footer.includes('·'));
   ok('IO-P2-14 SVG 与 PNG 共用同一页脚表达式', api.buildSceneSvg().includes(footer.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')));
+
+  /* IO-P2-15：图层表色取该层首个导出对象颜色，不再全部 #7c3aed */
+  api.resetState();
+  const dp=api.baseObject('point','point.marker',{name:'D1',x:1,y:1});
+  dp.style.color='#ff0000';
+  const dr=api.baseObject('rect','rect.area',{name:'D2',x:5,y:5,width:2,height:2});
+  api.state.layers.push({id:'layer.empty',name:'空图层',visible:true,locked:false});
+  api.state.objects=[dp,dr];
+  api.syncActiveFloor();
+  const dx=api.dxfEntitiesForExport();
+  const dl=dx.layers.find(l=>l.name==='默认图层')||dx.layers[0];
+  eq('IO-P2-15 图层表色=首个导出对象色', dl.color, '#ff0000');
+  ok('IO-P2-15 实体自身颜色未被改写', dx.entities.some(e=>e.type==='POINT'&&e.color==='#ff0000'));
+  eq('IO-P2-15 无对象图层回退默认色', (dx.layers.find(l=>l.name==='空图层')||{}).color, '#7c3aed');
+  /* 场地 SITE 层颜色保持独立，不被首个业务对象覆盖 */
+  api.state.site={id:'site.t3',name:'',layerId:'layer.default',visible:true,locked:false,annot:{},style:{},updatedAt:'',kind:'rect',shape:{type:'rect',x:0,y:0,w:40,h:20}};
+  const dxSite=api.dxfEntitiesForExport();
+  eq('IO-P2-15 SITE 层保持场地色', dxSite.layers.find(l=>l.name==='SITE').color, '#16a34a');
 }
 
 });

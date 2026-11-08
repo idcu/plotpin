@@ -621,7 +621,10 @@ function dxfEntitiesForExport(){
     if(usedNames.has(nm)){ let k=2; while(usedNames.has(nm+'_'+k)) k++; nm=nm+'_'+k; }
     usedNames.add(nm); nameMap.set(l.id,nm);
   });
-  const layers=state.layers.map(l=>({name:nameMap.get(l.id),color:'#7c3aed'}));
+  const layers=state.layers.map(l=>({name:nameMap.get(l.id)}));
+  /* IO-P2-15：图层表色取该层首个导出对象的颜色（最近 ACI），不再全部硬编码 #7c3aed；
+     实体颜色仍按对象自身 color 写入，互不影响 */
+  const layerColor=new Map();
   /* DXF 明确降级报告：符号点保留 POINT 锚点，形状以折线近似（不静默丢失） */
   const report={symbolPoints:0, approxPolylines:0, degraded:false,
     note:'符号图元在 DXF 中以 LWPOLYLINE 折线近似（曲线/圆弧离散），不可再编辑为符号；真实尺寸按对象 phys，phys=0 时用 0.6 m 名义尺寸。'};
@@ -633,6 +636,7 @@ function dxfEntitiesForExport(){
     const t=getType(o.typeId);
     const color=o.style.color||t.color||'#111827';
     const layer=nameMap.get(o.layerId)||dxfSanitizeName(layerOf(o).name);
+    if(!layerColor.has(layer)) layerColor.set(layer,color);
     if(o.kind==='point'){
       entities.push({type:'POINT',layer,color,x:o.x,y:o.y});
       if(t.symbol&&t.symbol.length){
@@ -663,7 +667,8 @@ function dxfEntitiesForExport(){
     }
   });
   report.degraded=report.symbolPoints>0;
-  return {entities,layers,report};
+  const layerDefs=layers.map(l=>Object.assign({color:layerColor.get(l.name)||'#7c3aed'},l));
+  return {entities,layers:layerDefs,report};
 }
 function exportDXF(){
   const {entities,layers,report}=dxfEntitiesForExport();
