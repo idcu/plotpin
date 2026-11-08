@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 审计 P2 批次 A（5/5）：替换底图重置旧校准
 
-- **Commit Hash**：待批次末回填（`fix(import): 替换底图重置旧校准与仿射`）
+- **Commit Hash**：`88b880c`（`fix(import): 替换底图重置旧校准与仿射`）
 - **核心改动**：
   - `js/features/io-import.js` 抽出 `applyImageBackground(bg,meta)`：写入新图 kind/fileName/assetId/宽高，并统一 `transform=null`、`calibrated=false`、`metersPerPixel=0.05`。
   - `importBackgroundFile` 原逻辑在旧图已校准（`calibrated===true`）时保留 `metersPerPixel`，新图像素坐标与比例不同却沿用旧值，测量结果错误；现在任何替换都先清校准，要求重新校准。
@@ -20,7 +20,7 @@
 
 ## 2026-11-08 · 审计 P2 批次 A（4/5）：加载丢对象计数可见 + 审计字段修正
 
-- **Commit Hash**：待批次末回填（`fix(load): 加载审计按 layerId 判定并统计丢弃对象`）
+- **Commit Hash**：`2561779`（`fix(load): 加载审计按 layerId 判定并统计丢弃对象`）
 - **核心改动**：
   - `js/core/persistence.js` `auditProject` 的未知图层检查由 `o.layer` 改为 schema 与 `sanitizeObjects` 实际使用的 `o.layerId`；旧写法恒不命中，未知图层永不告警。
   - `sanitizeObjects` 为 5 处结构非法丢弃分支（非法 kind、矩形/平行四边形非正宽高、折线点数不足、尺寸标注点数不足）累加 `audit.dropped`；`buildProject` 与 `lastSanitizeReport` 同步带 `dropped`，`console.warn` 覆盖丢弃场景。
@@ -36,7 +36,7 @@
 
 ## 2026-11-08 · 审计 P2 批次 A（3/5）：切工程前强制落盘
 
-- **Commit Hash**：待批次末回填（`fix(persistence): 切工程前强制落盘待保存草稿`）
+- **Commit Hash**：`7ddf6e4`（`fix(persistence): 切工程前强制落盘待保存草稿`）
 - **核心改动**：
   - `js/core/persistence.js` 新增 `flushPendingSave()`：切工程前若有待保存防抖/重试定时器，先清定时器并立即 `runSave()` 旧现场；租约被另一标签占用或落盘失败（含 `saveHealth==='failed'`）抛错，`openProjectById` 在读取/替换现场前调用，失败即取消切换。
   - 失败提示走既有 `io.js` 的 `toast('操作失败：…')`，不再静默丢最后一次编辑；救援模式（`rescueHold`）不覆盖原记录，直接放行切换。
@@ -51,7 +51,7 @@
 
 ## 2026-11-08 · 审计 P2 批次 A（2/5）：CSV/XLSX 形状参数不再静默取整
 
-- **Commit Hash**：待批次末回填（`fix(export): CSV/XLSX 形状参数按精度输出`）
+- **Commit Hash**：`c6eb64f`（`fix(export): CSV/XLSX 形状参数按精度输出`）
 - **核心改动**：
   - `js/features/io-fields.js` 的 `exportShapeSummary`：平行四边形倾角原 `String(Math.round(...))`、扇形起止角原 `Math.round(a0)+','+Math.round(a1)`，改为与其它数值列同一入口 `fmt()`（读取 `settings.precision`，默认 2 位）。小数倾角/角度不再被静默舍入成整数，导出→导入可保留小数。
   - 表格「形状参数」与合成「参数」列的整数形状现在显示为 `30.00,120.00` / `30.00`（与 X/Y/角度/宽高等列一致的固定小数位），并同步更新 4 条既有期望值；未新增/删除断言。
@@ -66,7 +66,7 @@
 
 ## 2026-11-08 · 审计 P2 批次 A（1/5）：墓碑上限对齐对象上限
 
-- **Commit Hash**：待批次末回填（`fix(tombstone): 墓碑硬上限对齐对象上限`）
+- **Commit Hash**：`c7c24ff`（`fix(tombstone): 墓碑硬上限对齐对象上限`）
 - **核心改动**：
   - `js/core/config.js`：`TOMBSTONE_MAX` 20,000 → **100,000**，与 `OBJECTS_MAX` 同量级；`sanitizeTombstones` 的保留窗口 + 硬上限淘汰逻辑不变。旧值下删除超过 2 万对象后，较早墓碑会被 `slice` 截掉，与仍持有这些对象的离线端合并时对象复活。
   - `scripts/selftest.mjs`：原「A-11 墓碑硬上限 2 万」断言改为「与对象上限同量级」；新增 30,000 条墓碑不被截断、旧端 30,000 对象合并后 `objects.length===0` 且 `stats.deleted===30000`。
