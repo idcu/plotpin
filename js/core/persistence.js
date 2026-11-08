@@ -279,12 +279,16 @@ async function saveProjectAs(name){
 function countProjectObjects(p){
   return projectObjectLists(p).reduce((n,list)=>n+list.length,0);
 }
+/** 工程对象数上限守卫：打开工程库、导入、协作合并共用同一判据（CORE-P2-20） */
+function assertProjectWithinLimits(raw,label){
+  const errs=importLimitErrors({objects:countProjectObjects(raw)});
+  if(errs.length) throw new Error(label+'超出上限：'+importLimitMessage(errs));
+}
 /** 打开工程库中的工程：先构建候选 → 准备资产 → 原子替换；任何失败保持当前现场（审计 P1-9） */
 async function openProjectById(id){
   const raw=await idbGetKey(projectKey(id));
   if(!raw||!isReadableSchema(raw.schema)) throw new Error('工程不存在或已损坏');
-  const errs=importLimitErrors({objects:countProjectObjects(raw)});
-  if(errs.length) throw new Error('工程超出上限：'+importLimitMessage(errs));
+  assertProjectWithinLimits(raw,'工程');
   const next=buildProject(raw);
   await ensureBackgroundAsset(next);          /* 在候选状态上转存资产，不动当前 state */
   const prevState=state, prevHistory=history, prevSelected=new Set(selectedIds), prevDraft=draft;
@@ -934,6 +938,7 @@ function mergeHistoryNeeded(stats){
 async function mergeProjectJSON(raw,opts={}){
   if(!raw||typeof raw!=='object') throw new Error('不是有效的工程 JSON');
   if(!isReadableSchema(raw.schema)) throw new Error('schema 不匹配，不是本工具的工程文件');
+  assertProjectWithinLimits(raw,'合并工程');          /* CORE-P2-20：协作/离线合并复用导入限额 */
   syncActiveFloor();
   const currentRaw=persistableState();
   const cur=state;
@@ -942,6 +947,7 @@ async function mergeProjectJSON(raw,opts={}){
   try{ incoming=migrateProject(incomingRaw); }
   finally{ state=cur; }
   const {project,stats}=mergeProjectData(currentRaw,deepClone(incoming));
+  assertProjectWithinLimits(project,'合并结果');      /* 两侧各自未超限、并集仍可能超限 */
   /* 对象/楼层之外（图层、类型、墓碑）也可能有变化：用规范化序列化判断是否需要落盘 */
   if(mergeStable(project)===mergeStable(currentRaw)) return stats;
   /* history:'overwrite' 供实时协作：只有远端覆盖本地内容时才入撤销栈，

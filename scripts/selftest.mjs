@@ -100,7 +100,7 @@ code += `\n;globalThis.__api = {
   get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
   importJsonFile, openProjectById,
-  createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, baseObject,
+  createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, assertProjectWithinLimits, baseObject,
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
   importLimitErrors, importLimitMessage,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
@@ -7991,6 +7991,16 @@ await section("P2-RT 批次 6：快照与协作", async () => {
   ok('RT-P2-05 拖拽比较识别真差异', api.sameSerializable({a:1,b:{x:1,y:2}},{a:1,b:{x:1,y:3}})===false);
   ok('RT-P2-05 快照比较忽略键顺序', api.sameJson({props:{color:'red',width:2}},{props:{width:2,color:'red'}}));
   ok('RT-P2-05 快照比较识别真差异', api.sameJson({props:{color:'red'}},{props:{color:'blue'}})===false);
+
+  /* CORE-P2-20：协作/离线合并入口复用导入对象上限，拒绝时不替换现场 */
+  let limitMsg='';
+  try{ api.assertProjectWithinLimits({objects:new Array(api.APP_LIMITS.OBJECTS_MAX+1)},'合并'); }catch(e){ limitMsg=e.message; }
+  ok('CORE-P2-20 超限工程被统一守卫拒绝', /合并超出上限/.test(limitMsg));
+  api.resetState();
+  let mergeMsg='';
+  try{ await api.mergeProjectJSON({schema:api.SCHEMA,objects:new Array(api.APP_LIMITS.OBJECTS_MAX+1)}); }catch(e){ mergeMsg=e.message; }
+  ok('CORE-P2-20 mergeProjectJSON 拒绝超限输入', /合并工程超出上限/.test(mergeMsg));
+  eq('CORE-P2-20 拒绝后现场未替换', api.state.objects.length, 0);
 }
 });
 
