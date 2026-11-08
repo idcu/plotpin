@@ -5127,6 +5127,23 @@ await section("57.1 插件 API 版本化与能力白名单（C-01）", async () 
 
 });
 
+/* 57.1b RT-P2-07 插件清单/源码上限按 UTF-8 字节而非字符数 ---------------- */
+await section("57.1b RT-P2-07 插件清单/源码上限按 UTF-8 字节", async () => {
+{
+  const PP=api.PlotPin;
+  const mo = { schema:'plotpin.plugin/v1', id:'demo.bytes', name:'字节上限', version:'1.0.0',
+    apiVersion:'1.0', capabilities:[], code:'1' };
+  /* 70000 个中文字符 = 70000 字符 / 210000 字节：字符数未超 192 KB，字节数已超 */
+  const rb = PP.validatePluginManifest(Object.assign({}, mo, { filler:'中'.repeat(70000) }));
+  ok('RT-P2-07 清单多字节内容按字节拒绝', !rb.ok && /192 KB/.test(rb.reason));
+  /* 22000 个中文字符 = 22000 字符 / 66000 字节：字符数未超 64 KB，字节数已超 */
+  const rc = PP.validatePluginManifest(Object.assign({}, mo, { code:'中'.repeat(22000) }));
+  ok('RT-P2-07 code 多字节内容按字节拒绝', !rc.ok && /64 KB/.test(rc.reason));
+  const okc = PP.validatePluginManifest(Object.assign({}, mo, { code:'x'.repeat(65536) }));
+  ok('RT-P2-07 code 恰好 64 KB（单字节）通过', okc.ok === true);
+}
+});
+
 /* 57.2 C-05 几何规则检查：配置 / 框架 / 三条规则 / CSV / 定位 --------------- */
 await section("57.2 C-05 几何规则检查：配置 / 框架 / 三条规则 / CSV / 定位", async () => {
 {

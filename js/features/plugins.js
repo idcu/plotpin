@@ -34,6 +34,9 @@
   /* -------------------- 版本与能力 ---------------------------------------- */
   const PLUGIN_API_VERSION = '1.1.0';
   const PLUGIN_CALL_TIMEOUT = 2000;   /* 单次调用/初始化上限，超时直接 terminate */
+  /* RT-P2-07：上限按 UTF-8 字节而非字符数，避免多字节文案绕过（复用 snapshot.js 的 utf8Length） */
+  const PLUGIN_MANIFEST_MAX_BYTES = 196608;   /* 清单 192 KB */
+  const PLUGIN_CODE_MAX_BYTES = 65536;        /* 插件源码 64 KB */
   const PLUGIN_CAPABILITIES = Object.freeze({
     'state:read': '读取工程对象快照',
     'state:write': '新增对象（经主工程清洗后提交）',
@@ -100,7 +103,7 @@
       try { m = JSON.parse(raw); } catch (_) { return { ok: false, reason: '清单不是合法 JSON' }; }
     }
     if (!m || typeof m !== 'object' || Array.isArray(m)) return { ok: false, reason: '清单必须是 JSON 对象' };
-    if (JSON.stringify(m).length > 196608) return { ok: false, reason: '清单超过 192 KB 上限' };
+    if (utf8Length(JSON.stringify(m)) > PLUGIN_MANIFEST_MAX_BYTES) return { ok: false, reason: '清单超过 192 KB（UTF-8 字节）上限' };
     if (m.schema !== 'plotpin.plugin/v1') return { ok: false, reason: 'schema 必须为 plotpin.plugin/v1' };
     const id = String(m.id == null ? '' : m.id).trim();
     if (!PLUGIN_ID_RE.test(id)) return { ok: false, reason: 'id 需为 2–64 位字母、数字、点、下划线或短横线' };
@@ -112,7 +115,7 @@
     if (!check.ok) return check;
     const code = String(m.code == null ? '' : m.code);
     if (!code.trim()) return { ok: false, reason: 'code 必填' };
-    if (code.length > 65536) return { ok: false, reason: 'code 超过 64 KB 上限' };
+    if (utf8Length(code) > PLUGIN_CODE_MAX_BYTES) return { ok: false, reason: 'code 超过 64 KB（UTF-8 字节）上限' };
     return { ok: true, spec: { id, name, version, apiVersion: String(m.apiVersion), capabilities: check.caps.slice(), code } };
   }
 
