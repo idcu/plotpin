@@ -86,7 +86,7 @@ test('N-26：DXF/TSV 导出端到端可用，图纸与台账口径不串', async
   await page.selectOption('#exportKind', 'tsv');
   await page.click('#exportBtn');
   const tsv = readFileSync(await (await tsvEvent).path(), 'utf8');
-  expect(tsv.replace(/^\ufeff/, '').split('\n')[0]).toBe(tsvHeader);
+  expect(tsv.replace(/^\ufeff/, '').split(/\r?\n/)[0]).toBe(tsvHeader);
   expect(tsv).toContain('N26H');
   expect(tsv).toContain('N26V');
 

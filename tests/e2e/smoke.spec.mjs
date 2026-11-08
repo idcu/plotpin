@@ -127,7 +127,7 @@ test('导出字段表：CSV/XLSX 表头与行值同源，台账列与公式防�
   await page.click('#exportBtn');
   const download = await downloadPromise;
   const text = readFileSync(await download.path(), 'utf8').replace(/^\ufeff/, '');
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   expect(lines[0]).toBe(header);
   expect(lines.length).toBe(2);
   expect(lines[1].startsWith('P-01,')).toBe(true);
