@@ -1,6 +1,6 @@
 # 图钉 PlotPin 已知问题
 
-> 核对于 `987f594`（2026-11-08，P2 批次 11 代码 HEAD）。本表来自只读代码审计与仓库内夹具/脚本；标注「可复跑」的条目均已用仓库内命令验证过，未标注「实测」的条目未做运行期复现。数量类指标以 [facts.md](facts.md) 为准。
+> 核对于 `5eec209`（2026-11-08，P2 批次 11 修复代码 HEAD）。本表来自只读代码审计与仓库内夹具/脚本；标注「可复跑」的条目均已用仓库内命令验证过，未标注「实测」的条目未做运行期复现。数量类指标以 [facts.md](facts.md) 为准。
 > 分类口径：**已修复**=有可复跑判据；**仍存在**=代码路径确证但未修；**已降级为限制**=产品边界或质量取舍，不是缺陷。
 > 新问题的编号与审计报告一一对应，便于后续计划映射：`IO-*`、`CORE-*`、`RT-*` 分别见本地过程材料 `audit-out/audit-io.md`、`audit-out/audit-core.md`、`audit-out/audit-runtime.md`（该目录不入库，不随仓库分发）。
 
@@ -264,18 +264,19 @@
 > 本批统一验证：selftest 3186 通过 / 0 失败；e2e 118 用例（117 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 46.2%（缺口 8 / UI 1 / 模板 0，PHRASES 1001 / TEMPLATES 112 / DICT.zh 193）；dist 820,884 B / gzip 255,006 B / 余量 18,796 B；SW `VERSION=78`；8 种 golden 均未变化，导出字段未改。
 > 仍保留的「未验证/限制」：墓碑只持久化 id、不存名称，跨会话无法回填历史墓碑名（未改 schema）；场地隐藏时停车仍有意回退取景框；新工程/图层的默认名在创建时按当时语言落盘，切换语言不会重译历史数据；`features` 层与 `ui-shell.js` 仍有审计未列出的硬编码中文（UI 硬编码门禁 1/20）；协作嵌套弹窗未改（既有行为）。
 
-### 2.11 批次 11：性能打点（3 条）
+### 2.11 批次 11：性能打点 3 条 + 修复 2 条
 
-> 本批定义是「无打点不提交」：只补真实 Chromium 采集与采样设施，生产代码未改；数据见 [performance.md](performance.md) §4.1.6~§4.1.8，采集环境统一为 1920×1080@DPR1、headless Chromium（SwiftShader）、CDP 强制 GC ×2、`--repeat-each=2`。
+> 批次 11 最初只补真实 Chromium 采集与采样设施（生产代码未改）；随后按内存硬规矩追加修复：CORE-P2-3 `4b800e8`、IO-P2-11 `5eec209`。数据见 [performance.md](performance.md) §4.1.6~§4.1.8，采集环境统一为 1920×1080@DPR1、headless Chromium（SwiftShader）、CDP 强制 GC ×2、`--repeat-each=2`。
 
-| 编号 | 状态 | 打点结论 | 提交 | 验证依据 |
+| 编号 | 状态 | 结论 | 提交 | 验证依据 |
 |---|---|---|---|---|
-| CORE-P2-3 | 仍存在（已量化） | 活动楼层对象在 `objects` 与 `floors[active].objects` 两条路径各存一份：10k 对象 × 20 条历史堆增量 19.657 MB，对照布局 9.788 MB（2.01×）；`pushHistory` 826.1~840.5 ms vs 420.5~423.1 ms；快照对象实例 400,000 vs 200,000 | `15bd54f` | `node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs --repeat-each=2`；两次堆读数一致到 0.01 MB |
+| CORE-P2-3 | **已修复** | `WeakMap` 记忆使 `objects` 与 `floors[active].objects` 共用一个快照容器：10k 对象 × 20 条历史堆增量 19.657 MB → **8.912 MB（−54.7%）**，`pushHistory` 826.1/840.5 ms → **505.2/488.3 ms**，快照对象实例 400,000 → **200,000**；别名结构与切层后撤销/重做保持 | `15bd54f`（打点）、`4b800e8`（修复） | `node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-3" --repeat-each=2`；selftest 74b 21 断言 |
 | CORE-P2-4 | 已收敛（N-21 修复，本批补证） | `listSnapshots` / `pruneSnapshots` 每次仅 1 次 IDB get（P95 0.9/0.6、0.3/0.3 ms），`snapshotRecords` 20 次 get（P95 360.1/349.8 ms）；列表/淘汰不再解析快照 data | `60736c5` | 同上；`idbGetKey` 计数包装，20 条 × 10k 对象 |
-| IO-P2-11 | 仍存在（已量化，收益小） | 字段表「长度」「面积」在结果非零时短路求值两次：各 13,333 次/10k 行（1.33 次/行）；去重可回收 1.6/1.2 ms，占 10k 行构建 6.9%~8.5% | `987f594` | 同上；`objectLength`/`objectArea` 计数包装 + 单次调用独立计时 |
+| IO-P2-11 | **已修复** | `buildExportRow` 每行各算一次长度/面积：调用 13,333 → **10,000 次（−25%）**；10k 行构建 P50 18.9/17.4 → 15.6/18.4 ms（差异在机器抖动内）；导出字段与 8 种 golden 逐字节不变 | `987f594`（打点）、`5eec209`（修复） | 同上；`objectLength`/`objectArea` 计数包装；e2e 117 通过 + 1 条件跳过 |
 
-> 本批统一验证：selftest 3186 通过 / 0 失败；e2e 118 用例（117 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 46.2%（缺口 8 / UI 1 / 模板 0）；dist 820,884 B / gzip 255,006 B / 余量 18,796 B；SW `VERSION=78`；8 种 golden 与导出字段均未变化；本批产物增量 0 B（仅 `tests/perf` 与文档）。
-> 性能用例：`tests/perf/p2-perf.perf.mjs` 3 用例 × 2 次复跑 = 6 passed（14.7 s），数据写入 `test-results/perf-p2.json`（该目录不入库）。
+> 批次 11 修复后统一验证：selftest **3207** 通过 / 0 失败（+21 断言）；e2e 118 用例（117 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 46.2%（缺口 8 / UI 1 / 模板 0）；dist **821,325 B** / gzip 255,136 B / 余量 **18,355 B**（较批次 11 起点 +441 B）；SW `VERSION=80`；8 种 golden 与导出字段均未变化。
+> 性能用例：`tests/perf/p2-perf.perf.mjs` 3 用例 × 2 次复跑 = 6 passed（13.6 s），数据写入 `test-results/perf-p2.json`（该目录不入库）。
+> 剩余风险：历史 >20 步的长时编辑内存斜率未单独采集；IO-P2-11 的墙钟收益小于本机抖动，保留依据是调用数下降且输出逐字节一致。
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 

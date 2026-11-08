@@ -1,7 +1,7 @@
 # 事实源（FACTS）
 
 > 本文件是仓库内**数量类指标的唯一事实源**。其他文档只引用本文件，不复制具体数字；历史文档中的旧值一律标注「历史值」。
-> 采集日期：2026-11-08；代码基线：`987f594`（P2 批次 11 代码 HEAD）；N-25～N-27 收口段与 P2 批次 1~11（B 类文档、表格往返、DXF/PNG 一致性、核心瞬态边界、核心 schema/安全、快照/协作、插件沙箱、规则/统计、目录/停车/UI、代码卫生/i18n、性能打点）在其上增量修订，数值以最近一次门禁实测为准。
+> 采集日期：2026-11-08；代码基线：`5eec209`（P2 批次 11 修复代码 HEAD）；N-25～N-27 收口段与 P2 批次 1~11（B 类文档、表格往返、DXF/PNG 一致性、核心瞬态边界、核心 schema/安全、快照/协作、插件沙箱、规则/统计、目录/停车/UI、代码卫生/i18n、性能打点）及批次 11 修复（CORE-P2-3 历史内存、IO-P2-11 导出去重）在其上增量修订，数值以最近一次门禁实测为准。
 > 采集环境：本机 Windows + Node（selftest/门禁）+ Playwright Chromium（e2e）。
 > 边界：性能读数（P95 / heapUsed）以 [performance.md](performance.md) 为准；`CHANGELOG.internal.md` 与本地未跟踪的 `audit-out/` 是历史/过程材料，其中数字不代表当前状态。
 
@@ -9,18 +9,18 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 820,884 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 255,006 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 821,325 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 255,136 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 18,796 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=78` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 18,355 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=80` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3186 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
-| selftest 分区 | 126 个 | `node scripts/selftest.mjs --list` | 输出 127 行（含 1 行标题） |
+| selftest 断言 | 3207 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 分区 | 127 个 | `node scripts/selftest.mjs --list` | 输出 128 行（含 1 行标题） |
 | 加载脚本 | 45 个（35 项目 + 10 vendor） | `check.mjs` 输出「加载 45 个脚本」 | `js/` 下 35 个 `.js` |
 | e2e 用例 | 118 个（117 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
 | e2e spec 文件 | 35 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 36 个 `.mjs`（含 1 个 helper） |

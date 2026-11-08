@@ -7,16 +7,16 @@
 ## 2026-11-08 · P2 批次 11 修复：CORE-P2-3 内存 + IO-P2-11 去重
 
 - **Commit Hash**：
-  - CORE-P2-3：`待回填`
-  - IO-P2-11：`待回填`
-  - 收尾 `docs(changelog)`：`待回填`
+  - CORE-P2-3：`4b800e8`
+  - IO-P2-11：`5eec209`
+  - 收尾 `docs(changelog)`：本提交
 - **核心改动**：
   - CORE-P2-3：`sharedHistoryValue` / `copySnapshotContainers` 增加 `WeakMap` 记忆，`objects` 与 `floors[active].objects` 在快照和物化两侧都只保留一份容器；新增 selftest 74b（21 断言，双楼层切换后两次撤销 + 重做 + 20 条上限 + 资产保活）。
   - IO-P2-11：`buildExportRow` 每行只算一次 `objectLength` / `objectArea`，字段 getter 改为读取行上下文；导出字段与 8 种 golden 未变。
 - **验证数据**：
   - CORE-P2-3（真实 Chromium 1920×1080@DPR1，10k 对象，20 次 `pushHistory`，CDP 强制 GC ×2，`--repeat-each=2`）：20 条历史堆增量 19.657 MB → **8.912 MB（−54.7%）**；`pushHistory` 826.1/840.5 ms → **505.2/488.3 ms（−39%/−42%）**；快照对象实例 400,000 → **200,000**；活动楼层独立数组 20/20 → **0/20**。
   - IO-P2-11（同环境，10k 行）：`objectLength` / `objectArea` 各 13,333 次 → **10,000 次**；构建 P50 18.9/17.4 ms → 15.6/18.4 ms（差异在噪声内）；8 种 golden 逐字节不变。
-  - 门禁：selftest **3207/0**；e2e 117 通过 +1 条件跳过；check-gates 6/6+10/10；discipline 13/13；dist 821,325 B / gzip 255,136 B / 余量 18,355 B（本批源码 +441 B）；SW `VERSION=79`。
+  - 门禁：selftest **3207/0**；e2e 117 通过 +1 条件跳过；check-gates 6/6+10/10；discipline 13/13；dist 821,325 B / gzip 255,136 B / 余量 18,355 B（本批源码 +441 B）；SW `VERSION=80`。
 - **遗留 TODO / 风险**：
   - CORE-P2-3 已修复并经真实浏览器复测；长时编辑（>20 步）内存斜率仍未单独采集。
   - IO-P2-11 的耗时收益小于机器抖动，保留改动是因为调用数确定下降且输出逐字节一致；若不接受无感改动可回退。
