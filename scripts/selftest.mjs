@@ -221,6 +221,7 @@ code += `\n;globalThis.__api = {
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
+  get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
   clearCurrentFloor,
   get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
   get affinePairs(){ return affinePairs; }, set affinePairs(v){ affinePairs=v; },
@@ -2031,6 +2032,58 @@ await section("28.10 IO-P1-6 工程库打开顺序：afterStateLoaded 成功后�
     sandbox.assetPrune=orig.prune; sandbox.afterStateLoaded=orig.after;
     sandbox.scheduleSave=orig.save; sandbox.requestRender=orig.render; sandbox.reachableAssetIds=orig.reach;
     api.resetState();
+  }
+}
+});
+
+/* 28.11 P2-A3 切工程前强制落盘：待保存不丢、失败取消切换 ---------------- */
+await section("28.11 P2-A3 切工程前强制落盘", async () => {
+{
+  const orig={get:sandbox.idbGetKey,ensure:sandbox.ensureBackgroundAsset,prune:sandbox.assetPrune,
+              after:sandbox.afterStateLoaded,save:sandbox.scheduleSave,run:sandbox.runSave,reach:sandbox.reachableAssetIds};
+  const PID='PRJ_OPEN_P2_A3';
+  api.resetState();
+  api.state.meta.name='NEXT'; api.state.meta.projectId=PID;
+  const raw=api.persistableState();
+  try{
+    /* ① 有待保存定时器：先以旧工程落盘，再替换现场 */
+    api.resetState();
+    api.state.meta.name='OLD'; api.state.meta.projectId='PRJ_OLD_A3';
+    api.state.objects=[api.baseObject('point','point.marker',{name:'OLD-OBJ',x:1,y:2})];
+    sandbox.idbGetKey=async k=>k==='proj:'+PID?JSON.parse(JSON.stringify(raw)):null;
+    sandbox.ensureBackgroundAsset=async()=>{};
+    sandbox.afterStateLoaded=async()=>{};
+    sandbox.assetPrune=async()=>[];
+    sandbox.reachableAssetIds=async()=>[];
+    const saved=[]; let sched=0;
+    sandbox.runSave=async()=>{ saved.push(api.state.meta.name); };
+    api.scheduleSave();                       /* 真实 450ms 防抖：制造待保存状态 */
+    sandbox.scheduleSave=()=>{ sched++; };
+    let threw=false; try{ await api.openProjectById(PID); }catch(e){ threw=true; }
+    eq('P2-A3 待保存切工程不抛错', threw, false);
+    eq('P2-A3 先落盘旧工程', saved[0], 'OLD');
+    eq('P2-A3 切换后为新工程', api.state.meta.name, 'NEXT');
+    eq('P2-A3 切换后恢复自动保存', sched, 1);
+    /* ② 落盘失败：取消切换并保留旧现场（可见错误） */
+    api.resetState();
+    api.state.meta.name='OLD2';
+    api.state.objects=[api.baseObject('point','point.marker',{name:'KEEP',x:3,y:4})];
+    const before=api.state;
+    sandbox.scheduleSave=orig.save;           /* 恢复真实防抖，制造待保存定时器 */
+    api.scheduleSave();
+    sandbox.scheduleSave=()=>{ sched++; };
+    sandbox.runSave=async()=>{ throw new Error('disk full'); };
+    let msg=''; threw=false;
+    try{ await api.openProjectById(PID); }catch(e){ threw=true; msg=String(e&&e.message||''); }
+    ok('P2-A3 落盘失败向上抛出', threw);
+    ok('P2-A3 落盘失败提示取消切换', msg.includes('取消切换'));
+    eq('P2-A3 落盘失败保留旧现场', api.state, before);
+    eq('P2-A3 落盘失败保留对象', api.state.objects.length, 1);
+  } finally {
+    sandbox.idbGetKey=orig.get; sandbox.ensureBackgroundAsset=orig.ensure;
+    sandbox.assetPrune=orig.prune; sandbox.afterStateLoaded=orig.after;
+    sandbox.scheduleSave=orig.save; sandbox.runSave=orig.run; sandbox.reachableAssetIds=orig.reach;
+    api.resetState(); api.resetSaveHealth();
   }
 }
 });

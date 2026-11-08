@@ -284,8 +284,21 @@ function assertProjectWithinLimits(raw,label){
   const errs=importLimitErrors({objects:countProjectObjects(raw)});
   if(errs.length) throw new Error(label+'超出上限：'+importLimitMessage(errs));
 }
+/** 切工程前强制落盘：清掉 450ms 防抖/重试定时器并立即保存旧现场。
+ *  租约被另一标签占用或落盘失败时抛错，由调用方取消切换并提示，不再静默丢弃最后一次编辑。 */
+async function flushPendingSave(){
+  const pending=!!saveTimer||!!saveRetryTimer;
+  clearTimeout(saveTimer); saveTimer=null;
+  clearTimeout(saveRetryTimer); saveRetryTimer=null;
+  if(!pending||rescueHold) return;
+  if(leaseSaveBlocked()) throw new Error('另一标签页正在编辑，已取消切换以保护草稿');
+  try{ await runSave(); }
+  catch(e){ reportSaveFailure(e,'idb'); throw new Error('旧工程保存失败，已取消切换'); }
+  if(saveHealth.state==='failed') throw new Error('旧工程保存失败，已取消切换');
+}
 /** 打开工程库中的工程：先构建候选 → 准备资产 → 原子替换；任何失败保持当前现场（审计 P1-9） */
 async function openProjectById(id){
+  await flushPendingSave();
   const raw=await idbGetKey(projectKey(id));
   if(!raw||!isReadableSchema(raw.schema)) throw new Error('工程不存在或已损坏');
   assertProjectWithinLimits(raw,'工程');

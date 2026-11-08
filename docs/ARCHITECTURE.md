@@ -149,6 +149,7 @@ Schema 为 `offline-drawing-annotation/v2`；`v1` 只读兼容，读取时迁移
 2. 若工程已绑定工程库（`state.meta.projectId`），再写 `proj:*` 副本；副本失败只降级提示，不重试；
 3. 设置每次写 localStorage；草稿兜底只在 IndexedDB 写入失败时写；
 4. 失败分类：`quota` 不重试并提示导出/清理；`idb` 提示降级；其他瞬时错误按 1s/3s/9s 重试三次。
+5. 切工程：`openProjectById()` 在读取/替换现场前调用 `flushPendingSave()`——清掉 450ms 防抖与重试定时器并立即 `runSave()` 旧现场；若租约被另一标签占用或落盘失败，抛错并取消切换（可见提示），不再静默丢弃最后一次编辑。
 
 加载侧 `loadSavedProject()` 先读 IndexedDB，失败再读 localStorage；若读到结构损坏的工程，会进入"救援"模式保留原文并可导出，避免用空工程覆盖用户数据（加载审计由 D-07 交付；相关限制见 [known-issues](known-issues.md)）。
 

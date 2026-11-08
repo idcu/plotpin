@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=90
+version=91
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -22,7 +22,7 @@ cb00476756b06976ddced3932677c7a74ac608c44b1e2ea23a7b9bd4dd22608f  js/core/geomet
 e1adf61f04f0f1315ed94c5772135ef15809ca60599c48a101933fbec5f3df92  js/core/geometry.js
 d458118b6153cb37aabe02c83527132133ee9720959592ee392d7f5061ad9d98  js/core/interaction.js
 050f7238d8602958cdf3b2ad0676fa6be4539302d3422a1c66ffd74fc01b0b5f  js/core/model.js
-e4d689ca3b04738e6b01b53ee9551640a3526a646433df958087e5ecc361a2e0  js/core/persistence.js
+3824012105ce2970dba33a9827694353e422d3de7d50f2e4328915659dc31ce9  js/core/persistence.js
 d4029e65497430f962c1c422fc769e092f366e6a805cb59b778f0cb65f8b9e73  js/core/render.js
 15b8367adf844d671a44bc5fa31e871ec69f533a96c0093d25cd1999d1b44366  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
