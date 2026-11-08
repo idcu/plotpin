@@ -214,7 +214,7 @@ code += `\n;globalThis.__api = {
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   addFloor, deleteFloor,
   snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
-  snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById,
+  snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById, createSnapshot,
   snapshotFloorMetas, diffSceneItems,
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
@@ -6994,7 +6994,7 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   const p=api.baseObject('point','point.marker',{id:'PH1',name:'PH1',x:1,y:1});
   p.props={photoDataUrl:'data:image/png;base64,AAAA',photoId:'as_photo_1'};
   api.state.objects=[p];
-  const snapData=api.snapshotProjectData();
+  const snapData=await api.snapshotProjectData();
   eq('B-04 快照剥离 photoDataUrl', 'photoDataUrl' in (snapData.objects[0].props||{}), false);
   eq('B-04 快照保留 photoId 引用', snapData.objects[0].props.photoId, 'as_photo_1');
   eq('B-04 快照深拷贝不回写当前状态', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
@@ -7952,6 +7952,27 @@ await section("P2-RT 批次 6：快照与协作", async () => {
   ok('RT-P2-01 前缀只匹配本工程', api.snapshotKey('A:B','X').startsWith('snap:A%3AB:')&&!api.snapshotKey('A','B:X').startsWith('snap:A%3AB:'));
   eq('RT-P2-01 索引键同样编码', api.snapshotIndexKey('A:B'), 'snapidx:A%3AB');
   eq('RT-P2-01 键后缀还原原始快照 id', api.snapshotIdOfKey(api.snapshotKey('P','S:1')), 'S:1');
+
+  /* RT-P2-03：快照的照片资产化只作用于深拷贝副本，不改实时工程 */
+  const storeRt03=new Map();
+  const savedIdb={get:sandbox.idbGetKey,put:sandbox.idbPutKey,del:sandbox.idbDeleteKey,keys:sandbox.idbAllKeys};
+  sandbox.idbGetKey=async k=>storeRt03.get(k);
+  sandbox.idbPutKey=async(k,v)=>{ storeRt03.set(k,v); };
+  sandbox.idbDeleteKey=async k=>{ storeRt03.delete(k); };
+  sandbox.idbAllKeys=async()=>Array.from(storeRt03.keys());
+  api.resetState(); api.state.meta.projectId='PRJ_RT03';
+  const ph3=api.baseObject('point','point.marker',{id:'PH3',name:'PH3',x:1,y:1});
+  ph3.props={photoDataUrl:'data:image/png;base64,AAAA'};
+  api.state.objects=[ph3];
+  const meta3=await api.createSnapshot({label:'RT03'});
+  eq('RT-P2-03 快照生成成功', typeof meta3.snapshotId, 'string');
+  eq('RT-P2-03 实时对象仍保留内嵌照片', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
+  eq('RT-P2-03 实时对象未被写入 photoId', 'photoId' in api.state.objects[0].props, false);
+  const rec3=storeRt03.get(api.snapshotKey('PRJ_RT03',meta3.snapshotId));
+  ok('RT-P2-03 快照数据已剥离 photoDataUrl', !!rec3&&!('photoDataUrl' in (rec3.data.objects[0].props||{})));
+  sandbox.idbGetKey=savedIdb.get; sandbox.idbPutKey=savedIdb.put;
+  sandbox.idbDeleteKey=savedIdb.del; sandbox.idbAllKeys=savedIdb.keys;
+  api.resetState();
 }
 });
 

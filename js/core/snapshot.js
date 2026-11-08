@@ -20,10 +20,12 @@ function snapshotIdOfKey(key){
   try{ return decodeURIComponent(raw); }catch(_){ return raw; }
 }
 
-/** 快照数据：当前楼层写回后深拷贝；剥离照片内嵌 dataUrl，保留 photoId / 底图 assetId 引用 */
-function snapshotProjectData(){
+/** 快照数据：先深拷贝实时 state，再在副本上完成照片资产化（RT-P2-03）。
+ *  资产化只写副本，不会静默改动正在编辑的工程；快照仍只保留 photoId 引用。 */
+async function snapshotProjectData(){
   syncActiveFloor();
   const data=persistableState();
+  await ensureObjectPhotoAssets(data);
   projectObjectLists(data).forEach(list=>{
     list.forEach(o=>{ if(o&&o.props&&o.props.photoDataUrl) delete o.props.photoDataUrl; });
   });
@@ -95,8 +97,7 @@ async function createSnapshot(opts={}){
   if(!pid) throw new Error('请先把当前图纸另存到工程库，再生成版本快照');
   if(opts.projectId&&state.meta.projectId!==opts.projectId) throw new Error('只能为当前打开的工程生成快照');
   const t0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-  await ensureObjectPhotoAssets(state);        /* 任何内嵌照片先转为资产引用，避免快照体积膨胀 */
-  const data=snapshotProjectData();
+  const data=await snapshotProjectData();        /* RT-P2-03：资产化与剥离都只作用于副本 */
   const json=JSON.stringify(data);
   const meta={
     snapshotId:uid('SNAP'), projectId:pid, projectName:state.meta.name||'未命名工程',
