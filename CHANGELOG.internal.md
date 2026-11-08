@@ -2,6 +2,18 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+## 2026-11-08 · N-24 历史草案含照片内存与 10k 快照列表复测
+
+- **Commit Hash**：`待回填`（docs(perf)：N-24 真机复测数据与门禁口径）。
+- **核心改动**：无业务代码改动。N-24 的内存问题由 B-10（`snapshotHistoryState` 结构共享）修复、10k 快照列表由 N-21（`snapidx:` 元数据索引）修复；本次用 `tests/perf/speed.perf.mjs` 的 N-24 用例在真实 Chromium 复测并把数据固化到 `docs/performance.md` §4.1.5。
+- **性能数据**（真实 Chromium；CDP `HeapProfiler.collectGarbage` + `Runtime.getHeapUsage`；1000 对象 + 10 张 100 KB 内嵌 base64 照片）
+  - 20 条含照片历史 heapUsed 增量：整份深拷贝 28.01 MB（29,365,720 B）→ 结构共享 **1.00 MB（1,049,336 B）**，**−96.43%**（门禁 ≥50%）。
+  - 20 次 `pushHistory` 同步耗时：122.5 ms → 41.9 ms（−65.8%）。
+  - 单次 undo：7.6 / 11.3 / 9.0 / 10.6 / 10.1 ms，**max 11.3 ms**（门禁 <100 ms）。
+  - 10k 对象 × 20 条快照列表：索引 `listSnapshots` P50 0.2 / P95 0.8 ms；全量 `snapshotRecords` P50 371.1 / P95 384.2 ms；**加速 1855×**。
+- **验证数据**：`perf-browser.mjs tests/perf/speed.perf.mjs -g "N-24"` 1 passed；e2e `history-increment.spec.mjs` 已固化 drop≥50% 与 undo<100ms；断言数、产物体积不变（无代码改动）。
+- **遗留风险**：夹具照片是 `props.photoDataUrl` 内嵌 base64（最坏情况）；工程实际使用 `props.photoId` 内容寻址时快照不持有图片字节，内存只会更低。
+
 ## 2026-11-08 · N-23 选中/悬停不再重建静态层
 
 - **Commit Hash**：`待回填`（perf(render)：选中与悬停只叠加动态层）。

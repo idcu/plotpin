@@ -158,6 +158,25 @@ DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm 
 
 基准代价：每次**拖拽开始/结束**各触发一次静态层重建（选中/悬停为零次）。10k 对象时约 0.2 s，与改造前「选中即重建」的总次数相同，只是把成本从点选移到了真正开始改形时。
 
+#### 4.1.5 历史栈含照片内存与 10k 快照列表（2026-11-08，N-24 复测）
+
+命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-24"`（真实 Chromium，CDP `HeapProfiler.collectGarbage` + `Runtime.getHeapUsage` 测堆）。夹具：1000 对象 + 10 张 100 KB 内嵌 base64 照片；参考组用 `JSON.parse(JSON.stringify(state))` 复刻改造前的整份深拷贝 20 条。
+
+| 指标 | 改造前（整份深拷贝） | 当前（结构共享） | 变化 | 结论 |
+|---|---|---|---|---|
+| 20 条含照片历史 heapUsed 增量 | 28.01 MB（29,365,720 B） | **1.00 MB（1,049,336 B）** | **−96.43%** | 通过（≥50%） |
+| 20 次 pushHistory 同步耗时 | 122.5 ms | 41.9 ms | −65.8% | 记录 |
+| 单次 undo 同步耗时（5 次采样） | — | 7.6 / 11.3 / 9.0 / 10.6 / 10.1 ms，max **11.3 ms** | — | 通过（<100 ms） |
+
+10k 对象 × 20 条快照的列表打开（N-21 元数据索引 vs 逐条全量读）：
+
+| 路径 | P50 | P95 | 加速 |
+|---|---|---|---|
+| `listSnapshots()`（`snapidx:` 索引） | 0.2 ms | 0.8 ms | — |
+| `snapshotRecords()`（逐条读 + 反序列化） | 371.1 ms | 384.2 ms | **1855×** |
+
+说明：N-24 的内存问题由 B-10（结构共享快照）修复、列表耗时由 N-21（元数据索引）修复，本次仅补真机复测与门禁，未改业务代码。e2e `history-increment.spec.mjs` 已固化「heapUsed 下降 ≥50%」与「undo <100ms」两条断言；本文件 §4.1.5 的 perf 用例额外覆盖 10k 快照列表。
+
 ### 4.2 真实浏览器代理数据（2026-11-07，Chromium + SwiftShader）
 
 来源：[manual-acceptance-report-2026-11-07.md](manual-acceptance-report-2026-11-07.md) §M5；命令 `npm run perf:browser`（4 passed / 19.1 s）。
