@@ -13,7 +13,9 @@
 4. 同一缺陷被多份审计重复发现的，只保留一条任务，证据位置合并列出（见 §4 去重表）。
 5. 顺序原则：**先止血（安全/数据丢失/假绿门禁），再纠错，再提速，最后补文档与测试**。任何性能项都排在安全与数据丢失项之后。
 
-## 1. 实测基线（采集日期 2026-11-07～08）
+## 1. 历史基线（N 系列开工时采集，2026-11-07～08）
+
+> 下表是 N 系列开工时的快照，数值已被后续任务推进改变，**不代表当前状态**；现行值、采集命令与日期见 [facts.md](../facts.md)。保留本表仅用于追溯计划起点。
 
 | 项 | 值 | 来源 | 备注 |
 |---|---|---|---|
@@ -38,10 +40,10 @@
 ### 2.1 硬门禁（每个任务提交前必须全绿，沿用现状）
 
 ```bash
-node scripts/check.mjs --selftest      # 2706 断言基线不得减少，作为 N-01 之前的暂定基线
-node scripts/e2e.mjs                   # 不低于 90 条 / 1 skipped；跳过项不得增加
-node scripts/build.mjs --check         # 产物 ≤ 839,680 B，当前 783,226 B
-node scripts/check-gates.mjs           # 7/7
+node scripts/check.mjs --selftest      # 断言数不得减少（当前值见 docs/facts.md）
+node scripts/e2e.mjs                   # 通过数不得减少、跳过项不得增加（当前值见 docs/facts.md）
+node scripts/build.mjs --check         # 产物 ≤ 839,680 B（当前值与余量见 docs/facts.md）
+node scripts/check-gates.mjs           # 正面基线 6/6 + 人为破坏 9/9
 node scripts/check-discipline.mjs --strict  # 13/13 L4
 ```
 
@@ -316,7 +318,7 @@ node scripts/check-discipline.mjs --strict  # 13/13 L4
 
 #### N-25 文档单一事实源与过期数字清理
 
-- 问题与证据：当前值与旧值冲突：selftest 2706 vs 文档 2584；e2e 90 vs 65；体积 783,226 vs 784,371；DXF 已实现 vs「未验证」；plans 写 D01-D15 但旧 README 只列 D01-D13；报告写「10,000 对象 / 7,453 B > 10 KB」自相矛盾；`known-issues.md` 的 K1 条目把 SW 门禁写成已修复而 CI 恒绿。来源：audit-docs S1-S6、D01-D26。
+- 问题与证据（以下均为立项时的历史数字，现行值见 `docs/facts.md`）：当时同一指标存在多份互相冲突的「当前值」——selftest 2706 vs 文档 2584；e2e 90 vs 65；体积 783,226 vs 784,371；DXF 已实现 vs「未验证」；plans 写 D01-D15 但旧 README 只列 D01-D13；报告写「10,000 对象 / 7,453 B > 10 KB」自相矛盾；`known-issues.md` 的 K1 条目把 SW 门禁写成已修复而 CI 恒绿。来源：audit-docs S1-S6、D01-D26。
 - 目标：建立 `docs/facts.md` 作为唯一事实源（数值 + 采集命令 + 采集日期），其余文档只引用不复制；旧数字加「历史」标注或删除；计划索引与状态对齐。
 - 涉及文件：`docs/facts.md`（新增）、`README.md`、`docs/testing.md`、`docs/performance.md`、`docs/known-issues.md`、`docs/plans/README.md`、相关功能文档；`CHANGELOG.internal.md` 仅追加。
 - 验收：① 全仓 `rg "2584|65 个 e2e|784,371|784,371 B"` 仅命中历史区且显式标注；② `facts.md` 每个数字有采集命令与日期；③ plans 索引覆盖 D01-D15 与 N-01～N-27；④ known-issues 对 SW 门禁的描述与 CI 实际一致（N-01 结果）；⑤ 链接/锚点校验零断链。
@@ -329,7 +331,7 @@ node scripts/check-discipline.mjs --strict  # 13/13 L4
 - 问题与证据：7 个文件无模块文档（`features/import-ui.js`、`io-import.js`、`io-table.js`、`plugins.js`、`common/plugins-sandbox.js`、`common/pdf-read.js`、`common/symbols.js`，`docs/modules.md:203-344` 仅 26 个）；testing 只有计数与明细，无功能域覆盖矩阵（`docs/testing.md`）；CSV/TSV/XLSX/GeoJSON/PNG 无 golden 回归（`scripts/check.mjs`/测试目录）；DXF 无直接 e2e、TSV 无独立用例；`@media print` 未闭合无门禁（`css/style.css:213-224`，audit-gates P1-1）；Playwright 清空 `test-results` 会删人工验收证据（audit-docs D08/D18）。
 - 目标：`modules.md` 覆盖全部 45 个 classic script；`testing.md` 增加「功能域 × 层（selftest/e2e/golden）」矩阵；补 5 类缺失 golden 与 DXF/TSV e2e；`check-gates` 增加 CSS 结构场景；人工验收证据移出 Playwright `outputDir`。
 - 涉及文件：`docs/modules.md`、`docs/testing.md`、`tests/golden/`、`tests/e2e/*`、`scripts/check-gates.mjs`、`playwright.config.mjs`、`docs/acceptance/`。
-- 验收：① modules 逐文件表 45 行、`script` 类 35 行全覆盖；② 测试矩阵列出 108 个 selftest 分区与 90 条 e2e 的功能域归属，空白格显式标「无覆盖」；③ 新增 ≥5 类 golden 且 8 种导出各有字节/semantic 对比；④ DXF/TSV 有独立 e2e 通过；⑤ CSS 门禁场景 7→8（N-01 后为 9→10）；⑥ 人工证据目录不被测试清空。
+- 验收：① modules 逐文件表覆盖全部 `js/` 脚本（数量以 `docs/facts.md` 为准）；② 测试矩阵列出全部 selftest 分区与 e2e 用例的功能域归属（数量以 `docs/facts.md` 为准），空白格显式标「无覆盖」；③ 新增 ≥5 类 golden 且 8 种导出各有字节/semantic 对比；④ DXF/TSV 有独立 e2e 通过；⑤ CSS 门禁场景 9→10；⑥ 人工证据目录不被测试清空。
 - 依赖：N-25（事实源先统一；测试计数以 facts.md 为准）。
 - 风险：golden 新增可能暴露既有差异；发现即先报告差异，不擅自改 golden 基线。
 - 预估：10～14 人时。数据属性：静态可判定 + e2e 实跑。

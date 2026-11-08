@@ -2,6 +2,28 @@
 
 记录每次提交的核心改动、实测验证数据与遗留风险，便于复盘。数据均为本机实测，未达标不提交。
 
+> 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
+
+## 2026-11-08 · N-25 文档单一事实源与过期数字清理
+
+- **Commit Hash**：本段收尾统一回填。
+- **核心改动**：
+  - 新增 `docs/facts.md`：数量类指标的唯一事实源，每行附采集命令与日期（基线 `2df8b3c`，采集 2026-11-08）；明确性能数字以 `performance.md` 为准。
+  - `docs/known-issues.md`：核对基线改为 `2df8b3c`；§1 已修复 24 → 34 条（补 CORE-P1-4/5、RT-P1-01~07、RT-P1-10，逐条给出可复跑 e2e/selftest 位置）；§2.1 收为 2 条「部分修复」（CORE-P1-8、RT-P1-09），未修复部分保留「仍存在」措辞。
+  - 清理过期数字：`README.md`（spec 35 → 34）、`docs/engineering.md`（体积快照、提交示例余量）、`docs/modules.md`（断言 2706 → 2982、门禁牙齿 7 → 9）、`docs/plans/README.md`（体积口径 + D-01~D-15 逐条索引）、`docs/plans/next-phase-2026-11.md`（§1 标注为历史基线、门禁命令注释改为引用 facts.md、N-25 验收数字去具体值）、`docs/testing.md`（118 分区 / 2982 断言 / 34 spec / 108 用例，§3.2 按 `--list` 逐 spec 重算）、`docs/manual-acceptance-report-2026-11-07.md`（标注历史值）。
+  - `CHANGELOG.internal.md` 顶部声明本文件为历史档案，现行值以 `docs/facts.md` 为准。
+- **验证数据**：
+  - `node scripts/check.mjs --selftest`：2982 通过 / 0 失败（118 分区；契约 7/0；插件 API 23/0/0；i18n 45.65% / 缺口 6 / UI 硬编码 1 / 模板内 0；SW VERSION=33）。
+  - `node scripts/e2e.mjs`：107 passed / 1 skipped（108 用例 / 34 spec）。
+  - `node scripts/build.mjs --check`：811,021 B（792.0 KB）、gzip 252,205 B、余量 28,659 B，SHA256 与 manifest 一致；本次仅改 Markdown，产物不变。
+  - `node scripts/check-gates.mjs`：正面基线 6/6 + 破坏 9/9。
+  - `node scripts/check-discipline.mjs --strict`：13/13；最大文档 51.1KB/418L（≤60KB/≤600L）。
+  - 链接/锚点一次性校验：README + `docs/**/*.md` 共 15 个文件，0 断链。
+  - 过期值复扫：`2584|2,584|65 个 e2e|784,371` 仅命中 `CHANGELOG.internal.md` 历史档案、未跟踪的 `audit-out/` 与计划中显式标注为「立项时历史数字」的段落。
+- **遗留 TODO / 风险**：
+  - N-26 需把 testing.md §7 的「DXF 导出无 e2e」空白补齐；本次未改该行，避免提前宣称未做之事。
+  - `audit-out/` 为本地未跟踪材料，不参与链接校验与过期值复扫口径。
+
 ## 2026-11-08 · N-24 历史草案含照片内存与 10k 快照列表复测
 
 - **Commit Hash**：`5605ef4`（docs(perf)：N-24 真机复测数据与门禁口径）。

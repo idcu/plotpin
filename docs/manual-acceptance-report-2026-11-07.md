@@ -228,15 +228,17 @@ Get-ChildItem 'C:\Program Files\...\EXCEL.EXE', 'C:\Program Files\WPS Office\*\o
 
 ## 8. D-14 修复记录（英文侧）
 
+> 下表是 D-14 验收当日（2026-11-07）的历史值，**不代表当前状态**；现行指标与采集命令见 [facts.md](facts.md)。
+
 | 项 | 数据 |
 |---|---|
 | 修复前 M4 扫描 | 6 个区域含中文 / 193 实例 / 89 去重 / 0 占位符 |
 | 修复后 M4 扫描 | 3 个区域含中文 / 3 实例 / 3 去重 / 0 占位符 |
 | 中文界面回归 | 抽查页签、符号库、规则、设置、图框按钮，文案不变（`acceptance-evidence/M4/zh-check.json`） |
 | 体积（源文件） | 7,854 B（预算 8,000 B，余量 146 B）。归档注：原文未写明基数，按预算推断为本次 i18n 文案增量口径，非单文件产物 |
-| 体积（构建产物） | 7,453 B（余量 547 B）。归档注：原文将该值标注为 `dist/plotpin-standalone.html`，与事实不符；该产物 2026-11-08 实测为 783,226 B（见 `scripts/dist-manifest.json`），7,453 B 应为文案增量口径，保留原值存疑 |
-| selftest | 2,706 通过 / 0 失败 |
-| e2e | 85 passed / 1 skipped（当日实测；当前用例数见 testing.md，不以此值作为现状） |
+| 体积（构建产物） | 7,453 B（余量 547 B）。归档注：原文将该值标注为 `dist/plotpin-standalone.html`，与事实不符；该产物当前实测值见 [facts.md](facts.md)（`scripts/dist-manifest.json`），7,453 B 应为文案增量口径，保留原值存疑 |
+| selftest | 2,706 通过 / 0 失败（历史值） |
+| e2e | 85 passed / 1 skipped（历史值；当前用例数见 [facts.md](facts.md)，不以此值作为现状） |
 | i18n 覆盖率门禁 | 41.99% ≥ 基线 40%，缺口 0 |
 | 证据目录 | `acceptance-evidence/`（已加入 `.gitignore`，位于 `test-results/` 之外） |
 
