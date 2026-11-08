@@ -2,12 +2,12 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=48
+version=49
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
-25d8b28152c77215404f5b66ef3c06e0d2c72aec5f424b24f5aa5eeaf62019c1  js/common/dxf.js
+a4122a38c0ac51ba7ea5ba1287a91ee2dc9a640891144470649390192df9a226  js/common/dxf.js
 b738a54fe0e51a89719088da52e73b90860ad8011189230425bad79e1b3a7056  js/common/i18n.js
 99aa5e3d60c02d924805468660f3616b4a8f6f2c0b2bc2d41fa71b91bc721890  js/common/merge.js
 4df813717856383f877d6552aeb8529ebf7f2adbbc52cf0c62ca40c4e7db60d2  js/common/pdf-read.js
@@ -45,7 +45,7 @@ a2522523831e35bb35355a13fa930b5c3840f40486814baf80a76dbb6a67f782  js/features/ui
 5e1137eca399e2bd0a85e1890268b319aec2fffd3c20354fd8664ff079ad7909  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets/src/core.js
 4c6e26b341a211b76218e26fc9fa5f644077bc0136e28348b4b529558b42bd02  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/geometry/src/core.js
 8f893da7e2a131e5795628f813b1999879a7cbe67a57812de0072b3ede63a21a  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dsv/src/vendor/dsv.js
-f406fe75588c614f3f28eabf8c5af4b14082f2d6315a15958baf12d25561dca6  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf/src/core.js
+86ada86fed89fc55f86465de62fa764b60278d504d6b920ec750d10ff287526b  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf/src/core.js
 a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf-image/src/core.js
 546ea3c769dc0f14673df2e85e705a63445c5624b6c02c50fe635a298f3024b6  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf/src/core.js
 202910ffd949406f841020fb4f2940a8f35dec4b60610943a67748a1f46901d0  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/qr/src/core.js

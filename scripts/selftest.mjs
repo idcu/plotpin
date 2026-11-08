@@ -7735,6 +7735,19 @@ await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
   ok('IO-P2-18 R12 凸度降级在预检文案', fl.some(l=>l.includes('R12 凸度')&&l.includes('2')));
   const fl0=api.dxfFidelityLines({version:'AC1009',versionName:'R12',knownVersion:true,r12Bulge:0,supportedCount:5,blocks:0},null);
   ok('IO-P2-18 无凸度不误报降级', !fl0.some(l=>l.includes('R12 凸度')));
+
+  /* IO-P2-19：TEXT/ATTRIB 首尾空格原样保留（不得 trim 文本值） */
+  const dxfSrc=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','9','$INSUNITS','70','6','0','ENDSEC',
+    '0','SECTION','2','ENTITIES',
+    '0','TEXT','8','0','10','1','20','2','40','1','1','  门牌 A  ',
+    '0','ATTRIB','8','0','10','3','20','4','40','1','1','  属性 B  ',
+    '0','ENDSEC','0','EOF'].join('\n');
+  const pT=api.Dxf.parseDxf(dxfSrc);
+  const texts=pT.entities.filter(e=>e.type==='TEXT').map(e=>e.text);
+  ok('IO-P2-19 TEXT 文本不 trim', texts.includes('  门牌 A  '));
+  ok('IO-P2-19 ATTRIB 文本不 trim', texts.includes('  属性 B  '));
+  const pp=api.Dxf.inspect(dxfSrc);
+  ok('IO-P2-19 预检仍可识别版本', !!pp.version);
 }
 
 });

@@ -277,7 +277,7 @@ function readRecord(lines,i,typ){
     else if(c===3){ if(typ==='MTEXT') r.text+=raw!==undefined?raw:''; }
     else if(c===1){
       if(typ==='MTEXT') r.text+=(raw!==undefined?raw:'');
-      else r.text=raw!==undefined?raw.replace(/\s+$/,''):'';
+      else r.text=raw!==undefined?raw:'';
     }
     else if(c===41){ if(typ==='INSERT') r.sx=parseFloat(raw)||1; else if(typ==='ELLIPSE') r.t0=parseFloat(raw); }
     j+=2;

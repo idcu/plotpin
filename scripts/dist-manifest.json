@@ -1,9 +1,9 @@
 {
   "file": "plotpin-standalone.html",
-  "sha256": "05007ea782aa891068918683f2fc2e00946d9eec34c36da78d53c61dcb2ab36f",
-  "bytes": 815464,
+  "sha256": "2665bdde27ff9189ce1e2dd51131dc659bb59dbab9aace2e71d03e23941a2114",
+  "bytes": 815487,
   "kb": "796.4 KB",
-  "gzipBytes": 253587,
+  "gzipBytes": 253583,
   "gzipKb": "247.6 KB",
   "maxBytes": 839680
 }

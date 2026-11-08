@@ -40,7 +40,11 @@
   /** 严格两行一组：DXF ASCII 的组码/值固定成对出现（与公共模块同一读取模型） */
   function dxfPairs(text){
     const lines=String(text||'').split(/\r?\n/), out=[];
-    for(let i=0;i+1<lines.length;i+=2) out.push([parseInt(lines[i],10), lines[i+1]===undefined?'':lines[i+1].trim()]);
+    for(let i=0;i+1<lines.length;i+=2){
+      const code=parseInt(lines[i],10), raw=lines[i+1]===undefined?'':lines[i+1];
+      /* IO-P2-19：组码 1 为文本原值，保留首尾空格；其余组码仍 trim 以便结构比较 */
+      out.push([code, code===1?raw:raw.trim()]);
+    }
     return out;
   }
   function sectionScan(pairs,onEntity,onSection){
