@@ -649,7 +649,7 @@ function drawSiteAnnotations(c,v,toS){
 }
 function drawGrid(c,v,d,cssW,cssH,toS){
   if(!state.settings.gridVisible) return;
-  const step=niceStep(45/v.zoom);
+  const step=gridDisplayStep(v.zoom,state.settings.gridSize,45);
   const a=s2w([0,cssH],v,d), b=s2w([cssW,0],v,d);
   const x0=Math.floor(Math.min(a[0],b[0])/step)*step, x1=Math.ceil(Math.max(a[0],b[0])/step)*step;
   const y0=Math.floor(Math.min(a[1],b[1])/step)*step, y1=Math.ceil(Math.max(a[1],b[1])/step)*step;

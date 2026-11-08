@@ -209,6 +209,7 @@ code += `\n;globalThis.__api = {
   affineLinearSummary, affineEllipseImage, affineShapeTransform,
   siteBoundaryPoints, siteShapeCenter, siteBasePoint, siteRadiusText, siteAreaPerimeter,
   worldFrame, computeWorldFrame, resetFrameRef, syncFramePan, siteBounds, w2s, fitView, pointBounds,
+  niceStep, snapPoint, gridDisplayStep,
   siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
   siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
   sitePropsHTML, imagePropsHTML,
@@ -4690,6 +4691,47 @@ await section("48.1 覆盖率口径 v3：与缩放无关、面积同源、隐藏
   const optMs=Date.now()-optT0;
   ok('覆盖口径v3-优化器搜索耗时实测 '+optMs+'ms（Node 桩，仅记录）', optMs>=0);
   console.log('  [N-20] 5000×5000m 覆盖率分析 ' + hugeMs + ' ms；优化器搜索 ' + optMs + ' ms（Node 桩）');
+  api.resetState();
+}
+
+});
+
+/* 48.2 显示网格步长与吸附步长对齐（P2-E3） -------------------------------- */
+await section("48.2 显示网格步长与吸附步长对齐", async () => {
+{
+  const grids=[0.1,0.5,1,2.5];
+  const zooms=[0.1,0.25,0.5,1,2,4,8,20];
+  let bad=0, minSpacing=Infinity, worst='';
+  for(const g of grids) for(const z of zooms){
+    const st=api.gridDisplayStep(z,g,45);
+    const k=st/g, rk=Math.round(k);
+    if(!(rk>=1&&Math.abs(k-rk)<1e-9)){ bad++; worst=`${g}m@${z}x k=${k}`; }
+    else if(st*z<45-1e-9){ bad++; worst=`${g}m@${z}x 间距=${st*z}`; }
+    minSpacing=Math.min(minSpacing,st*z);
+  }
+  eq('E3-所有组合步长均为吸附步长整数倍且间距≥45px'+(worst?'（'+worst+'）':''), bad, 0);
+  ok('E3-最小屏幕间距≥45px（实测 '+minSpacing.toFixed(3)+'px）', minSpacing>=45-1e-9);
+  /* 最小性：若非最小一档，再减一个吸附步长就会低于目标间距 */
+  ok('E3-步长取最小可行整数倍', [0.1,0.25,0.5,1,2,8].every(z=>{
+    const st=api.gridDisplayStep(z,1,45);
+    return st<=1+1e-12 || (st-1)*z<45;
+  }));
+  /* 网格线坐标必须是合法吸附坐标：snapPoint 对网格交点不变 */
+  api.state.settings.snap=true; api.state.settings.gridSize=1;
+  ok('E3-网格线与吸附坐标一致', [0.1,0.5,1,2,8].every(z=>{
+    const st=api.gridDisplayStep(z,1,45);
+    return [1,2,3].every(k=>{
+      const p=api.snapPoint([st*k,st*k]);
+      return Math.abs(p[0]-st*k)<1e-9&&Math.abs(p[1]-st*k)<1e-9;
+    });
+  }));
+  /* 放大时显示步长单调不增 */
+  const seq=[0.1,0.25,0.5,1,2,4,8].map(z=>api.gridDisplayStep(z,1,45));
+  ok('E3-放大时显示步长单调不增', seq.every((v,i)=>i===0||v<=seq[i-1]+1e-12));
+  /* 回归依据：旧 niceStep(45/zoom) 在高缩放下会给出 0.5m，落在 1m 吸附坐标之外 */
+  const old=api.niceStep(45/100);
+  ok('E3-旧算法 100x 时步长 0.5m 不是 1m 吸附步长整数倍（问题复现）',
+    Math.abs(old/Math.round(old)-1)>1e-9);
   api.resetState();
 }
 

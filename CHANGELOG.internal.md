@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 E（3/3）：显示网格步长对齐吸附步长
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/viewport.js`：新增 `gridDisplayStep(zoom, gridSize, minPx=45)`，返回 `gridSize` 的整数倍且屏幕间距不小于 `minPx`；`niceStep` 保留给比例尺。
+  - `js/core/render.js#drawGrid`：网格步长由 `niceStep(45/zoom)` 改为 `gridDisplayStep(v.zoom, state.settings.gridSize, 45)`，网格线始终落在可吸附坐标上。
+  - `scripts/selftest.mjs` +6（新增分区 48.2）：网格大小 0.1/0.5/1/2.5 × 缩放 0.1–20 共 32 组断言步长均为吸附步长整数倍、间距≥45px；步长取最小可行整数倍；`snapPoint` 对网格交点不变；放大时步长单调不增；旧算法 100x 给出 0.5m 的问题复现。
+  - 同步 `docs/user-guide.md`、`docs/features.md`、`docs/modules.md`、`docs/facts.md`、`docs/engineering.md`。
+- **验证数据**：
+  - 网格大小 1m 实测：0.1x→450m、0.5x→90m、1x→45m、2x→23m、8x→6m、20x→3m、100x→1m；各档 `step/gridSize` 均为正整数，最小屏幕间距 45px。
+  - 旧算法：100x 下 `niceStep(45/100)=0.5m`，与 1m 吸附步长不对齐（断言复现）。
+  - selftest **3598 通过 / 0 失败**（基线 3592，+6）；e2e 123 通过 + 1 条件跳过。
+  - dist **834,123 B**（本条 **+216 B**）/ gzip 259,132 B / 余量 **5,557 B**；SW `VERSION=112`。
+- **遗留 TODO / 风险**：
+  - 显示网格在缩小视图时会更稀疏（间距固定≥45px 的整数倍），与旧版 `niceStep` 的 1/2/5 档位不同；这是对齐吸附步长的代价。
+  - 网格步长只影响绘制，不改变 `snapPoint` 的吸附粒度；导出 SVG 不画网格，无影响。
+
 ## 2026-11-08 · 批次 E（2/3）：盲区面积与主覆盖率统一口径
 
 - **Commit Hash**：`e69bdb2`

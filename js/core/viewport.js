@@ -84,6 +84,12 @@ function niceStep(targetMeters){
   const f=n<2?1:n<5?2:5;
   return f*pow;
 }
+/** 显示网格步长：吸附步长的整数倍，保证每条网格线都落在可吸附坐标上。
+ *  目标屏幕间距 minPx（默认 45px）；放大时按吸附步长的整数倍收敛，最小为吸附步长本身。 */
+function gridDisplayStep(zoom,gridSize,minPx){
+  const g=Math.max(.01,Number(gridSize)||1), z=Math.max(1e-6,Number(zoom)||1);
+  return g*Math.max(1,Math.ceil((Number(minPx)||45)/(g*z)));
+}
 function snapPoint(p,byKey){
   if(!state.settings.snap || byKey?.shiftKey) return p;
   const g=state.settings.gridSize||1;
