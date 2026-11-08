@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · N-27 公共抽象收敛与 P2 审计归档
 
-- **Commit Hash**：本段收尾统一回填。
+- **Commit Hash**：`7ea2de7`（perf(render)：删除选中绘制每帧未使用分配并归档 N-27 收敛结论）。
 - **核心改动**：
   - `js/core/render.js`：删除 `drawSelection` 中每帧执行且结果未被任何分支使用的 `objectPoints(o).map(toS)`（审计 CORE-P2-13）。影响调用方：无（函数内局部变量）；`objectPoints` 仍由 `geometry.js` 的 `objectBounds`/捕捉路径使用。
   - 其余 8 项按代码现状归档，未强行收敛：`historyValueEqual` 保留（生产无调用，但 `selftest:7095-7096` 两条断言直接覆盖，删除即删断言）；`mergeStable`/`sanitizeLayers`/`objectIndexById` 均单一定义、无重复；`collectSnap`（N-22）、`normalizeExportColor`（N-10）、`APP_LIMITS.COVERAGE_*`（N-20）已由前置任务收敛；`scripts/lib/*` 抽取放弃（`check-discipline.mjs` 无 CSS/MJS 解析器，`check-ngm.mjs` 遍历/容错语义不同，抽取会改变门禁行为且无断言覆盖）。
@@ -25,7 +25,7 @@
 
 ## 2026-11-08 · N-26 导出 golden 补齐与测试矩阵收口
 
-- **Commit Hash**：本段收尾统一回填。
+- **Commit Hash**：`98b7f80`（test(golden)：补齐 CSV/TSV/XLSX/GeoJSON/PNG 导出基线并收口测试矩阵）。
 - **核心改动**：
   - selftest 新增分区「N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节基线」：固定场景（时间戳固定避免台账「更新时间」漂移）+ 纯序列化函数；XLSX 先断言同输入两次构建字节一致，再比 golden；新增 `tests/golden/plain-scene.csv`（619 B）、`plain-scene.tsv`（617 B）、`plain-scene.xlsx`（9,795 B）、`blindspots.geojson`（769 B）。
   - e2e `export-scope.spec.mjs` 新增 2 条：DXF/TSV 导出下载内容与可见性口径；PNG 语义 golden（签名 + 2631×1860，不锁编码字节），基线 `tests/golden/plain-scene.png.meta.json`（36 B）。
@@ -44,7 +44,7 @@
 
 ## 2026-11-08 · N-25 文档单一事实源与过期数字清理
 
-- **Commit Hash**：本段收尾统一回填。
+- **Commit Hash**：`e105584`（docs(facts)：建立单一事实源并清理全仓过期数字）。
 - **核心改动**：
   - 新增 `docs/facts.md`：数量类指标的唯一事实源，每行附采集命令与日期（基线 `2df8b3c`，采集 2026-11-08）；明确性能数字以 `performance.md` 为准。
   - `docs/known-issues.md`：核对基线改为 `2df8b3c`；§1 已修复 24 → 34 条（补 CORE-P1-4/5、RT-P1-01~07、RT-P1-10，逐条给出可复跑 e2e/selftest 位置）；§2.1 收为 2 条「部分修复」（CORE-P1-8、RT-P1-09），未修复部分保留「仍存在」措辞。
