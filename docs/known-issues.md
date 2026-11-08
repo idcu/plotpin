@@ -164,6 +164,7 @@
 | CORE-P2-6 | 已收敛（归档）：`optimizeCameraPlacement` 的 before/after 已与 `analyzeCoverage` 同分母（`res.totalArea`），未改代码 | [geometry-coverage.js](../js/core/geometry-coverage.js) 优化分支 |
 | CORE-P2-13 | 已收敛（归档）：`drawSelection` 的无用 `alloc` 已在 N-27 删除，见 §2.4 对应条目 | [known-issues.md](known-issues.md) §2.4 |
 | CORE-P2-14 | 已归档（仅自测入口）：`historyValueEqual` 生产代码不使用，保留供自测；断言未删除 | [known-issues.md](known-issues.md) §2.4 |
+| RT-P2-02 | 已降级为限制：快照每工程 20 条 / 约 16 MB 是 UTF-8 字节估算的软上限；单条超限仍保留 | [features.md](features.md) §11、[ARCHITECTURE.md](ARCHITECTURE.md) 快照节、[user-guide.md](user-guide.md) §14 |
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 
