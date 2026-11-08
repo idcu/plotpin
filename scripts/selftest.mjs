@@ -7748,6 +7748,10 @@ await section("P2-IO 批次 3：DXF/PNG 一致性", async () => {
   ok('IO-P2-19 ATTRIB 文本不 trim', texts.includes('  属性 B  '));
   const pp=api.Dxf.inspect(dxfSrc);
   ok('IO-P2-19 预检仍可识别版本', !!pp.version);
+
+  /* IO-P2-26：单独 LF/控制字符也不得进入图层名（N-10 只覆盖 CRLF+Tab 组合） */
+  eq('IO-P2-26 单独 LF 压成空格', api.dxfSanitizeName('X\nY'), 'X Y');
+  eq('IO-P2-26 控制字符被剔除', /[\x00-\x1f]/.test(api.dxfSanitizeName('a\u0001b')), false);
 }
 
 });
