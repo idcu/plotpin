@@ -5334,12 +5334,17 @@ await section("57. 插件注册点：导出器 / 导入器注册、校验、查�
   /* 自定义设备类型注册（P2-3 插件化补齐） */
   const typeBase=api.BUILTIN_TYPES.length;
   eq('插件-初始无插件类型', PP.listPluginTypes().length, 0);
+  /* B9：类型注册/注销必须走 markDirty('settings')，否则刷新后类型丢失、协作收不到 */
+  const dirtyKinds=[], origMark=sandbox.markDirty;
+  sandbox.markDirty=k=>{ dirtyKinds.push(k); origMark(k); };
   ok('插件-注册自定义设备类型', PP.registerObjectType({
     id:'plugin.ptz', kind:'point', name:'全景相机', color:'#0ea5e9', icon:'custom',
     scaleShape:'sector', fov:360, iconSize:1.5,
     symbol:[{d:'M0 0h24v24H0z', fill:false}], symbolViewBox:{x:0,y:0,w:24,h:24},
     defaultStyle:{fillAlpha:.2,strokeWidth:.08}
   }));
+  eq('B9-注册类型标记落盘', dirtyKinds[dirtyKinds.length-1], 'settings');
+  ok('B9-类型进入可持久化工程', api.persistableState().objectTypes.some(t=>t.id==='plugin.ptz'));
   const pt=PP.listPluginTypes()[0];
   eq('插件-类型写入内置表', api.BUILTIN_TYPES.filter(t=>t.id==='plugin.ptz').length, 1);
   eq('插件-类型写入当前工程', api.state.objectTypes.filter(t=>t.id==='plugin.ptz').length, 1);
@@ -5388,12 +5393,14 @@ await section("57. 插件注册点：导出器 / 导入器注册、校验、查�
   ok('插件-使用中的类型仍保留', api.state.objectTypes.some(t=>t.id==='plugin.ptz'));
   api.resetState();
   ok('插件-未使用时可注销类型', PP.unregisterObjectType('plugin.ptz'));
+  eq('B9-注销类型标记落盘', dirtyKinds[dirtyKinds.length-1], 'settings');
   eq('插件-注销后内置表移除', api.BUILTIN_TYPES.filter(t=>t.id==='plugin.ptz').length, 0);
   eq('插件-注销后当前工程移除', api.state.objectTypes.filter(t=>t.id==='plugin.ptz').length, 0);
   ok('插件-内置类型不可注销', !PP.unregisterObjectType('point.marker'));
   ok('插件-注销第二个插件类型', PP.unregisterObjectType('plugin.zone'));
   eq('插件-内置类型表恢复原长度', api.BUILTIN_TYPES.length, typeBase);
   eq('插件-插件类型表清空', PP.listPluginTypes().length, 0);
+  sandbox.markDirty=origMark;
   api.resetState();
 }
 

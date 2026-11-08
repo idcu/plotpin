@@ -132,7 +132,8 @@ const MARK_DIRTY_PROFILES=Object.freeze({
   objectEdit:Object.freeze({ui:'lists',broadcast:true}),
   clear:Object.freeze({ui:'full',broadcast:false}),
   restore:Object.freeze({ui:'none',broadcast:true}),
-  floor:Object.freeze({ui:'none',broadcast:false})
+  floor:Object.freeze({ui:'none',broadcast:false}),
+  settings:Object.freeze({ui:'full',broadcast:true})
 });
 function markDirty(kind){
   const p=MARK_DIRTY_PROFILES[kind]||MARK_DIRTY_PROFILES.object;

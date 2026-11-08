@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 批次 B（4/6）：插件类型注册/注销接入持久化与协作广播
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/plugins.js` 新增 `markTypesChanged()`：`installType()` 与 `unregisterObjectType()` 修改当前工程 `state.objectTypes` 后调用 `markDirty('settings')`，进入自动保存与协作广播；无 `markDirty` 环境降级到 `scheduleSave()`。
+  - `js/core/persistence.js` 增加 `settings` 写盘画像（全量 UI 刷新 + 广播），避免未知 kind 静默落到默认分支。
+  - 同步 `docs/features.md`、`docs/user-guide.md`：插件清单仍只在本会话有效，但注册的自定义类型随工程持久化。
+- **验证数据**：
+  - selftest **3514 通过 / 0 失败**（基线 3511，+3）：注册后 `markDirty` 收到 `settings`、类型进入 `persistableState().objectTypes`、注销后同样收到 `settings`。
+  - dist **828,572 B**（本条 **+277 B**）/ gzip 257,122 B / 余量 **11,108 B**；SW `VERSION=98`；8 种 golden 与导出字段未变。
+  - e2e / build --check / check-gates / discipline 见提交前完整门禁记录。
+- **遗留 TODO / 风险**：
+  - `BUILTIN_TYPES` 仍会被 `addType` 追加，作为 `createInitialState()` 的来源；这意味着会话内注册的类型会出现在「新工程」默认类型中。此为既有行为，本批未改。
+  - 类型被对象引用时注销会拒绝；此时不会触发 `markDirty`（无变化可存）。
+
 ## 2026-11-08 · 批次 B（3/6）：入站时间戳校验，未来时间不再永久压制本地编辑
 
 - **Commit Hash**：`待回填`

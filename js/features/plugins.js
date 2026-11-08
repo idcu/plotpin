@@ -134,6 +134,11 @@
     if (typeof global.renderTypes === 'function') global.renderTypes();
     if (typeof global.requestRender === 'function') global.requestRender();
   }
+  /** 类型表变更统一提交：进入自动保存/协作广播，否则刷新或崩溃后插件类型丢失（F06） */
+  function markTypesChanged() {
+    if (typeof global.markDirty === 'function') global.markDirty('settings');
+    else if (typeof global.scheduleSave === 'function') global.scheduleSave();
+  }
   /** 注册类型进入当前工程（若不存在则追加；同 id 覆盖时替换定义）；后续新建/载入工程都会带上 */
   function installType(t) {
     const st = appState();
@@ -141,6 +146,7 @@
       const i = st.objectTypes.findIndex(x => x && x.id === t.id);
       if (i >= 0) st.objectTypes[i] = cloneJSON(t);
       else st.objectTypes.push(cloneJSON(t));
+      markTypesChanged();
     }
     refreshTypeUI();
   }
@@ -302,7 +308,10 @@
       if (i >= 0) list.splice(i, 1);
     }
     const st = appState();
-    if (st && Array.isArray(st.objectTypes)) st.objectTypes = st.objectTypes.filter(x => !x || x.id !== t.id);
+    if (st && Array.isArray(st.objectTypes)) {
+      st.objectTypes = st.objectTypes.filter(x => !x || x.id !== t.id);
+      markTypesChanged();
+    }
     refreshTypeUI();
     return true;
   }
