@@ -969,6 +969,7 @@
       'Time {ms} ms | objects {objects} | pairs {pairs}/{theoretical} theoretical',
     '已截断 {n} 条':'Truncated: {n}', '未执行：':'Not run: ', '点击定位':'Click to locate',
     '共 {n} 页，已导入第 1 页':'{n} page(s); imported page 1 only',
+    '未配置阈值类型 {n} 个':'Unconfigured threshold types: {n}',
     ' · {n} 条':' · {n} violations', '检查完成：{n} 条违规':'Done: {n} violations',
     '已导出 {n} 条违规':'Exported {n} violations'
   };

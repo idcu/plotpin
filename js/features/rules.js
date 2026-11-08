@@ -410,7 +410,12 @@ function ruleOverlapCheck(ctx){
 function ruleSpacingCheck(ctx){
   const thresholds=ctx.config.types||{};
   const ids=Object.keys(thresholds);
-  if(!ids.length) return {violations:[],pairs:0,theoretical:0,objects:0};
+  const unconfigured=new Set();
+  for(const o of ctx.objects){
+    if(!Object.prototype.hasOwnProperty.call(thresholds,o.typeId)) unconfigured.add(o.typeId);
+  }
+  const unconfiguredTypes=Array.from(unconfigured);
+  if(!ids.length) return {violations:[],pairs:0,theoretical:0,objects:0,unconfiguredTypes};
   const maxT=Math.max(...ids.map(k=>Number(thresholds[k])||0));
   const items=[];
   for(const o of ctx.objects){
@@ -433,7 +438,7 @@ function ruleSpacingCheck(ctx){
       message:'与 '+b.o.name+' 净距 '+fmt(gap)+' m，低于阈值 '+fmt(t)+' m'
     });
   }
-  return {violations,pairs:pairRes.pairs.length,theoretical:pairRes.theoretical,objects:items.length};
+  return {violations,pairs:pairRes.pairs.length,theoretical:pairRes.theoretical,objects:items.length,unconfiguredTypes};
 }
 function rulePointOutsideSite(p,poly,tol){
   if(pointInPolygon(p,poly)) return false;
@@ -495,11 +500,12 @@ function runRuleCheck(opts={}){
   const mode=opts.mode==='brute'?'brute':'sweep';
   const rules=Array.from(RULE_REGISTRY.values());
   const t0=ruleNow();
-  const result={ranAt:new Date().toISOString(),ms:0,scope,ruleOrder:rules.map(r=>r.id),violations:[],perRule:{},skipped:[],stats:{objects:0,floors:0,pairs:0,theoretical:0,truncated:0,brute:mode==='brute'}};
+  const result={ranAt:new Date().toISOString(),ms:0,scope,ruleOrder:rules.map(r=>r.id),violations:[],perRule:{},skipped:[],stats:{objects:0,floors:0,pairs:0,theoretical:0,truncated:0,brute:mode==='brute',unconfiguredTypes:0}};
   const floors=ruleFloorContexts(scope);
   result.stats.floors=floors.length;
   const geomCache=new Map();
   const footprint=o=>{ if(!geomCache.has(o)) geomCache.set(o,ruleObjectFootprint(o)); return geomCache.get(o); };
+  const unconfiguredTypes=new Set();
   for(const floor of floors){
     const objects=(floor.objects||[]).filter(o=>o&&typeof o==='object'&&isVisible(o));
     result.stats.objects+=objects.length;
@@ -524,6 +530,7 @@ function runRuleCheck(opts={}){
           per.pairs+=pairs; per.theoretical+=theoretical;
           result.stats.pairs+=pairs; result.stats.theoretical+=theoretical;
           if(res.skipped) result.skipped.push({ruleId:rule.id,ruleName:rule.name,floorId:floor.id,floorName:floor.name,reason:res.skipped});
+          if(Array.isArray(res.unconfiguredTypes)) res.unconfiguredTypes.forEach(t=>unconfiguredTypes.add(t));
         }
       }catch(err){
         result.skipped.push({ruleId:rule.id,ruleName:rule.name,floorId:floor.id,floorName:floor.name,reason:'规则异常：'+(err&&err.message||err)});
@@ -531,6 +538,7 @@ function runRuleCheck(opts={}){
       per.ms+=ruleNow()-t;
     }
   }
+  result.stats.unconfiguredTypes=unconfiguredTypes.size;
   const order=new Map(result.ruleOrder.map((id,i)=>[id,i]));
   result.violations.sort((a,b)=>
     (order.get(a.ruleId)??99)-(order.get(b.ruleId)??99) ||
@@ -659,6 +667,7 @@ function renderRuleResults(){
   const r=ruleLastResult;
   const stats=L('耗时 {ms} ms｜对象 {objects}｜候选对 {pairs} / 理论 {theoretical}',
     {ms:r.ms,objects:r.stats.objects,pairs:r.stats.pairs,theoretical:r.stats.theoretical})+
+    (r.stats.unconfiguredTypes?'｜'+L('未配置阈值类型 {n} 个',{n:r.stats.unconfiguredTypes}):'')+
     (r.stats.truncated?'｜'+L('已截断 {n} 条',{n:r.stats.truncated}):'');
   if(!r.violations.length){
     box.innerHTML='<div class="ok-banner">'+esc(L('未发现违规。'))+'</div><p class="hint-text">'+esc(stats)+'</p>';

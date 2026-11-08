@@ -31,6 +31,7 @@ test('C-05 规则检查：重叠/越界到间距改配置重查、点击定位�
   await expect(page.locator('#ruleResults')).toContainText('对象重叠');
   await expect(page.locator('#ruleResults')).toContainText('越界');
   await expect(page.locator('#ruleResults')).toContainText('完全越出场地边界');
+  await expect(page.locator('#ruleResults')).toContainText('未配置阈值类型 2 个');
 
   /* 改配置 → 重查：给点类型配置 1m 阈值，违规数应变 3 */
   const minInput = page.locator('[data-rule-type-min="point.marker"]');
@@ -41,6 +42,7 @@ test('C-05 规则检查：重叠/越界到间距改配置重查、点击定位�
   await expect(page.locator('#ruleCount')).toContainText('3 条');
   await expect(page.locator('#ruleResults')).toContainText('最小间距');
   await expect(page.locator('#ruleResults')).toContainText('低于阈值');
+  await expect(page.locator('#ruleResults')).toContainText('未配置阈值类型 1 个');
 
   /* 点击违规行：定位到对象并切到属性页签 */
   const first = page.locator('[data-rule-hit]').first();

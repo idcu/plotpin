@@ -5382,7 +5382,13 @@ await section("57.5 最小间距：不足 / 刚好达标 / 改配置重查 / 双
     api.baseObject('rect','rect.area',{x:20,y:5,width:4,height:4,shape:{type:'circle',r:2},name:'C'}),
     pt(25,5,'P')
   ];
-  eq('间距-未配置类型不参与比较', cnt(api.runRuleCheck({scope:'current'})), 0);
+  const ru = api.runRuleCheck({scope:'current'});
+  eq('间距-未配置类型不参与比较', cnt(ru), 0);
+  eq('间距-未配置阈值类型计数 1', ru.stats.unconfiguredTypes, 1);
+  api.state.rules.spacing.types = {'point.marker':4,'rect.area':4};
+  const rc = api.runRuleCheck({scope:'current'});
+  eq('间距-配置阈值后未配置类型计数归零', rc.stats.unconfiguredTypes, 0);
+  eq('间距-配置阈值后同场景出现违规', cnt(rc), 1);
 
   api.resetState();
   api.state.rules.spacing.types = {'line.custom':1};

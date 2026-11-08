@@ -2,13 +2,13 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=81
+version=82
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
 a4122a38c0ac51ba7ea5ba1287a91ee2dc9a640891144470649390192df9a226  js/common/dxf.js
-651b341747751c54cad2cf81ee67a3a0781da87d2efda2d21e853cba1b3fbf3d  js/common/i18n.js
+e25c5e685d88347dc6979950862c5c71d37c98d823e7457756a652baee060fa1  js/common/i18n.js
 99aa5e3d60c02d924805468660f3616b4a8f6f2c0b2bc2d41fa71b91bc721890  js/common/merge.js
 884b70dd99ebe2b47ed86126b57bd9a1343d8606c4b44368ac5fa4a8745bc2ac  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
@@ -37,7 +37,7 @@ d1c8066483d7f3374577333787c60c5c21c02a5cba3f30b076f484a1e9cf7faa  js/features/io
 a03456ddb47c580a7d807fa2f9b5eea83229277c9d5d688fabbb020faf92b307  js/features/parking.js
 8453b98f135f0489aee1cddabaae5025744f543664cebe2f62af058c70665179  js/features/plugins.js
 3e0599b36f66be9556c7559a75bac4392cafe6d3388cc743d19db908553ddbcd  js/features/props.js
-9e9c82b12b78a51148212edbd7f996ce6ed70e39dc17d6bb326f123f4c7bc3d7  js/features/rules.js
+daf8e63c3e272489c81f18e1662b4755e894d939627490728d832eb896a807a9  js/features/rules.js
 423ee24cf1ff09d4e575e5160a9afa3fd2e6f937f3f45df16cf631515dbbaca5  js/features/snapshot-ui.js
 3a6b54c3c5bc78c148215de5dc1e38ba1439e883006ba8c1826c43cfac29cd82  js/features/ui-panels.js
 5380aed910a4f2083956552338e62495138f95a0dca86bd97213bcf1eead6080  js/features/ui-shell.js
