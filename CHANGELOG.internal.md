@@ -6,7 +6,7 @@
 
 ## 2026-11-09 · 导入导出（P2-05）：超过单张资产上限的照片不再进入持久化副本
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`ee422c1`
 - **核心问题**：`assetPut` 对 `bytes.length > APP_LIMITS.ASSET_MAX_BYTES`（16 MB）抛「资产超过单个大小上限」，`ensureObjectPhotoAssets` 捕获后保留 `photoDataUrl`；该 base64 原样进入 `persistableState()` 副本（自动保存、工程库、快照、协作快照、导出），每份 22 MB+，且每次保存都重复持有这份必失败的大字符串。
 - **核心改动**：
   - `js/core/persistence.js` 新增 `oversizePhotoDataUrl(du)`：先按字符长度快速排除（base64 解码后必不长于源串），超长才解码精确比较字节数。
