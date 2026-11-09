@@ -17,7 +17,7 @@ const TOOL_TITLES={
   rect:L('区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消'),line:L('折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）'),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
   calibrate:L('比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用'),
-  affine:L('仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消'),
+  affine:L(TXT_AFFINE_HINT),
   'site-rect':L('绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消'),
   'site-circle':L('绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消'),
   'site-ellipse':L('绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消'),

@@ -428,7 +428,7 @@ function showTableImportPreview(fileName,plan){
     '<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>';
   openModal(L('表格导入预览：{name}',{name:fileName}),
     countLine+
-    '<p class="hint-text">'+esc(L('可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。'))+'<b>'+esc(L('长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。'))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
+    '<p class="hint-text">'+esc(L(TXT_TABLE_IMPORT_HINT))+'<b>'+esc(L('长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。'))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
     [{text:L('取消'),click:closeModal},
      {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }

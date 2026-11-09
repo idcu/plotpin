@@ -253,6 +253,8 @@ code += `\n;globalThis.__api = {
   ruleObjectFootprint, ruleGapGeometry, rulePolygonIntersectionArea, ruleMaxPolygonIntersection,
   rulePointOutsideSite, ruleViolationsCsv, ruleFloorContexts,
   locateRuleViolation, normalizeRuleTypes, mergeRuleSide, ruleExportName,
+  renderRuleResults,
+  get ruleLastResult(){ return ruleLastResult; }, set ruleLastResult(v){ ruleLastResult=v; },
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -5797,6 +5799,20 @@ await section("57.3 规则注册框架", async () => {
     return r.ok&&api.listRules().find(x=>x.id==='test.owned').owner==='demo.plugin';
   })());
   ok('规则框架-插件规则可注销', api.unregisterRule('test.owned').ok&&!api.listRules().some(r=>r.id==='test.owned'));
+
+  /* F14：截断只影响展示/导出，统计口径必须按截断前累加；UI 明示只展示前 N 条 */
+  api.registerRule({id:'test.bulk',name:'批量规则',check:()=>Array.from({length:6001},(_,i)=>({objectId:'O'+i,message:'hit'}))});
+  const bulk=api.runRuleCheck({scope:'current'});
+  eq('规则统计-完整总数按截断前计数', bulk.fullCount, 6001);
+  eq('规则统计-导出条数等于上限', bulk.exportedCount, 5000);
+  eq('规则统计-perRule 按截断前累加', bulk.perRule['test.bulk'].count, 6001);
+  eq('规则统计-截断条数', bulk.stats.truncated, 1001);
+  api.ruleLastResult=bulk;
+  api.renderRuleResults();
+  ok('规则统计-UI 明示仅展示前 N 条', (api.$('ruleResults').innerHTML||'').includes('仅展示前 5000 条'));
+  eq('规则统计-计数显示完整总数', api.$('ruleCount').textContent, ' · 6001 条');
+  api.ruleLastResult=null;
+  ok('规则统计-批量规则可注销', api.unregisterRule('test.bulk').ok);
 }
 
 });
@@ -5988,6 +6004,12 @@ await section("57.7 违规清单 CSV 导出与点击定位", async () => {
   ok('CSV-逗号字段加引号', fc.includes('"规则,名"'));
   ok('CSV-公式注入加前导单引号', fc.includes("'=SUM(1)"));
   ok('CSV-文件名带日期与 .csv', /^rule-violations-\d{8}-\d{4}\.csv$/.test(api.ruleExportName()));
+
+  /* F14：截断导出必须有显式标注，不能让用户误以为 CSV 完整 */
+  const truncated={violations:fake.violations,fullCount:6001,exportedCount:1,stats:{truncated:1001}};
+  const tcsv=api.ruleViolationsCsv(truncated);
+  ok('CSV-截断时显式标注仅导出前 N 条', tcsv.includes('仅导出前 1 条（共 6001 条）'));
+  ok('CSV-截断标注不冒充数据行', tcsv.startsWith('\uFEFF# '));
 
   const v = r.violations.find(x=>x.ruleId==='overlap');
   const located = await api.locateRuleViolation(v);

@@ -4,6 +4,10 @@
  * 属性面板等动态业务文案仍为中文，属后续增量；核心绘图流程不依赖语言。
  * 用法：I18N.setLang('en'); I18N.apply(document); I18N.t('new')
  */
+/* 长文案单一来源：既做 i18n 键，也被界面直接引用，避免同一串在产物里重复两遍 */
+const TXT_CLEAR_FLOOR_CONFIRM='将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。';
+const TXT_AFFINE_HINT='仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消';
+const TXT_TABLE_IMPORT_HINT='可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。';
 (function (global) {
   'use strict';
   const DICT = {
@@ -277,7 +281,7 @@
       'Image transform: orange center = move, blue dot = rotate, bottom-right = uniform scale, top-edge midpoint = shear; affects the image only (objects stay put); image corners snap to site corners',
     '比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用':
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
-    '仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消':
+    [TXT_AFFINE_HINT]:
       'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); red/green control points are draggable, Delete removes, Ctrl+Z undoes, press Enter or ✓ to solve, right-click/Esc cancels',
     '绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消':
       'Draw rectangle site: drag the diagonal (Shift = square), release to finish, Esc cancels',
@@ -513,7 +517,7 @@
     '按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：':'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
     '个对象替换（':' objects replaced (',
     '行条件）、':' row conditions), ',
-    '可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。':'Updatable: name, business type, layer, anchor, angle, width/height, shape, closed, node coordinates, annotation type, visibility, lock, note. Replace rows change properties only, not geometry; use Match ID / Match name / Match name contains / Match object type / Match business type / Match layer columns to narrow the scope (all must match); the Floor column also scopes updates, replacements and new-row placement.',
+    [TXT_TABLE_IMPORT_HINT]:'Updatable: name, business type, layer, anchor, angle, width/height, shape, closed, node coordinates, annotation type, visibility, lock, note. Replace rows change properties only, not geometry; use Match ID / Match name / Match name contains / Match object type / Match business type / Match layer columns to narrow the scope (all must match); the Floor column also scopes updates, replacements and new-row placement.',
     '表格导入失败（已回滚）：':'Table import failed (rolled back): ',
     '该型号在多厂商重名，请填写厂商后计价':'This model name is duplicated across vendors; fill in the vendor before pricing',
     '定位失败：无法切换到目标楼层':'Locate failed: cannot switch to the target floor',
@@ -669,7 +673,7 @@
       'Delete floor "{name}" and all its objects? This can be undone.',
     '确定删除工程「{name}」？此操作不可撤销（不影响已导出的文件）。':
       'Delete project "{name}"? This cannot be undone (exported files are unaffected).',
-    '将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。':
+    [TXT_CLEAR_FLOOR_CONFIRM]:
       'Clear the image base, vector site, {n} objects and annotations on this floor, plus all calibration control points and affine settings; selection and view will reset. Undo with Ctrl+Z.',
     '其余提示略 {n}': 'Remaining warnings omitted: {n}',
     '其余错误略 {n}': 'Remaining errors omitted: {n}',
@@ -969,7 +973,9 @@
     '未发现违规。':'No violations found.',
     '耗时 {ms} ms｜对象 {objects}｜候选对 {pairs} / 理论 {theoretical}':
       'Time {ms} ms | objects {objects} | pairs {pairs}/{theoretical} theoretical',
-    '已截断 {n} 条':'Truncated: {n}', '未执行：':'Not run: ', '点击定位':'Click to locate',
+    '未执行：':'Not run: ', '点击定位':'Click to locate',
+    '仅展示前 {n} 条':'Showing first {n}',
+    '已导出前 {n} 条':'Exported first {n}',
     '共 {n} 页，已导入第 1 页':'{n} page(s); imported page 1 only',
     '未配置阈值类型 {n} 个':'Unconfigured threshold types: {n}',
     ' · {n} 条':' · {n} violations', '检查完成：{n} 条违规':'Done: {n} violations',

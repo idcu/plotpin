@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 规则统计（features-ui F14）：截断前的完整计数 + 展示/导出显式标注
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`runRuleCheck` 先按 `RULE_MAX_VIOLATIONS`（5000）截断，再用截断后的数组统计 `perRule.count`；总违规 >5000 时排在后面的规则显示 `count=0`，用户误判「某类问题没有」；CSV 只含前 5000 条且无任何标注（审计 F14）。
+- **核心改动**：
+  - `js/features/rules.js`：`perRule.count` 改为在截断前逐条累加；结果新增 `fullCount`（完整总数）与 `exportedCount`（实际返回条数）；UI 统计行在截断时显示「仅展示前 N 条」，计数徽标显示完整总数；CSV 在截断时首行写入 `# 仅导出前 N 条（共 M 条）`；导出 toast 改为「已导出前 N 条」。
+  - `js/common/i18n.js`：新增 `仅展示前 {n} 条` / `已导出前 {n} 条` 两条中英对照（缺口不增）。
+- **字节回收来源（本条要求净增 ≤0）**：同一提交内提取 3 条重复长文案为单一常量（`TXT_CLEAR_FLOOR_CONFIRM` / `TXT_AFFINE_HINT` / `TXT_TABLE_IMPORT_HINT`），i18n 键与界面引用共用；并删除已无引用的 `已截断 {n} 条` 英文条目。回收 −884 B，抵消功能增量 +694 B 后净 **−190 B**。
+- **验证数据**（先红后绿）：
+  - 新增 9 条断言：修复前实测 4 条失败（`完整总数 期望 6001 实际 undefined`、`导出条数 期望 5000 实际 undefined`、`perRule 期望 6001 实际 5000`、`UI 明示失败`）；修复后 57.3/57.7 过滤跑 35/35 通过。
+  - `perRule['test.bulk'].count=6001`（截断前）、`fullCount=6001`、`exportedCount=5000`、`stats.truncated=1001`；CSV 截断标注断言通过。
+  - dist **834,252 → 834,062 B（−190 B）**；gzip 259,831 → 259,950（+119 B）；余量 **5,618 B**（>5,000 停线）；SW `VERSION=122`；selftest **3625 / 0**（+9）。
+- **公共抽象清单（新增）**：`TXT_CLEAR_FLOOR_CONFIRM`、`TXT_AFFINE_HINT`、`TXT_TABLE_IMPORT_HINT`（定义于 `js/common/i18n.js` 顶部，作为 i18n 键与界面文案的唯一来源）；影响调用方：`js/features/io.js`、`js/core/interaction.js`、`js/features/io-table.js`，文案内容逐字不变。
+- **遗留 TODO / 风险**：`fullCount` / `exportedCount` 是新增响应字段，旧插件若自行重建结果对象则仍按 `violations.length` 显示（向后兼容，不破坏既有字段）。
+
 ## 2026-11-10 · 文档计数补充（engineering P2-05）：modules.md 计数纳入同一门禁
 
 - **Commit Hash**：`待回填`

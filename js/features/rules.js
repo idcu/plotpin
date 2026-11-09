@@ -521,6 +521,7 @@ function runRuleCheck(opts={}){
         const arr=Array.isArray(res)?res:(res&&Array.isArray(res.violations)?res.violations:[]);
         arr.forEach(v=>{
           if(!v||typeof v!=='object') return;
+          per.count++;                      /* F14：按截断前累加，总违规超上限时后面的规则不再显示 0 */
           result.violations.push(Object.assign({
             ruleId:rule.id, ruleName:rule.name, objectId:'', objectName:'', peerId:'', peerName:'',
             floorId:floor.id, floorName:floor.name, x:0, y:0, kind:'', value:0, message:''
@@ -552,8 +553,9 @@ function runRuleCheck(opts={}){
     result.violations.length=RULE_MAX_VIOLATIONS;
     result.stats.truncated=total-RULE_MAX_VIOLATIONS;
   }
+  result.fullCount=total;
+  result.exportedCount=result.violations.length;
   for(const id of Object.keys(result.perRule)){
-    result.perRule[id].count=result.violations.filter(v=>v.ruleId===id).length;
     result.perRule[id].ms=ruleRound(result.perRule[id].ms,1);
   }
   result.ms=ruleRound(ruleNow()-t0,1);
@@ -573,7 +575,10 @@ function ruleViolationsCsv(result){
       v.message||'', Number.isFinite(Number(v.value))?Number(v.value):''
     ]);
   });
-  return '\uFEFF'+rows.map(r=>r.map(c=>csvCell(c,',')).join(',')).join('\r\n')+'\r\n';
+  /* F14：截断时先写一行显式说明，避免用户把「前 N 条」当成完整清单 */
+  const truncated=!!(result&&result.stats&&result.stats.truncated);
+  const note=truncated?`# 仅导出前 ${list.length} 条（共 ${Number(result.fullCount)||list.length} 条）\r\n`:'';
+  return '\uFEFF'+note+rows.map(r=>r.map(c=>csvCell(c,',')).join(',')).join('\r\n')+'\r\n';
 }
 function ruleExportName(){
   const d=new Date(), p=n=>String(n).padStart(2,'0');
@@ -660,7 +665,7 @@ function readRuleConfigFromUI(){
 function renderRuleResults(){
   const box=$('ruleResults'); const count=$('ruleCount');
   if(!box) return;
-  if(count) count.textContent=ruleLastResult?L(' · {n} 条',{n:ruleLastResult.violations.length}):'';
+  if(count) count.textContent=ruleLastResult?L(' · {n} 条',{n:Number.isFinite(ruleLastResult.fullCount)?ruleLastResult.fullCount:ruleLastResult.violations.length}):'';
   if(!ruleLastResult){
     box.innerHTML='<p class="hint-text">'+esc(L('尚未运行检查。配置修改后请重新运行。'))+'</p>';
     return;
@@ -669,7 +674,8 @@ function renderRuleResults(){
   const stats=L('耗时 {ms} ms｜对象 {objects}｜候选对 {pairs} / 理论 {theoretical}',
     {ms:r.ms,objects:r.stats.objects,pairs:r.stats.pairs,theoretical:r.stats.theoretical})+
     (r.stats.unconfiguredTypes?'｜'+L('未配置阈值类型 {n} 个',{n:r.stats.unconfiguredTypes}):'')+
-    (r.stats.truncated?'｜'+L('已截断 {n} 条',{n:r.stats.truncated}):'');
+    (r.stats.truncated?'｜'+L('仅展示前 {n} 条',
+      {n:Number.isFinite(r.exportedCount)?r.exportedCount:r.violations.length}):'');
   if(!r.violations.length){
     box.innerHTML='<div class="ok-banner">'+esc(L('未发现违规。'))+'</div><p class="hint-text">'+esc(stats)+'</p>';
     return;
@@ -694,7 +700,10 @@ function ruleExport(){
   ruleLastResult=result;
   renderRuleResults();
   downloadBlob(new Blob([ruleViolationsCsv(result)],{type:'text/csv;charset=utf-8'}),ruleExportName());
-  toast(L('已导出 {n} 条违规',{n:result.violations.length}), '');
+  const n=result.violations.length;
+  toast(result.stats&&result.stats.truncated
+    ?L('已导出前 {n} 条',{n})
+    :L('已导出 {n} 条违规',{n}), '');
 }
 function initRuleUI(){
   if(!$('ruleConfig')) return;

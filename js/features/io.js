@@ -15,7 +15,7 @@ $('newBtn').onclick=async()=>{
    先二次确认并 pushHistory，清空可用 Ctrl+Z 整体撤销 */
 $('clearFloorBtn').onclick=()=>{
   const n=(state.objects||[]).length;
-  const msg=L('将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。',{n});
+  const msg=L(TXT_CLEAR_FLOOR_CONFIRM,{n});
   showConfirm(msg).then(ok=>{
     if(!ok) return;
     pushHistory();
