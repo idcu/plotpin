@@ -469,6 +469,10 @@ function backgroundScalePlan(w,h,mime,byteLen){
   return {width:tw,height:th,format:keepAlpha?'image/png':'image/jpeg',quality:keepAlpha?undefined:BG_JPEG_QUALITY};
 }
 async function prepareBackgroundBytes(f){
+  /* 与主导入共用同一字节上限：底图按钮 `bgInput` 与拖拽图片两条入口都经过这里，
+     必须在 arrayBuffer() 之前拦截，否则大文件先整份读入内存再报错（P2-04） */
+  const byteErrs=importLimitErrors({bytes:f&&f.size});
+  if(byteErrs.length) throw new Error('超限：'+importLimitMessage(byteErrs));
   const raw=new Uint8Array(await f.arrayBuffer());
   const mime=f.type||'image/png';
   const url=URL.createObjectURL(new Blob([raw],{type:mime}));

@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 导入导出一（3/6）：底图入口与主导入共用字节上限
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/io-import.js#prepareBackgroundBytes`：读取字节前先走 `importLimitErrors({bytes:f.size})`，超限抛「超限：文件过大」。
+  - 底图按钮（`bgInput` → `importBackgroundFile`）与拖拽图片（`handleImportFile` → `importBackgroundFile`）都经过该函数，两条入口共用同一 `IMPORT_FILE_MAX_BYTES` 口径；拖拽路径原有的入口校验保留，行为等价。
+  - `scripts/selftest.mjs` +1：构造 `size=IMPORT_FILE_MAX_BYTES+1` 的假文件，其 `arrayBuffer()` 一旦被调用即抛错；断言拒绝原因含「文件过大」，证明拦截发生在读字节之前。
+- **验证数据**：
+  - selftest **3599 通过 / 0 失败**（基线 3598，+1；旧实现下该断言实测失败）。
+  - dist **833,629 B**（833,497 → **+132 B**）；gzip 259,117 B；余量 **6,051 B**；SW `VERSION=114`。
+- **遗留 TODO / 风险**：
+  - 仅按 `File.size` 拦截；`size` 由浏览器提供，属可信元数据。像素上限仍由解码后的 `BG_MAX_DECODE_PIXELS` 把关。
+  - `importBackgroundFile` 自身未重复校验，靠 `prepareBackgroundBytes` 单点兜底；后续若新增不经过该函数的底图入口，需显式复用。
+
 ## 2026-11-08 · 减字节专项：死代码清理与重复实现收敛
 
 - **Commit Hash**：`79a665b`

@@ -148,7 +148,7 @@ code += `\n;globalThis.__api = {
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
-  esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan,
+  esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan, prepareBackgroundBytes,
   createTitleBlock, normalizeTitleBlock, TITLE_BLOCK_FIELDS, TITLE_BLOCK_TEXT_MAX,
   titleBlockEffective, titleBlockSpec, titleBlockRatio, niceScaleBarMeters, titleBlockLegendData,
   exportTitleBlockSvg, drawTitleBlockOnCanvas,
@@ -7542,6 +7542,14 @@ await section("70. A-09 导入限值与事务化原语", async () => {
       pixels:L.BG_MAX_DECODE_PIXELS+1}),
     ['file','text','rows','entities','objects','pixels']);
   eq('importLimitMessage 中文提示', api.importLimitMessage(['file','objects']), '文件过大、对象数量过多');
+
+  /* P2-04：底图入口（文件选择 / 拖拽图片）与主导入共用 IMPORT_FILE_MAX_BYTES；
+     超限必须在读字节之前拒绝，避免 arrayBuffer() 先把整份大文件读进内存。 */
+  const bigBg={name:'huge.png',type:'image/png',size:L.IMPORT_FILE_MAX_BYTES+1,
+    arrayBuffer:async()=>{ throw new Error('超限文件不应被读取'); }};
+  let bigBgMsg='';
+  try{ await api.prepareBackgroundBytes(bigBg); }catch(e){ bigBgMsg=String(e&&e.message||e); }
+  ok('底图超限在读取字节前拒绝', bigBgMsg.includes('文件过大'));
 
   eq('countProjectObjects 顶层+非活动楼层',
     api.countProjectObjects({activeFloorId:'f1',objects:[{},{}],
