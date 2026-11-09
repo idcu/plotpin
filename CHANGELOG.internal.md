@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 导入导出二（4/6）：CSV/XLSX/PDF-LZW 解压炸弹窗口
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`9db0928`
 - **核心改动**：
   - `js/features/io-import.js#dsvRowsExceed`：CSV/TSV 在 `DSV.parseRows` **之前**按换行预判行数（引号内换行不计），超过 `APP_LIMITS.IMPORT_ROWS_MAX` 直接拒绝，不再先把整份文本展开成行数组；原 `rows.length` 校验保留作兜底。
   - `ngm.vendor/.../format/zip/src/vendor/zip.js#zipInflateRaw(bytes,limit)`：改为流式累计，累计解压字节超过 `limit` 立即 `reader.cancel()` 并抛错；`zipReadEntries` 以 `L.maxEntryBytes`（64 MB）传入，不再「先完整解压再复核」。
