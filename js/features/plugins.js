@@ -29,6 +29,7 @@
   const appState = () => { try { return state; } catch (_) { return undefined; } };
   const cloneJSON = v => JSON.parse(JSON.stringify(v));
   const TYPE_KINDS = ['point', 'rect', 'line'];
+  /* 契约要求与 config.js 的 POINT_SCALE_SHAPES 键集逐项相等，故此处保留字面量（不改写为常量） */
   const TYPE_SHAPES = ['none', 'circle', 'square', 'sector', 'bar'];
 
   /* -------------------- 版本与能力 ---------------------------------------- */
@@ -178,7 +179,7 @@
       if (def.scaleShape !== undefined) {
         if (!TYPE_SHAPES.includes(def.scaleShape)) throw new Error('scaleShape 仅支持 ' + TYPE_SHAPES.join(' / '));
         t.scaleShape = def.scaleShape;
-        if (def.scaleShape === 'sector') {
+        if (def.scaleShape === SEC) {
           const fov = Number(def.fov);
           if (!(Number.isFinite(fov) && fov >= 10 && fov <= 360)) throw new Error('扇形视场需提供 10–360 的 fov');
           t.fov = Math.round(fov);

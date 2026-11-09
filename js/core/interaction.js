@@ -328,7 +328,7 @@ canvas.addEventListener('pointerdown',e=>{
     if(draft && draft.kind===draftKind){
       draft.current=wp; draft.pending=false; finishDraft();
     }else{
-      draft={kind:draftKind,start:wp,current:wp,pending:true,typeId:$('rectType').value,a0:0,a1:shape==='sector'?90:undefined};
+      draft={kind:draftKind,start:wp,current:wp,pending:true,typeId:$('rectType').value,a0:0,a1:shape===SEC?90:undefined};
     }
     return;
   }
@@ -596,7 +596,7 @@ function moveObjectBy(o,orig,d){
 function syncFirstPoint(o){ if(o.points&&o.points.length){ o.x=o.points[0][0]; o.y=o.points[0][1]; } }
 function resizeRectByHandle(o,drag,p){
   if(!o) return;
-  if(o.shape&&o.shape.type==='parallelogram') return resizeParallelogramByHandle(o,drag,p);
+  if(o.shape&&o.shape.type===PARA) return resizeParallelogramByHandle(o,drag,p);
   const orig=drag.original, idx=drag.handle.index;
   const local=rotatePoint(p,[orig.x,orig.y],-orig.angle);
   const corners=[[0,0],[orig.width,0],[orig.width,orig.height],[0,orig.height]];
@@ -769,14 +769,14 @@ function finishDraft(){
     if(w>=.08&&hh>=.08){
       pushHistory();
       const o=baseObject('rect',draft.typeId||$('rectType').value,
-        {x,y,width:w,height:hh,shape:{type:'parallelogram',skew:PARALLELOGRAM_DEFAULT_SKEW}});
+        {x,y,width:w,height:hh,shape:{type:PARA,skew:PARALLELOGRAM_DEFAULT_SKEW}});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加平行四边形区域'); switchTab('props');
     }
   }else if(draft.kind==='areaCircle'){
     const r=dist(draft.start,draft.current);
     if(r>=.08){
       pushHistory();
-      const o=baseObject('rect',draft.typeId||$('rectType').value,{x:draft.start[0],y:draft.start[1],shape:{type:'circle',r}});
+      const o=baseObject('rect',draft.typeId||$('rectType').value,{x:draft.start[0],y:draft.start[1],shape:{type:CIR,r}});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加圆形区域'); switchTab('props');
     }
   }else if(draft.kind==='areaEllipse'){
@@ -785,7 +785,7 @@ function finishDraft(){
     if(w>=.08&&h>=.08){
       pushHistory();
       const o=baseObject('rect',draft.typeId||$('rectType').value,
-        {x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,shape:{type:'ellipse',rx:w/2,ry:h/2}});
+        {x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,shape:{type:ELL,rx:w/2,ry:h/2}});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加椭圆区域'); switchTab('props');
     }
   }else if(draft.kind==='areaSector'){
@@ -793,7 +793,7 @@ function finishDraft(){
     if(r>=.08){
       pushHistory();
       const o=baseObject('rect',draft.typeId||$('rectType').value,
-        {x:draft.start[0],y:draft.start[1],shape:{type:'sector',r,a0,a1}});
+        {x:draft.start[0],y:draft.start[1],shape:{type:SEC,r,a0,a1}});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加扇形区域'); switchTab('props');
     }
   }else if(draft.kind==='line'){
@@ -834,15 +834,15 @@ async function finishSiteDraft(){
     const a=d.start,b=d.current;
     const x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),hh=Math.abs(a[1]-b[1]);
     if(w<.5||hh<.5){ toast('场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸','warn'); setTool('select'); requestRender(); return; }
-    applyVectorSite('parallelogram',{type:'parallelogram',x,y,w,h:hh,skew:PARALLELOGRAM_DEFAULT_SKEW});
+    applyVectorSite(PARA,{type:PARA,x,y,w,h:hh,skew:PARALLELOGRAM_DEFAULT_SKEW});
   }else if(d.kind==='siteCircle'){
     const r=dist(d.start,d.current);
     if(r<.5){ toast('半径过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
-    applyVectorSite('circle',circleShapeFrom(d.start,r));
+    applyVectorSite(CIR,circleShapeFrom(d.start,r));
   }else if(d.kind==='siteEllipse'){
     const shape=ellipseShapeFromCorners(d.start,d.current);
     if(shape.rx*2<.5||shape.ry*2<.5){ toast('场地过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
-    applyVectorSite('ellipse',shape);
+    applyVectorSite(ELL,shape);
   }else if(d.kind==='siteSector'){
     const r=dist(d.start,d.current);
     if(r<.5){ toast('半径过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
@@ -851,7 +851,7 @@ async function finishSiteDraft(){
     const m=v.split(/[,，\s]+/).map(Number);
     const a0=Number.isFinite(m[0])?m[0]:0, sweep=Number.isFinite(m[1])?m[1]:90;
     if(!(sweep>0)||sweep>360){ toast(L('张角需在 0–360° 之间'),'error'); setTool('select'); return; }
-    applyVectorSite('sector',sectorShapeFrom(d.start,r,a0,a0+sweep));
+    applyVectorSite(SEC,sectorShapeFrom(d.start,r,a0,a0+sweep));
   }else if(d.kind==='sitePolygon'){
     const ps=d.points.slice();
     while(ps.length>=2&&dist(ps.at(-1),ps.at(-2))<EPS) ps.pop();

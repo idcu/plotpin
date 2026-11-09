@@ -58,10 +58,10 @@ function getHandles(o){
 /** 区域形状控制点：矩形/平行四边形=4角(+错切+旋转)；圆=半径端；椭圆=两轴端+旋转；扇形=两边端（半径+角度）+弧中点（半径） */
 function areaShapeHandles(o,handles){
   const tt=areaShapeType(o);
-  if(tt==='rect'||tt==='parallelogram'){
+  if(tt==='rect'||tt===PARA){
     const quad=rectPoints(o);
     quad.forEach((p,i)=>handles.push({type:'rect',index:i,x:p[0],y:p[1]}));
-    if(tt==='parallelogram'){
+    if(tt===PARA){
       /* 顶边中点：横向拖拽只改倾角，面积（底×高）保持不变 */
       handles.push({type:'shapeHandle',mode:'skew',x:(quad[2][0]+quad[3][0])/2,y:(quad[2][1]+quad[3][1])/2});
     }
@@ -70,15 +70,15 @@ function areaShapeHandles(o,handles){
     return;
   }
   const sh=o.shape;
-  if(tt==='circle'){
+  if(tt===CIR){
     handles.push({type:'shapeHandle',mode:'arcR',x:o.x+sh.r,y:o.y});
-  }else if(tt==='ellipse'){
+  }else if(tt===ELL){
     const a=o.angle*Math.PI/180, b=a+Math.PI/2;
     handles.push({type:'shapeHandle',mode:'rx',x:o.x+Math.cos(a)*sh.rx,y:o.y+Math.sin(a)*sh.rx});
     handles.push({type:'shapeHandle',mode:'ry',x:o.x+Math.cos(b)*sh.ry,y:o.y+Math.sin(b)*sh.ry});
     const off=Math.max(.55,30/state.viewport.zoom);
     handles.push({type:'rotate',x:o.x+Math.cos(b)*off,y:o.y+Math.sin(b)*off});
-  }else if(tt==='sector'){
+  }else if(tt===SEC){
     const p=a=>[o.x+sh.r*Math.cos(a*Math.PI/180),o.y+sh.r*Math.sin(a*Math.PI/180)];
     const a0=Number(sh.a0)||0, mid=a0+sectorSweep(sh)/2;
     handles.push({type:'shapeHandle',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
@@ -480,23 +480,23 @@ function drawSite(c,v,toS){
   const fill=typeof st.fill==='string'&&st.fill?st.fill:'#eef2f7';
   const stroke=typeof st.stroke==='string'&&st.stroke?st.stroke:'#3b82f6';
   c.save();
-  if(sh.type==='circle'){
+  if(sh.type===CIR){
     const ce=toS([sh.cx,sh.cy]);
     c.fillStyle=fill;
     c.beginPath(); c.arc(ce[0],ce[1],sh.r*v.zoom,0,Math.PI*2); c.fill();
     c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
-  }else if(sh.type==='ellipse'){
+  }else if(sh.type===ELL){
     const ce=toS([sh.cx,sh.cy]);
     c.fillStyle=fill;
     c.beginPath(); c.ellipse(ce[0],ce[1],sh.rx*v.zoom,sh.ry*v.zoom,screenAngle({angle:sh.angle||0}),0,Math.PI*2); c.fill();
     c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
-  }else if(sh.type==='sector'){
+  }else if(sh.type===SEC){
     const ce=toS([sh.cx,sh.cy]), R=sh.r*v.zoom, rg=sectorArcRange(sh);
     c.fillStyle=fill;
     c.beginPath(); c.moveTo(ce[0],ce[1]);
     c.arc(ce[0],ce[1],R,-rg.a1*Math.PI/180,-rg.a0*Math.PI/180,false); c.closePath(); c.fill();
     c.strokeStyle=stroke; c.lineWidth=2; c.stroke();
-  }else if(sh.type==='parallelogram'){
+  }else if(sh.type===PARA){
     const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,Number(sh.w)||0,Number(sh.h)||0,sh.skew).map(toS);
     c.fillStyle=fill;
     c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.fill();
@@ -697,18 +697,18 @@ function annotationItems(o,opt={}){
     const tt=areaShapeType(o), sh=o.shape||{};
     if(annotOn(o,'base')) push(o.x,o.y,`(${fmt(o.x)}, ${fmt(o.y)})`,10,-24);
     if(annotOn(o,'radius')){
-      if(tt==='circle'||tt==='sector'){
-        const a0=(tt==='sector'?(Number(sh.a0)||0):0)*Math.PI/180, r=Number(sh.r)||0;
+      if(tt===CIR||tt===SEC){
+        const a0=(tt===SEC?(Number(sh.a0)||0):0)*Math.PI/180, r=Number(sh.r)||0;
         push(o.x+r*Math.cos(a0),o.y+r*Math.sin(a0),'R '+fmt(r)+' m',6,6);
-      }else if(tt==='ellipse'){
+      }else if(tt===ELL){
         push(o.x+(Number(sh.rx)||0),o.y,'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry),6,6);
       }
     }
-    if(annotOn(o,'edge') && (tt==='rect'||tt==='parallelogram')){
+    if(annotOn(o,'edge') && (tt==='rect'||tt===PARA)){
       const wp=rectPoints(o);
       for(let k=0;k<4;k++){ const a=wp[k],b=wp[(k+1)%4], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
     }
-    if(annotOn(o,'vertex') && (tt==='rect'||tt==='parallelogram')){
+    if(annotOn(o,'vertex') && (tt==='rect'||tt===PARA)){
       rectPoints(o).forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     }
   }else if(o.kind==='line'){
@@ -756,14 +756,14 @@ function drawPhysicalPoint(c,o,color,type,toS,v,markerScale){
   c.save(); c.translate(s[0],s[1]);
   c.strokeStyle=color; c.lineWidth=Math.max(1.5,.06*z); c.fillStyle=color; c.globalAlpha=1;
   c.beginPath();
-  if(shape==='circle'){
+  if(shape===CIR){
     c.arc(0,0,R/2,0,Math.PI*2);
   }else if(shape==='square'){
     const h=R/2; c.rotate(screenAngle(o)); c.rect(-h,-h,R,R);
   }else if(shape==='bar'){
     const h=R/2, lw=Math.max(2,.1*z);
     c.lineWidth=lw; c.lineCap='round'; c.moveTo(-h,0); c.lineTo(h,0);
-  }else if(shape==='sector'){
+  }else if(shape===SEC){
     const fov=(Math.min(360,Math.max(10,Number(type.fov)||90)))*Math.PI/180, half=fov/2;
     const a=screenAngle(o);                        // 世界朝向映射到屏幕（Y 翻转）
     c.moveTo(0,0); c.arc(0,0,R,a-half,a+half); c.closePath();
@@ -771,7 +771,7 @@ function drawPhysicalPoint(c,o,color,type,toS,v,markerScale){
   c.globalAlpha=.12; c.fill(); c.globalAlpha=1; c.stroke();
   /* 中心定位点 + 朝向指示（物理图形的锚点始终清晰可点） */
   c.globalAlpha=1; c.fillStyle=color;
-  if(shape==='sector'){
+  if(shape===SEC){
     c.rotate(screenAngle(o));
     c.beginPath(); c.moveTo(10,0); c.lineTo(2,-4.5); c.lineTo(2,4.5); c.closePath(); c.fill();
   }
@@ -1026,7 +1026,7 @@ function drawSelection(c,v,toS){
       c.save(); c.strokeStyle='#2563eb'; c.setLineDash([5,3]); c.lineWidth=1.4;
       c.strokeRect(p0[0],p1[1],p1[0]-p0[0],p0[1]-p1[1]); c.restore();
       /* 圆/椭圆/扇形：基点=圆心，单独以 ⊕ 标出（矩形/平行四边形基点即角手柄，无需另画） */
-      if(o.kind==='rect'&&!['rect','parallelogram'].includes(areaShapeType(o))){
+      if(o.kind==='rect'&&!['rect',PARA].includes(areaShapeType(o))){
         const bs=toS([o.x,o.y]);
         c.save(); c.strokeStyle='#2563eb'; c.lineWidth=1.6;
         c.beginPath(); c.rect(bs[0]-4,bs[1]-4,8,8); c.stroke();

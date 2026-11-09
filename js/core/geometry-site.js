@@ -27,15 +27,15 @@ function siteBounds(bg){
     return {minX:0,minY:0,maxX:w,maxY:h,w,h};
   }
   const sh=bg.shape||defaultSiteShape();
-  if(sh.type==='circle'){ const r=positiveNum(sh.r,50),cx=Number(sh.cx)||0,cy=Number(sh.cy)||0; return mk(cx-r,cy-r,cx+r,cy+r); }
-  if(sh.type==='ellipse'){
+  if(sh.type===CIR){ const r=positiveNum(sh.r,50),cx=Number(sh.cx)||0,cy=Number(sh.cy)||0; return mk(cx-r,cy-r,cx+r,cy+r); }
+  if(sh.type===ELL){
     const rx=positiveNum(sh.rx,50), ry=positiveNum(sh.ry,35);
     const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0, a=(Number(sh.angle)||0)*Math.PI/180;
     const c=Math.cos(a), s=Math.sin(a);
     const hw=Math.sqrt(rx*rx*c*c+ry*ry*s*s), hh=Math.sqrt(rx*rx*s*s+ry*ry*c*c);
     return mk(cx-hw,cy-hh,cx+hw,cy+hh);
   }
-  if(sh.type==='sector'){
+  if(sh.type===SEC){
     const r=positiveNum(sh.r,50), cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
     const pts=sectorArcPoints(cx,cy,r,Number(sh.a0)||0,sectorSweep(sh)).concat([[cx,cy]]);
     const b=pointBounds(pts)||{minX:cx-r,minY:cy-r,maxX:cx+r,maxY:cy+r};
@@ -45,7 +45,7 @@ function siteBounds(bg){
     const b=pointBounds(sh.points);
     if(b) return mk(b.minX,b.minY,b.maxX,b.maxY);
   }
-  if(sh.type==='parallelogram'){
+  if(sh.type===PARA){
     const pts=parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
     const b=pointBounds(pts);
     if(b) return mk(b.minX,b.minY,b.maxX,b.maxY);
@@ -62,13 +62,13 @@ function siteOutlinePoints(site){
   const sh=siteShapeOf(site);
   const pair=p=>[Number(p&&p[0])||0,Number(p&&p[1])||0];
   if(sh.type==='polygon'&&Array.isArray(sh.points)&&sh.points.length>=3) return sh.points.map(pair);
-  if(sh.type==='parallelogram'){
+  if(sh.type===PARA){
     return parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew).map(pair);
   }
-  if(sh.type==='circle'||sh.type==='ellipse'){
+  if(sh.type===CIR||sh.type===ELL){
     const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
-    const rx=sh.type==='circle'?positiveNum(sh.r,50):positiveNum(sh.rx,50);
-    const ry=sh.type==='circle'?rx:positiveNum(sh.ry,35);
+    const rx=sh.type===CIR?positiveNum(sh.r,50):positiveNum(sh.rx,50);
+    const ry=sh.type===CIR?rx:positiveNum(sh.ry,35);
     const rot=(Number(sh.angle)||0)*Math.PI/180, c=Math.cos(rot), s=Math.sin(rot);
     const n=Math.max(32,Math.ceil(Math.max(rx,ry)*4)), out=[];
     for(let i=0;i<n;i++){
@@ -77,7 +77,7 @@ function siteOutlinePoints(site){
     }
     return out;
   }
-  if(sh.type==='sector'){
+  if(sh.type===SEC){
     const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0, r=positiveNum(sh.r,50);
     return sectorArcPoints(cx,cy,r,Number(sh.a0)||0,sectorSweep(sh)).concat([[cx,cy]]).map(pair);
   }
@@ -92,7 +92,7 @@ function siteOutlinePoints(site){
 function siteBoundaryPoints(site){
   const sh=(site&&site.shape)||{};
   if(sh.type==='polygon') return (sh.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
-  if(sh.type==='parallelogram'){
+  if(sh.type===PARA){
     return parallelogramPoints(Number(sh.x)||0,Number(sh.y)||0,positiveNum(sh.w,100),positiveNum(sh.h,70),sh.skew);
   }
   if(!sh.type||sh.type==='rect'){
@@ -104,7 +104,7 @@ function siteBoundaryPoints(site){
 /** 场地几何中心：圆/椭圆/扇形取圆心，其余取边界折点均值（与区域面积标签同口径） */
 function siteShapeCenter(site){
   const sh=(site&&site.shape)||{};
-  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
+  if([CIR,ELL,SEC].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
   const pts=siteBoundaryPoints(site);
   if(pts&&pts.length) return [pts.reduce((s,p)=>s+p[0],0)/pts.length, pts.reduce((s,p)=>s+p[1],0)/pts.length];
   const d=siteDomainOf(site); return [d.w/2,d.h/2];
@@ -112,15 +112,15 @@ function siteShapeCenter(site){
 /** 场地基点坐标：圆/椭圆/扇形取圆心；矩形/平行四边形取基点；多边形无基点（返回 null） */
 function siteBasePoint(site){
   const sh=(site&&site.shape)||{};
-  if(['circle','ellipse','sector'].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
-  if(!sh.type||sh.type==='rect'||sh.type==='parallelogram') return [Number(sh.x)||0,Number(sh.y)||0];
+  if([CIR,ELL,SEC].includes(sh.type)) return [Number(sh.cx)||0,Number(sh.cy)||0];
+  if(!sh.type||sh.type==='rect'||sh.type===PARA) return [Number(sh.x)||0,Number(sh.y)||0];
   return null;
 }
 /** 场地半径文案：圆/扇形→R；椭圆→Rx/Ry；矩形/多边形无半径（返回空串） */
 function siteRadiusText(site){
   const sh=(site&&site.shape)||{};
-  if(sh.type==='circle'||sh.type==='sector') return fmt(sh.r)+' m';
-  if(sh.type==='ellipse') return 'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry);
+  if(sh.type===CIR||sh.type===SEC) return fmt(sh.r)+' m';
+  if(sh.type===ELL) return 'Rx '+fmt(sh.rx)+'  Ry '+fmt(sh.ry);
   return '';
 }
 /** 场地面积/周长：多边形按顶点精确计算，其余形状复用区域公式（矩形/平行四边形/圆/椭圆/扇形） */
@@ -132,8 +132,8 @@ function siteAreaPerimeter(site){
     if(ps.length<3) return {area:0,perimeter:ps.length===2?polylineLength(ps):0};
     return {area:polygonArea(ps), perimeter:polylineLength(ps.concat([ps[0]]))};
   }
-  if(sh.type==='parallelogram'){
-    const o={shape:{type:'parallelogram',skew:sh.skew},x:Number(sh.x)||0,y:Number(sh.y)||0,
+  if(sh.type===PARA){
+    const o={shape:{type:PARA,skew:sh.skew},x:Number(sh.x)||0,y:Number(sh.y)||0,
       width:positiveNum(sh.w,100),height:positiveNum(sh.h,70),angle:0};
     return {area:shapeArea(o), perimeter:shapePerimeter(o)};
   }
@@ -150,13 +150,13 @@ function siteHandlesOf(site){
     return out;
   }
   const cx=Number(sh.cx)||0, cy=Number(sh.cy)||0;
-  if(sh.type==='circle'){
+  if(sh.type===CIR){
     const r=Number(sh.r)||0;
     out.push({type:'siteNode',mode:'center',x:cx,y:cy});
     out.push({type:'siteNode',mode:'radius',x:cx+r,y:cy});
     return out;
   }
-  if(sh.type==='ellipse'){
+  if(sh.type===ELL){
     const rx=Number(sh.rx)||0, ry=Number(sh.ry)||0, a=(Number(sh.angle)||0)*Math.PI/180, b=a+Math.PI/2;
     out.push({type:'siteNode',mode:'center',x:cx,y:cy});
     out.push({type:'siteNode',mode:'rx',x:cx+Math.cos(a)*rx,y:cy+Math.sin(a)*rx});
@@ -165,7 +165,7 @@ function siteHandlesOf(site){
     out.push({type:'siteNode',mode:'rotate',x:cx+Math.cos(b)*off,y:cy+Math.sin(b)*off});
     return out;
   }
-  if(sh.type==='sector'){
+  if(sh.type===SEC){
     const r=Number(sh.r)||0, rg=sectorArcRange(sh), a0=rg.a0, sw=rg.sweep, a1=rg.a1;
     const p=deg=>[cx+r*Math.cos(deg*Math.PI/180),cy+r*Math.sin(deg*Math.PI/180)];
     out.push({type:'siteNode',mode:'center',x:cx,y:cy});
@@ -174,7 +174,7 @@ function siteHandlesOf(site){
     out.push({type:'siteNode',mode:'radius',x:p(a0+sw/2)[0],y:p(a0+sw/2)[1]});
     return out;
   }
-  if(sh.type==='parallelogram'){
+  if(sh.type===PARA){
     const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
     const pts=parallelogramPoints(x,y,w,hh,sh.skew);
     pts.forEach((p,i)=>out.push({type:'siteNode',mode:'corner',index:i,x:p[0],y:p[1]}));
@@ -198,7 +198,7 @@ function siteHandleDragTo(site,h,p){
   if(h.mode==='corner'){
     const x=Number(sh.x)||0, y=Number(sh.y)||0, w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
     /* 平行四边形：顶边两角含错切位移，先扣回未错切坐标再按对角固定规则反解 */
-    const isPara=sh.type==='parallelogram';
+    const isPara=sh.type===PARA;
     const skew=isPara?parallelogramSkew(sh)*Math.PI/180:0;
     const pull=(v,i)=> i>=2 && isPara ? v-Math.tan(skew)*(p[1]-y) : v;
     const fixed=[[x,y],[x+w,y],[x+w,y+hh],[x,y+hh]][(h.index+2)%4];
@@ -255,11 +255,11 @@ function rectShapeFromCorners(a,b){
   return {type:'rect',w:Math.max(.05,Math.abs(a[0]-b[0])),h:Math.max(.05,Math.abs(a[1]-b[1]))};
 }
 /** 圆形场地：圆心固定在世界域中心 (r,r)，世界域恰为 2r×2r（拖点仅决定半径） */
-function circleShapeFrom(c,r){ const rr=Math.max(.05,Number(r)||0); return {type:'circle',cx:rr,cy:rr,r:rr}; }
+function circleShapeFrom(c,r){ const rr=Math.max(.05,Number(r)||0); return {type:CIR,cx:rr,cy:rr,r:rr}; }
 /** 椭圆场地：由包围盒两角点生成，中心置域中心，世界域=包围盒 */
 function ellipseShapeFromCorners(a,b){
   const w=Math.max(.05,Math.abs(a[0]-b[0])), h=Math.max(.05,Math.abs(a[1]-b[1]));
-  return {type:'ellipse',cx:w/2,cy:h/2,rx:w/2,ry:h/2,angle:0};
+  return {type:ELL,cx:w/2,cy:h/2,rx:w/2,ry:h/2,angle:0};
 }
 /** 扇形场地：圆心/半径/起止角确定后整体平移到第一象限（与多边形同一规整规则） */
 function sectorShapeFrom(c,r,a0=0,a1){
@@ -269,7 +269,7 @@ function sectorShapeFrom(c,r,a0=0,a1){
   const cx=Number(c[0])||0, cy=Number(c[1])||0;
   const pts=sectorArcPoints(cx,cy,rr,s0,s1-s0).concat([[cx,cy]]);
   const minX=Math.min(...pts.map(p=>p[0])), minY=Math.min(...pts.map(p=>p[1]));
-  return {type:'sector',cx:cx-minX,cy:cy-minY,r:rr,a0:s0,a1:s1};
+  return {type:SEC,cx:cx-minX,cy:cy-minY,r:rr,a0:s0,a1:s1};
 }
 /** 多边形平移到第一象限（minX=minY=0），返回规整后的 shape */
 function polygonShapeFromPoints(points){
@@ -286,12 +286,12 @@ function siteDescriptionParts(bg){
   if(!bg) return {kind:'', title:L('矢量场地：'), detail:L('未设置')};
   const d=siteDomainOf(bg);
   if(bg.kind==='image') return {kind:'image', title:L('图片底图：'), detail:`${bg.fileName||L('未命名')} ${bg.width}×${bg.height}px ｜ ${fmt(bg.metersPerPixel)} m/px${bg.calibrated?L('（已校准）'):L('（未校准）')} ｜ ${L('实地')} ${fmt(d.w)}×${fmt(d.h)} m`};
-  if(bg.kind==='circle') return {kind:'circle', title:L('圆形场地：'), detail:`${L('半径')} ${fmt(bg.shape.r)} m ｜ ${L('占地')} ${fmt(d.w)}×${fmt(d.h)} m`};
-  if(bg.kind==='ellipse'){
+  if(bg.kind===CIR) return {kind:CIR, title:L('圆形场地：'), detail:`${L('半径')} ${fmt(bg.shape.r)} m ｜ ${L('占地')} ${fmt(d.w)}×${fmt(d.h)} m`};
+  if(bg.kind===ELL){
     const sh=bg.shape, rot=Number(sh.angle)||0;
-    return {kind:'ellipse', title:L('椭圆场地：'), detail:`${L('半径')} ${fmt(sh.rx)}×${fmt(sh.ry)} m${rot?` ｜ ${L('旋转')} ${Math.round(rot)}°`:''} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
+    return {kind:ELL, title:L('椭圆场地：'), detail:`${L('半径')} ${fmt(sh.rx)}×${fmt(sh.ry)} m${rot?` ｜ ${L('旋转')} ${Math.round(rot)}°`:''} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
   }
-  if(bg.kind==='sector') return {kind:'sector', title:L('扇形场地：'), detail:`${L('半径')} ${fmt(bg.shape.r)} m ｜ ${Math.round(sectorSweep(bg.shape))}° ${L('扇区')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
+  if(bg.kind===SEC) return {kind:SEC, title:L('扇形场地：'), detail:`${L('半径')} ${fmt(bg.shape.r)} m ｜ ${Math.round(sectorSweep(bg.shape))}° ${L('扇区')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
   if(bg.kind==='polygon') return {kind:'polygon', title:L('多边形场地：'), detail:`${bg.shape.points.length} ${L('条边')} ｜ ${L('外接')} ${fmt(d.w)}×${fmt(d.h)} m`};
   return {kind:bg.kind||'rect', title:L('矩形场地：'), detail:`${fmt(d.w)}×${fmt(d.h)} m${L('（世界坐标，无需比例尺校准）')}`};
 }
@@ -307,7 +307,7 @@ function hitPhysicalPoint(o,shape,p){
   const size=Number(o.phys);
   if(!(size>0)) return false;
   const dxy=[p[0]-o.x,p[1]-o.y];
-  if(shape==='circle') return Math.hypot(dxy[0],dxy[1])<=size/2;
+  if(shape===CIR) return Math.hypot(dxy[0],dxy[1])<=size/2;
   if(shape==='square'){
     const q=rotatePoint(p,[o.x,o.y],-o.angle);
     return Math.abs(q[0]-o.x)<=size/2 && Math.abs(q[1]-o.y)<=size/2;
@@ -317,7 +317,7 @@ function hitPhysicalPoint(o,shape,p){
     const e1=[o.x+Math.cos(a)*half,o.y+Math.sin(a)*half], e2=[o.x-Math.cos(a)*half,o.y-Math.sin(a)*half];
     return distanceToSegment(p,e1,e2)<=Math.max(.12,8/(state.viewport.zoom||1));
   }
-  if(shape==='sector'){
+  if(shape===SEC){
     const r=Math.hypot(dxy[0],dxy[1]);
     if(r>size) return false;
     if(r<EPS) return true;
@@ -374,9 +374,9 @@ function siteCornerPoints(site){
   const bp=siteBoundaryPoints(site);
   if(bp&&bp.length>=3) return bp;
   const sh=siteShapeOf(site);
-  if(sh.type==='circle'||sh.type==='ellipse'){
-    const rx=sh.type==='circle'?(Number(sh.r)||0):(Number(sh.rx)||0);
-    const ry=sh.type==='circle'?(Number(sh.r)||0):(Number(sh.ry)||0);
+  if(sh.type===CIR||sh.type===ELL){
+    const rx=sh.type===CIR?(Number(sh.r)||0):(Number(sh.rx)||0);
+    const ry=sh.type===CIR?(Number(sh.r)||0):(Number(sh.ry)||0);
     return [[sh.cx-rx,sh.cy],[sh.cx+rx,sh.cy],[sh.cx,sh.cy-ry],[sh.cx,sh.cy+ry]];
   }
   return [];

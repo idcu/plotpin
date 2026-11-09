@@ -417,11 +417,11 @@ function buildSceneSvg(){
   if(site&&siteIsVisible(site)){
     const sh=siteShapeOf(site), st=site.style||{};
     const fill=xmlEscape(st.fill||'#eef2f7'), stroke=xmlEscape(st.stroke||'#3b82f6');
-    if(sh.type==='circle'){
+    if(sh.type===CIR){
       shapes.push(`<circle cx="${X(sh.cx)}" cy="${Y(sh.cy)}" r="${sh.r*ppu}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
-    }else if(sh.type==='ellipse'){
+    }else if(sh.type===ELL){
       shapes.push(`<ellipse cx="${X(sh.cx)}" cy="${Y(sh.cy)}" rx="${sh.rx*ppu}" ry="${sh.ry*ppu}" transform="rotate(${-Number(sh.angle)||0} ${X(sh.cx)} ${Y(sh.cy)})" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`);
-    }else if(sh.type==='sector'){
+    }else if(sh.type===SEC){
       const R=sh.r*ppu, cx=X(sh.cx), cy=Y(sh.cy), rg=sectorArcRange(sh), sweep=rg.sweep;
       const ex=a=>[cx+R*Math.cos(a*Math.PI/180),cy-R*Math.sin(a*Math.PI/180)];
       const a0=rg.a0;
@@ -546,10 +546,10 @@ function buildSceneSvg(){
       }else if((o.phys||0)>0&&psh!=='none'){
         const R=o.phys*ppu, half=R/2, sw=Math.max(1.5,.06*ppu);
         let body='';
-        if(psh==='circle') body=`<circle r="${half}" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-width="${sw}"/>`;
+        if(psh===CIR) body=`<circle r="${half}" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-width="${sw}"/>`;
         else if(psh==='square') body=`<rect x="${-half}" y="${-half}" width="${R}" height="${R}" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-width="${sw}"/>`;
         else if(psh==='bar') body=`<line x1="${-half}" y1="0" x2="${half}" y2="0" stroke="${color}" stroke-width="${Math.max(2,.1*ppu)}" stroke-linecap="round"/>`;
-        else if(psh==='sector'){
+        else if(psh===SEC){
           const fov=Math.min(360,Math.max(10,Number(t.fov)||90))*Math.PI/180, hh=fov/2;
           body=`<path d="M0,0 L ${R*Math.cos(hh)},${-R*Math.sin(hh)} A ${R} ${R} 0 0 1 ${R*Math.cos(hh)},${R*Math.sin(hh)} Z" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-width="${sw}"/>`;
         }
@@ -651,7 +651,7 @@ function dxfEntitiesForExport(){
       entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:!!o.closed});
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);
-      if(tt==='circle') entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
+      if(tt===CIR) entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
       else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:true});
     }else if(o.kind==='dimension'&&o.points.length>=2){
       entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:outlineOf(o),closed:o.subtype==='area'});

@@ -9,7 +9,7 @@ const TABLE_IMPORT_EXTRA_COLUMNS=['操作'].concat(TABLE_MATCH_COLUMNS);
 function tableImportColumns(){ return TABLE_COLUMNS.concat(TABLE_IMPORT_EXTRA_COLUMNS); }
 /* 区域形状 / 标注子类型：表格中文 ↔ 模型枚举（导出导入共用同一映射） */
 const AREA_SHAPE_LABELS={rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形',parallelogram:'平行四边形'};
-const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':'circle','椭圆':'ellipse','扇形':'sector','平行四边形':'parallelogram'};
+const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':CIR,'椭圆':ELL,'扇形':SEC,'平行四边形':PARA};
 const DIM_SUB_LABELS={ruler:'测距',distance:'两点距离',area:'面积',angle:'角度'};
 const DIM_SUB_BY_LABEL={'测距':'ruler','两点距离':'distance','距离':'distance','面积':'area','角度':'angle'};
 /* 节点坐标文本：节点间用分号、XY 间用逗号，如 "0,0;3.5,-2;10,4"（CSV 中整格自动加引号）；
@@ -35,26 +35,26 @@ function applyRowShape(o,label,v){
     o.shape=null; o.width=v.w; o.height=v.h; o.x=v.x; o.y=v.y; o.angle=normalizeAngle(v.angle);
     return true;
   }
-  if(tt==='circle'){
+  if(tt===CIR){
     if(!(v.w>0)) return false;
-    o.shape={type:'circle',r:v.w/2}; o.width=0; o.height=0; o.angle=0; o.x=v.x; o.y=v.y; return true;
+    o.shape={type:CIR,r:v.w/2}; o.width=0; o.height=0; o.angle=0; o.x=v.x; o.y=v.y; return true;
   }
-  if(tt==='ellipse'){
+  if(tt===ELL){
     if(!(v.w>0)||!(v.h>0)) return false;
-    o.shape={type:'ellipse',rx:v.w/2,ry:v.h/2}; o.width=0; o.height=0; o.angle=normalizeAngle(v.angle); o.x=v.x; o.y=v.y; return true;
+    o.shape={type:ELL,rx:v.w/2,ry:v.h/2}; o.width=0; o.height=0; o.angle=normalizeAngle(v.angle); o.x=v.x; o.y=v.y; return true;
   }
-  if(tt==='sector'){
+  if(tt===SEC){
     if(!(v.w>0)) return false;
     const a0=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:0);
     const a1=Number.isFinite(v.params[1])?v.params[1]:a0+90;
     let sweep=((a1-a0)%360+360)%360; if(sweep===0) sweep=360;
-    o.shape={type:'sector',r:v.w/2,a0,a1:a0+sweep}; o.width=0; o.height=0; o.angle=0; o.x=v.x; o.y=v.y; return true;
+    o.shape={type:SEC,r:v.w/2,a0,a1:a0+sweep}; o.width=0; o.height=0; o.angle=0; o.x=v.x; o.y=v.y; return true;
   }
-  if(tt==='parallelogram'){
+  if(tt===PARA){
     if(!(v.w>0)||!(v.h>0)) return false;
     /* 形状参数 = 倾角（度）；缺省 30° */
     const skew=Number.isFinite(v.params[0])?v.params[0]:(Number.isFinite(v.angle)?v.angle:PARALLELOGRAM_DEFAULT_SKEW);
-    o.shape={type:'parallelogram',skew:clampSkewDeg(skew)};
+    o.shape={type:PARA,skew:clampSkewDeg(skew)};
     o.width=v.w; o.height=v.h; o.x=v.x; o.y=v.y;
     o.angle=normalizeAngle(Number.isFinite(v.angle)?v.angle:0);
     return true;
@@ -176,15 +176,15 @@ function geomRoundingTol(cnd,ulp){
     if(tt==='rect'){
       areaTol=0.5*ulp*(Math.abs(cnd.width)+Math.abs(cnd.height))+ulp;
       lenTol=3*ulp;
-    }else if(tt==='parallelogram'){
+    }else if(tt===PARA){
       /* 面积=底×高（同矩形）；周长含斜边 h/cosθ，倾角取整带来额外误差，放宽到 5ulp */
       areaTol=0.5*ulp*(Math.abs(cnd.width)+Math.abs(cnd.height))+ulp;
       lenTol=5*ulp;
-    }else if(tt==='circle'){
+    }else if(tt===CIR){
       const r=sh.r||0;
       areaTol=Math.PI*(r*ulp+ulp*ulp)+ulp;   /* πr²，|Δr|≤ulp/2 */
       lenTol=4*ulp;                            /* 2πr */
-    }else if(tt==='ellipse'){
+    }else if(tt===ELL){
       const rx=sh.rx||0,ry=sh.ry||0;
       areaTol=1.6*ulp*Math.max(rx,ry)+ulp;    /* πrx·ry，半轴由直径/2 得到 */
       lenTol=4*ulp;
@@ -383,7 +383,7 @@ function rowsToObjectsPlan(rows){
       /* 形状列决定尺寸校验：矩形/椭圆要宽+高；圆/扇形只要直径（宽度列） */
       const shape=AREA_SHAPE_BY_LABEL[c('形状')]||'rect';
       const w=tableNum(c('宽度')), h=tableNum(c('高度'));
-      const needH=shape==='rect'||shape==='ellipse';
+      const needH=shape==='rect'||shape===ELL;
       if(!(w>0)||(needH&&!(h>0))){
         problem(where+'：'+AREA_SHAPE_LABELS[shape]+'缺少有效宽度'+(needH?'/高度':'')+'，已跳过');
         return;

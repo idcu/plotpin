@@ -262,8 +262,8 @@ $('addTypeBtn').onclick=async()=>{
   const saved={id:uid('type'),kind,name,color,icon:kind==='point'?icon:(kind==='rect'?'rect':'line'),defaultStyle:kind==='rect'?{fillAlpha:.16,strokeWidth:.12}:{strokeWidth:.1}};
   if(kind==='point'){
     const psh=$('newTypeShape').value;
-    if(['none','circle','square','sector','bar'].includes(psh)) saved.scaleShape=psh;
-    if(psh==='sector') saved.fov=90;
+    if(['none',CIR,'square',SEC,'bar'].includes(psh)) saved.scaleShape=psh;
+    if(psh===SEC) saved.fov=90;
     const iconSize=Math.min(5,Math.max(.5,Number($('newTypeIconSize')?.value)||1));
     if(iconSize!==1) saved.iconSize=iconSize;
   }
@@ -369,10 +369,10 @@ if($('symbolJsonInput')) $('symbolJsonInput').addEventListener('change',async e=
 /** 清单/报告中区域形状的参数摘要 */
 function areaParamText(o){
   const tt=areaShapeType(o), sh=o.shape||{};
-  if(tt==='circle') return `${L('圆形')} r=${fmt(sh.r)}m`;
-  if(tt==='ellipse') return `${L('椭圆')} ${fmt(sh.rx*2)}×${fmt(sh.ry*2)}m / ${Math.round(o.angle)}°`;
-  if(tt==='sector') return `${L('扇形')} r=${fmt(sh.r)}m / ${Math.round(sectorSweep(sh))}°`;
-  if(tt==='parallelogram') return `${L('平行四边形')} ${fmt(o.width)}×${fmt(o.height)}m / ${L('倾角')} ${Math.round(parallelogramSkew(sh))}°`;
+  if(tt===CIR) return `${L('圆形')} r=${fmt(sh.r)}m`;
+  if(tt===ELL) return `${L('椭圆')} ${fmt(sh.rx*2)}×${fmt(sh.ry*2)}m / ${Math.round(o.angle)}°`;
+  if(tt===SEC) return `${L('扇形')} r=${fmt(sh.r)}m / ${Math.round(sectorSweep(sh))}°`;
+  if(tt===PARA) return `${L('平行四边形')} ${fmt(o.width)}×${fmt(o.height)}m / ${L('倾角')} ${Math.round(parallelogramSkew(sh))}°`;
   return `${fmt(o.width)}×${fmt(o.height)} / ${Math.round(o.angle)}°`;
 }
 function objectArea(o){
@@ -429,8 +429,8 @@ function findIssues(){
     if(o.kind==='rect'){
       const tt=areaShapeType(o), sh=o.shape||{};
       const small=tt==='rect'?(o.width<.05||o.height<.05)
-        :tt==='circle'?sh.r<.05
-        :tt==='ellipse'?((sh.rx||0)<.05||(sh.ry||0)<.05)
+        :tt===CIR?sh.r<.05
+        :tt===ELL?((sh.rx||0)<.05||(sh.ry||0)<.05)
         :(sh.r||0)<.05;
       if(small) issues.push(`${o.name} ${L('尺寸过小')}`);
     }

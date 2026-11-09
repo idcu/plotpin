@@ -59,8 +59,8 @@ function collectSnap(st,vis,box,parts){
         }else{
           const sh=o.shape;
           push(o.id,[o.x,o.y],'center');
-          if(tt==='circle'||tt==='ellipse'){
-            const rx=tt==='circle'?sh.r:sh.rx, ry=tt==='circle'?sh.r:sh.ry;
+          if(tt===CIR||tt===ELL){
+            const rx=tt===CIR?sh.r:sh.rx, ry=tt===CIR?sh.r:sh.ry;
             const a=(o.angle||0)*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
             /* 象限点独立标记（椭圆旋转按其角度） */
             [[rx,0],[-rx,0],[0,ry],[0,-ry]].forEach(q=>{
@@ -82,7 +82,7 @@ function collectSnap(st,vis,box,parts){
         for(let k=0;k<4;k++) add(o.id,ps[k],ps[(k+1)%4]);
       }
     }
-    if(wantCir&&isRect&&tt==='circle') circles.push({id:o.id,c:[o.x,o.y],r:o.shape.r});
+    if(wantCir&&isRect&&tt===CIR) circles.push({id:o.id,c:[o.x,o.y],r:o.shape.r});
   }
   /* 矢量场地边角也参与捕捉（场地不在 objects，需单独追加）：
      折点→端点；圆/椭圆/扇形→圆心（center）。图层隐藏时不参与。 */
@@ -94,7 +94,7 @@ function collectSnap(st,vis,box,parts){
         const bp=siteBoundaryPoints(site);
         if(bp) bp.forEach(p=>{ if(inBox(p)) push('site',p,'endpoint'); });
         const sh=siteShapeOf(site);
-        if((sh.type==='circle'||sh.type==='ellipse'||sh.type==='sector')
+        if((sh.type===CIR||sh.type===ELL||sh.type===SEC)
            && inBox([Number(sh.cx)||0,Number(sh.cy)||0]))
           push('site',[Number(sh.cx)||0,Number(sh.cy)||0],'center');
       }
@@ -207,7 +207,7 @@ function squareCorner(a,p,shift){ return __geo.constrainSquareCorner(a,p,shift);
 function nearestPointOnSegment(p,a,b){ return __geo.nearestPointOnSegment(p,a,b); }
 function segmentsIntersect(a,b,c,d){ return __geo.segmentsIntersect(a,b,c,d); }
 function rectPoints(o){
-  if(o.shape&&o.shape.type==='parallelogram'){
+  if(o.shape&&o.shape.type===PARA){
     return parallelogramPoints(o.x,o.y,o.width,o.height,o.shape.skew)
       .map(p=>rotatePoint(p,[o.x,o.y],o.angle));
   }
@@ -262,7 +262,7 @@ function objectSnapBounds(o,out){
   }
   if(o.kind==='rect'){
     const tt=areaShapeType(o);
-    if(tt==='rect'||tt==='parallelogram'){
+    if(tt==='rect'||tt===PARA){
       if(tt==='rect'&&!(o.angle||0)){
         const x=Number(o.x)||0, y=Number(o.y)||0, w=Number(o.width)||0, h=Number(o.height)||0;
         out.minX=Math.min(x,x+w); out.maxX=Math.max(x,x+w);
@@ -273,7 +273,7 @@ function objectSnapBounds(o,out){
       out.minX=out.maxX=o.x||0; out.minY=out.maxY=o.y||0; return out;
     }
     const sh=o.shape||{};
-    const r=(tt==='circle'||tt==='sector')
+    const r=(tt===CIR||tt===SEC)
       ?Math.abs(Number(sh.r)||0)
       :Math.max(Math.abs(Number(sh.rx)||0),Math.abs(Number(sh.ry)||0));
     const cx=Number(o.x)||0, cy=Number(o.y)||0;
@@ -332,7 +332,7 @@ function boundsIntersect(a,b){ return __geo.boundsIntersect(a,b); }
 
 /* -------------------- 统一参数形状（区域与矢量场地共用） -------------------- */
 /* 区域对象：shape=null 为矩形（width/height/angle）；否则 circle/ellipse/sector/parallelogram，锚点 (x,y) */
-const AREA_SHAPE_TYPES=['rect','circle','ellipse','sector','parallelogram'];
+const AREA_SHAPE_TYPES=['rect',CIR,ELL,SEC,PARA];
 const SHAPE_SEGMENTS=72;
 /* 平行四边形倾角（°）：0=矩形，正值上边向右错切；限制 ±80° 避免退化为无限长边 */
 const PARALLELOGRAM_DEFAULT_SKEW=30;
@@ -343,7 +343,7 @@ function parallelogramSkew(sh){ return __geo.clampSkew(sh&&sh.skew,PARALLELOGRAM
 function parallelogramPoints(x,y,w,h,skew){ return __geo.parallelogramPoints(x,y,w,h,skew); }
 function areaShapeType(o){
   const t=o&&o.shape&&o.shape.type;
-  return (t==='circle'||t==='ellipse'||t==='sector'||t==='parallelogram')?t:'rect';
+  return (t===CIR||t===ELL||t===SEC||t===PARA)?t:'rect';
 }
 /** 扇形有效张角（0–360°）；a0/a1 为世界系绝对角度（Y 向上），相等时视为整圆 */
 function sectorSweep(sh){ return __geo.sectorSweep(sh&&sh.a0,sh&&sh.a1); }
@@ -357,14 +357,14 @@ function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){ return __geo.sect
 /** 区域形状 → 闭合世界多边形顶点（扇形首点为圆心）；渲染/包围盒/框选/SVG 共用 */
 function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
   const tt=areaShapeType(o);
-  if(tt==='rect'||tt==='parallelogram') return rectPoints(o);
+  if(tt==='rect'||tt===PARA) return rectPoints(o);
   const sh=o.shape;
-  if(tt==='circle'){
+  if(tt===CIR){
     const r=Math.max(EPS,Number(sh.r)||0), pts=[];
     for(let i=0;i<seg;i++){ const a=2*Math.PI*i/seg; pts.push([o.x+r*Math.cos(a),o.y+r*Math.sin(a)]); }
     return pts;
   }
-  if(tt==='ellipse'){
+  if(tt===ELL){
     const rx=Math.max(EPS,Number(sh.rx)||0), ry=Math.max(EPS,Number(sh.ry)||0);
     const pts=[], ang=(o.angle||0)*Math.PI/180, c=Math.cos(ang), s=Math.sin(ang);
     for(let i=0;i<seg;i++){
@@ -390,10 +390,10 @@ function outlineOf(o){
 /** 世界坐标命中（米） */
 function shapeHit(o,p){
   const tt=areaShapeType(o);
-  if(tt==='rect'||tt==='parallelogram') return pointInPolygon(p,rectPoints(o));
+  if(tt==='rect'||tt===PARA) return pointInPolygon(p,rectPoints(o));
   const sh=o.shape, dx=p[0]-o.x, dy=p[1]-o.y;
-  if(tt==='circle') return Math.hypot(dx,dy)<=(Number(sh.r)||0);
-  if(tt==='ellipse'){
+  if(tt===CIR) return Math.hypot(dx,dy)<=(Number(sh.r)||0);
+  if(tt===ELL){
     const q=rotatePoint(p,[o.x,o.y],-(o.angle||0));
     const rx=Math.max(EPS,Number(sh.rx)||0), ry=Math.max(EPS,Number(sh.ry)||0);
     const vx=(q[0]-o.x)/rx, vy=(q[1]-o.y)/ry;
@@ -409,10 +409,10 @@ function shapeHit(o,p){
 /** 面积（㎡），各形状精确公式 */
 function shapeArea(o){
   const tt=areaShapeType(o);
-  if(tt==='rect'||tt==='parallelogram') return Math.max(0,o.width)*Math.max(0,o.height);
+  if(tt==='rect'||tt===PARA) return Math.max(0,o.width)*Math.max(0,o.height);
   const sh=o.shape;
-  if(tt==='circle'){ const r=Number(sh.r)||0; return Math.PI*r*r; }
-  if(tt==='ellipse') return __geo.ellipseArea(sh.rx,sh.ry);
+  if(tt===CIR){ const r=Number(sh.r)||0; return Math.PI*r*r; }
+  if(tt===ELL) return __geo.ellipseArea(sh.rx,sh.ry);
   const r=Number(sh.r)||0;
   return __geo.sectorArea(r,sectorSweep(sh));
 }
@@ -420,15 +420,15 @@ function shapeArea(o){
 function shapePerimeter(o){
   const tt=areaShapeType(o);
   if(tt==='rect') return Math.max(0,o.width)*2+Math.max(0,o.height)*2;
-  if(tt==='parallelogram'){
+  if(tt===PARA){
     /* 错切不改变面积，但斜边长为 h/cos(倾角)：周长 = 2(w + h/cosθ) */
     const w=Math.max(0,o.width), hh=Math.max(0,o.height);
     const cs=Math.cos(parallelogramSkew(o.shape)*Math.PI/180);
     return 2*(w+(cs<1e-6?0:hh/cs));
   }
   const sh=o.shape;
-  if(tt==='circle') return 2*Math.PI*sh.r;
-  if(tt==='ellipse') return __geo.ellipsePerimeter(sh.rx,sh.ry);
+  if(tt===CIR) return 2*Math.PI*sh.r;
+  if(tt===ELL) return __geo.ellipsePerimeter(sh.rx,sh.ry);
   const r=Math.max(0,sh.r);
   const sweep=sectorSweep(sh);
   /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
@@ -438,7 +438,7 @@ function shapePerimeter(o){
  *  手柄定位（render.js）与旋转角度换算（interaction.js）必须共用本函数，否则图形绕锚点甩动而手柄画在中心。 */
 function shapeLabelCenter(o){
   const tt=areaShapeType(o);
-  if(tt==='rect'||tt==='parallelogram') return objectCenter(o);
+  if(tt==='rect'||tt===PARA) return objectCenter(o);
   return [o.x,o.y];
 }
 /** 旋转手柄拖拽写回：以 shapeLabelCenter 为基准由指针方位角求对象角度（P1-1）。
@@ -450,9 +450,9 @@ function rotateShapeByHandle(o,wp,pointRotate){
   if(!pointRotate) deg-=90;
   o.angle=normalizeAngle(Math.round(deg));
   const tt=areaShapeType(o);
-  if(tt!=='rect'&&tt!=='parallelogram') return;
+  if(tt!=='rect'&&tt!==PARA) return;
   const w=Number(o.width)||0, h=Number(o.height)||0;
-  const off=tt==='parallelogram'?h*Math.tan(parallelogramSkew(o.shape)*Math.PI/180):0;
+  const off=tt===PARA?h*Math.tan(parallelogramSkew(o.shape)*Math.PI/180):0;
   const v=rotatePoint([(w+off)/2,h/2],[0,0],o.angle);
   o.x=c[0]-v[0]; o.y=c[1]-v[1];
 }
@@ -467,41 +467,41 @@ function convertAreaShape(o,newType){
   const oldW=o.width, oldH=o.height, oldShape=o.shape;
   if(newType==='rect'){
     let bw,bh;
-    if(old==='ellipse'){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
-    else if(old==='parallelogram'){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
+    if(old===ELL){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
+    else if(old===PARA){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
     else { bw=bh=Math.sqrt(A); }
     /* CORE-P2-7：椭圆带旋转时，本地框=2rx×2ry，转换后必须保留角度，否则视觉朝向丢失。
        P1-2：角度的旋转绕基点发生，基点必须按旋转后的质心偏移反解，否则质心沿旋转方向漂移。 */
-    const ang=(old==='parallelogram'||old==='ellipse')?oldAngle:0;
+    const ang=(old===PARA||old===ELL)?oldAngle:0;
     o.angle=ang; o.shape=null;
     const v=rotatePoint([bw/2,bh/2],[0,0],ang);
     o.x=c[0]-v[0]; o.y=c[1]-v[1]; o.width=bw; o.height=bh;
     return;
   }
-  if(newType==='parallelogram'){
+  if(newType===PARA){
     let bw,bh,ang=oldAngle;
-    if(old==='rect'||old==='parallelogram'){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
-    else if(old==='ellipse'){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
+    if(old==='rect'||old===PARA){ bw=Math.max(.05,oldW); bh=Math.max(.05,oldH); }
+    else if(old===ELL){ bw=2*Math.max(.05,Number(oldShape.rx)); bh=2*Math.max(.05,Number(oldShape.ry)); }
     else { bw=bh=Math.sqrt(A); ang=0; }
-    const skew=old==='parallelogram'?parallelogramSkew(oldShape):PARALLELOGRAM_DEFAULT_SKEW;
+    const skew=old===PARA?parallelogramSkew(oldShape):PARALLELOGRAM_DEFAULT_SKEW;
     const off=bh*Math.tan(skew*Math.PI/180);
     /* 质心相对基点偏移 (w+off)/2, h/2：按最终角度旋转后反推基点，使质心落在原中心（angle≠0 时也成立） */
     const v=rotatePoint([(bw+off)/2,bh/2],[0,0],ang);
     o.x=c[0]-v[0]; o.y=c[1]-v[1];
-    o.width=bw; o.height=bh; o.angle=ang; o.shape={type:'parallelogram',skew};
+    o.width=bw; o.height=bh; o.angle=ang; o.shape={type:PARA,skew};
     return;
   }
-  if(newType==='circle'){
-    o.shape={type:'circle',r:Math.sqrt(A/Math.PI)};
-  }else if(newType==='ellipse'){
+  if(newType===CIR){
+    o.shape={type:CIR,r:Math.sqrt(A/Math.PI)};
+  }else if(newType===ELL){
     let rx,ry,ang=0;
-    if(old==='rect'||old==='parallelogram'){ rx=oldW/2; ry=oldH/2; ang=oldAngle; }
-    else if(old==='circle'){ rx=ry=Number(oldShape.r); }
+    if(old==='rect'||old===PARA){ rx=oldW/2; ry=oldH/2; ang=oldAngle; }
+    else if(old===CIR){ rx=ry=Number(oldShape.r); }
     else { rx=ry=Number(oldShape.r); }
-    o.angle=ang; o.shape={type:'ellipse',rx:Math.max(.05,rx),ry:Math.max(.05,ry)};
+    o.angle=ang; o.shape={type:ELL,rx:Math.max(.05,rx),ry:Math.max(.05,ry)};
   }else{ /* sector：默认 90° 饼形，半径按等面积反推，圆心不动 */
     const sweep=90;
-    o.angle=0; o.shape={type:'sector',r:Math.sqrt(A/(Math.PI*sweep/360)),a0:0,a1:sweep};
+    o.angle=0; o.shape={type:SEC,r:Math.sqrt(A/(Math.PI*sweep/360)),a0:0,a1:sweep};
   }
   o.x=c[0]; o.y=c[1]; o.width=0; o.height=0;
 }

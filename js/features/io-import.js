@@ -251,7 +251,7 @@ function applyDxfImport(fileName,text,meta,opts){
         }else if(e.type==='CIRCLE'){
           if(!(e.r>0)) return;
           const x=e.x,y=e.y,r=e.r; bounds([[x-r,y-r],[x+r,y+r]]);
-          const o=baseObject('rect','rect.area',{x,y,shape:{type:'circle',r},width:0,height:0,layerId:layerIdFor(e.layer)});
+          const o=baseObject('rect','rect.area',{x,y,shape:{type:CIR,r},width:0,height:0,layerId:layerIdFor(e.layer)});
           state.objects.push(o); counts.rect++;
         }else if(e.type==='POINT'){
           const x=e.x,y=e.y; bounds([[x,y]]);
@@ -416,7 +416,7 @@ function openSitePicker(){
       if(m.length<2||!(m[0]>0)||!(m[1]>0)) return toast(L('请输入底边与高（均为正数），如 120,80,30'),'error');
       const skew=Number.isFinite(m[2])?m[2]:PARALLELOGRAM_DEFAULT_SKEW;
       closeModal();
-      applyVectorSite('parallelogram',{type:'parallelogram',x:0,y:0,w:m[0],h:m[1],skew});
+      applyVectorSite(PARA,{type:PARA,x:0,y:0,w:m[0],h:m[1],skew});
       return;
     }
     if(act==='polygon'){ closeModal(); setTool('site-polygon'); return; }
@@ -426,7 +426,7 @@ function openSitePicker(){
       const shape=ellipseShapeFromInput(v);
       if(!shape) return toast(L('请输入两个正数半径，如 40,25'),'error');
       closeModal();
-      applyVectorSite('ellipse',shape);
+      applyVectorSite(ELL,shape);
       return;
     }
     if(act==='rect-num'){
@@ -441,7 +441,7 @@ function openSitePicker(){
       const v=await showPrompt({title:L('圆形场地'),label:L('半径（米）'),value:'30'});
       const r=Number(v);
       if(!(r>0)) return toast(L('请输入正数半径'),'error');
-      closeModal(); applyVectorSite('circle',circleShapeFrom([0,0],r));
+      closeModal(); applyVectorSite(CIR,circleShapeFrom([0,0],r));
     }
   });
 }
@@ -450,7 +450,7 @@ function openSitePicker(){
 function ellipseShapeFromInput(text){
   const m=String(text||'').split(/[,，x×*\s]+/).map(Number);
   if(m.length<2||!(m[0]>0)||!(m[1]>0)) return null;
-  return {type:'ellipse',cx:0,cy:0,rx:m[0],ry:m[1],angle:0};
+  return {type:ELL,cx:0,cy:0,rx:m[0],ry:m[1],angle:0};
 }
 /** 应用矢量场地：只更新独立 site 槽，保留图片底图、场地元数据（id/name/layer/visible/locked/annot/style） */
 function applyVectorSite(kind,shape){

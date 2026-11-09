@@ -59,7 +59,7 @@ let calibUndoStack = [];     /* 校准控制点专用撤销栈（增/删/拖拽�
  * @property {string} [icon]
  * @property {boolean} [builtin]
  * @property {number} [iconSize]
- * @property {'none'|'circle'|'square'|'sector'|'bar'} [scaleShape]
+ * @property {'none'|CIR|'square'|SEC|'bar'} [scaleShape]
  * @property {number} [fov]
  * @property {Array<{d:string,fill?:boolean}>} [symbol]
  * @property {{fillAlpha?:number,strokeWidth?:number}} [defaultStyle]

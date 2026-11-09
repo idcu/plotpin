@@ -20,6 +20,9 @@ const EPS = 1e-8;
 const BG_MAX_EDGE = 3000;
 const BG_JPEG_QUALITY = 0.85;
 const BG_RECOMPRESS_LIMIT = 6 * 1024 * 1024;
+/* 形状类型字面量的唯一来源：几何/渲染/导入导出/属性面板共用，避免同一拼音串在各文件重复书写。
+   值即 schema 中的 shape.type / scaleShape 取值，改动会破坏存档兼容。 */
+const CIR = 'circle', ELL = 'ellipse', SEC = 'sector', PARA = 'parallelogram';
 /* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限/导入限值），避免魔法数字散落各处 */
 const APP_LIMITS = Object.freeze({
   ZOOM_MIN: 0.02, ZOOM_MAX: 200,
@@ -102,9 +105,9 @@ function normalizeIcon(icon, kind){
 }
 const BUILTIN_TYPES = [
   {id:'point.marker', kind:'point', name:'通用标记', color:'#2563eb', icon:'marker', scaleShape:'none', builtin:true},
-  {id:'point.camera', kind:'point', name:'摄像头', color:'#dc2626', icon:'camera', scaleShape:'sector', fov:90, builtin:true},
-  {id:'point.dome', kind:'point', name:'球机', color:'#1d4ed8', icon:'dome', scaleShape:'circle', builtin:true},
-  {id:'point.light', kind:'point', name:'路灯', color:'#ca8a04', icon:'light', scaleShape:'circle', builtin:true},
+  {id:'point.camera', kind:'point', name:'摄像头', color:'#dc2626', icon:'camera', scaleShape:SEC, fov:90, builtin:true},
+  {id:'point.dome', kind:'point', name:'球机', color:'#1d4ed8', icon:'dome', scaleShape:CIR, builtin:true},
+  {id:'point.light', kind:'point', name:'路灯', color:'#ca8a04', icon:'light', scaleShape:CIR, builtin:true},
   {id:'point.gate', kind:'point', name:'道闸', color:'#ea580c', icon:'gate', scaleShape:'bar', builtin:true},
   {id:'point.charger', kind:'point', name:'充电桩', color:'#0f766e', icon:'charger', scaleShape:'square', builtin:true},
   {id:'point.warning', kind:'point', name:'警示点', color:'#f59e0b', icon:'warning', scaleShape:'none', builtin:true},

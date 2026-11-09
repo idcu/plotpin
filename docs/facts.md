@@ -9,11 +9,11 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 834,826 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 259,498 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 833,165 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 259,510 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 4,854 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=115` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 6,515 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=117` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 

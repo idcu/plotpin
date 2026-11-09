@@ -94,18 +94,18 @@ function affineEllipseImage(M,angleDeg,rx,ry){
 function affineShapeTransform(M,shape,opts){
   const sh=shape||{}, o=Object.assign({allowRotatedBox:true},opts||{});
   const mapP=p=>affApply(M,p), lin=affineLinearSummary(M), type=sh.type||'rect';
-  if(type==='circle'||type==='ellipse'){
+  if(type===CIR||type===ELL){
     const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]);
-    const rx=positiveNum(type==='circle'?sh.r:sh.rx,50), ry=positiveNum(type==='circle'?sh.r:sh.ry,35);
+    const rx=positiveNum(type===CIR?sh.r:sh.rx,50), ry=positiveNum(type===CIR?sh.r:sh.ry,35);
     const im=affineEllipseImage(M,Number(sh.angle)||0,rx,ry);
-    if(type==='circle'&&im.circle) return {type:'circle',cx:c[0],cy:c[1],r:im.rx,degraded:null};
-    return {type:'ellipse',cx:c[0],cy:c[1],rx:im.rx,ry:im.ry,angle:im.angle,degraded:null};
+    if(type===CIR&&im.circle) return {type:CIR,cx:c[0],cy:c[1],r:im.rx,degraded:null};
+    return {type:ELL,cx:c[0],cy:c[1],rx:im.rx,ry:im.ry,angle:im.angle,degraded:null};
   }
-  if(type==='sector'){
+  if(type===SEC){
     const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]), r0=positiveNum(sh.r,50);
     const exact=lin.isSimilarity&&lin.det>0;
     const rr=exact?r0*lin.s1:r0*Math.sqrt(Math.abs(lin.det));
-    return {type:'sector',cx:c[0],cy:c[1],r:Math.max(.05,rr),
+    return {type:SEC,cx:c[0],cy:c[1],r:Math.max(.05,rr),
       a0:normalizeAngle((Number(sh.a0)||0)+lin.rotationDeg),
       a1:normalizeAngle((Number(sh.a1)||0)+lin.rotationDeg),
       degraded:exact?null:'sector-affine'};
@@ -114,7 +114,7 @@ function affineShapeTransform(M,shape,opts){
     points:(Array.isArray(sh.points)?sh.points:[]).map(p=>mapP([Number(p&&p[0])||0,Number(p&&p[1])||0])),degraded:null};
   /* 矩形/平行四边形：底边 U、侧边 V 一起映射，再以 U 单位向量为基准重算高/倾角/朝向 */
   const w=positiveNum(sh.w,100), hh=positiveNum(sh.h,70);
-  const skew=type==='parallelogram'?parallelogramSkew(sh):0;
+  const skew=type===PARA?parallelogramSkew(sh):0;
   const a=(Number(sh.angle)||0)*Math.PI/180, co=Math.cos(a), si=Math.sin(a);
   const off=hh*Math.tan(skew*Math.PI/180);
   const lx=co*w, ly=si*w, mx=co*off-si*hh, my=si*off+co*hh;
@@ -133,8 +133,8 @@ function affineShapeTransform(M,shape,opts){
     return {type:'polygon',points:corners,degraded:null};
   const skewOut=Math.atan2(offOut,hhOut)*180/Math.PI;
   const clamped=clampSkewDeg(skewOut);
-  const isRect=type!=='parallelogram'&&Math.abs(skewOut)<1e-9;
-  return {type:isRect?'rect':'parallelogram',x:bp[0],y:bp[1],w:lenU,h:hhOut,skew:clamped,angle:ang,
+  const isRect=type!==PARA&&Math.abs(skewOut)<1e-9;
+  return {type:isRect?'rect':PARA,x:bp[0],y:bp[1],w:lenU,h:hhOut,skew:clamped,angle:ang,
     degraded:Math.abs(clamped-skewOut)>1e-9?'skew-clamped':null};
 }
 /**
@@ -167,21 +167,21 @@ function migrateObjectsByAffine(objects,M,out){
         o.width=Math.max(.05,(Number(o.width)||0)*Math.hypot(ex[0],ex[1]));
         o.height=Math.max(.05,(Number(o.height)||0)*Math.hypot(ey[0],ey[1]));
         o.angle=normalizeAngle(Math.atan2(ex[1],ex[0])*180/Math.PI);
-      }else if(o.shape.type==='circle'||o.shape.type==='ellipse'){
+      }else if(o.shape.type===CIR||o.shape.type===ELL){
         const r=affineShapeTransform(M,{type:o.shape.type,cx:ox,cy:oy,angle:origAng,
           r:o.shape.r,rx:o.shape.rx,ry:o.shape.ry});
         o.x=r.cx; o.y=r.cy;
-        if(r.type==='circle') o.shape={type:'circle',r:r.r};
-        else { o.shape={type:'ellipse',rx:r.rx,ry:r.ry}; o.angle=r.angle; }
-      }else if(o.shape.type==='sector'){
-        const r=affineShapeTransform(M,{type:'sector',cx:ox,cy:oy,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
-        o.x=r.cx; o.y=r.cy; o.shape={type:'sector',r:r.r,a0:r.a0,a1:r.a1}; note(o,r);
-      }else if(o.shape.type==='parallelogram'){
-        const r=affineShapeTransform(M,{type:'parallelogram',x:ox,y:oy,w:o.width,h:o.height,
+        if(r.type===CIR) o.shape={type:CIR,r:r.r};
+        else { o.shape={type:ELL,rx:r.rx,ry:r.ry}; o.angle=r.angle; }
+      }else if(o.shape.type===SEC){
+        const r=affineShapeTransform(M,{type:SEC,cx:ox,cy:oy,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
+        o.x=r.cx; o.y=r.cy; o.shape={type:SEC,r:r.r,a0:r.a0,a1:r.a1}; note(o,r);
+      }else if(o.shape.type===PARA){
+        const r=affineShapeTransform(M,{type:PARA,x:ox,y:oy,w:o.width,h:o.height,
           skew:o.shape.skew,angle:origAng});
-        if(r.type==='parallelogram'){
+        if(r.type===PARA){
           o.x=r.x; o.y=r.y; o.width=r.w; o.height=r.h; o.angle=r.angle;
-          o.shape={type:'parallelogram',skew:r.skew};
+          o.shape={type:PARA,skew:r.skew};
         }
         note(o,r);
       }
@@ -201,21 +201,21 @@ function siteShapeByAffine(shape,M,out){
   const sh=shape||{type:'rect',x:0,y:0,w:100,h:70};
   const type=sh.type||'rect';
   const note=r=>{ if(r&&r.degraded&&out) (out.degraded=out.degraded||[]).push({code:r.degraded}); };
-  if(type==='circle'||type==='ellipse'){
+  if(type===CIR||type===ELL){
     const r=affineShapeTransform(M,{type,cx:sh.cx,cy:sh.cy,angle:sh.angle,r:sh.r,rx:sh.rx,ry:sh.ry});
-    return r.type==='circle'?{type:'circle',cx:r.cx,cy:r.cy,r:r.r}
-      :{type:'ellipse',cx:r.cx,cy:r.cy,rx:r.rx,ry:r.ry,angle:r.angle};
+    return r.type===CIR?{type:CIR,cx:r.cx,cy:r.cy,r:r.r}
+      :{type:ELL,cx:r.cx,cy:r.cy,rx:r.rx,ry:r.ry,angle:r.angle};
   }
-  if(type==='sector'){
-    const r=affineShapeTransform(M,{type:'sector',cx:sh.cx,cy:sh.cy,r:sh.r,a0:sh.a0,a1:sh.a1});
+  if(type===SEC){
+    const r=affineShapeTransform(M,{type:SEC,cx:sh.cx,cy:sh.cy,r:sh.r,a0:sh.a0,a1:sh.a1});
     note(r);
-    return {type:'sector',cx:r.cx,cy:r.cy,r:r.r,a0:r.a0,a1:r.a1};
+    return {type:SEC,cx:r.cx,cy:r.cy,r:r.r,a0:r.a0,a1:r.a1};
   }
   const r=affineShapeTransform(M,{type,x:Number(sh.x)||0,y:Number(sh.y)||0,w:sh.w,h:sh.h,skew:sh.skew,angle:0},
     {allowRotatedBox:false});
   if(r.type==='polygon') return {type:'polygon',points:r.points};
-  return r.type==='parallelogram'
-    ?{type:'parallelogram',x:r.x,y:r.y,w:r.w,h:r.h,skew:r.skew}
+  return r.type===PARA
+    ?{type:PARA,x:r.x,y:r.y,w:r.w,h:r.h,skew:r.skew}
     :{type:'rect',x:r.x,y:r.y,w:r.w,h:r.h};
 }
 

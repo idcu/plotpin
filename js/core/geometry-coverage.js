@@ -6,11 +6,11 @@ function cameraFootprint(o){
   const r=Number(o.phys);
   if(!(r>0)) return null;
   const type=getType(o.typeId), shape=type.scaleShape;
-  if(shape==='sector'){
+  if(shape===SEC){
     const fov=Math.min(360,Math.max(10,Number(type.fov)||90));
-    return {kind:fov>=360?'circle':'sector',id:o.id,name:o.name||'',x:o.x,y:o.y,r,fov,angle:Number(o.angle)||0};
+    return {kind:fov>=360?CIR:SEC,id:o.id,name:o.name||'',x:o.x,y:o.y,r,fov,angle:Number(o.angle)||0};
   }
-  if(shape==='circle') return {kind:'circle',id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2};
+  if(shape===CIR) return {kind:CIR,id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2};
   if(shape==='square') return {kind:'square',id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2,angle:Number(o.angle)||0};
   return null;
 }
@@ -30,7 +30,7 @@ function pointInFootprint(p,cam){
     return Math.abs(q[0]-cam.x)<=cam.r+EPS && Math.abs(q[1]-cam.y)<=cam.r+EPS;
   }
   if(d>cam.r+EPS) return false;
-  if(cam.kind==='circle'||d<EPS) return true;
+  if(cam.kind===CIR||d<EPS) return true;
   let bearing=Math.atan2(dy,dx)*180/Math.PI-cam.angle;
   bearing=((bearing%360)+360)%360;
   const half=cam.fov/2;
@@ -137,7 +137,7 @@ function analyzeCoverage(st,opt){
         }
         const d2=dx*dx+dy*dy;
         if(d2>c.r2+EPS) continue;
-        if(c.cam.kind==='circle'||d2<=EPS){ hit=true; break; }
+        if(c.cam.kind===CIR||d2<=EPS){ hit=true; break; }
         /* 扇形：|与朝向夹角| ≤ fov/2。half≤90° 用平方比较免开方；>90° 用点积与半径比较 */
         const dot=dx*c.cosA+dy*c.sinA;
         if(c.half<=90){
@@ -248,7 +248,7 @@ function optimizeCameraPlacement(st,opt){
     positions.push([minX+(maxX-minX)*i/gridN,minY+(maxY-minY)*j/gridN]);
   }
   const angles=fov>=360?[0]:Array.from({length:Math.round(360/angleStep)},(_,i)=>Math.round(i*angleStep));
-  const mkCam=(x,y,angle)=>({kind:fov>=360?'circle':'sector',x,y,r:phys,fov,angle});
+  const mkCam=(x,y,angle)=>({kind:fov>=360?CIR:SEC,x,y,r:phys,fov,angle});
 
   /* 单个候选的新增覆盖面积：只遍历其外接圆覆盖到的格子 */
   const gainOf=(x,y,angle)=>{

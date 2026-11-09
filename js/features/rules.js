@@ -327,12 +327,12 @@ function ruleObjectFootprint(o){
     const type=getType(o.typeId)||{};
     const shape=type.scaleShape;
     const ang=Number(o.angle)||0;
-    if(phys>0&&shape==='circle'){
+    if(phys>0&&shape===CIR){
       const r=phys/2, seg=Math.max(16,Math.min(48,Math.ceil(r*8)));
       pushPoly(ruleCirclePoints(Number(o.x)||0,Number(o.y)||0,r,seg));
     }else if(phys>0&&shape==='square'){
       pushPoly(ruleRotatedRectPoints(Number(o.x)||0,Number(o.y)||0,phys,phys,ang));
-    }else if(phys>0&&shape==='sector'){
+    }else if(phys>0&&shape===SEC){
       const fov=Math.min(360,Math.max(10,Number(type.fov)||90));
       const pts=[[Number(o.x)||0,Number(o.y)||0]].concat(sectorArcPoints(Number(o.x)||0,Number(o.y)||0,phys,ang-fov/2,fov));
       pushPoly(pts);

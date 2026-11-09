@@ -64,7 +64,7 @@ function annotToggleKeys(o){
   if(o.kind==='rect'){
     const tt=areaShapeType(o);
     /* 矩形/平行四边形：有边长与顶点坐标、无半径；圆/椭圆/扇形反之 */
-    return (tt==='rect'||tt==='parallelogram') ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
+    return (tt==='rect'||tt===PARA) ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
   }
   /* 开放折线无面积概念：不提供「面积」开关，避免出现勾选后无任何效果的无效配置 */
   if(o.kind==='line' && !o.closed) return keys.filter(k=>k!=='area');
@@ -105,9 +105,9 @@ function renderAnnotToggles(o){
  */
 function siteAnnotToggleKeys(site){
   const t=siteShapeOf(site).type;
-  const hasPts=(t==='rect'||t==='parallelogram'||t==='polygon');
-  const hasBase=(t==='rect'||t==='parallelogram'||t==='circle'||t==='ellipse'||t==='sector');
-  const hasRadius=(t==='circle'||t==='ellipse'||t==='sector');
+  const hasPts=(t==='rect'||t===PARA||t==='polygon');
+  const hasBase=(t==='rect'||t===PARA||t===CIR||t===ELL||t===SEC);
+  const hasRadius=(t===CIR||t===ELL||t===SEC);
   return [
     ['siteNodes','节点坐标',hasPts],
     ['siteSegLen','段长',hasPts],
@@ -150,16 +150,16 @@ function sitePropsHTML(site, mode){
       points:pts, canEdit:true, min:3, nodeLabel:'顶点', hintUnit:'个顶点',
       shapeName:'场地多边形', hint:'画布上双击边插入顶点、双击顶点删除'
     });
-  }else if(sh.type==='circle'){
+  }else if(sh.type===CIR){
     params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}`;
-  }else if(sh.type==='ellipse'){
+  }else if(sh.type===ELL){
     params=`${row('中心 X',num('cx',fv(sh.cx)))}${row('中心 Y',num('cy',fv(sh.cy)))}
       ${row('半径X (m)',num('rx',fv(sh.rx,50)))}${row('半径Y (m)',num('ry',fv(sh.ry,35)))}
       ${row('旋转角',num('angle',Math.round(Number(sh.angle)||0),1))}`;
-  }else if(sh.type==='sector'){
+  }else if(sh.type===SEC){
     params=`${row('圆心 X',num('cx',fv(sh.cx)))}${row('圆心 Y',num('cy',fv(sh.cy)))}${row('半径 (m)',num('r',fv(sh.r,50)))}
       ${row('起始角',num('a0',Math.round(Number(sh.a0)||0),1))}${row('张角 (0–360)',num('sweep',Math.round(sectorSweep(sh)),1))}`;
-  }else if(sh.type==='parallelogram'){
+  }else if(sh.type===PARA){
     params=`${row('基点 X',num('x',fv(sh.x)))}${row('基点 Y',num('y',fv(sh.y)))}
       ${row('宽度 (m)',num('w',fv(sh.w,100)))}${row('高度 (m)',num('h',fv(sh.h,70)))}
       ${row('倾角 (°)',num('skew',Math.round(Number(sh.skew)||0),1))}`;
@@ -339,14 +339,14 @@ function renderProps(){
     const baseName=({rect:'基点',circle:'圆心',ellipse:'中心',sector:'圆心',parallelogram:'基点'})[stt];
     const baseRows=`${row(baseName+' X',num('x',fmt(o.x)))}${row(baseName+' Y',num('y',fmt(o.y)))}`;
     let params='';
-    if(stt==='rect'||stt==='parallelogram'){
+    if(stt==='rect'||stt===PARA){
       params=`${baseRows}
         ${row('宽度',num('width',fmt(o.width)))}${row('高度',num('height',fmt(o.height)))}
         ${row('旋转角',num('angle',Math.round(o.angle),1))}
-        ${stt==='parallelogram'?row('倾角 (°)',num('shapeSkew',Math.round(parallelogramSkew(sh)),1)):''}`;
-    }else if(stt==='circle'){
+        ${stt===PARA?row('倾角 (°)',num('shapeSkew',Math.round(parallelogramSkew(sh)),1)):''}`;
+    }else if(stt===CIR){
       params=`${baseRows}${row('半径 (m)',num('shapeR',fmt(sh.r)))}`;
-    }else if(stt==='ellipse'){
+    }else if(stt===ELL){
       params=`${baseRows}${row('半径X (m)',num('shapeRx',fmt(sh.rx)))}${row('半径Y (m)',num('shapeRy',fmt(sh.ry)))}
         ${row('旋转角',num('angle',Math.round(o.angle),1))}`;
     }else{
@@ -361,7 +361,7 @@ function renderProps(){
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
-      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt==='parallelogram'?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L('坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。'))}</div>`;
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L('坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。'))}</div>`;
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
@@ -378,7 +378,7 @@ function renderProps(){
     const physHint=isSymbol
       ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('符号图元：填 0 为屏幕固定图标；填图元外接宽度（米）后按真实比例随底图缩放，朝向随朝向角旋转。'))}</div>`
       : canScale
-        ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh==='sector'?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh==='sector'?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
+        ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh===SEC?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh===SEC?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
         : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。'))}</div>`;
     const ci=currentCatalog?currentCatalog.items:[];
     const vendors=Array.from(new Set(ci.map(it=>it.vendor)));
@@ -658,7 +658,7 @@ function rotateSelected(delta){
   pushHistory();
   objs.forEach(o=>{
     if(o.kind==='dimension') return;
-    if(o.kind==='rect'&&areaShapeType(o)==='sector'&&o.shape){
+    if(o.kind==='rect'&&areaShapeType(o)===SEC&&o.shape){
       o.shape.a0=normalizeAngle((Number(o.shape.a0)||0)+delta);
       o.shape.a1=(Number(o.shape.a1)||0)+delta;
     }else if(o.points&&o.points.length){

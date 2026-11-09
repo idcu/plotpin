@@ -1064,7 +1064,7 @@ function sanitizeSiteAnnot(raw){
 }
 function sanitizeSite(rawSite,layers){
   if(!rawSite||typeof rawSite!=='object') return null;
-  const allowed=['rect','circle','ellipse','sector','parallelogram','polygon'];
+  const allowed=['rect',CIR,ELL,SEC,PARA,'polygon'];
   const shapeKind=rawSite.shape&&rawSite.shape.type;
   const kind=allowed.includes(rawSite.kind)?rawSite.kind:(allowed.includes(shapeKind)?shapeKind:'rect');
   const legacyW=positiveNum(rawSite.width,1000)*positiveNum(rawSite.metersPerPixel,0.1);
@@ -1120,21 +1120,21 @@ function pointArray(v){
  */
 function sanitizeShape(raw,kind,legacyW,legacyH){
   const sh=raw&&typeof raw==='object'?raw:{};
-  if(kind==='circle'){
+  if(kind===CIR){
     const r=positiveNum(sh.r,50);
-    return {type:'circle',cx:finiteNumber(sh.cx,r),cy:finiteNumber(sh.cy,r),r};
+    return {type:CIR,cx:finiteNumber(sh.cx,r),cy:finiteNumber(sh.cy,r),r};
   }
-  if(kind==='ellipse'){
+  if(kind===ELL){
     const rx=positiveNum(sh.rx,NaN), ry=positiveNum(sh.ry,NaN);
-    if(Number.isFinite(rx)&&Number.isFinite(ry)) return {type:'ellipse',cx:finiteNumber(sh.cx,rx),cy:finiteNumber(sh.cy,ry),rx,ry,angle:finiteNumber(sh.angle,0)};
+    if(Number.isFinite(rx)&&Number.isFinite(ry)) return {type:ELL,cx:finiteNumber(sh.cx,rx),cy:finiteNumber(sh.cy,ry),rx,ry,angle:finiteNumber(sh.angle,0)};
     return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
-  if(kind==='sector'){
+  if(kind===SEC){
     const r=positiveNum(sh.r,NaN);
     if(Number.isFinite(r)){
       const a0=finiteNumber(sh.a0,0);
       const a1=finiteNumber(sh.a1,finiteNumber(sh.a0,0)+90);
-      return {type:'sector',cx:finiteNumber(sh.cx,0),cy:finiteNumber(sh.cy,0),r,a0,a1};
+      return {type:SEC,cx:finiteNumber(sh.cx,0),cy:finiteNumber(sh.cy,0),r,a0,a1};
     }
     return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
@@ -1143,8 +1143,8 @@ function sanitizeShape(raw,kind,legacyW,legacyH){
     if(pts.length>=3) return {type:'polygon',points:pts.map(p=>[p[0],p[1]])};
     return {type:'rect',x:0,y:0,w:positiveNum(legacyW,100),h:positiveNum(legacyH,70)};
   }
-  if(kind==='parallelogram'){
-    return {type:'parallelogram',x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),
+  if(kind===PARA){
+    return {type:PARA,x:finiteNumber(sh.x,0),y:finiteNumber(sh.y,0),
       w:positiveNum(sh.w,positiveNum(legacyW,100)),h:positiveNum(sh.h,positiveNum(legacyH,70)),
       skew:clampSkewDeg(finiteNumber(sh.skew,PARALLELOGRAM_DEFAULT_SKEW))};
   }
@@ -1175,10 +1175,10 @@ function mergeTypes(saved){
     if(t.kind==='point'){
       const iconSize=finiteNumber(t.iconSize,NaN);
       if(iconSize>=.5&&iconSize<=5) savedType.iconSize=iconSize;
-      if(['none','circle','square','sector','bar'].includes(t.scaleShape)){
+      if(['none',CIR,'square',SEC,'bar'].includes(t.scaleShape)){
         savedType.scaleShape=t.scaleShape;
         const fov=finiteNumber(t.fov,NaN);
-        if(t.scaleShape==='sector'&&fov>=10&&fov<=360) savedType.fov=Math.round(fov);
+        if(t.scaleShape===SEC&&fov>=10&&fov<=360) savedType.fov=Math.round(fov);
       }
       /* 自定义 SVG 图元：与导入共用同一校验（路径数/长度/字符白名单），坏数据直接丢弃 */
       let paths=[];
@@ -1202,25 +1202,25 @@ function mergeTypes(saved){
 /** 区域对象参数形状清洗；非法/缺省返回 null（调用方按矩形 width/height 处理） */
 function sanitizeAreaShape(raw){
   if(!raw||typeof raw!=='object') return null;
-  if(raw.type==='circle'){
+  if(raw.type===CIR){
     const r=positiveNum(raw.r,NaN);
-    return Number.isFinite(r)?{type:'circle',r}:null;
+    return Number.isFinite(r)?{type:CIR,r}:null;
   }
-  if(raw.type==='ellipse'){
+  if(raw.type===ELL){
     const rx=positiveNum(raw.rx,NaN), ry=positiveNum(raw.ry,NaN);
-    return Number.isFinite(rx)&&Number.isFinite(ry)?{type:'ellipse',rx,ry}:null;
+    return Number.isFinite(rx)&&Number.isFinite(ry)?{type:ELL,rx,ry}:null;
   }
-  if(raw.type==='sector'){
+  if(raw.type===SEC){
     const r=positiveNum(raw.r,NaN);
     if(!Number.isFinite(r)) return null;
     const a0=finiteNumber(raw.a0,0);
     let a1=finiteNumber(raw.a1,finiteNumber(raw.a0,0)+90);
     /* 张角钳到 (0,360] */
     let sweep=((a1-a0)%360+360)%360; if(sweep===0) sweep=360;
-    return {type:'sector',r,a0,a1:a0+sweep};
+    return {type:SEC,r,a0,a1:a0+sweep};
   }
-  if(raw.type==='parallelogram'){
-    return {type:'parallelogram',skew:clampSkewDeg(finiteNumber(raw.skew,PARALLELOGRAM_DEFAULT_SKEW))};
+  if(raw.type===PARA){
+    return {type:PARA,skew:clampSkewDeg(finiteNumber(raw.skew,PARALLELOGRAM_DEFAULT_SKEW))};
   }
   return null;
 }
@@ -1253,7 +1253,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
       const s=sanitizeAreaShape(raw.shape);
       if(s){
         o.shape=s;
-        if(s.type==='parallelogram'){
+        if(s.type===PARA){
           /* 平行四边形的底/高仍存在 width/height（shape 只存倾角），不能清零 */
           o.width=positiveNum(raw.width,0); o.height=positiveNum(raw.height,0);
           if(o.width<=0||o.height<=0){ audit.dropped=(audit.dropped||0)+1; return; }

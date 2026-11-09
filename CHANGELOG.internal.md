@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 净字节回收（1/1）：形状类型字面量收敛为公共常量
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/config.js` 新增单一来源 `const CIR='circle', ELL='ellipse', SEC='sector', PARA='parallelogram'`（值即 `shape.type` / `scaleShape` 的 schema 取值，未改任何取值）。
+  - 18 个 `js/**` 文件中的同名字符串字面量全部替换为常量引用（几何、渲染、持久化、导入导出、属性面板、表格、规则、UI）。
+  - `js/features/plugins.js#TYPE_SHAPES` **保留字面量**：`contracts/conventions.json` 的「枚举同源」判据按标识符提取，`POINT_SCALE_SHAPES` 键集必须与 `TYPE_SHAPES` 逐项相等，改写为常量会使 `check-contracts` 报「不同源」（本次已实测触发并回退该处）。
+  - `js/common/i18n.js` 未改：其中 `'sector'` 是 PHRASES 的英文译文值，不是枚举字面量。
+- **调用点 grep 证据**（`git grep -o "'token'" HEAD -- js`，HEAD=`f86b26f`）：`'circle'` 81 处 / 17 文件、`'ellipse'` 54 处 / 12 文件、`'sector'` 62 处 / 16 文件、`'parallelogram'` 66 处 / 11 文件；替换后 `js/**` 内除 `plugins.js#TYPE_SHAPES` 与 `i18n.js` 译文外无残留字面量。
+- **验证数据**：
+  - selftest **3607 通过 / 0 失败**（与回收前一致，断言数未减少）；e2e 123 通过 + 1 跳过；五道门禁全绿。
+  - dist **833,165 B**（834,826 → **−1,661 B**）；gzip 259,510 B（+12 B，gzip 冗余度变化，不设门禁）；余量 **6,515 B**；SW `VERSION=117`。
+  - `build.mjs --check` 二次构建确定性一致：SHA256 `9ba3923f…`。
+- **遗留 TODO / 风险**：
+  - 常量名 `CIR/ELL/SEC/PARA` 为压缩字节刻意取短；可读性靠 `config.js` 处注释承担。
+  - 回收目标 1,500 B 已达成（实际 −1,661 B），后续条目转为功能批次执行。
+
 ## 2026-11-08 · 导入导出二（4/6）：CSV/XLSX/PDF-LZW 解压炸弹窗口
 
 - **Commit Hash**：`9db0928`
