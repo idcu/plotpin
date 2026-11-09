@@ -7908,6 +7908,16 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   eq('N-21-列表新到旧', listed[0].snapshotId, 'SNAP-20');
   store.delete(api.snapshotIndexKey(PID));
   ok('N-21-索引缺失时回退重建', (await api.snapshotIndexLoad(PID)).length===20&&store.has(api.snapshotIndexKey(PID)));
+  /* P2-15：索引与真实记录不一致（写一半/中断/幽灵项）时按记录重建，绝不返回半索引 */
+  store.clear();
+  const PID2='PRJ_ATOM';
+  const mAtom={snapshotId:'ATOM-1',projectId:PID2,createdAt:new Date(2026,0,1).toISOString(),bytes:100,objectCount:1};
+  store.set(api.snapshotKey(PID2,'ATOM-1'),{meta:mAtom,data:{schema:'1',objects:[]}});
+  await sandbox.idbPutKey(api.snapshotIndexKey(PID2),{metas:[]});   /* 记录已写、索引写一半中断 */
+  eq('P2-15 半索引按记录重建', (await api.listSnapshots(PID2)).map(m=>m.snapshotId), ['ATOM-1']);
+  store.set(api.snapshotIndexKey(PID2),{metas:[mAtom,{snapshotId:'GHOST-1',projectId:PID2,createdAt:'2026-01-01',bytes:1}]});
+  eq('P2-15 幽灵索引项被剔除', (await api.listSnapshots(PID2)).length, 1);
+  eq('P2-15 重建后索引与记录一致', store.get(api.snapshotIndexKey(PID2)).metas.map(m=>m.snapshotId), ['ATOM-1']);
   store.clear();
   for(let i=0;i<3;i++){
     const meta={snapshotId:'BIG-'+i,projectId:PID,createdAt:new Date(2026,0,1,0,i).toISOString(),bytes:15*1048576,objectCount:1};

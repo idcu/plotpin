@@ -62,19 +62,28 @@ async function listSnapshots(pid){
 }
 /**
  * 快照元数据索引 `snapidx:<pid>`：列表/淘汰只依赖 meta，不解析快照 data。
- * 索引缺失（旧版本数据或索引损坏）时回退扫描并重建；单条索引很小。
+ * P2-15：索引与真实记录集合核对——缺失项或幽灵项（写一半中断）一律按记录重建，
+ * 保证任何时刻中断都不会留下半索引；重建写失败只告警，列表仍按记录实时可用。
  */
-async function snapshotIndexLoad(pid){
-  try{
-    const idx=await idbGetKey(snapshotIndexKey(pid));
-    if(idx&&Array.isArray(idx.metas)) return idx.metas;
-  }catch(_){}
+async function snapshotIndexRebuild(pid){
   const metas=(await snapshotRecords(pid)).map(r=>r.meta);
-  try{ await idbPutKey(snapshotIndexKey(pid),{metas}); }catch(_){}
+  try{ await idbPutKey(snapshotIndexKey(pid),{metas}); }catch(_){ toast('快照索引写入失败，列表改为按记录实时重建','warn'); }
   return metas;
 }
+async function snapshotIndexLoad(pid){
+  let metas=null;
+  try{
+    const idx=await idbGetKey(snapshotIndexKey(pid));
+    if(idx&&Array.isArray(idx.metas)) metas=idx.metas;
+  }catch(_){}
+  let keys=[];
+  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(snapshotProjectPrefix(pid))); }catch(_){ return metas||[]; }
+  if(metas&&metas.length===keys.length&&metas.every(m=>keys.indexOf(snapshotKey(pid,m&&m.snapshotId))>=0)) return metas;
+  return snapshotIndexRebuild(pid);
+}
 async function snapshotIndexSave(pid,metas){
-  try{ await idbPutKey(snapshotIndexKey(pid),{metas}); }catch(_){}
+  try{ await idbPutKey(snapshotIndexKey(pid),{metas}); }
+  catch(_){ await snapshotIndexRebuild(pid); }
 }
 async function getSnapshot(pid,sid){ return idbGetKey(snapshotKey(pid,sid)); }
 /** 按数量与总字节上限淘汰最旧（至少保留最新一条）；基于元数据索引，不读快照 data */

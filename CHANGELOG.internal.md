@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 导入导出三（5/6）：快照索引原子性与中断自愈
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/core/snapshot.js` 新增 `snapshotIndexRebuild(pid)`：按 `snapshotRecords` 重建 `snapidx:<pid>`，写失败只 `toast` 告警不抛错。
+  - `snapshotIndexLoad` 返回前用 `idbAllKeys`（仅键）核对索引条目集合与真实记录集合；数量或 id 不一致（含写一半中断、幽灵项）一律重建后再返回。
+  - `snapshotIndexSave` 写失败时自动重建；`createSnapshot` 保持「先写记录、后写索引」，`pruneSnapshots`/`deleteSnapshot` 的索引写失败同样自愈。
+  - 索引仍是单键 `{metas}` 写入；未改 `snapidx` 键格式、未改快照记录结构。
+- **验证数据**：
+  - 先补断言后修：section 73 新增 3 条。旧实现实测 3 条全失败（半索引返回 `[]`、幽灵项返回 2 条、重建后索引仍含 `GHOST-1`）；修复后全绿。
+  - selftest **3610 通过 / 0 失败**（3607 → +3）；e2e 123 通过 + 1 跳过；五道门禁全绿。
+  - dist **833,619 B**（833,165 → **+454 B**）；gzip 259,654 B；余量 **6,061 B**；SW `VERSION=118`；SHA256 `4162b4bc…`。
+- **遗留 TODO / 风险**：
+  - `snapshotIndexLoad` 每次多一次 keys 枚举（无 data 反序列化）；`docs/performance.md` 的 N-21 打点为旧代码实测，本次未复测，数字未改动。
+  - 余量 6,061 B 仍高于停线 5,000 B，可继续下一条（DXF 控制字符）。
+
 ## 2026-11-08 · 净字节回收（1/1）：形状类型字面量收敛为公共常量
 
 - **Commit Hash**：`b371a6a`
