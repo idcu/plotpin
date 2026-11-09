@@ -325,6 +325,8 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 - 提取公共逻辑若影响现有调用方，必须在 commit body 显式列出受影响调用方与影响范围，禁止静默修改。
 - 已完成的公共工具（如 `esc` / `xmlEscape`、`outlineOf`、`siteBounds`、`objectIndexById`、`ensureVendor`）必须直接复用，
   不得二次实现；公共抽象变更若改变输出（如 SVG/DXF 顶点数），必须先建 golden 基线再替换。
+- 门禁脚本共用 `scripts/lib/fs-utils.mjs`（`walkFiles` / `readJson`）与 `scripts/lib/budget.mjs`（体积预算常量）；
+  新增门禁不得再各写一份目录遍历 / JSON 解析 / 体积阈值。
 
 ### 6.4 门禁与提交的关系
 

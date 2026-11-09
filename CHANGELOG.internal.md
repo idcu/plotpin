@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 脚本公共逻辑（engineering P2-09）：walk/readJson 收敛到 scripts/lib
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`scripts/lib/fs-utils.mjs` 已存在，但 `check-ngm.mjs` 仍自带一份 `walkFiles`（多后缀 + 目录跳过）与 `readJson`（缺文件即 fail）；`build.mjs`、`check-plugin-api.mjs` 也各自 `JSON.parse(readFileSync(...))`。审计 P2-09 的剩余重复点。
+- **核心改动**：
+  - `scripts/lib/fs-utils.mjs` 的 `walkFiles` 增补 `exts`（多后缀）与 `skipDir(dir,name)`（目录级跳过）两个可选参数；原 `ext` / `skip` 行为不变（纯增量）。
+  - `check-ngm.mjs` 删除本地 `walkFiles`，改用共享遍历（跳过规则逐条保留：`.git`/`node_modules`/`ngm.vendor`/`analysis`/`data`/`.trae`/`.screenshots`/`.tmp-*`/`public/vendor`）；`readJson` 改为对 `lib.readJson` 的薄包装，保留「缺文件/非法 JSON 即 fail」语义。
+  - `build.mjs` 的 manifest 解析、`check-plugin-api.mjs` 的契约解析改用 `lib.readJson`（异常处理路径不变）。
+  - `fail` 未合并：`check-sw.mjs` 是即时退出、`check-ngm.mjs` 是累积后统一汇总，语义不同，强行合并会改变门禁行为。
+- **验证数据**（重构前后对照，均为本机实测）：
+  - 重复点计数（grep 实测）：目录遍历实现 2 份（`check-ngm` 本地 + `lib`）→ **1 份**（`lib`）；`scripts/*.mjs` 中外部 `JSON.parse(readFileSync(...))` 3 处（`build` / `check-plugin-api` / `check-ngm` vendor 循环）→ **1 处**（`check-ngm` vendor 循环需逐模块自定义报错，保留）。
+  - `check-ngm` 输出与改动前逐字一致：`OK (10 declared, 10 locked, 10 vendor modules, 10 referenced modules, ngm 0.102.0-dev.1)`，并保留「vendor 字节锚定 62 个文件 / 10 个模块」。
+  - `check-plugin-api`：23 键 / 23 条 / 0 泄漏 / 0 落空；`check-contracts` 11 项 / 0 违约；i18n 45.97% / 缺口 10 不变。
+  - 本条只动 `scripts/**` 与文档，**dist 增量 0 B**（834,252 B 不变），断言数不变。
+- **公共抽象清单（新增/调整）**：
+  - 调整 `walkFiles`：新增 `exts` / `skipDir` 两个可选参数，现有调用方（`check.mjs`、`check-discipline.mjs`、`i18n-scan.mjs`、`check-contracts.mjs`）不传即行为不变。
+  - 复用 `readJson`：`build.mjs`、`check-plugin-api.mjs`、`check-ngm.mjs` 三个调用方，异常处理各自保留。
+- **遗留 TODO / 风险**：无；`fail` 的两种语义保持现状并已在本文说明。
+
 ## 2026-11-10 · 文档计数（engineering P2-05/P2-06）：计数改为实测值并由门禁锚定
 
 - **Commit Hash**：`待回填`

@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { walkFiles as walkFilesShared, readJson as parseJsonFile } from './lib/fs-utils.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_SLUG = 'gitee:idcu/ngm-repo';
@@ -47,7 +48,7 @@ function readJson(relPath) {
     return null;
   }
   try {
-    return JSON.parse(fs.readFileSync(abs, 'utf8'));
+    return parseJsonFile(abs);
   } catch (e) {
     fail(`${relPath} 不是合法 JSON：${e.message}`);
     return null;
@@ -61,22 +62,6 @@ function isSemver(v) {
 function semverFromRef(ref) {
   const m = String(ref || '').match(/\/v([0-9]+(?:\.[0-9]+){2}(?:-[0-9A-Za-z.-]+)?)$/);
   return m ? m[1] : null;
-}
-
-function walkFiles(dir, out) {
-  if (!fs.existsSync(dir)) return;
-  for (const name of fs.readdirSync(dir)) {
-    if (name === '.git' || name === 'node_modules' || name === 'ngm.vendor') continue;
-    const abs = path.join(dir, name);
-    const st = fs.statSync(abs);
-    if (st.isDirectory()) {
-      if (name === 'analysis' || name === 'data' || name.startsWith('.tmp-') || name === '.trae' || name === '.screenshots') continue;
-      if (name === 'vendor' && path.basename(dir) === 'public') continue;
-      walkFiles(abs, out);
-    } else if (['.js', '.mjs', '.cjs', '.html'].includes(path.extname(name))) {
-      out.push(abs);
-    }
-  }
 }
 
 /* ---- vendor 字节锚定（P2-04） ---- */
@@ -312,8 +297,11 @@ if (project && lock) {
     }
 
     const refCount = new Map();
-    const files = [];
-    walkFiles(ROOT, files);
+    const files = walkFilesShared(ROOT, {
+      exts: ['.js', '.mjs', '.cjs', '.html'],
+      skip: ['.git', 'node_modules', 'ngm.vendor', 'analysis', 'data', '.trae', '.screenshots'],
+      skipDir: (dir, name) => name.startsWith('.tmp-') || (name === 'vendor' && path.basename(dir) === 'public')
+    });
     const refRe = /ngm\.vendor\/gitee\.com\/idcu\/ngm-repo\/(packages\/[A-Za-z0-9._/-]+)/g;
     for (const file of files) {
       if (file === fileURLToPath(import.meta.url)) continue;

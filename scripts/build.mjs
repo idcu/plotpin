@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { buildStandalone } from './pack-core.mjs';
 import { MAX_BYTES, GZIP_MAX_BYTES, budgetStatus } from './lib/budget.mjs';
+import { readJson } from './lib/fs-utils.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -84,7 +85,7 @@ if (!checkOnly) {
   } else {
     let manifest;
     try {
-      manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      manifest = readJson(manifestPath);
     } catch (e) {
       errors.push(`scripts/dist-manifest.json 不是合法 JSON：${e.message}`);
     }

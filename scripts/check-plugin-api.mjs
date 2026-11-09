@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readJson } from './lib/fs-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -93,7 +94,7 @@ function contractFacts(api) {
 }
 
 function check() {
-  const contract = JSON.parse(fs.readFileSync(CONTRACT, 'utf8'));
+  const contract = readJson(CONTRACT);
   const file = path.join(ROOT, contract.file);
   if (!fs.existsSync(file)) return { error: contract.file + ' 不存在' };
   const source = fs.readFileSync(file, 'utf8');

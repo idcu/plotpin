@@ -157,7 +157,7 @@
 | `drawSelection` 无用分配 | 已删除 | `js/core/render.js:947` 的 `drawSelection` 原先每帧执行 `objectPoints(o).map(toS)` 且结果未被任何分支使用；现已删除，产物 −36 B，画布像素不变（e2e 109 通过） |
 | `normalizeColor` 分散 | 已收敛（N-10） | 唯一实现 `normalizeExportColor`（`js/features/io-export.js:371`），SVG 图例/对象/文字/标记 4 处调用同源 |
 | 覆盖率口径常量未收敛 | 已收敛（N-20） | `APP_LIMITS.COVERAGE_TARGET_CELLS/MAX_CELLS/CELL_MIN_M/CELL_MAX_M`（`js/core/config.js:42-45`）；`geometry-coverage.js` 全部引用，无重复字面量 |
-| 门禁脚本 CSS/MJS 解析器两套 | 前提不成立，不抽取 | `check-discipline.mjs` 不含 CSS/MJS 解析器；`check-ngm.mjs` 的 `walkFiles`/`readJson` 与前者遍历范围、容错语义不同，抽到 `scripts/lib/` 会改变行为且无断言覆盖 |
+| 门禁脚本 CSS/MJS 解析器两套 | 已收敛遍历/JSON 读取（2026-11-10） | `check-discipline.mjs` 不含 CSS/MJS 解析器；`check-ngm.mjs` 的 `walkFiles`/`readJson` 已改用 `scripts/lib/fs-utils.mjs`：共享遍历新增 `exts` / `skipDir` 选项后范围完全等价（`.git`/`node_modules`/`ngm.vendor` 等跳过规则逐条保留），`readJson` 仍保留「缺文件即 fail」的容错语义（薄包装，不改报告方式）；`check-ngm` 输出与改动前一致 |
 | `sanitizeLayers` 多份 | 无重复，不改 | `js/core/persistence.js:1063` 单一定义，`:778` 单一调用 |
 | `objectIndexById` 调用点未统一 | 已统一 | `js/core/model.js:523` 单一定义；5 处调用（`js/core/interaction.js:306/393/681/706`、`js/core/persistence.js:154`） |
 
