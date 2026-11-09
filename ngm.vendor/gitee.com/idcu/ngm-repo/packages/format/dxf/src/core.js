@@ -414,7 +414,9 @@ function buildDxf(entities,layers,opt={}){
   out+=pair(0,'ENDSEC')+pair(0,'EOF');
   return out;
 }
-function escapeText(s){ return String(s??'').replace(/\r?\n/g,' '); }
+/* P2-17：DXF 组码值不允许出现 C0/C1 控制字符（裸 \r、NUL、\u001b/\u001f 等）。
+   整段控制字符折叠为单个空格，避免把换行/控制符原样写进 pair 造成解析错位。 */
+function escapeText(s){ return String(s??'').replace(/[\u0000-\u001F\u007F]+/g,' '); }
 
 return {
   parse: parseDxf,

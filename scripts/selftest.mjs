@@ -8925,6 +8925,21 @@ await section("导入健壮性：CSV 行数预判 / ZIP 解压中上限 / PDF-LZ
 
 });
 
+/* ---------------- P2-17 DXF 文本控制字符清洗：裸 \r / NUL / C0 ---------------------- */
+await section("P2-17 DXF 文本控制字符清洗", async () => {
+{
+  const raw='A\rB\u0000C\u001fD\nE';
+  const out=api.Dxf.buildDxf([{type:'TEXT',x:0,y:0,height:1,text:raw}],[]);
+  /* DXF 结构性换行是 \r\n；把它剔除后不允许再出现任何 C0/C1 控制字符 */
+  const body=out.replace(/\r\n/g,'\n');
+  ok('P2-17 产物无裸控制字符', !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(body));
+  ok('P2-17 控制字符折叠为空格且文本保留', out.includes('A B C D E'));
+  const plain=api.Dxf.buildDxf([{type:'TEXT',x:0,y:0,height:1,text:'普通文本'}],[]);
+  ok('P2-17 常规文本原样输出', plain.includes('普通文本'));
+}
+
+});
+
 /* ---------------- 结果汇总 ---------------- */
 if (listOnly) {
   console.log(`共 ${sectionNames.length} 个分区（--filter=<regex> 选择执行）：`);

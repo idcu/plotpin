@@ -74,7 +74,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 
 - 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/dist-manifest.json.maxBytes`）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-08 实测：`bytes = 833,619`、gzip `259,654`、余量 `6,061 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-08 实测：`bytes = 833,636`、gzip `259,669`、余量 `6,044 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---
@@ -106,7 +106,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | **不跑**（SwiftShader 读数不能当真实 GPU 结论） |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 
-> **vendor 摘要口径（2026-11-08）**：`check-ngm.mjs` 只校验 `ngm.lock` 的 `moduleDigest` **格式**与 vendor 模块存在性，不重算内容摘要。因导入健壮性补丁改了 `ngm.vendor/.../format/zip` 与 `format/pdf`（新增可选参数），**对应 `moduleDigest` 未重算**（本机无 ngm 工具链）。CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 的 job 执行；一旦启用，这两个模块会因摘要不一致而失败，需先用 ngm 重新锁定后再启用。
+> **vendor 摘要口径（2026-11-08）**：`check-ngm.mjs` 只校验 `ngm.lock` 的 `moduleDigest` **格式**与 vendor 模块存在性，不重算内容摘要。因导入健壮性补丁改了 `ngm.vendor/.../format/zip` 与 `format/pdf`（新增可选参数），DXF 文本清洗又改了 `format/dxf`，**这三处 `moduleDigest` 未重算**（本机无 ngm 工具链）。CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 的 job 执行；一旦启用，这三个模块会因摘要不一致而失败，需先用 ngm 重新锁定后再启用。
 
 ### 3.2 `check.mjs` 的 12 步
 

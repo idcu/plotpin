@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 导入导出四（6/6）：DXF 文本控制字符清洗
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - vendor `dxf` 的 `escapeText`（`ngm.vendor/.../format/dxf/src/core.js`）由 `replace(/\r?\n/g,' ')` 改为 `replace(/[\u0000-\u001F\u007F]+/g,' ')`：裸 `\r`、NUL、`\u001b`、`\u001f`、DEL 等 C0/C1 控制字符整段折叠为单个空格；仅新增清洗，未改 DXF 组码/结构/其他实体。
+  - 文本清洗仍是唯一写入口（`pair(1, escapeText(text))`），未新增导出层级。
+- **验证数据**：
+  - 先补断言后修：新增 section「P2-17 DXF 文本控制字符清洗」3 条。旧实现实测 2 条失败（产物含裸 `\r`/NUL/`\u001f`；`A\rB\0C\u001fD\nE` 未折叠为 `A B C D E`）；修复后全绿。
+  - selftest **3613 通过 / 0 失败**（3610 → +3）；e2e 123 通过 + 1 跳过；五道门禁全绿。
+  - dist **833,636 B**（833,619 → **+17 B**）；gzip 259,669 B；余量 **6,044 B**；SW `VERSION=119`；SHA256 `d66c72e3…`。
+- **遗留 TODO / 风险**：
+  - 当前实现把 `\t` 也折叠为空格（原实现保留制表符）；DXF 组码值不允许裸 TAB，此变化属于目标行为。
+  - `format/dxf` 的 `moduleDigest` 未重算，已并入 `docs/known-issues.md` §2.12 NGM-01（CI `ngm verify --deep` 会失败）。
+  - 余量 6,044 B 仍高于停线 5,000 B；下一条为三套限额常量收敛。
+
 ## 2026-11-08 · 导入导出三（5/6）：快照索引原子性与中断自愈
 
 - **Commit Hash**：`69f59c1`

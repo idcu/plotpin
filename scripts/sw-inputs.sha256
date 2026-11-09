@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=118
+version=119
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -45,7 +45,7 @@ c3984ec609d7e4e26bd4c6f4a8d70876b43ea311091fb73df4053e1f32f5d265  js/features/ru
 5e1137eca399e2bd0a85e1890268b319aec2fffd3c20354fd8664ff079ad7909  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets/src/core.js
 4c6e26b341a211b76218e26fc9fa5f644077bc0136e28348b4b529558b42bd02  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/geometry/src/core.js
 8f893da7e2a131e5795628f813b1999879a7cbe67a57812de0072b3ede63a21a  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dsv/src/vendor/dsv.js
-86ada86fed89fc55f86465de62fa764b60278d504d6b920ec750d10ff287526b  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf/src/core.js
+94e88bdb8eaf09219b8ece98239bb89b88c8697628e0f11e627340e02708ce03  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf/src/core.js
 a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf-image/src/core.js
 24520fc0cec7229760570242dd73e841001466ebbffcf320fd6dec22b7c44abe  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf/src/core.js
 202910ffd949406f841020fb4f2940a8f35dec4b60610943a67748a1f46901d0  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/qr/src/core.js
