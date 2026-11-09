@@ -106,6 +106,8 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | **不跑**（SwiftShader 读数不能当真实 GPU 结论） |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 
+> **vendor 摘要口径（2026-11-08）**：`check-ngm.mjs` 只校验 `ngm.lock` 的 `moduleDigest` **格式**与 vendor 模块存在性，不重算内容摘要。因导入健壮性补丁改了 `ngm.vendor/.../format/zip` 与 `format/pdf`（新增可选参数），**对应 `moduleDigest` 未重算**（本机无 ngm 工具链）。CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 的 job 执行；一旦启用，这两个模块会因摘要不一致而失败，需先用 ngm 重新锁定后再启用。
+
 ### 3.2 `check.mjs` 的 12 步
 
 | # | 检查 | 执行条件 | 判据要点 |

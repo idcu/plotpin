@@ -287,6 +287,14 @@
 > 性能用例：`tests/perf/p2-perf.perf.mjs` 3 用例 × 2 次复跑 = 6 passed（13.6 s），数据写入 `test-results/perf-p2.json`（该目录不入库）。
 > 剩余风险：历史 >20 步的长时编辑内存斜率未单独采集；IO-P2-11 的墙钟收益小于本机抖动，保留依据是调用数下降且输出逐字节一致。
 
+### 2.12 vendor 模块摘要未重算（1 条）
+
+| 编号 | 状态 | 内容 | 影响 | 验证依据 |
+|---|---|---|---|---|
+| NGM-01 | 已知风险（未修复） | 导入健壮性补丁 `9db0928` 改了 `ngm.vendor/.../format/zip/src/vendor/zip.js` 与 `.../format/pdf/src/core.js`（仅新增可选参数），`ngm.lock` 对应条目的 `moduleDigest` 未重算 | 本机 `check-ngm.mjs` 只校验摘要格式与模块存在，门禁仍绿；**CI 若配置 `NGM_BIN_URL` 启用 `ngm verify --deep`，这两个模块会因摘要不一致失败** | 本机无 ngm 工具链（PATH 与 `node_modules/.bin` 均无 `ngm`）；摘要字段仍为锁定的 `packages/format/pdf` = `2a60d5a4…`、`packages/format/zip` = `2c42d43f…`（见 `ngm.lock`） |
+
+> 处理方式：启用 `ngm verify --deep` 前，先用 ngm 重新锁定 `packages/format/zip` 与 `packages/format/pdf` 并提交新的 `moduleDigest`。
+
 ## 3. 已降级为限制（10 条，不是缺陷）
 
 | 编号 | 限制 | 为什么按限制处理 |

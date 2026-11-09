@@ -19,7 +19,7 @@
 - **遗留 TODO / 风险**：
   - 余量已跌破 5,000 B 停线，本批次后续 5 条（快照索引原子写、DXF 控制字符、限额常量收敛、>16MB dataUrl 常驻）**未做**。
   - CSV 预判按「裸换行计数」估算，引号内换行不计；含分隔符错位等畸形文本仍由解析后的行数校验兜底，只保证不在解析前失控展开。
-  - vendor 改动新增可选参数而非改签名语义；`ngm.lock` 的 `moduleDigest` 未重算（`check-ngm.mjs` 只校验 lock 格式/模块存在，CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 时执行）。
+  - vendor 改动新增可选参数而非改签名语义。**`ngm.lock` 的 `moduleDigest` 未重算**：本机无 ngm 工具链（`ngm` 不在 PATH、`node_modules/.bin` 无 ngm），无法按 ngm 的子树摘要算法重新生成；`check-ngm.mjs` 只校验 lock 格式与模块存在，**CI 若启用 `ngm verify --deep`（配置 `NGM_BIN_URL`）会因 `packages/format/zip` 与 `packages/format/pdf` 摘要不一致而失败**。见 `docs/engineering.md` 门禁表注与 `docs/known-issues.md` §2.12。
 
 ## 2026-11-08 · 导入导出一（3/6）：底图入口与主导入共用字节上限
 
