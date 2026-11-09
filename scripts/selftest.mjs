@@ -241,6 +241,7 @@ code += `\n;globalThis.__api = {
   resetSaveHealth(){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0}; },
   LEASE_CHANNEL, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, LEASE_FUTURE_SKEW_MS, acquireEditorLease, releaseEditorLease, leaseIngest,
   leaseConflictAt, leaseClaim, leaseSyncProject, leaseStatus, onLeaseConflict,
+  leaseSaveBlocked, flushBeforeUnload, LS_KEY,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
@@ -8482,6 +8483,19 @@ await section("D-09 多标签同工程编辑租约（假时钟）", async () => 
   api.leaseIngest({type:'lease',tabId:'PEER4',projectId:P,ts:20000},20000);
   eq('D-09 确认后取得租约并解除冲突',
     api.leaseClaim(20000)&&api.leaseStatus().confirmed&&!api.leaseStatus().conflict, true);
+  /* P2-17：冲突标签在 pagehide 不得写 IndexedDB 'current'，但要保留本地兜底并给出可见状态 */
+  api.releaseEditorLease();
+  api.acquireEditorLease();
+  api.state.meta.projectId=P;
+  api.leaseSyncProject(30000);
+  const leaseNow=Date.now();
+  api.leaseIngest({type:'lease',tabId:'PEER9',projectId:P,ts:leaseNow},leaseNow);
+  eq('D-09 未确认租约时保存被阻断', api.leaseSaveBlocked(), true);
+  eq('D-09 冲突时 flush 不写 IndexedDB', api.flushBeforeUnload(), false);
+  ok('D-09 冲突时给出可见保存状态', /另一标签页正在编辑/.test(api.$('saveState').textContent||''));
+  ok('D-09 冲突时仍写本地兜底草稿', !!sandbox.localStorage.getItem(api.LS_KEY));
+  api.leaseIngest({type:'release',tabId:'PEER9'},leaseNow);
+  eq('D-09 对端离开后 flush 恢复落盘', api.flushBeforeUnload(), true);
   api.releaseEditorLease();
   api.state.meta.projectId=prevId;
 }

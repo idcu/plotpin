@@ -1245,14 +1245,21 @@ window.addEventListener('keyup',e=>{
   if(e.code==='Space'&&spaceDown){ spaceDown=false; document.body.classList.remove('panning'); document.body.className='tool-'+currentTool; }
 });
 
-/* 关闭/刷新页面前强制落盘：IndexedDB 事务尽力触发，localStorage 同步兜底，杜绝最后编辑丢失 */
+/* 关闭/刷新页面前强制落盘：IndexedDB 事务尽力触发，localStorage 同步兜底，杜绝最后编辑丢失。
+   多标签租约冲突时（另一标签正在编辑）不得写 'current'，否则会覆盖对端草稿；
+   本地兜底草稿仍写入，并复用自动保存的状态提示，返回 false 表示未写 IndexedDB。 */
 function flushBeforeUnload(){
   try{
     clearTimeout(saveTimer);
     const snapshot=persistableState();
     writeLocalDraft(snapshot);
+    if(leaseSaveBlocked()){
+      saveStatus(L('另一标签页正在编辑，已暂停自动保存'));
+      return false;
+    }
     idbPut(snapshot).catch(()=>{});
-  }catch(e){}
+    return true;
+  }catch(e){ return false; }
 }
 window.addEventListener('pagehide',flushBeforeUnload);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushBeforeUnload(); });

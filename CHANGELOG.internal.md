@@ -4,6 +4,19 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 多标签（core-kernel P2-17）：冲突标签 pagehide 不再覆盖 IndexedDB 草稿
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`flushBeforeUnload` 无条件 `idbPut(snapshot)` 写 `current`，不检查多标签租约；被判定为「非持有者」的标签在 `pagehide` 仍会覆盖对端草稿（`scheduleSave` 有 `leaseSaveBlocked` 拦截，flush 没有）。
+- **核心改动**：`js/core/interaction.js` 的 `flushBeforeUnload` 先写本地兜底草稿，再检查 `leaseSaveBlocked()`；冲突时跳过 `idbPut`、复用「另一标签页正在编辑，已暂停自动保存」状态提示，并返回 `false`（非冲突返回 `true`，事件监听器忽略返回值）。
+- **预算**：本条预计 +100~200 B，实际 **+138 B**，余量 5,693 → **5,555 B**（仍 >5,000 停线）。
+- **验证数据**（先红后绿）：
+  - 新增 5 条断言（D-09）：修复前 3 条失败（`flush` 返回 undefined、无可见状态、恢复落盘无法判定）；修复后 10/10 通过。
+  - 冲突场景：`leaseSaveBlocked()=true`、`flushBeforeUnload()=false`、`#saveState` 含「另一标签页正在编辑」、`localStorage[LS_KEY]` 已写入；对端 release 后 `flushBeforeUnload()=true`。
+  - dist **833,987 → 834,125 B（+138 B）**；gzip 259,816；余量 **5,555 B**；SW `VERSION=125`；selftest **3636 / 0**（+5）。
+- **公共抽象清单**：无新增；复用 `leaseSaveBlocked()`（tab-lease）与 `writeLocalDraft()`（persistence）。`flushBeforeUnload` 返回值由 `undefined` 改为布尔（内部函数，事件监听器忽略），不影响公共 API。
+- **遗留 TODO / 风险**：冲突标签仍会写共享的 `LS_KEY` 本地兜底（IDB `current` 才是否定写入的目标）；若对端也依赖 localStorage 兜底，可能被这份副本覆盖。彻底隔离需按 tab 分键，属另一次改动。
+
 ## 2026-11-10 · core 跨层依赖（core-kernel P2-18）：影响范围报告，本轮不动代码
 
 - **Commit Hash**：`待回填`
