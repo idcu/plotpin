@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 净字节回收（1/1）：形状类型字面量收敛为公共常量
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`b371a6a`
 - **核心改动**：
   - `js/core/config.js` 新增单一来源 `const CIR='circle', ELL='ellipse', SEC='sector', PARA='parallelogram'`（值即 `shape.type` / `scaleShape` 的 schema 取值，未改任何取值）。
   - 18 个 `js/**` 文件中的同名字符串字面量全部替换为常量引用（几何、渲染、持久化、导入导出、属性面板、表格、规则、UI）。
