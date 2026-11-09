@@ -6,7 +6,7 @@
 
 ## 2026-11-09 · 限额常量两层语义确认（不合并，仅锁定口径）
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`d558335`
 - **核心结论**：`APP_LIMITS`（app 跨格式提交门禁）与 vendor `DXF_LIMITS`/`PDF_LIMITS`（解析层护栏）**语义不同、取小者生效**，强行合并会改变实际生效上限，故**不收敛数值**，只把两层关系写进代码注释与文档。
 - **调用点 grep 证据**（`git grep -n`）：
   - `js/common/pdf-read.js:15` → `const PDF_LIMITS=__pdf.PDF_LIMITS;`：app 直接复用 vendor 常量对象，**无重复定义**；`PDF_LIMITS` 的其他引用（`:46/:381/:410`）全部走该单一来源。
