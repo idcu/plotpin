@@ -4,6 +4,15 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · core 跨层依赖（core-kernel P2-18）：影响范围报告，本轮不动代码
+
+- **Commit Hash**：`待回填`
+- **结论**：按本轮约束（不改行为、不改公共签名；搬迁函数/改调用图须先出报告），**未改代码**，仅把影响分析与方案写入 `docs/known-issues.md` §2.13。
+- **证据**：`geometry-coverage.js:45/94/105` 调用 `isVisible`，其定义在 `render.js:12`（`effectiveVisible` 的别名，本体在 `render.js:10`，只依赖 `model.js:549` 的 `layerOf`）。`isVisible` 共 8 处调用、`effectiveVisible` 共 4 处（含 selftest 契约断言）。
+- **方案 A（行为等价，需授权后执行）**：把 `effectiveVisible` 从 `render.js` 搬到 `model.js`，`render.js` 保留 `isVisible` 别名；`io-export.js:137`、`io-fields.js:44` 无需改；加载顺序 model→render 安全；预计 dist ±20 B。
+- **否决**：方案 B（注入谓词，改公共签名）、方案 C（覆盖率内复制 `layerOf`，违反禁止重复实现）。
+- **验证数据**：docs-only，dist **833,987 B 不变**、gzip 259,756、余量 5,693 B；断言 3631/0 不变；SW `VERSION=124` 不变。
+
 ## 2026-11-10 · 规则 i18n（features-ui F12）：规则名 / 违规消息 / 跳过原因 / CSV 表头统一走 L()
 
 - **Commit Hash**：`待回填`
