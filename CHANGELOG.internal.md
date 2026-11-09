@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-08 · 导入导出二（4/6）：CSV/XLSX/PDF-LZW 解压炸弹窗口
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - `js/features/io-import.js#dsvRowsExceed`：CSV/TSV 在 `DSV.parseRows` **之前**按换行预判行数（引号内换行不计），超过 `APP_LIMITS.IMPORT_ROWS_MAX` 直接拒绝，不再先把整份文本展开成行数组；原 `rows.length` 校验保留作兜底。
+  - `ngm.vendor/.../format/zip/src/vendor/zip.js#zipInflateRaw(bytes,limit)`：改为流式累计，累计解压字节超过 `limit` 立即 `reader.cancel()` 并抛错；`zipReadEntries` 以 `L.maxEntryBytes`（64 MB）传入，不再「先完整解压再复核」。
+  - `ngm.vendor/.../format/pdf/src/core.js#lzwDecode`：新增 `maxBytes` 输出累计上限，`decodeStream` 传入 `opt.maxInflateBytes`（64 MB），与 FlateDecode 同口径；超限即中止，不再继续展开。
+  - 未新增依赖；`js/` 公共 API 与导出字段无变化；vendor 改动仅新增可选参数，旧调用方（不传 limit）走原来的整段解压路径，行为等价。
+- **验证数据**：
+  - 先补断言后修：section「导入健壮性」+8 条。旧实现下实测失败 3 条（CSV 超行仍调用 `parseRows`、ZIP 无限额时解压成功、LZW 无限额时输出 2000 字节）；修复后全绿。
+  - selftest **3607 通过 / 0 失败**（3599 → +8）；e2e 123 通过 + 1 跳过；五道门禁全绿。
+  - dist **834,826 B**（833,629 → **+1,197 B**）；gzip 259,498 B；余量 **4,854 B**；SW `VERSION=115`。
+- **遗留 TODO / 风险**：
+  - 余量已跌破 5,000 B 停线，本批次后续 5 条（快照索引原子写、DXF 控制字符、限额常量收敛、>16MB dataUrl 常驻）**未做**。
+  - CSV 预判按「裸换行计数」估算，引号内换行不计；含分隔符错位等畸形文本仍由解析后的行数校验兜底，只保证不在解析前失控展开。
+  - vendor 改动新增可选参数而非改签名语义；`ngm.lock` 的 `moduleDigest` 未重算（`check-ngm.mjs` 只校验 lock 格式/模块存在，CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 时执行）。
+
 ## 2026-11-08 · 导入导出一（3/6）：底图入口与主导入共用字节上限
 
 - **Commit Hash**：`221703d`

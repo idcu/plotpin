@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, deflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { buildStandalone } from './pack-core.mjs';
@@ -102,7 +102,8 @@ code += `\n;globalThis.__api = {
   importJsonFile, openProjectById,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, assertProjectWithinLimits, baseObject,
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
-  importLimitErrors, importLimitMessage,
+  importLimitErrors, importLimitMessage, dsvRowsExceed, handleImportFile,
+  PdfCore: globalThis.__idcuPdf,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
@@ -8859,6 +8860,59 @@ await section("P2-RT 批次 6：快照与协作", async () => {
   ok('CORE-P2-20 mergeProjectJSON 拒绝超限输入', /合并工程超出上限/.test(mergeMsg));
   eq('CORE-P2-20 拒绝后现场未替换', api.state.objects.length, 0);
 }
+});
+
+/* ---------------- 导入健壮性：CSV 行数预判 / ZIP 解压中上限 / PDF-LZW 输出上限 ---------------- */
+await section("导入健壮性：CSV 行数预判 / ZIP 解压中上限 / PDF-LZW 输出上限", async () => {
+{
+  const L=api.APP_LIMITS;
+  /* CSV：引号内换行不计，超行必须在 parseRows 之前拦截（避免先展开成行数组） */
+  eq('CSV 预判-引号内换行不计', api.dsvRowsExceed('"a\nb\nc"\nd', 1), false);
+  eq('CSV 预判-超行返回 true', api.dsvRowsExceed('a\nb\nc\n', 2), true);
+  eq('CSV 预判-未超行返回 false', api.dsvRowsExceed('a\nb', 5), false);
+  const many='a\n'.repeat(L.IMPORT_ROWS_MAX+1);
+  let parsed=0;
+  const origParse=api.DSV.parseRows;
+  api.DSV.parseRows=(...a)=>{ parsed++; return origParse(...a); };
+  try{ await api.handleImportFile({name:'bomb.csv',size:many.length,type:'text/csv',text:async()=>many}); }
+  finally{ api.DSV.parseRows=origParse; }
+  eq('CSV 超行在 parseRows 前拦截', parsed, 0);
+
+  /* ZIP：伪造/压缩率极高的条目在解压累计阶段即中止，不先完整展开 */
+  const payload=new Uint8Array(256*1024);
+  const packed=deflateRawSync(payload);
+  let zipMsg='';
+  try{ await api.Zip.inflateRaw(packed,1024); }catch(e){ zipMsg=String(e&&e.message||e); }
+  ok('ZIP 解压中超出上限即中止', /解压中超过/.test(zipMsg));
+  const zipFull=await api.Zip.inflateRaw(packed,payload.length);
+  eq('ZIP 限内解压结果不变', zipFull.length, payload.length);
+
+  /* PDF LZW：输出累计超过 maxInflateBytes 即中止（与 FlateDecode 同口径） */
+  function lzwLiterals(text){
+    let codeLen=9,next=258,prev=false,bits=0,cur=0; const out=[];
+    const emit=c=>{
+      cur=(cur<<codeLen)|c; bits+=codeLen;
+      while(bits>=8){ bits-=8; out.push((cur>>>bits)&255); }
+      cur&=(1<<bits)-1;
+    };
+    emit(256);
+    for(let i=0;i<text.length;i++){
+      emit(text.charCodeAt(i));
+      if(prev){ next++; if(next+2>=(1<<codeLen)&&codeLen<12) codeLen++; }
+      prev=true;
+    }
+    emit(257);
+    if(bits) out.push((cur<<(8-bits))&255);
+    return String.fromCharCode(...out);
+  }
+  let lzwMsg='';
+  try{ await api.PdfCore.decodeStream({dict:'<< /Filter /LZWDecode >>',data:lzwLiterals('A'.repeat(2000))},{maxInflateBytes:100}); }
+  catch(e){ lzwMsg=String(e&&e.message||e); }
+  ok('PDF LZW 输出超限即中止', /解压炸弹|上限/.test(lzwMsg));
+  const lzwOk=await api.PdfCore.decodeStream({dict:'<< /Filter /LZWDecode >>',data:lzwLiterals('A'.repeat(50))},{maxInflateBytes:100});
+  eq('PDF LZW 限内输出正确', lzwOk.bytes.length, 50);
+}
+
 });
 
 /* ---------------- 结果汇总 ---------------- */

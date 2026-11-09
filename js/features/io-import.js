@@ -1,4 +1,14 @@
 /* io-import.js —— 文件导入路由、DXF/PDF/图片底图、底图/场地选择 */
+/** CSV/TSV 行数预判：引号内换行不计；超限时在 parseRows 之前返回 true（边界仍由行数校验兜底） */
+function dsvRowsExceed(text,limit){
+  let n=0,q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text.charCodeAt(i);
+    if(c===34) q=!q;
+    else if(c===10&&!q&&++n>limit) return true;
+  }
+  return false;
+}
 function extOfFile(name){ const m=String(name||'').toLowerCase().match(/\.([a-z0-9]+)$/); return m?m[1]:''; }
 /**
  * 导入 JSON 工程（事务化）：先构建候选、校验限值、转存资产，全部成功后才替换 state；
@@ -59,6 +69,7 @@ async function handleImportFile(f){
       const text=await f.text();
       const textErrs=importLimitErrors({chars:text.length});
       if(textErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(textErrs)}),'error');
+      if(dsvRowsExceed(text,APP_LIMITS.IMPORT_ROWS_MAX)) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(['rows'])}),'error');
       const rows=DSV.parseRows(text,ext==='tsv'?'\t':DSV.detectDelimiter(text));
       const rowErrs=importLimitErrors({rows:rows.length});
       if(rowErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(rowErrs)}),'error');

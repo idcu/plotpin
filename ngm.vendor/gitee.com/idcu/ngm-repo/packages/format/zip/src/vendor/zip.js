@@ -75,10 +75,30 @@ function zipBuild(entries,opt){
 /* 输入上限：防止畸形/超大压缩包与解压炸弹耗尽内存（可在测试中传入更小的 opt） */
 const ZIP_LIMITS={maxBytes:50*1024*1024,maxEntries:2000,maxEntryBytes:64*1024*1024,maxTotalBytes:128*1024*1024};
 /* verifyCrc=true 时逐条校验中央目录里的 CRC32（默认关闭，保持既有读取行为） */
-async function zipInflateRaw(bytes){
+async function zipInflateRaw(bytes,limit){
   if(typeof DecompressionStream==='undefined') throw new Error('当前浏览器不支持 DecompressionStream，无法读取压缩的 xlsx');
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  if(!(limit>0)) return new Uint8Array(await new Response(stream).arrayBuffer());
+  /* 流式累计：一旦超过上限立即 cancel，避免「先完整展开再复核」的内存峰值（解压炸弹） */
+  const reader=stream.getReader(), chunks=[]; let total=0;
+  try{
+    for(;;){
+      const {done,value}=await reader.read();
+      if(done) break;
+      if(!value||!value.byteLength) continue;
+      total+=value.byteLength;
+      if(total>limit){
+        try{ await reader.cancel(); }catch(_){}
+        throw new Error('压缩包内单文件解压中超过 '+(limit/1048576)+'MB 上限（疑似解压炸弹）');
+      }
+      chunks.push(value);
+    }
+  }finally{
+    try{ reader.releaseLock(); }catch(_){}
+  }
+  const out=new Uint8Array(total); let off=0;
+  for(const c of chunks){ out.set(c,off); off+=c.byteLength; }
+  return out;
 }
 async function zipReadEntries(arrayBuffer,opt){
   const L=Object.assign({},ZIP_LIMITS,opt||{});
@@ -112,7 +132,7 @@ async function zipReadEntries(arrayBuffer,opt){
       if(!/\/$/.test(name)){
         let data;
         if(method===0) data=raw.slice();
-        else if(method===8) data=await zipInflateRaw(raw);
+        else if(method===8) data=await zipInflateRaw(raw,L.maxEntryBytes);
         else throw new Error('不支持的 ZIP 压缩方式 method='+method);
         /* 以实际解压字节复核上限，避免中央目录声明值偏小绕过防护 */
         if(data.length>L.maxEntryBytes)
