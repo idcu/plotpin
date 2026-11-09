@@ -9,24 +9,24 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 833,636 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
-| gzip 字节 | 259,669 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
+| 单文件产物字节 | 834,252 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致 |
+| gzip 字节 | 259,831 B | 同上（`gzipBytes`） | gzip 不设硬门禁 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/dist-manifest.json` 的 `maxBytes` / `scripts/build.mjs` | 不得放宽 |
-| 体积余量 | 6,044 B | 上限 − 当前值 | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=120` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 5,428 B | 上限 − 当前值 | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=121` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 49 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3613 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 断言 | 3616 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
 | selftest 分区 | 136 个 | `node scripts/selftest.mjs --list` | 输出 137 行（含 1 行标题） |
 | 加载脚本 | 45 个（35 项目 + 10 vendor） | `check.mjs` 输出「加载 45 个脚本」 | `js/` 下 35 个 `.js` |
 | e2e 用例 | 124 个（123 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak |
 | e2e spec 文件 | 35 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 37 个 `.mjs`（35 个 spec + 2 个 helper） |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/`；含 4 项结构校验（规则删空即红） |
 | 插件 API 面 | 23 键 / 清单 23 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
-| i18n 覆盖率 | 46.04% / 缺口 9 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
+| i18n 覆盖率 | 45.97% / 缺口 10 / UI 硬编码 1 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
 | i18n 字典规模 | PHRASES 1007 / TEMPLATES 112 / DICT.zh 193 | 同上 | |
 | 门禁牙齿 | 正面基线 6/6 + 人为破坏 12/12 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10/11 场景为契约清空 / 未 bump 就 `--update` |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |

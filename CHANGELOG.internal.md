@@ -4,6 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-09 · 导入导出（P2-05）：超过单张资产上限的照片不再进入持久化副本
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`assetPut` 对 `bytes.length > APP_LIMITS.ASSET_MAX_BYTES`（16 MB）抛「资产超过单个大小上限」，`ensureObjectPhotoAssets` 捕获后保留 `photoDataUrl`；该 base64 原样进入 `persistableState()` 副本（自动保存、工程库、快照、协作快照、导出），每份 22 MB+，且每次保存都重复持有这份必失败的大字符串。
+- **核心改动**：
+  - `js/core/persistence.js` 新增 `oversizePhotoDataUrl(du)`：先按字符长度快速排除（base64 解码后必不长于源串），超长才解码精确比较字节数。
+  - `persistableState()` 在副本上删除非当前/其余楼层对象中超限的 `props.photoDataUrl`；实时 `state` 保留，当前会话仍可查看。
+  - `ensureObjectPhotoAssets()` 返回超限计数（跳过超限对象，不再白解码整串）；`afterStateLoaded` 计数 >0 时给一次 warn 提示。
+- **调用点 grep 证据**（`git grep -n "persistableState"`）：`js/core/persistence.js:287/652/997`（自动保存 / 工程库 / 合并）、`js/core/snapshot.js:29`（快照）、`js/features/io-export.js:103`（导出）、`js/features/collab.js:394/408/459/543/547/607/646`（协作快照与断线队列）、`js/features/plugins.js:435/790/800/828`（插件态）、`js/core/interaction.js:1252`。所有入口共用同一份 `persistableState()`，一处收敛即全链路生效。
+- **验证数据**：
+  - 先补会失败的断言（section 73）：新增 3 条，修复前 1 条实测失败（`P2-05 超限照片不写入持久化副本（期望 false，实际 true）`）；修复后 3/3 通过。
+  - 保留 P1-4 既有断言：未超限且 `assetPut` 失败仍保留 base64，实时 state 不受影响。
+  - selftest **3616 通过 / 0 失败**（3613 → +3）；e2e 123 通过 + 1 跳过；五道门禁全绿。
+  - dist **834,252 B**（833,636 → **+616 B**）；gzip 259,831 B（+162 B）；余量 **5,428 B**（仍 > 5,000 B 停线）；SW `VERSION=121`。
+- **遗留 TODO / 风险**：
+  - 超限照片不进入任何持久化副本，刷新/重开后不可恢复（资产库物理上无法保存 16 MB 以上单张资产）；载入时 warn 提示，属明确取舍。
+  - 余量 5,428 B 仍高于停线 5,000 B；本条为第 11 条（任务清单最后一条功能项），到此结束，不再开启新功能项。
+
 ## 2026-11-09 · 限额常量两层语义确认（不合并，仅锁定口径）
 
 - **Commit Hash**：`d558335`

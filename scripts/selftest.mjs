@@ -7762,6 +7762,18 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   ok('P1-4 提示含失败数量', /1 张设备照片/.test(toastMsgs[0].m));
   eq('P1-4 实时 state 照片不受影响', api.state.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
 
+  /* P2-05：超过单张资产上限（16MB）的 base64 资产库必定拒收，
+     持久化副本不得长期携带这份必失败的大字符串；实时 state 保留当前会话可见。 */
+  const stBig = api.resetState();
+  const bigPhoto = 'data:image/png;base64,' + 'A'.repeat(4 * Math.ceil((api.APP_LIMITS.ASSET_MAX_BYTES + 1) / 3));
+  stBig.objects = [{id: 'BIG1', props: {photoDataUrl: bigPhoto}}];
+  const bigOut = api.persistableState();
+  eq('P2-05 超限照片不写入持久化副本', 'photoDataUrl' in (bigOut.objects[0].props || {}), false);
+  eq('P2-05 实时 state 仍保留超限照片（当前会话可见）', api.state.objects[0].props.photoDataUrl, bigPhoto);
+  stBig.objects[0].props.photoDataUrl = 'data:image/png;base64,AAAA';
+  const smallOut = api.persistableState();
+  eq('P2-05 未超限照片仍写入持久化副本（P1-4 语义不变）', smallOut.objects[0].props.photoDataUrl, 'data:image/png;base64,AAAA');
+
   /* 资产保活：快照记录是 {meta,data} 外壳，必须解包 data 才能收集资产引用 */
   const snapRec={meta:{snapshotId:'S1'},data:{
     background:{assetId:'bg_top'},

@@ -370,6 +370,13 @@ async function assetGet(id){ return (await bgAssetsReady).getId(id); }
 async function assetPrune(keepIds){ return (await bgAssetsReady).prune(keepIds); }
 const dataUrlToBytes = ContentAssets.dataUrlToBytes;
 const bytesToDataUrl = ContentAssets.bytesToDataUrl;
+/** 单张照片 base64 是否超过资产上限（超限资产库必拒收）。
+ *  先按字符长度快速排除：合法 base64 解码后一定不长于源串，短串无需解码。 */
+function oversizePhotoDataUrl(du){
+  if(typeof du!=='string'||du.length<=APP_LIMITS.ASSET_MAX_BYTES) return false;
+  try{ return dataUrlToBytes(du).bytes.length>APP_LIMITS.ASSET_MAX_BYTES; }
+  catch(_){ return false; }
+}
 
 /** 底图落盘清洗（N-03）：
  *  - 有 assetId：剥离 dataUrl（字节已在 assets 库，重开按 assetId 取回）；
@@ -391,6 +398,11 @@ function persistableState(){
     if(f.id===copy.activeFloorId){ delete f.background; delete f.site; delete f.objects; delete f.viewport; return; }
     scrubBackgroundForSave(f.background);
   });
+  /* P2-05：超过单张资产上限的照片无法进资产库，写进工程记录/自动保存只会长期
+     持有必失败的大字符串；只在副本上剥离，实时 state 保留供当前会话查看。 */
+  projectObjectLists(copy).forEach(list=>list.forEach(o=>{
+    if(o&&o.props&&oversizePhotoDataUrl(o.props.photoDataUrl)) delete o.props.photoDataUrl;
+  }));
   return copy;
 }
 /** 启动能力探测：file:// 下的 IndexedDB / Service Worker / Blob 可用性差异显式化（纯函数，便于自测） */
@@ -763,9 +775,11 @@ function projectObjectLists(st){
  */
 async function ensureObjectPhotoAssets(st){
   const done=new Set();
+  let oversize=0;
   for(const list of projectObjectLists(st)) for(const o of list){
     const du=o&&o.props&&o.props.photoDataUrl;
     if(!du) continue;
+    if(oversizePhotoDataUrl(du)){ oversize++; continue; }
     try{
       const bin=dataUrlToBytes(du);
       const id=assetIdFor(bin.bytes);
@@ -774,6 +788,7 @@ async function ensureObjectPhotoAssets(st){
       delete o.props.photoDataUrl;
     }catch(_){ /* 保留 dataUrl，照片仍可在当前会话查看 */ }
   }
+  return oversize;
 }
 /** 多楼层：非当前楼层背景的内嵌 dataUrl → 资产库 */
 async function ensureFloorBackgroundAssets(st){
@@ -1332,8 +1347,9 @@ async function afterStateLoaded(fit=true,opts={}){
     resetTransientInteractionState(opts);   /* 草稿/拖拽/捕捉/参考线/覆盖层统一复位；校准语义见函数注释 */
     invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
     resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
-    await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
+    const oversizePhotos=await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
     await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
+    if(oversizePhotos) toast(oversizePhotos+' 张设备照片超过单张 16MB 上限，不会写入工程保存，仅当前会话可见','warn');
     /* 旧版底图资产 */refreshUI();
     if(fit) fitView();
     requestRender();
