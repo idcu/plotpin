@@ -254,7 +254,7 @@
 
 | 编号 | 状态 | 修复要点 | 提交 | 验证依据 |
 |---|---|---|---|---|
-| P2-17 | 已修复 | vendor `dxf` 的 `escapeText` 由「仅把 `\r?\n` 折成空格」改为把整段 C0/C1 控制字符（NUL、裸 `\r`、`\u001b`、`\u001f`、DEL）折叠为单个空格；DXF 组码值不再含控制字符 | `待回填` | selftest +3：产物剔除结构性 `\r\n` 后无任何控制字符；`A\rB\0C\u001fD\nE` → `A B C D E`；常规文本原样；旧实现 2 条失败 |
+| P2-17 | 已修复 | vendor `dxf` 的 `escapeText` 由「仅把 `\r?\n` 折成空格」改为把整段 C0/C1 控制字符（NUL、裸 `\r`、`\u001b`、`\u001f`、DEL）折叠为单个空格；DXF 组码值不再含控制字符 | `fdf7f21` | selftest +3：产物剔除结构性 `\r\n` 后无任何控制字符；`A\rB\0C\u001fD\nE` → `A B C D E`；常规文本原样；旧实现 2 条失败 |
 
 > 该改动位于 `ngm.vendor/.../format/dxf`，与 NGM-01 同属「vendor 摘要未重算」风险清单。
 
@@ -307,7 +307,7 @@
 
 | 编号 | 状态 | 内容 | 影响 | 验证依据 |
 |---|---|---|---|---|
-| NGM-01 | 已知风险（未修复） | 导入健壮性补丁 `9db0928` 改了 `ngm.vendor/.../format/zip/src/vendor/zip.js` 与 `.../format/pdf/src/core.js`（仅新增可选参数），`待回填` 又改了 `.../format/dxf/src/core.js`（`escapeText` 控制字符清洗），三处 `ngm.lock` 的 `moduleDigest` 均未重算 | 本机 `check-ngm.mjs` 只校验摘要格式与模块存在，门禁仍绿；**CI 若配置 `NGM_BIN_URL` 启用 `ngm verify --deep`，这三个模块会因摘要不一致失败** | 本机无 ngm 工具链（PATH 与 `node_modules/.bin` 均无 `ngm`）；锁定的摘要：`packages/format/pdf` = `2a60d5a4…`、`packages/format/zip` = `2c42d43f…`、`packages/format/dxf` = `609fb87b…`（均未重算） |
+| NGM-01 | 已知风险（未修复） | 导入健壮性补丁 `9db0928` 改了 `ngm.vendor/.../format/zip/src/vendor/zip.js` 与 `.../format/pdf/src/core.js`（仅新增可选参数），`fdf7f21` 又改了 `.../format/dxf/src/core.js`（`escapeText` 控制字符清洗），三处 `ngm.lock` 的 `moduleDigest` 均未重算 | 本机 `check-ngm.mjs` 只校验摘要格式与模块存在，门禁仍绿；**CI 若配置 `NGM_BIN_URL` 启用 `ngm verify --deep`，这三个模块会因摘要不一致失败** | 本机无 ngm 工具链（PATH 与 `node_modules/.bin` 均无 `ngm`）；锁定的摘要：`packages/format/pdf` = `2a60d5a4…`、`packages/format/zip` = `2c42d43f…`、`packages/format/dxf` = `609fb87b…`（均未重算） |
 
 > 处理方式：启用 `ngm verify --deep` 前，先用 ngm 重新锁定 `packages/format/zip`、`packages/format/pdf` 与 `packages/format/dxf` 并提交新的 `moduleDigest`。
 

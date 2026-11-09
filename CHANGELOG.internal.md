@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 导入导出四（6/6）：DXF 文本控制字符清洗
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`fdf7f21`
 - **核心改动**：
   - vendor `dxf` 的 `escapeText`（`ngm.vendor/.../format/dxf/src/core.js`）由 `replace(/\r?\n/g,' ')` 改为 `replace(/[\u0000-\u001F\u007F]+/g,' ')`：裸 `\r`、NUL、`\u001b`、`\u001f`、DEL 等 C0/C1 控制字符整段折叠为单个空格；仅新增清洗，未改 DXF 组码/结构/其他实体。
   - 文本清洗仍是唯一写入口（`pair(1, escapeText(text))`），未新增导出层级。
