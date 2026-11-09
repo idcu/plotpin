@@ -4,6 +4,26 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-09 · 限额常量两层语义确认（不合并，仅锁定口径）
+
+- **Commit Hash**：`待回填`
+- **核心结论**：`APP_LIMITS`（app 跨格式提交门禁）与 vendor `DXF_LIMITS`/`PDF_LIMITS`（解析层护栏）**语义不同、取小者生效**，强行合并会改变实际生效上限，故**不收敛数值**，只把两层关系写进代码注释与文档。
+- **调用点 grep 证据**（`git grep -n`）：
+  - `js/common/pdf-read.js:15` → `const PDF_LIMITS=__pdf.PDF_LIMITS;`：app 直接复用 vendor 常量对象，**无重复定义**；`PDF_LIMITS` 的其他引用（`:46/:381/:410`）全部走该单一来源。
+  - `js/common/dxf.js:180` → `const baseParse=D.parseDxf;`：直接调用 vendor 解析，**未复制 `maxChars/maxEntities` 数值**。
+  - vendor 定义：`ngm.vendor/.../format/dxf/src/core.js:140` `DXF_LIMITS={maxChars:20*1024*1024,maxEntities:50000}`；`.../format/pdf/src/core.js:15` `PDF_LIMITS={maxBytes:50MB,maxPages:300,maxObjects:20000,maxInflateBytes:64MB}`。
+  - 生效上限：DXF 取 vendor 的 **20 MB / 50,000 实体**（比 app 的 32 MB / 100,000 更严）；PDF 文件取 app 的 **32 MB**（比 vendor 的 50 MB 更严）。
+- **核心改动**：
+  - `js/core/config.js` `APP_LIMITS` 顶部注释补两层语义、各自的数值与「取小者生效」，并说明差异是设计而非漂移。
+  - `docs/features.md` §20 限额表新增「vendor 预解析」行（DXF/PDF 各自上限，注明不合并）。
+- **验证数据**：
+  - 本项无代码路径变更，**无法写出「修复前失败、修复后通过」的断言**（如实说明，未新增断言）；selftest 维持 **3613 通过 / 0 失败**。
+  - e2e 123 通过 + 1 跳过；五道门禁全绿。
+  - dist **833,636 B（+0 B，注释被压缩器剥离，SHA256 不变 `d66c72e3…`）**；gzip 259,669 B；余量 **6,044 B**；SW `VERSION=120`。
+- **遗留 TODO / 风险**：
+  - 两层数值仍会随各自版本独立演进；若 vendor 升级改变上限，实际生效值会变化，需按本条目口径复核（文档已写明取小者）。
+  - 余量 6,044 B 仍高于停线 5,000 B，可继续下一条（`>16MB` 资产化失败后 dataUrl 不长期持有）。
+
 ## 2026-11-08 · 导入导出四（6/6）：DXF 文本控制字符清洗
 
 - **Commit Hash**：`fdf7f21`

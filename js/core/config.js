@@ -23,7 +23,11 @@ const BG_RECOMPRESS_LIMIT = 6 * 1024 * 1024;
 /* 形状类型字面量的唯一来源：几何/渲染/导入导出/属性面板共用，避免同一拼音串在各文件重复书写。
    值即 schema 中的 shape.type / scaleShape 取值，改动会破坏存档兼容。 */
 const CIR = 'circle', ELL = 'ellipse', SEC = 'sector', PARA = 'parallelogram';
-/* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限/导入限值），避免魔法数字散落各处 */
+/* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限/导入限值），避免魔法数字散落各处。
+ * 与 vendor 各自的上限分属两层，**刻意不合并**（语义不同、取小者生效）：
+ *   - vendor 预解析护栏：`format/dxf` = 20MB 文本 / 50,000 实体；`format/pdf` = 50MB / 300 页 / 20,000 对象 / 单流解压 64MB。
+ *   - 本表：跨格式提交门禁（32MB 文件与字符、100,000 实体/对象等），在解析前按字节与解析后按实体数分别拦截。
+ * 因此 DXF 实际生效上限是 vendor 的 20MB/5 万（更严），PDF 文件是 app 的 32MB（更严）；数值差异是设计而非漂移。 */
 const APP_LIMITS = Object.freeze({
   ZOOM_MIN: 0.02, ZOOM_MAX: 200,
   ICON_SCALE_MIN: 0.2, ICON_SCALE_MAX: 8,
