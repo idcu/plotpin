@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 文档计数（engineering P2-05/P2-06）：计数改为实测值并由门禁锚定
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`docs/testing.md:15` 写「127 个分区 / 3,516 条断言」，实测为 136 / 3,616；`docs/engineering.md:101,117`、`README.md:68,77`、`docs/modules.md:78` 仍写 `check.mjs` 12 步 / 3,023 断言 / 118 分区；`docs/testing.md:76` 把 123 通过 + 1 跳过写成「124 用例通过」。审计 P2-05/P3-02。
+- **核心改动**：
+  - `scripts/badge.mjs`：除原有 README 三处断言锚点外，新增文档计数校验——`docs/facts.md`（断言 / 分区 / 加载脚本 / e2e spec）、`docs/testing.md`（分区 / 断言 / 脚本 / spec）、`docs/engineering.md`（`check.mjs` 步数两处）、`README.md`（步数两处）。任一与实测不一致即退出 1；解析不到锚点同样判红（防止锚点被删后静默假绿）。
+  - 实测来源：selftest 输出（断言、加载脚本）、`selftest --list`（分区）、`tests/e2e/*.spec.mjs` 文件数（spec）、`check.mjs` 头部注释编号数（步数）。
+  - 修正文档：testing.md 136/3,616/45、日期与「123 通过 + 1 跳过」；engineering.md 13 步并补第 13 行 CSS 结构；README 13 步两处；modules.md 3,616/136。
+- **验证数据**：
+  - 修复前 `node scripts/badge.mjs --check` 实测退出 1，输出 6 条漂移（testing 127/3516、engineering 12×2、README 12×2）。
+  - 修复后输出「✅ 文档计数与实测一致（断言 3616 / 分区 136 / 脚本 45 / e2e spec 35 / 门禁 13 步）」。
+  - e2e 逐 spec 用 `playwright test --list --reporter=json` 复核：35 文件 / 124 用例，testing.md §3.2 各行计数全部吻合（plugin-sandbox 22、pdf-multipage 6、collab 12、table-batch 4、ui-hardening 2 等）。
+  - 本条只动 `scripts/**` 与文档，**dist 增量 0 B**（834,252 B 不变），断言数不变。
+- **遗留 TODO / 风险**：e2e 用例总数（124）未纳入离线门禁（需要 Playwright 才能得到），只锚定 spec 文件数；用例数仍靠实际 e2e 运行与 §3.2 人工矩阵保持一致。
+
 ## 2026-11-10 · 工程门禁（engineering P2-04）：vendor 实际字节锚定，篡改本地即红
 
 - **Commit Hash**：`待回填`

@@ -98,7 +98,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | 命令 | 作用 | 在 `npm run ci` | 在 CI 工作流 |
 |---|---|---|---|
 | `npm run lint` / `node scripts/check.mjs` | 不带 `--selftest` 的快速自检 | 否 | 否 |
-| `node scripts/check.mjs --selftest` | 12 步总闸（见 3.2），契约与插件 API 面总是真实核对 | 是 | `test` job |
+| `node scripts/check.mjs --selftest` | 13 步总闸（见 3.2），契约与插件 API 面总是真实核对 | 是 | `test` job |
 | `node scripts/check-contracts.mjs` | 契约结构校验 + 四条真实核对（规则删空即红；`--selftest` 额外验证判据自己会红） | 经总闸 | `test` job（独立步骤） |
 | `node scripts/check-plugin-api.mjs` | `PlotPin` 顶层键 ↔ `contracts/plugin-api.json` 双向真实比对 | 经总闸 | `test` job（独立步骤） |
 | `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
@@ -114,7 +114,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 > **vendor 摘要口径（2026-11-10 更新）**：`check-ngm.mjs` 现在会对 `ngm.vendor/**` 的**实际字节**逐文件计算 sha256，并与仓库内清单 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会在本地红并指出文件名（`node scripts/check-ngm.mjs`）。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。清单同时记录 `ngm.lock` 的 `moduleDigest`，lock 重新锁定而清单未刷新也会红。
 > **仍未解决**：`moduleDigest` 本身由 ngm 二进制生成、算法未公开，本机无 ngm 工具链，**无法重算**；导入健壮性补丁改了 `format/zip` 与 `format/pdf`，DXF 文本清洗又改了 `format/dxf`，这三处 `moduleDigest` 仍未刷新。CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 的 job 执行；一旦启用，这三个模块会因摘要不一致而失败，需先用 ngm 重新锁定后再启用。
 
-### 3.2 `check.mjs` 的 12 步
+### 3.2 `check.mjs` 的 13 步
 
 | # | 检查 | 执行条件 | 判据要点 |
 |---|---|---|---|
@@ -130,6 +130,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | 10 | 逻辑层自测 | 仅 `--selftest` | 执行 `scripts/selftest.mjs`，退出码纳入门禁 |
 | 11 | i18n | 仅 `--selftest` | `i18n-scan.mjs --check`：覆盖率 ≥40%、缺口 ≤10、UI 硬编码 ≤20、模板内 UI 文案 =0 |
 | 12 | SW 缓存版本 | 总是 | `check-sw.mjs`：预缓存输入内容指纹必须与提交入库的 `scripts/sw-inputs.sha256` 一致，且清单 `version` 等于 `sw.js` 的 `VERSION` |
+| 13 | CSS 结构 | 总是 | 去注释/字符串后花括号必须配平（未闭合的 `@media` 会静默吞掉其后所有规则） |
 
 注意：第 5 步 `badge.mjs --check` 内部会先跑一次 selftest，第 10 步再跑一次；`--selftest` 下 selftest 实际执行两次，
 这是刻意保留的「README 断言数必须与真实断言数同源」判据，不是重复浪费。

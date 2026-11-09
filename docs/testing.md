@@ -3,16 +3,17 @@
 > 本文描述**当前真实存在**的测试结构、判据与空白；不把「计划要加」写成「已有」。
 > 工程门禁与阈值的唯一事实来源是 [engineering.md](engineering.md)，性能数据见 [performance.md](performance.md)。
 >
-> 本轮核对：2026-11-08，`node scripts/selftest.mjs`、`node scripts/selftest.mjs --list`、
+> 本轮核对：2026-11-10，`node scripts/selftest.mjs`、`node scripts/selftest.mjs --list`、
 > `node node_modules/@playwright/test/cli.js test --list`。数量类指标汇总于 [facts.md](facts.md)，本文只描述结构与覆盖，不写「大约」。
+> §1/§3.2 的计数锚点由 `node scripts/badge.mjs --check` 校验（断言 / 分区 / 加载脚本 / e2e spec / 门禁步数），与实际不一致即红。
 
 ---
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-08） | 是否在 CI |
+| 层 | 入口 | 运行环境 | 规模（2026-11-10） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **127 个分区 / 3,516 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **136 个分区 / 3,616 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **35 个 spec / 124 个用例**（默认 123 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 12 种人为破坏 | 是 |
@@ -73,7 +74,7 @@
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
 - CI 侧新增 `e2e` job（`npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`，Node 20 / `ubuntu-latest`）。
-  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 124 用例通过，无法复现 runner 的网络、系统库与浏览器下载；
+  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 123 用例通过 + 1 条件跳过，无法复现 runner 的网络、系统库与浏览器下载；
   首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）

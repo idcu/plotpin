@@ -65,7 +65,7 @@ node scripts/serve.mjs
 
 ```powershell
 npm run test          # 公共模块接线自检 + 逻辑层自测
-npm run lint          # 12 步工程质量门禁（不含 --selftest）
+npm run lint          # 13 步工程质量门禁（不含 --selftest）
 node scripts/check.mjs --selftest
 npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实浏览器 e2e（需先装 Playwright）
@@ -74,7 +74,7 @@ npm run discipline    # 方法论自检看板
 # 3616 assertions, no dependencies
 ```
 
-`node scripts/check.mjs` 当前覆盖 12 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、模块分层、`--selftest`、i18n 覆盖率、Service Worker 缓存版本。CI 另外串行执行 `bench`、`build --check`、`check-gates`、`check-ngm` 与 `check-discipline`。
+`node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、模块分层、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。CI 另外串行执行 `bench`、`build --check`、`check-gates`、`check-ngm` 与 `check-discipline`。
 
 - **性能门禁必须有数据**：`scripts/bench.mjs` 的 P95 / heapUsed / 静态重建阈值不达标即红；涉及渲染或历史栈的改动需同时跑对应基准。
 - **门禁不达标不提交**：不得放宽阈值、删除断言或跳过用例来"转绿"。
