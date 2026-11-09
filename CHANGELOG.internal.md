@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 导入导出三（5/6）：快照索引原子性与中断自愈
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`69f59c1`
 - **核心改动**：
   - `js/core/snapshot.js` 新增 `snapshotIndexRebuild(pid)`：按 `snapshotRecords` 重建 `snapidx:<pid>`，写失败只 `toast` 告警不抛错。
   - `snapshotIndexLoad` 返回前用 `idbAllKeys`（仅键）核对索引条目集合与真实记录集合；数量或 id 不一致（含写一半中断、幽灵项）一律重建后再返回。
