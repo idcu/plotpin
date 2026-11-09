@@ -6,7 +6,7 @@
 
 ## 2026-11-08 · 导入导出一（3/6）：底图入口与主导入共用字节上限
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`221703d`
 - **核心改动**：
   - `js/features/io-import.js#prepareBackgroundBytes`：读取字节前先走 `importLimitErrors({bytes:f.size})`，超限抛「超限：文件过大」。
   - 底图按钮（`bgInput` → `importBackgroundFile`）与拖拽图片（`handleImportFile` → `importBackgroundFile`）都经过该函数，两条入口共用同一 `IMPORT_FILE_MAX_BYTES` 口径；拖拽路径原有的入口校验保留，行为等价。
