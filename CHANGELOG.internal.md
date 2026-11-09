@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 工程门禁（engineering P2-03/P2-06）：体积分级预警 + gzip 硬阈值 + 预算常量单一来源
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`build.mjs` 只有 `bytes > MAX_BYTES` 一条判据，余量从 56 KB 掉到 5,428 B 的全过程没有任何预警；gzip 只打印不判断；`size-report.mjs` 也不显示「离上限还有多少」。审计 P2-03。
+- **核心改动**：
+  - 新增 `scripts/lib/budget.mjs`：`MAX_BYTES=839,680`、`GZIP_MAX_BYTES=286,720`（280 KiB）、`GZIP_WARN_BYTES=266,240`（260 KiB）、`MARGIN_WARN_BYTES=8,000`、`MARGIN_CRITICAL_BYTES=6,000`，`budgetStatus()` 返回 `ok/warn/error`。
+  - `build.mjs`：`--check` 走 `budgetStatus()`（超上限 / gzip 超限判红；余量分级预警只打印不阻断）；manifest 新增 `gzipMaxBytes`，并校验 `maxBytes` / `gzipMaxBytes` 与 `budget.mjs` 一致，防止「改清单绕过门禁」。
+  - `size-report.mjs`：输出体积余量、gzip 余量与分级预警；`--json` 增加 `marginBytes / gzipMarginBytes / budgetLevel / budgetWarnings` 字段。
+  - `size-report.mjs` 的 P2-06 口径修正此前已完成（按 dist 分块统计），本轮未改口径。
+- **验证数据**：
+  - 阈值分支实测（直接调 `budgetStatus()`）：`834,252/259,831 → warn`（强警告 5,428 < 6,000）；`832,500 → warn`（预警 7,180 < 8,000）；`831,000 → ok`；`840,000 → error`（超 320 B）；gzip `267,000 → warn`；gzip `287,000 → error`（超 280 B）。
+  - `node scripts/build.mjs` 已刷新 manifest（新增 `gzipMaxBytes`），字节/gzip/哈希不变；`build.mjs --check` 与 `size-report.mjs` 均实测通过。
+  - 本条只动 `scripts/**`，**dist 增量 0 B**（834,252 B 不变），断言数不变。
+- **遗留 TODO / 风险**：预警阈值不阻断构建，是否阻断属于发布策略取舍；本轮按审计建议保持非阻断。
+
 ## 2026-11-09 · 导入导出（P2-05）：超过单张资产上限的照片不再进入持久化副本
 
 - **Commit Hash**：`ee422c1`

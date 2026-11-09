@@ -16,14 +16,13 @@ import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { buildStandalone } from './pack-core.mjs';
+import { MAX_BYTES, GZIP_MAX_BYTES, budgetStatus } from './lib/budget.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const checkOnly = process.argv.includes('--check');
 const FILE = 'plotpin-standalone.html';
 const manifestPath = join(root, 'scripts', 'dist-manifest.json');
-/* 门禁口径：820 KB。gzip 只作对外发布指标，不设硬门禁（不同 zlib 版本字节可能不同） */
-const MAX_BYTES = 820 * 1024;
 
 const html = readFileSync(join(root, 'index.html'), 'utf8');
 const readSource = p => readFileSync(join(root, p), 'utf8');
@@ -33,25 +32,31 @@ const bytes = Buffer.byteLength(bundled, 'utf8');
 const kb = (bytes / 1024).toFixed(1);
 const gzipBytes = gzipSync(Buffer.from(bundled, 'utf8')).length;
 const gzipKb = (gzipBytes / 1024).toFixed(1);
+const budget = budgetStatus({ bytes, gzipBytes });
 
 if (!checkOnly) {
   const dist = join(root, 'dist');
   mkdirSync(dist, { recursive: true });
   writeFileSync(join(dist, FILE), bundled);
   writeFileSync(join(dist, 'SHA256SUMS.txt'), `${sha}  ${FILE}\n`);
-  const manifest = { file: FILE, sha256: sha, bytes, kb: `${kb} KB`, gzipBytes, gzipKb: `${gzipKb} KB`, maxBytes: MAX_BYTES };
+  const manifest = {
+    file: FILE, sha256: sha, bytes, kb: `${kb} KB`, gzipBytes, gzipKb: `${gzipKb} KB`,
+    maxBytes: MAX_BYTES, gzipMaxBytes: GZIP_MAX_BYTES
+  };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
   console.log(`✅ 已生成 dist/${FILE}（${kb} KB）`);
-  console.log(`   gzip: ${gzipKb} KB（${gzipBytes} B，对外发布指标，不设硬门禁）`);
+  console.log(`   gzip: ${gzipKb} KB（${gzipBytes} B，硬上限 ${(GZIP_MAX_BYTES / 1024).toFixed(0)} KB）`);
+  console.log(`   体积余量：${budget.margin} B / gzip 余量：${budget.gzipMargin} B`);
+  budget.warnings.forEach(w => console.log(`   ! ${w}`));
   console.log(`   SHA256: ${sha}`);
   console.log(`   已刷新 scripts/dist-manifest.json（--check 以此为准）`);
   console.log('   双击该文件即可离线使用；校验和见 dist/SHA256SUMS.txt');
 } else {
   const errors = [];
 
-  if (bytes > MAX_BYTES) {
-    errors.push(`产物体积超限：${kb} KB > ${(MAX_BYTES / 1024).toFixed(0)} KB`);
-  }
+  /* 体积门禁：上限判红（errors）、余量分级预警（warnings 不阻断）、gzip 硬阈值判红 */
+  errors.push(...budget.errors);
+  budget.warnings.forEach(w => console.log(`  ! ${w}`));
 
   /* 确定性：同一份源两次构建必须得到同一字节串，否则「可从源复现」不成立 */
   const again = buildStandalone(html, readSource);
@@ -91,6 +96,13 @@ if (!checkOnly) {
       if (manifest.bytes !== bytes) {
         errors.push(`产物字节数与登记值不一致：构建 ${bytes} / 登记 ${manifest.bytes}`);
       }
+      /* 预算常量单一来源：清单里的上限必须与 lib/budget.mjs 一致，防止「改清单绕过门禁」 */
+      if (manifest.maxBytes !== MAX_BYTES) {
+        errors.push(`dist-manifest.json 的 maxBytes（${manifest.maxBytes}）与 lib/budget.mjs（${MAX_BYTES}）不一致`);
+      }
+      if (manifest.gzipMaxBytes !== undefined && manifest.gzipMaxBytes !== GZIP_MAX_BYTES) {
+        errors.push(`dist-manifest.json 的 gzipMaxBytes（${manifest.gzipMaxBytes}）与 lib/budget.mjs（${GZIP_MAX_BYTES}）不一致`);
+      }
     }
   }
 
@@ -110,6 +122,7 @@ if (!checkOnly) {
     errors.forEach(e => console.error('  - ' + e));
     process.exit(1);
   }
-  console.log(`✅ 单文件打包校验通过：${kb} KB（上限 ${(MAX_BYTES / 1024).toFixed(0)} KB；gzip ${gzipKb} KB），无外部引用，`
+  console.log(`✅ 单文件打包校验通过：${kb} KB（上限 ${(MAX_BYTES / 1024).toFixed(0)} KB，余量 ${budget.margin} B；`
+    + `gzip ${gzipKb} KB，余量 ${budget.gzipMargin} B），无外部引用，`
     + `SHA256 ${sha} 与 scripts/dist-manifest.json 登记值一致；二次构建确定性一致`);
 }

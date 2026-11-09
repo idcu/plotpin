@@ -66,13 +66,18 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 | 登记哈希 | 构建结果的 SHA256 / 字节数与 `scripts/dist-manifest.json` 不一致 |
 | 登记缺失 | `scripts/dist-manifest.json` 不存在或不是合法 JSON |
 | 本地产物 | `dist/` 存在时，其字节或哈希与源重建不一致 |
+| gzip 体积 | gzip > **280 KiB（286,720 B）**；> 260 KiB（266,240 B）只预警 |
+| 预算常量 | `dist-manifest.json` 的 `maxBytes` / `gzipMaxBytes` 与 `scripts/lib/budget.mjs` 不一致 |
 
 改 `js/**`、`css/`、`index.html` 后必须运行 `node scripts/build.mjs` 刷新登记值，否则 CI 必红。
-`dist/` 与 gzip 体积只打印，gzip **不设硬门禁**（不同 zlib 版本字节可能不同）。
+`dist/` 与 gzip 体积都会打印；gzip 设硬上限 280 KiB（不同 zlib 版本字节可能不同，阈值留了余量）。
+体积余量分级预警（不阻断）：余量 < 8,000 B 警告，< 6,000 B 强警告。阈值常量只在 `scripts/lib/budget.mjs` 维护。
 
 ### 2.3 体积预算（易漂移，指向单一来源）
 
-- 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/dist-manifest.json.maxBytes`）。
+- 硬上限：**839,680 B**（代码常量 `MAX_BYTES = 820 * 1024`，`scripts/lib/budget.mjs`；`dist-manifest.json.maxBytes` 必须一致）。
+- gzip 硬上限：**286,720 B（280 KiB）**；`GZIP_WARN_BYTES = 266,240` 只预警（同上，`lib/budget.mjs` 单一来源）。
+- 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
   2026-11-09 实测：`bytes = 834,252`、gzip `259,831`、余量 `5,428 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。

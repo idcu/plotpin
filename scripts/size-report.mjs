@@ -20,6 +20,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { gzipSync } from 'node:zlib';
+import { MAX_BYTES, GZIP_MAX_BYTES, budgetStatus } from './lib/budget.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => readFileSync(join(root, p), 'utf8');
@@ -32,6 +34,9 @@ if (!existsSync(dist)) {
 }
 const bundle = readFileSync(dist, 'utf8');
 const total = bytes(bundle);
+/* 体积预算与 build.mjs 同源（lib/budget.mjs）：分级预警 + gzip 阈值判断 */
+const gzipBytes = gzipSync(Buffer.from(bundle, 'utf8')).length;
+const budget = budgetStatus({ bytes: total, gzipBytes });
 
 /* ---- 1. 按构建标记切分组成 ---- */
 const parts = [];
@@ -183,6 +188,13 @@ const deadCandidates = names.filter(({ name }) => {
 
 const report = {
   totalBytes: total,
+  maxBytes: MAX_BYTES,
+  marginBytes: budget.margin,
+  gzipBytes,
+  gzipMaxBytes: GZIP_MAX_BYTES,
+  gzipMarginBytes: budget.gzipMargin,
+  budgetLevel: budget.level,
+  budgetWarnings: budget.warnings,
   top: parts.slice(0, 10).map(p => ({ path: p.path, bytes: p.bytes, pct: +(p.bytes / total * 100).toFixed(2) })),
   jsBytes: jsParts.reduce((a, p) => a + p.bytes, 0),
   compressible: { ...savings, total: savings.comment + savings.indent + savings.blank },
@@ -206,6 +218,10 @@ if (process.argv.includes('--json')) {
   console.log(JSON.stringify(report, null, 2));
 } else {
   console.log(`发行包总体积：${total} B（${(total / 1024).toFixed(1)} KB）`);
+  console.log(`体积预算：上限 ${MAX_BYTES} B，余量 ${budget.margin} B；`
+    + `gzip ${gzipBytes} B（上限 ${GZIP_MAX_BYTES} B，余量 ${budget.gzipMargin} B）`);
+  if (budget.level === 'ok') console.log('预算状态：正常（余量与 gzip 均在阈值内）');
+  for (const w of budget.warnings) console.log(`! ${w}`);
   console.log('\nTop 10 组成：');
   for (const p of report.top) console.log(`  ${String(p.bytes).padStart(7)} B  ${String(p.pct).padStart(5)}%  ${p.path}`);
   console.log(`\nJS 合计：${report.jsBytes} B`);
