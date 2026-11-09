@@ -4,6 +4,18 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 文档计数补充（engineering P2-05）：modules.md 计数纳入同一门禁
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`docs/modules.md:100,102` 仍写「tests 45 个」「34 个 spec」「19 个 .mjs + 1 个 json 共 20」，实测为 55 个测试文件、35 个 spec、`scripts/*.mjs` 19 + `lib/*.mjs` 2 + manifest 1 共 22 个文件；本轮新增的 `lib/budget.mjs`、`lib/fs-utils.mjs` 也未列入模块表。
+- **核心改动**：
+  - `docs/modules.md`：更新 tests/spec/脚本文件计数，补 `lib/budget.mjs`、`lib/fs-utils.mjs` 两行。
+  - `scripts/badge.mjs`：新增 `docs/modules.md` 两个计数锚点（`## tests（N 个）`、`### e2e 用例（N 个 spec）`），与 `walkFiles(tests)` 实际文件数、`*.spec.mjs` 文件数比对，漂移即红。
+- **验证数据**：
+  - 实测：`Get-ChildItem tests -Recurse -File` = 55；`tests/e2e/*.spec.mjs` = 35；`scripts/*.mjs` = 19；`scripts/lib/*.mjs` = 2。
+  - `node scripts/badge.mjs --check` 通过：「文档计数与实测一致（断言 3616 / 分区 136 / 脚本 45 / e2e spec 35 / 门禁 13 步）」。
+  - 本条只动文档与门禁脚本，**dist 增量 0 B**（834,252 B 不变），断言数不变。
+
 ## 2026-11-10 · 脚本公共逻辑（engineering P2-09）：walk/readJson 收敛到 scripts/lib
 
 - **Commit Hash**：`待回填`

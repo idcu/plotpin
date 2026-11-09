@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { walkFiles } from './lib/fs-utils.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -76,6 +77,7 @@ const scriptCount = Number(((run.stdout || '').match(/加载\s*(\d+)\s*个脚本
 const listRun = spawnSync(process.execPath, [join(root, 'scripts', 'selftest.mjs'), '--list'], { encoding: 'utf8' });
 const sectionCount = Number(((listRun.stdout || '').match(/共\s*(\d+)\s*个分区/) || [])[1] || 0);
 const specCount = readdirSync(join(root, 'tests', 'e2e')).filter(n => n.endsWith('.spec.mjs')).length;
+const testFileCount = walkFiles(join(root, 'tests')).length;
 const checkHeader = readFileSync(join(root, 'scripts', 'check.mjs'), 'utf8');
 const stepCount = (checkHeader.slice(0, checkHeader.indexOf('*/') + 2).match(/^\s*\*?\s*\d+\)/gm) || []).length;
 
@@ -101,6 +103,8 @@ expectCount('docs/testing.md', /([\d,]+) 个分区 \/ ([\d,]+) 条断言 \/ 加�
 expectCount('docs/testing.md', /([\d,]+) 个 spec \/ ([\d,]+) 个用例/, specCount, 'e2e spec', 1);
 expectCount('docs/engineering.md', /`check\.mjs` 的 ([\d,]+) 步/, stepCount, 'check.mjs 步数');
 expectCount('docs/engineering.md', /`node scripts\/check\.mjs --selftest` \| ([\d,]+) 步总闸/, stepCount, 'check.mjs 步数（表格）');
+expectCount('docs/modules.md', /## tests（([\d,]+) 个）/, testFileCount, 'tests 文件数');
+expectCount('docs/modules.md', /### e2e 用例（([\d,]+) 个 spec）/, specCount, 'e2e spec 文件');
 expectCount('README.md', /npm run lint\s+# ([\d,]+) 步工程质量门禁/, stepCount, 'check.mjs 步数');
 expectCount('README.md', /当前覆盖 ([\d,]+) 步：/, stepCount, 'check.mjs 步数');
 

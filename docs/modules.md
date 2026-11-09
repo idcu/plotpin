@@ -92,14 +92,16 @@
 | `serve.mjs` | 零依赖静态服务器 | `HOST/PORT` → `127.0.0.1:4173` | 本地/e2e |
 | `pack-core.mjs` | 单文件打包纯函数（便于自测） | 输入文件 → HTML 文本 | `build.mjs`、selftest |
 | `minify-core.mjs` | 构建期无损压缩纯函数 | 文本 → 压缩文本 | `build.mjs`、selftest |
-| `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考） | `plotpin.html` → 报告 | 体积专项 |
+| `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考）；输出体积余量与 gzip 阈值判断 | `plotpin.html` → 报告 | 体积专项 |
+| `lib/budget.mjs` | 体积预算单一来源：`MAX_BYTES` / gzip 阈值 / 余量分级预警 | 字节 + gzip → `ok/warn/error` | `build.mjs`、`size-report.mjs` |
+| `lib/fs-utils.mjs` | 门禁共享工具：递归遍历（`ext` / `exts` / `skip` / `skipDir`）与 JSON 读取 | 目录 → 文件列表；文件 → 对象 | `check*.mjs`、`build.mjs`、`badge.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-> 脚本层没有"20 个 .mjs"；实际是 19 个 `.mjs` + `dist-manifest.json` 共 20 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
+> 脚本层没有"20 个 .mjs"；实际是 `scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 2 个 + `dist-manifest.json` 共 22 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
 
-## tests（45 个）
+## tests（55 个）
 
-### e2e 用例（34 个 spec）
+### e2e 用例（35 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
