@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 工程门禁（engineering P2-04）：vendor 实际字节锚定，篡改本地即红
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`check-ngm.mjs` 只校验 `ngm.lock` 的 `moduleDigest/subtreeOid` **格式**与 vendor 模块存在性，不重算任何内容哈希；审计 P2-04。补丁改过 `format/zip`、`format/pdf`、`format/dxf` 的 vendor 字节后，本地门禁仍全绿，只有配置了 `NGM_BIN_URL` 的 CI job 才可能发现。
+- **能力边界（如实记录）**：`moduleDigest` 由 ngm 二进制生成，算法未公开，本机无 ngm 工具链（PATH / 全局 npm 均无），**无法重算**；尝试 5 种候选聚合算法均不匹配 lock 值，不再猜测。
+- **核心改动**：
+  - `scripts/check-ngm.mjs` 新增第 5 项断言：对 `ngm.vendor/gitee.com/idcu/ngm-repo/**` 每个文件算 sha256，与仓库内清单 `scripts/ngm-vendor-digest.json` 比对；改动 / 缺失 / 新增分别计数并输出前 3 个文件名。
+  - 清单记录每个模块的 `lockModuleDigest`（复制自 `ngm.lock`）与模块聚合摘要；lock 重新锁定但清单未刷新 → 红。
+  - 新增 `--update-vendor-digest`：改 vendor 后按实际字节重写清单（62 个文件 / 10 个模块）。
+- **验证数据**：
+  - 未生成清单时：`check-ngm` 退出 1，输出「缺少 scripts/ngm-vendor-digest.json」。
+  - 篡改 `ngm.vendor/.../format/dxf/src/core.js`（追加 1 行）→ 退出 1，输出「packages/format/dxf 的 vendor 字节与清单不一致：改动 1 / 缺失 0 / 新增 0（src/core.js）」；写回原字节后恢复绿。
+  - 正常态：`check-ngm` 输出「vendor 字节锚定 62 个文件 / 10 个模块」并整体 OK。
+  - 本条只动 `scripts/**` 与文档，**dist 增量 0 B**（834,252 B 不变），断言数不变。
+- **遗留 TODO / 风险**：`moduleDigest` 仍未重算，`ngm verify --deep` 启用后 `format/zip`、`format/pdf`、`format/dxf` 三个模块仍会失败；已更新 NGM-01 为「部分缓解」并写明处理方式。
+
 ## 2026-11-10 · 工程门禁（engineering P2-03/P2-06）：体积分级预警 + gzip 硬阈值 + 预算常量单一来源
 
 - **Commit Hash**：`待回填`

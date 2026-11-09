@@ -1,16 +1,27 @@
 #!/usr/bin/env node
 /* check-ngm.mjs —— 消费方公共模块接线自检（零第三方依赖）
  *
- * 断言四件事：
+ * 断言五件事：
  *   1. ngm.json 的每条依赖 ↔ ngm.lock 的模块条目一一对应，版本一致；
  *   2. ngm.vendor 下的物理模块目录与 lock 一一对应，无未登记模块；
  *   3. 源码/入口里出现的 ngm.vendor 路径都能归到已登记的 subPath；
- *   4. .ngm-version 与 lockfileVersion 2.0.0 存在且格式合理。
+ *   4. .ngm-version 与 lockfileVersion 2.0.0 存在且格式合理；
+ *   5. vendor **实际字节**与仓库内清单 `scripts/ngm-vendor-digest.json` 一致（P2-04）。
+ *
+ * 第 5 条的边界（必须诚实写明）：lock 的 `moduleDigest` 由 ngm 二进制生成，算法未公开，
+ * 本机无 ngm 工具链，**无法重算**。这里改为「对 vendor 实际字节生成仓库内 sha256 清单并逐文件校验」：
+ * 任何 vendor 文件被改动/增删都会在本地红并指出具体文件，等价覆盖 `ngm verify --deep` 想发现的问题。
+ * 清单的 `lockModuleDigest` 字段复制自 ngm.lock：lock 重新锁定而清单未刷新也会红。
+ *
+ * 用法：
+ *   node scripts/check-ngm.mjs                     校验（默认）
+ *   node scripts/check-ngm.mjs --update-vendor-digest  按当前 vendor 字节重写清单（改 vendor 后必须执行）
  *
  * 只读；不调用 ngm，不访问网络。CI 与本地测试都可直接运行。
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,6 +77,30 @@ function walkFiles(dir, out) {
       out.push(abs);
     }
   }
+}
+
+/* ---- vendor 字节锚定（P2-04） ---- */
+const VENDOR_DIGEST_PATH = 'scripts/ngm-vendor-digest.json';
+const VENDOR_DIGEST_ALGORITHM = 'sha256 per file; module digest = sha256 of sorted "<rel>\\0<fileSha256>\\n"';
+const sha256 = (buf) => 'sha256:' + createHash('sha256').update(buf).digest('hex');
+
+function listModuleFiles(dir, base = dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir).sort()) {
+    const abs = path.join(dir, name);
+    if (fs.statSync(abs).isDirectory()) listModuleFiles(abs, base, out);
+    else out.push({ abs, rel: path.relative(base, abs).replace(/\\/g, '/') });
+  }
+  return out;
+}
+
+/** 模块 vendor 目录的实际文件哈希与聚合摘要 */
+function moduleVendorState(subPath) {
+  const dir = path.join(ROOT, 'ngm.vendor', VENDOR_REPO, subPath);
+  const files = {};
+  for (const f of listModuleFiles(dir)) files[f.rel] = sha256(fs.readFileSync(f.abs));
+  const canonical = Object.keys(files).sort().map((rel) => `${rel}\0${files[rel]}\n`).join('');
+  return { dir, files, digest: sha256(Buffer.from(canonical, 'utf8')) };
 }
 
 const project = readJson('ngm.json');
@@ -174,6 +209,66 @@ if (project && lock) {
         }
       } catch (e) {
         fail(`${subPath} 的 vendor ngm.json 不合法：${e.message}`);
+      }
+    }
+
+    /* ---- 5. vendor 实际字节 ↔ 仓库内 sha256 清单（P2-04） ----
+       moduleDigest 由 ngm 二进制生成、算法未公开，本机无法重算；
+       这里锚定 vendor 实际字节：任何改动/增删都在本地红并指出文件名，
+       清单同时记录 lock 的 moduleDigest，lock 重新锁定而清单未刷新也会红。 */
+    if (process.argv.includes('--update-vendor-digest')) {
+      const doc = { algorithm: VENDOR_DIGEST_ALGORITHM, modules: {} };
+      for (const subPath of declared.keys()) {
+        const v = moduleVendorState(subPath);
+        if (!fs.existsSync(v.dir)) continue;       /* 缺目录已在上面 fail */
+        doc.modules[subPath] = {
+          version: declared.get(subPath).version,
+          lockModuleDigest: (locked.get(subPath) || {}).moduleDigest || '',
+          digest: v.digest,
+          files: v.files
+        };
+      }
+      fs.writeFileSync(path.join(ROOT, VENDOR_DIGEST_PATH), JSON.stringify(doc, null, 2) + '\n');
+      console.log(`check-ngm: 已重写 ${VENDOR_DIGEST_PATH}（${Object.keys(doc.modules).length} 个模块 / `
+        + `${Object.values(doc.modules).reduce((n, m) => n + Object.keys(m.files).length, 0)} 个文件）`);
+    } else {
+      const doc = readJson(VENDOR_DIGEST_PATH);
+      if (doc) {
+        if (doc.algorithm !== VENDOR_DIGEST_ALGORITHM) {
+          fail(`${VENDOR_DIGEST_PATH} 的算法说明已变化：请重跑 --update-vendor-digest`);
+        }
+        let verifiedFiles = 0;
+        for (const subPath of declared.keys()) {
+          const rec = (doc.modules || {})[subPath];
+          if (!rec) {
+            fail(`vendor 摘要清单缺少模块：${subPath}（运行 node scripts/check-ngm.mjs --update-vendor-digest）`);
+            continue;
+          }
+          const lockDigest = (locked.get(subPath) || {}).moduleDigest || '';
+          if (rec.lockModuleDigest !== lockDigest) {
+            fail(`${subPath} 的 lock moduleDigest 与清单记录不一致（lock 已重新锁定？请重跑 --update-vendor-digest）`);
+          }
+          const v = moduleVendorState(subPath);
+          const listed = rec.files || {};
+          const changed = [], missing = [], extra = [];
+          for (const [rel, hash] of Object.entries(listed)) {
+            if (!(rel in v.files)) missing.push(rel);
+            else if (v.files[rel] !== hash) changed.push(rel);
+          }
+          for (const rel of Object.keys(v.files)) if (!(rel in listed)) extra.push(rel);
+          if (changed.length || missing.length || extra.length) {
+            fail(`${subPath} 的 vendor 字节与清单不一致：改动 ${changed.length} / 缺失 ${missing.length} / 新增 ${extra.length}`
+              + `（${[...changed, ...missing, ...extra].slice(0, 3).join('、')}）`);
+          } else if (rec.digest !== v.digest) {
+            fail(`${subPath} 的模块聚合摘要与清单不一致（请重跑 --update-vendor-digest）`);
+          }
+          verifiedFiles += Object.keys(listed).length;
+        }
+        for (const subPath of Object.keys(doc.modules || {})) {
+          if (!declared.has(subPath)) fail(`vendor 摘要清单登记了未声明模块：${subPath}`);
+        }
+        console.log(`check-ngm: vendor 字节锚定 ${verifiedFiles} 个文件 / ${Object.keys(doc.modules || {}).length} 个模块`
+          + '（moduleDigest 未重算：算法未公开且本机无 ngm 二进制）');
       }
     }
 

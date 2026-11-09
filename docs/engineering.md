@@ -111,7 +111,8 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | **不跑**（SwiftShader 读数不能当真实 GPU 结论） |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 
-> **vendor 摘要口径（2026-11-08）**：`check-ngm.mjs` 只校验 `ngm.lock` 的 `moduleDigest` **格式**与 vendor 模块存在性，不重算内容摘要。因导入健壮性补丁改了 `ngm.vendor/.../format/zip` 与 `format/pdf`（新增可选参数），DXF 文本清洗又改了 `format/dxf`，**这三处 `moduleDigest` 未重算**（本机无 ngm 工具链）。CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 的 job 执行；一旦启用，这三个模块会因摘要不一致而失败，需先用 ngm 重新锁定后再启用。
+> **vendor 摘要口径（2026-11-10 更新）**：`check-ngm.mjs` 现在会对 `ngm.vendor/**` 的**实际字节**逐文件计算 sha256，并与仓库内清单 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会在本地红并指出文件名（`node scripts/check-ngm.mjs`）。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。清单同时记录 `ngm.lock` 的 `moduleDigest`，lock 重新锁定而清单未刷新也会红。
+> **仍未解决**：`moduleDigest` 本身由 ngm 二进制生成、算法未公开，本机无 ngm 工具链，**无法重算**；导入健壮性补丁改了 `format/zip` 与 `format/pdf`，DXF 文本清洗又改了 `format/dxf`，这三处 `moduleDigest` 仍未刷新。CI 的 `ngm verify --deep` 仅在配置 `NGM_BIN_URL` 的 job 执行；一旦启用，这三个模块会因摘要不一致而失败，需先用 ngm 重新锁定后再启用。
 
 ### 3.2 `check.mjs` 的 12 步
 

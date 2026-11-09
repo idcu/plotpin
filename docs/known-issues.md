@@ -307,9 +307,9 @@
 
 | 编号 | 状态 | 内容 | 影响 | 验证依据 |
 |---|---|---|---|---|
-| NGM-01 | 已知风险（未修复） | 导入健壮性补丁 `9db0928` 改了 `ngm.vendor/.../format/zip/src/vendor/zip.js` 与 `.../format/pdf/src/core.js`（仅新增可选参数），`fdf7f21` 又改了 `.../format/dxf/src/core.js`（`escapeText` 控制字符清洗），三处 `ngm.lock` 的 `moduleDigest` 均未重算 | 本机 `check-ngm.mjs` 只校验摘要格式与模块存在，门禁仍绿；**CI 若配置 `NGM_BIN_URL` 启用 `ngm verify --deep`，这三个模块会因摘要不一致失败** | 本机无 ngm 工具链（PATH 与 `node_modules/.bin` 均无 `ngm`）；锁定的摘要：`packages/format/pdf` = `2a60d5a4…`、`packages/format/zip` = `2c42d43f…`、`packages/format/dxf` = `609fb87b…`（均未重算） |
+| NGM-01 | 已知风险（部分缓解） | 导入健壮性补丁 `9db0928` 改了 `ngm.vendor/.../format/zip/src/vendor/zip.js` 与 `.../format/pdf/src/core.js`（仅新增可选参数），`fdf7f21` 又改了 `.../format/dxf/src/core.js`（`escapeText` 控制字符清洗），三处 `ngm.lock` 的 `moduleDigest` 均未重算 | **已缓解**：`check-ngm.mjs` 新增 vendor 实际字节校验（`scripts/ngm-vendor-digest.json`，62 个文件），本地任何 vendor 字节漂移都会红并指出文件；**未解决**：`moduleDigest` 算法未公开且本机无 ngm，仍无法重算，CI 启用 `ngm verify --deep` 时这三个模块仍会失败 | 本机实测：篡改 `format/dxf/src/core.js` 1 字节 → 门禁退出 1 并输出「packages/format/dxf 的 vendor 字节与清单不一致：改动 1 / 缺失 0 / 新增 0（src/core.js）」；恢复后绿。锁定的摘要：`packages/format/pdf` = `2a60d5a4…`、`packages/format/zip` = `2c42d43f…`、`packages/format/dxf` = `609fb87b…`（均未重算） |
 
-> 处理方式：启用 `ngm verify --deep` 前，先用 ngm 重新锁定 `packages/format/zip`、`packages/format/pdf` 与 `packages/format/dxf` 并提交新的 `moduleDigest`。
+> 处理方式：启用 `ngm verify --deep` 前，先用 ngm 重新锁定 `packages/format/zip`、`packages/format/pdf` 与 `packages/format/dxf` 并提交新的 `moduleDigest`；修改任何 vendor 文件后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest`。
 
 ## 3. 已降级为限制（10 条，不是缺陷）
 

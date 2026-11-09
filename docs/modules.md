@@ -79,7 +79,7 @@
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
 | `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 10 种人为破坏并断言对应门禁变红 | 仓库副本 → 通过/失败 | CI |
-| `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性与消费方导出 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor` → 报告 | CI、`npm test` |
+| `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性、消费方导出，以及 vendor 实际字节 ↔ `scripts/ngm-vendor-digest.json` 逐文件 sha256；`--update-vendor-digest` 重写清单 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor` → 报告 | CI、`npm test` |
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致 | 仓库 → 报告 | `check.mjs` |
 | `check-plugin-api.mjs` | 运行时 `PlotPin` 键集合与 `contracts/plugin-api.json` 一致 | 源码/契约 → 报告 | `check.mjs` |
 | `check-deletions.mjs` | 结构性删除账本：`docs/deletions.md` 与代码中删除标记一致 | 文档+代码 → 报告 | `check.mjs` |
