@@ -85,7 +85,7 @@ async function openSnapshotManager(pid,pname){
           await openSnapshotManager(pid,pname);
         }else if(op==='restore'){
           if(state.meta.projectId!==pid){ toast(L('请先打开该工程再回滚'),'warn'); return; }
-          const ok=await showConfirm(L('回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。',{name:snapLabel(meta)}));
+          const ok=await showConfirm(L(TXT_SNAPSHOT_RESTORE_CONFIRM,{name:snapLabel(meta)}));
           if(!ok) return;
           clearDiffOverlay();
           await restoreSnapshotById(pid,sid);

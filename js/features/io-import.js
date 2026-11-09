@@ -116,7 +116,7 @@ async function importDwgFile(f){
   const info=dwgVersionInfo(head);
   openModal(L('DWG 文件兼容入口：{name}',{name:f.name}),
     '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('检测到 DWG 文件版本：'))+'<b>'+esc(info.label)+'</b></p>'+
-    '<p class="hint-text">'+esc(L('PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：'))+'</p>'+
+    '<p class="hint-text">'+esc(L(TXT_DWG_HINT))+'</p>'+
     '<ul class="hint-text" style="margin:8px 0 0;padding-left:20px;line-height:1.7">'+
       '<li><b>'+esc(L('转 DXF'))+'</b>：'+esc(L('AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；'))+'</li>'+
       '<li><b>'+esc(L('转 PDF'))+'</b>：'+esc(L('AutoCAD「打印/导出 → PDF」，可作矢量图纸或底图导入；'))+'</li>'+
@@ -170,7 +170,7 @@ async function importDxfFile(f){
   const Dxf=ensureVendor('Dxf');
   const meta=Dxf.inspect?Dxf.inspect(text):null;
   if(meta&&meta.binary){
-    return toast('该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入','error');
+    return toast(L(TXT_BINARY_DXF_HINT),'error');
   }
   let parsed;
   try{ parsed=Dxf.parseDxf(text,{strictUnits:true}); }
@@ -201,7 +201,7 @@ async function importDxfFile(f){
       ' <select id="dxfUnitSelect">'+unitOpts.map(([v,t])=>'<option value="'+v+'">'+esc(t)+'</option>').join('')+'</select></label>'+
     '<label style="display:block;margin:8px 0">'+esc(L('落点'))+
       ' <select id="dxfLanding"><option value="editable">'+esc(L('可编辑对象（按原图层）'))+'</option><option value="reference">'+esc(L('只读参考层（新建层并锁定）'))+'</option></select></label>'+
-    '<p class="hint-text">'+esc(L('参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。'))+'</p>',
+    '<p class="hint-text">'+esc(L(TXT_REF_LAYER_HINT))+'</p>',
     [{text:L('取消'),click:closeModal},
      {text:L('导入'),class:'primary',click:()=>{
        const unit=$('dxfUnitSelect').value, landing=$('dxfLanding').value;

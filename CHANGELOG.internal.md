@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 规则 i18n（features-ui F12）：规则名 / 违规消息 / 跳过原因 / CSV 表头统一走 L()
+
+- **Commit Hash**：`待回填`
+- **核心问题**：规则名（`对象重叠/最小间距/越界`）、违规消息（`'与 '+name+' 实质重叠 '+area+' m²'` 这类拼接）、跳过原因（`未设置矢量场地`）、CSV 表头全部硬编码中文；`lang=en` 时英文交付物里出现中文，且拼接消息无法被短语/模板覆盖（审计 F12）。
+- **核心改动**：
+  - `js/features/rules.js`：三条内建规则的 `ruleName` 与 `message` 改为 `L(key, params)` 模板（重叠/净距/部分或完全越界/轮廓自相交后缀）；`res.skipped` 与异常原因同走 `L()`；`runRuleCheck` 汇总层统一 `L(rule.name)`；CSV 表头与截断说明按当前语言生成（X/Y 不翻译）。
+  - 同时修正 `io-import.js:173` 二进制 DXF 提示直接 `toast('中文')` 未走 `L()` 的同类问题。
+  - `js/common/i18n.js`：补齐 17 条中英对照（规则名 3、CSV 表头 5、消息/跳过 9），缺口保持 10、不新增。
+- **字节回收来源（第二波要求中性或净减）**：同一提交把 7 条重复长文案提取为 `TXT_*` 单一常量（DWG 提示、场地拖拽/编辑提示、场地节点、参考线、捕捉循环、快照回滚确认、参考层提示、表格自动值提示、二进制 DXF、折线提示），i18n 键与界面共用；回收约 650 B，抵消 i18n 增量后净 **−17 B**。
+- **验证数据**（先红后绿）：
+  - 新增 4 条断言：修复前实测 4 条全红（规则名仍为 `对象重叠`、重叠消息中文、跳过原因中文、CSV 表头中文）；修复后 57.4/57.6/57.7 过滤跑 50/50 通过。
+  - `lang=en`：`ruleName='Object overlap'`、消息匹配 `^Substantially overlaps .* m²$`、跳过原因 `No vector site set`、CSV 表头 `Rule,Object ID,Object name,Related object,Floor,X,Y,Note,Value`。
+  - dist **834,004 → 833,987 B（−17 B）**；gzip 259,890 → 259,756；余量 **5,693 B**；SW `VERSION=124`；selftest **3631 / 0**（+4）；i18n 缺口 10 不变、覆盖率 45.72% → **47.01%**（新增 17 条中英对照）。
+- **公共抽象清单（新增）**：`TXT_DWG_HINT`、`TXT_SITE_DRAG_HINT`、`TXT_SITE_EDIT_HINT`、`TXT_SITE_NODE_HINT`、`TXT_GUIDE_HINT`、`TXT_SNAP_CYCLE_HINT`、`TXT_SNAPSHOT_RESTORE_CONFIRM`、`TXT_REF_LAYER_HINT`、`TXT_TABLE_AUTO_HINT`、`TXT_BINARY_DXF_HINT`、`TXT_POLYLINE_HINT`（均在 `js/common/i18n.js` 顶部）；影响调用方：`io-import.js`、`io-table.js`、`props.js`、`interaction.js`、`snapshot-ui.js`，中文文案逐字不变。
+- **遗留 TODO / 风险**：已打开的规则结果不会在切换语言后自动重译（结果在运行时本地化）；需重跑检查。CSV 历史文件语言取决于导出时界面语言。
+
 ## 2026-11-10 · 快照对比（features-ui F22）：列表与叠加层共用 2000 条上限
 
 - **Commit Hash**：`待回填`

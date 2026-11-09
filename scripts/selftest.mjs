@@ -5827,6 +5827,13 @@ await section("57.4 对象重叠：相交 / 贴合 / 容差 / 凹多边形 / 跨
   let r1 = run([rect(0,0),rect(5,5)]);
   eq('重叠-实质相交报 1 条', cnt(r1,'overlap'), 1);
   approx('重叠-交面积数值', r1.violations.find(v=>v.ruleId==='overlap').value, 25);
+  /* F12：规则名与拼接消息必须走 i18n，英文模式不能残留中文 */
+  api.I18N.setLang('en');
+  const rEn = run([rect(0,0),rect(5,5)]);
+  const ovEn = rEn.violations.find(v=>v.ruleId==='overlap');
+  eq('i18n-规则名英文', ovEn&&ovEn.ruleName, 'Object overlap');
+  ok('i18n-重叠消息英文', !!ovEn && /^Substantially overlaps .* m²$/.test(ovEn.message));
+  api.I18N.setLang('zh');
   eq('重叠-相邻贴合不报', cnt(run([rect(0,0),rect(10,0)]),'overlap'), 0);
   eq('重叠-0.02m 贴合容差内不报', cnt(run([rect(0,0),rect(10.02,0)]),'overlap'), 0);
   eq('重叠-0.10m 有间隙不报', cnt(run([rect(0,0),rect(10.10,0)]),'overlap'), 0);
@@ -5981,6 +5988,10 @@ await section("57.6 越界：场内 / 贴边 / 部分 / 完全 / 文字 / 尺寸
   const noSite = api.runRuleCheck({scope:'current'});
   eq('越界-无场地不产生违规', cnt(noSite), 0);
   ok('越界-无场地记录跳过原因', noSite.skipped.some(s=>s.ruleId==='bounds'&&/未设置/.test(s.reason)));
+  api.I18N.setLang('en');
+  const enSkip = api.runRuleCheck({scope:'current'});
+  ok('i18n-越界跳过原因英文', enSkip.skipped.some(s=>s.ruleId==='bounds'&&s.reason==='No vector site set'));
+  api.I18N.setLang('zh');
 }
 
 });
@@ -6004,6 +6015,11 @@ await section("57.7 违规清单 CSV 导出与点击定位", async () => {
   ok('CSV-逗号字段加引号', fc.includes('"规则,名"'));
   ok('CSV-公式注入加前导单引号', fc.includes("'=SUM(1)"));
   ok('CSV-文件名带日期与 .csv', /^rule-violations-\d{8}-\d{4}\.csv$/.test(api.ruleExportName()));
+  /* F12：CSV 表头随当前语言生成（英文交付物不出现中文表头） */
+  api.I18N.setLang('en');
+  const csvEn = api.ruleViolationsCsv(r);
+  ok('i18n-CSV 表头英文', csvEn.startsWith('\uFEFFRule,Object ID,Object name,Related object,Floor,X,Y,Note,Value'));
+  api.I18N.setLang('zh');
 
   /* F14：截断导出必须有显式标注，不能让用户误以为 CSV 完整 */
   const truncated={violations:fake.violations,fullCount:6001,exportedCount:1,stats:{truncated:1001}};

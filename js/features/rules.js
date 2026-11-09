@@ -400,10 +400,10 @@ function ruleOverlapCheck(ctx){
     if(!(hit.area>minArea)) continue;
     const c=objectCenter(a.o);
     violations.push({
-      ruleId:'overlap', ruleName:'对象重叠', objectId:a.o.id, objectName:a.o.name||'', peerId:b.o.id, peerName:b.o.name||'',
+      ruleId:'overlap', ruleName:L('对象重叠'), objectId:a.o.id, objectName:a.o.name||'', peerId:b.o.id, peerName:b.o.name||'',
       floorId:ctx.floor.id, floorName:ctx.floor.name, x:c[0], y:c[1], kind:'overlap',
       value:ruleRound(hit.area,3),
-      message:'与 '+b.o.name+' 实质重叠 '+fmt(hit.area)+' m²'+(hit.degenerate?'（轮廓自相交，按包围盒估算）':'')
+      message:L('与 {name} 实质重叠 {area} m²',{name:b.o.name,area:fmt(hit.area)})+(hit.degenerate?L('（轮廓自相交，按包围盒估算）'):'')
     });
   }
   return {violations,pairs:pairRes.pairs.length,theoretical:pairRes.theoretical,objects:items.length};
@@ -433,10 +433,10 @@ function ruleSpacingCheck(ctx){
     if(!Number.isFinite(gap)||gap+1e-9>=t) continue;
     const c=objectCenter(a.o);
     violations.push({
-      ruleId:'spacing', ruleName:'最小间距', objectId:a.o.id, objectName:a.o.name||'', peerId:b.o.id, peerName:b.o.name||'',
+      ruleId:'spacing', ruleName:L('最小间距'), objectId:a.o.id, objectName:a.o.name||'', peerId:b.o.id, peerName:b.o.name||'',
       floorId:ctx.floor.id, floorName:ctx.floor.name, x:c[0], y:c[1], kind:'spacing',
       value:ruleRound(gap,3), threshold:t,
-      message:'与 '+b.o.name+' 净距 '+fmt(gap)+' m，低于阈值 '+fmt(t)+' m'
+      message:L('与 {name} 净距 {gap} m，低于阈值 {t} m',{name:b.o.name,gap:fmt(gap),t:fmt(t)})
     });
   }
   return {violations,pairs:pairRes.pairs.length,theoretical:pairRes.theoretical,objects:items.length,unconfiguredTypes};
@@ -447,9 +447,9 @@ function rulePointOutsideSite(p,poly,tol){
 }
 function ruleBoundsCheck(ctx){
   const site=ctx.site;
-  if(!site||site.kind==='empty'||!site.shape) return {violations:[],skipped:'未设置矢量场地'};
+  if(!site||site.kind==='empty'||!site.shape) return {violations:[],skipped:L('未设置矢量场地')};
   const sitePoly=ruleCleanPolygon(siteOutlinePoints(site));
-  if(sitePoly.length<3) return {violations:[],skipped:'场地边界无效'};
+  if(sitePoly.length<3) return {violations:[],skipped:L('场地边界无效')};
   const siteSegs=rulePolygonSegments(sitePoly);
   const tol=ctx.config.tolerance;
   const violations=[];
@@ -467,10 +467,10 @@ function ruleBoundsCheck(ctx){
     }
     const c=objectCenter(o);
     violations.push({
-      ruleId:'bounds', ruleName:'越界', objectId:o.id, objectName:o.name||'', peerId:'', peerName:'',
+      ruleId:'bounds', ruleName:L('越界'), objectId:o.id, objectName:o.name||'', peerId:'', peerName:'',
       floorId:ctx.floor.id, floorName:ctx.floor.name, x:c[0], y:c[1], kind:partial?'partial':'full',
       value:outside,
-      message:partial?'部分越出场地边界':'完全越出场地边界'
+      message:partial?L('部分越出场地边界'):L('完全越出场地边界')
     });
   }
   return {violations,pairs:0,theoretical:0,objects:ctx.objects.length};
@@ -513,7 +513,7 @@ function runRuleCheck(opts={}){
     for(const rule of rules){
       const rc=cfg[rule.id]||{};
       if(rc.enabled===false) continue;
-      const per=result.perRule[rule.id]||(result.perRule[rule.id]={name:rule.name,count:0,pairs:0,theoretical:0,ms:0});
+      const per=result.perRule[rule.id]||(result.perRule[rule.id]={name:L(rule.name),count:0,pairs:0,theoretical:0,ms:0});
       const t=ruleNow();
       try{
         const ctx={objects,site:floor.site,floor,state,config:rc,mode,footprint,helpers:{objectCenter,objectBounds,pointInPolygon,segmentsIntersect,distanceToSegment}};
@@ -523,19 +523,19 @@ function runRuleCheck(opts={}){
           if(!v||typeof v!=='object') return;
           per.count++;                      /* F14：按截断前累加，总违规超上限时后面的规则不再显示 0 */
           result.violations.push(Object.assign({
-            ruleId:rule.id, ruleName:rule.name, objectId:'', objectName:'', peerId:'', peerName:'',
+            ruleId:rule.id, ruleName:L(rule.name), objectId:'', objectName:'', peerId:'', peerName:'',
             floorId:floor.id, floorName:floor.name, x:0, y:0, kind:'', value:0, message:''
-          },v,{ruleId:rule.id,ruleName:rule.name,floorId:floor.id,floorName:floor.name}));
+          },v,{ruleId:rule.id,ruleName:L(rule.name),floorId:floor.id,floorName:floor.name}));
         });
         if(res&&!Array.isArray(res)){
           const pairs=Number(res.pairs)||0, theoretical=Number(res.theoretical)||0;
           per.pairs+=pairs; per.theoretical+=theoretical;
           result.stats.pairs+=pairs; result.stats.theoretical+=theoretical;
-          if(res.skipped) result.skipped.push({ruleId:rule.id,ruleName:rule.name,floorId:floor.id,floorName:floor.name,reason:res.skipped});
+          if(res.skipped) result.skipped.push({ruleId:rule.id,ruleName:L(rule.name),floorId:floor.id,floorName:floor.name,reason:res.skipped});
           if(Array.isArray(res.unconfiguredTypes)) res.unconfiguredTypes.forEach(t=>unconfiguredTypes.add(t));
         }
       }catch(err){
-        result.skipped.push({ruleId:rule.id,ruleName:rule.name,floorId:floor.id,floorName:floor.name,reason:'规则异常：'+(err&&err.message||err)});
+        result.skipped.push({ruleId:rule.id,ruleName:L(rule.name),floorId:floor.id,floorName:floor.name,reason:L('规则异常：{msg}',{msg:err&&err.message||err})});
       }
       per.ms+=ruleNow()-t;
     }
@@ -566,7 +566,7 @@ function ruleViolations(opts){ return runRuleCheck(opts).violations; }
 
 /* -------------------- CSV 导出 -------------------- */
 function ruleViolationsCsv(result){
-  const rows=[['规则','对象编号','对象名称','关联对象','楼层','X','Y','说明','值']];
+  const rows=[[L('规则'),L('对象编号'),L('对象名称'),L('关联对象'),L('楼层'),'X','Y',L('说明'),L('值')]];
   const list=(result&&Array.isArray(result.violations)?result.violations:[]);
   list.forEach(v=>{
     rows.push([
@@ -577,7 +577,7 @@ function ruleViolationsCsv(result){
   });
   /* F14：截断时先写一行显式说明，避免用户把「前 N 条」当成完整清单 */
   const truncated=!!(result&&result.stats&&result.stats.truncated);
-  const note=truncated?`# 仅导出前 ${list.length} 条（共 ${Number(result.fullCount)||list.length} 条）\r\n`:'';
+  const note=truncated?`# ${L('仅导出前 {n} 条（共 {full} 条）',{n:list.length,full:Number(result.fullCount)||list.length})}\r\n`:'';
   return '\uFEFF'+note+rows.map(r=>r.map(c=>csvCell(c,',')).join(',')).join('\r\n')+'\r\n';
 }
 function ruleExportName(){

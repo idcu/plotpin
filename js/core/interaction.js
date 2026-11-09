@@ -14,7 +14,7 @@ function syncToolButtons(tool){
 }
 const TOOL_TITLES={
   select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
-  rect:L('区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消'),line:L('折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）'),
+  rect:L('区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消'),line:L(TXT_POLYLINE_HINT),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
   calibrate:L('比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用'),
   affine:L(TXT_AFFINE_HINT),
@@ -24,9 +24,9 @@ const TOOL_TITLES={
   'site-sector':L('绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消'),
   'site-parallelogram':L('绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）'),
   'site-polygon':L('绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消'),
-  'site-node':L('场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除'),
+  'site-node':L(TXT_SITE_NODE_HINT),
   'image-transform':L(TXT_IMAGE_TRANSFORM_HINT),
-  'guide':L('参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出')
+  'guide':L(TXT_GUIDE_HINT)
 };
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
 function updateToolTitle(){ $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||''); }
@@ -1086,7 +1086,7 @@ function helpShortcutRows(){
     [L('Shift（画线/标注/拖节点时）'),L('约束为水平/垂直线（正交）')],
     [L('Shift（拖矩形/椭圆/扇形时）'),L('正方形 / 正圆 / 45°方位吸附')],
     [L('对象捕捉'),L('自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪')],
-    ['Tab / Shift+Tab',L('画布聚焦时循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动')],
+    ['Tab / Shift+Tab',L(TXT_SNAP_CYCLE_HINT)],
     ['F6',L('在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）')],
     [L('空格 + 拖拽'),L('临时平移画布')],
     [L('方向键'),L('移动选中对象（Shift ×10 倍步距）')],['F',L('适应窗口（显示整张场地）')],

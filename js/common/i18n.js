@@ -9,6 +9,17 @@ const TXT_CLEAR_FLOOR_CONFIRM='将清空当前楼层的图片底图、矢量场�
 const TXT_AFFINE_HINT='仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消';
 const TXT_TABLE_IMPORT_HINT='可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。';
 const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋转，右下角=等比缩放，顶边中点=切变；只改图片，不动任何标注对象；图片角点靠近场地边角时自动吸附';
+const TXT_DWG_HINT='PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：';
+const TXT_SITE_DRAG_HINT='拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。';
+const TXT_SITE_EDIT_HINT='直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
+const TXT_SITE_NODE_HINT='场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除';
+const TXT_GUIDE_HINT='参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出';
+const TXT_SNAP_CYCLE_HINT='画布聚焦时循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动';
+const TXT_SNAPSHOT_RESTORE_CONFIRM='回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。';
+const TXT_REF_LAYER_HINT='参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。';
+const TXT_TABLE_AUTO_HINT='长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。';
+const TXT_BINARY_DXF_HINT='该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入';
+const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）';
 (function (global) {
   'use strict';
   const DICT = {
@@ -213,7 +224,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
       'Coordinates are world coordinates in metres and may be negative; areas stay true-to-scale. For triangles/arbitrary polygons use the Polyline tool with Closed area.',
     '该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。':
       'This type is a fixed-screen position marker. For scale-true coverage, use a circle/square/sector/bar point type under Layers/Types.',
-    '直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。':
+    [TXT_SITE_EDIT_HINT]:
       'Edit the coordinates/parameters below to adjust the site, or use the Site nodes tool to drag handles on canvas. Coordinates are world metres and may be negative.',
     '拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地随底图保持真实比例。':
       'Drag handles on canvas to adjust the site, or enter precise coordinates/parameters here. Coordinates are world metres and may be negative; the site stays true-to-scale.',
@@ -273,7 +284,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '点设备：单击放置（自动捕捉特征点，设置可关）':'Point: click to place (auto-snaps to feature points; toggle in Settings)',
     '区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消':
       'Area: choose a shape above and drag; Shift makes a square/circle or snaps sectors to 45°; Esc cancels',
-    '折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）':
+    [TXT_POLYLINE_HINT]:
       'Polyline: click point by point, double-click to finish; Shift constrains to horizontal/vertical; right-click/Esc cancels (enable Closed for triangles/polygons)',
     '文字：单击输入文字内容':'Text: click to enter text',
     '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
@@ -296,9 +307,8 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
       'Draw parallelogram site: drag base × height; it is created with a default 30° skew (editable in Site properties)',
     '绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消':
       'Draw polygon site: click along the boundary, double-click/Enter or ✓ closes it, Esc cancels',
-    '场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除':
-      'Site nodes: drag handles to reshape the vector site; enter exact coordinates/parameters in the panel; polygons support double-click edge insert and vertex delete',
-    '参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出':
+    [TXT_SITE_NODE_HINT]:'Site nodes: drag handles to reshape the vector site; enter exact coordinates/parameters in the panel; polygons support double-click edge insert and vertex delete',
+    [TXT_GUIDE_HINT]:
       'Guides: two clicks define an infinite guide (participates in intersection/perpendicular/parallel snapping); Backspace removes the last, Shift+G clears all, Esc exits',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
@@ -314,7 +324,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '正方形 / 正圆 / 45°方位吸附':'Square / circle / 45° bearing snap',
     '自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪':
       'Auto-snap endpoint □ midpoint △ center ◎ quadrant ◇ perpendicular ⊥ intersection × tangent; orange dashed = 45° polar/parallel tracking',
-    '画布聚焦时循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动':
+    [TXT_SNAP_CYCLE_HINT]:
       'Cycle snap types when the canvas is focused (Auto→Endpoint→Midpoint→Center→Quadrant→Intersection→Perpendicular→Tangent); click the bottom badge to restore Auto',
     '在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）':
       'Cycle focus across the top bar / tool rail / sidebar tabs (Tab inside the canvas cycles snapping; press F6 to leave)',
@@ -411,7 +421,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '项更新、':'updates, ', '项新增。':'new objects.',
     '可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；新对象支持点设备 / 矩形·圆·椭圆·扇形区域 / 折线（含闭合）/ 测距等标注（需「节点坐标」列）。':
       'Updatable: name, business type, layer, base coordinates, angle, width/height, shape, closed, node coordinates, dimension type, visibility, lock, note. New objects support point / rect·circle·ellipse·sector areas / polylines (closed) / measure annotations (Node coordinates column required).',
-    '长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。':
+    [TXT_TABLE_AUTO_HINT]:
       'Length/area/node count are recomputed from geometry; inconsistent manual values only warn and never block, geometry wins.',
     '建议导入前先导出 JSON 备份。':'Export a JSON backup before importing.',
     '取消':'Cancel', '合并导入':'Merge import',
@@ -493,7 +503,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     /* D-11：补齐 D-07/D-09 新增存档、导入预览与 UI 文案的英文条目 */
     '底图资产缺失，请重新导入底图':'Base-map asset missing; re-import the base map',
     '图片底图正在解码，请稍后重试':'Image base map is still decoding; try again shortly',
-    'PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：':'PlotPin does not bundle a DWG engine (no ODA/Aspose licence, no embedded DWG kernel) and never modifies the original file. Save a copy as DXF or PDF in CAD, then choose the converted file:',
+    [TXT_DWG_HINT]:'PlotPin does not bundle a DWG engine (no ODA/Aspose licence, no embedded DWG kernel) and never modifies the original file. Save a copy as DXF or PDF in CAD, then choose the converted file:',
     '转 DXF':'Convert to DXF',
     'AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；':'In AutoCAD: File → Save As → DXF (ASCII), preferably 2013/2018;',
     '转 PDF':'Convert to PDF',
@@ -509,7 +519,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '落点':'Target',
     '可编辑对象（按原图层）':'Editable objects (keep original layers)',
     '只读参考层（新建层并锁定）':'Read-only reference layer (new layer, locked)',
-    '参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。':'The reference layer is locked after import; unlock it in the layer manager to edit. DXF styles such as length/area/fill are not mapped; geometry and layers are authoritative.',
+    [TXT_REF_LAYER_HINT]:'The reference layer is locked after import; unlock it in the layer manager to edit. DXF styles such as length/area/fill are not mapped; geometry and layers are authoritative.',
     '导入':'Import',
     'DXF 中没有可导入实体':'No importable entities in this DXF',
     '提示：该 DXF 含 ':'Note: this DXF contains ',
@@ -598,7 +608,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '已批量隐藏标注':'Labels hidden for selection',
     '选中对象标注状态未变化':'Selected objects already have the requested label state',
     '没有可修改标注的选中对象':'No selected objects with editable labels',
-    '拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。':'Drag the control points on the canvas to adjust the site; you can also enter exact coordinates/parameters here. Coordinates are world coordinates (m) and may be negative; a site and an image base map can coexist.'
+    [TXT_SITE_DRAG_HINT]:'Drag the control points on the canvas to adjust the site; you can also enter exact coordinates/parameters here. Coordinates are world coordinates (m) and may be negative; a site and an image base map can coexist.'
   };
 
   /* 插值模板：中文整句（含 {占位}）→ 英文整句。调用方只传数据，不再拼接句子；
@@ -696,7 +706,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '删除快照「{name}」？只删除该版本记录，不影响当前工程与其它快照。':
       'Delete snapshot "{name}"? Only this version record is removed; the current project and other snapshots are unaffected.',
     '快照已生成：{n} 个对象 · {size} · {ms}ms': 'Snapshot created: {n} objects · {size} · {ms}ms',
-    '回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。':
+    [TXT_SNAPSHOT_RESTORE_CONFIRM]:
       'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack first (Ctrl+Z to revert); the rollback is saved immediately and editing continues.',
     '已回滚到快照：{time}': 'Rolled back to snapshot: {time}',
     '仿射校准 · 第 {n} 点': 'Affine calibration · point {n}',
@@ -924,7 +934,7 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '检测到 DWG 文件版本：':'DWG file version detected: ',
     'JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）':
       'Invalid JSON project (expected a v1 project exported by PlotPin)',
-    '该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入':
+    [TXT_BINARY_DXF_HINT]:
       'This DXF is binary (AutoCAD Binary DXF) and cannot be parsed in the browser; save it as ASCII DXF in CAD first',
     'PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）':
       'No usable graphics found in this PDF (it may be a scan without an embedded image, or use unsupported compression)',
@@ -980,7 +990,18 @@ const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋�
     '共 {n} 页，已导入第 1 页':'{n} page(s); imported page 1 only',
     '未配置阈值类型 {n} 个':'Unconfigured threshold types: {n}',
     ' · {n} 条':' · {n} violations', '检查完成：{n} 条违规':'Done: {n} violations',
-    '已导出 {n} 条违规':'Exported {n} violations'
+    '已导出 {n} 条违规':'Exported {n} violations',
+    /* F12：规则名 / 违规消息 / 跳过原因 / CSV 表头（此前硬编码中文） */
+    '规则':'Rule', '对象编号':'Object ID', '对象名称':'Object name', '关联对象':'Related object', '说明':'Note',
+    '对象重叠':'Object overlap', '最小间距':'Minimum spacing', '越界':'Out of bounds',
+    '与 {name} 实质重叠 {area} m²':'Substantially overlaps {name} by {area} m²',
+    '（轮廓自相交，按包围盒估算）':'(self-intersecting outline; bounding-box estimate)',
+    '与 {name} 净距 {gap} m，低于阈值 {t} m':'Clearance to {name} is {gap} m, below threshold {t} m',
+    '部分越出场地边界':'Partly outside the site boundary',
+    '完全越出场地边界':'Completely outside the site boundary',
+    '未设置矢量场地':'No vector site set', '场地边界无效':'Invalid site boundary',
+    '规则异常：{msg}':'Rule error: {msg}',
+    '仅导出前 {n} 条（共 {full} 条）':'Exporting first {n} of {full}'
   };
   Object.assign(PHRASES, MORE);
 

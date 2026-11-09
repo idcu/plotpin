@@ -175,8 +175,8 @@ function sitePropsHTML(site, mode){
       <label>${esc(L('锁定'))}</label><div><input type="checkbox" data-site-meta="locked" ${site.locked?'checked':''}></div>
     </div>`;
   const hint=tool
-    ?'拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。'
-    :'直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
+    ?TXT_SITE_DRAG_HINT
+    :TXT_SITE_EDIT_HINT;
   return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L(siteKindName(site.kind||sh.type)))}</span></h3>
     ${siteMeta}
     <div class="form-grid">${params}</div>
