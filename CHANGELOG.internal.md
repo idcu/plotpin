@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 快照对比（features-ui F22）：列表与叠加层共用 2000 条上限
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`snapshot-ui.js` 列表 `diff.items.slice(0,2000)`，但 `setDiffOverlay(true,diff.items,…)` 传入**全量**差异；两份快照差异数万时，画布每帧都要遍历全部条目（虽有当前楼层过滤，仍是 O(全量)），打开/关闭与每次视图刷新都会变慢（审计 F22）。
+- **核心改动**：
+  - `js/core/snapshot.js`：新增 `DIFF_ITEM_MAX=2000`；`setDiffOverlay` 内统一 `items.slice(0,DIFF_ITEM_MAX)`（防线放在状态入口，任何调用方都受限）。
+  - `js/features/snapshot-ui.js`：列表与叠加共用同一个 `DIFF_ITEM_MAX`，不再写死 2000；两处 `setDiffOverlay` 传截断后的 `shown`。当前楼层过滤仍由 `drawDiffOverlay` 逐帧执行（切楼层即时生效）。
+- **字节回收来源（第二波要求中性或净减）**：本提交同时把重复长文案「图片变换…」提取为 `TXT_IMAGE_TRANSFORM_HINT`（i18n 键与工具栏提示共用），回收约 160 B，抵消功能增量 +48 B 后净 **−58 B**。
+- **验证数据**（先红后绿）：
+  - 新增 2 条断言：`setDiffOverlay(true, 3000 条)` 修复前 `items.length=3000`，修复后 2000；`DIFF_ITEM_MAX=2000`。修复前 selftest 因 `DIFF_ITEM_MAX is not defined` 加载失败，修复后 B-04 分区 91/91 通过。
+  - dist **834,062 → 834,004 B（−58 B）**；gzip 259,950 → 259,890；余量 **5,676 B**；SW `VERSION=123`；selftest **3627 / 0**（+2）。
+- **公共抽象清单（新增）**：`DIFF_ITEM_MAX`（`js/core/snapshot.js`，列表与叠加共用）、`TXT_IMAGE_TRANSFORM_HINT`（`js/common/i18n.js`）；影响调用方：快照对比 UI、`js/core/interaction.js` 的 `TOOL_TITLES`，文案内容逐字不变。
+- **遗留 TODO / 风险**：叠加层只保留前 2000 条差异（与列表一致）；超出部分不绘制，但列表底部已有「仅列出前 N / 总数」提示。
+
 ## 2026-11-10 · 规则统计（features-ui F14）：截断前的完整计数 + 展示/导出显式标注
 
 - **Commit Hash**：`待回填`

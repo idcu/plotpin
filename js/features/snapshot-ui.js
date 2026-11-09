@@ -104,7 +104,7 @@ async function openSnapshotCompare(pid,aId,bId,pname){
   const counts=Object.keys(DIFF_CATEGORY_LABELS).map(k=>
     `<span style="color:${DIFF_OVERLAY_COLORS[k]};font-weight:600">${esc(L(DIFF_CATEGORY_LABELS[k]))} ${diff.counts[k]}</span>`).join('　')
     +`　<span style="color:#475569">${esc(L('未变'))} ${diff.unchanged}</span>`;
-  const shown=diff.items.slice(0,2000);
+  const shown=diff.items.slice(0,DIFF_ITEM_MAX);
   const items=shown.map(it=>{
     const color=DIFF_OVERLAY_COLORS[it.category]||'#f59e0b';
     return `<div class="proj-row" style="align-items:flex-start">
@@ -126,6 +126,6 @@ async function openSnapshotCompare(pid,aId,bId,pname){
     [{text:L('返回快照列表'),click:()=>{ closeModal(); openSnapshotManager(pid,pname); }},
      {text:L('关闭'),class:'primary',click:closeModal}],
     {onClose:clearDiffOverlay});
-  $('snapOverlayChk').onchange=e=>setDiffOverlay(e.target.checked,diff.items,{aId,bId});
-  setDiffOverlay(true,diff.items,{aId,bId});
+  $('snapOverlayChk').onchange=e=>setDiffOverlay(e.target.checked,shown,{aId,bId});
+  setDiffOverlay(true,shown,{aId,bId});
 }

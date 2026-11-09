@@ -79,7 +79,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 - gzip 硬上限：**286,720 B（280 KiB）**；`GZIP_WARN_BYTES = 266,240` 只预警（同上，`lib/budget.mjs` 单一来源）。
 - 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-09 实测：`bytes = 834,252`、gzip `259,831`、余量 `5,428 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-10 实测：`bytes = 834,004`、gzip `259,890`、余量 `5,676 B`（`node scripts/build.mjs --check` 复算一致）。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---

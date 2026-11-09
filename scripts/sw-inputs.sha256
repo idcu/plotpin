@@ -2,13 +2,13 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=122
+version=123
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
 a4122a38c0ac51ba7ea5ba1287a91ee2dc9a640891144470649390192df9a226  js/common/dxf.js
-cb4d7c84094e0f4eafabc758e13921a165d84d0b28081f1b8a9da5728cca0925  js/common/i18n.js
+f4a639bd668ec84cc1b45b8614bc013a4e17b37fe9c0a220e495fc24c47712ac  js/common/i18n.js
 5cc3adc014fcfb35c0b2b29b2c5f4dc8991ca6deea2a00747cef2f867342a319  js/common/merge.js
 884b70dd99ebe2b47ed86126b57bd9a1343d8606c4b44368ac5fa4a8745bc2ac  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
@@ -20,11 +20,11 @@ bcddea9a431948fae2f237f8eeb8c6d4b897697356fe11f5ba26eb2d460edbcc  js/common/symb
 9f325007e04d786ae5f816958a7d391ab8c74a4955dd48ce35182ac1a1769e7c  js/core/geometry-site.js
 5314889d9e938b19caf1ff72016d6af6c3a1b16f53afdccccb1b856b536989b5  js/core/geometry-transform.js
 64704f6b77e96f853fa19cf9b45a8ea954dae79fa36cbf003e2218ef8e4a7a28  js/core/geometry.js
-99c15147439c0c1ba67682c84a15ca3d48059b04fdf3da7eddd449bd7def004e  js/core/interaction.js
+b013602929e90da33efe02f7accb67e5d2fb4401ec5f39590ce3770ef0f09a6c  js/core/interaction.js
 d23e769bc773b2eacad0ec81bf066b595eaf012223e0b4a725fbe41aede43c88  js/core/model.js
 fd458593e9ba39c7c7906f7a5889a371c25b655a0c4a3957761a6bd64b12a663  js/core/persistence.js
 cbf6047136d0011827790d340a2c7a1537e0a3ef970faceae6631d64654e8c11  js/core/render.js
-65d938352b836e0466ecb362e58fcea8f48714d4266049c205d109bbac008a60  js/core/snapshot.js
+6645f4059b06d2f21fc32624c532b8784b1ae95c786838f268dccf072ce49a6a  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
 c4ecfa089e5f0a86cab9704a622f6ea0877985cfbbdda4673e301cfb0f3ed945  js/core/viewport.js
 c717628ed256a4372b9851cafadbf55689c13fd118729943725b587528f87169  js/features/catalog.js
@@ -38,7 +38,7 @@ cd2006b307d76dd4b3292dd281e17fa7e19d3a961feec41086a24a727609a0a4  js/features/co
 65e1e73cd64983fa70af19f9e3d63f432f72b0118b5cad388cc75c5b22758cdf  js/features/plugins.js
 d340773edbb7d0dde0561465e853b16660d985628502ec61ace1285e55f3d41c  js/features/props.js
 3395131db2e3615639b52bcee3761635630626e0c302cba2e3e87cfa07ba4a1e  js/features/rules.js
-423ee24cf1ff09d4e575e5160a9afa3fd2e6f937f3f45df16cf631515dbbaca5  js/features/snapshot-ui.js
+ee94b18f219951e4d045e5a7577af1b43318830c716cd535baab0847f6ff56da  js/features/snapshot-ui.js
 7a0458e869a9149af944e31ae30b2f996a8c2fc3f4671fccdd8dbb051df65593  js/features/ui-panels.js
 5380aed910a4f2083956552338e62495138f95a0dca86bd97213bcf1eead6080  js/features/ui-shell.js
 34d4ca019bf4e3e7f7e8bb648d46a2c7d9ebe6b4eca0a11f9e1203ceeba47e40  manifest.webmanifest

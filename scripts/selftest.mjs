@@ -223,7 +223,7 @@ code += `\n;globalThis.__api = {
   snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById, createSnapshot, sameJson,
   snapshotFloorMetas, diffSceneItems,
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
-  DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS,
+  DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS, DIFF_ITEM_MAX,
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
@@ -7878,6 +7878,13 @@ await section("73. B-04 版本快照：独立命名空间、照片引用化、A/
   eq('B-04 叠加 A/B 标记', [api.diffOverlay.aId,api.diffOverlay.bId], ['A1','B1']);
   api.clearDiffOverlay();
   eq('B-04 叠加关闭后条目清空', [api.diffOverlay.on,api.diffOverlay.items.length], [false,0]);
+
+  /* F22：叠加层必须与列表共用截断，不能把全量差异交给每帧渲染 */
+  const many=Array.from({length:3000},(_,i)=>({id:'I'+i,category:'modified',floorIds:[],b:{kind:'point',x:i,y:0}}));
+  api.setDiffOverlay(true,many);
+  eq('F22 叠加条目按上限截断', api.diffOverlay.items.length, 2000);
+  eq('F22 列表与叠加共用同一上限', api.DIFF_ITEM_MAX, 2000);
+  api.clearDiffOverlay();
 
   /* N-21：场景级差异——场地顶点/底图/楼层名必须可见，且排在对象差异之后 */
   const S1={site:{name:'S',shape:{type:'rect',w:100,h:50,points:[[0,0],[100,0],[100,50],[0,50]]}},background:{type:'blank'},floors:[{id:'f1',name:'1F'}]};

@@ -8,6 +8,7 @@
 const TXT_CLEAR_FLOOR_CONFIRM='将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。';
 const TXT_AFFINE_HINT='仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消';
 const TXT_TABLE_IMPORT_HINT='可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。';
+const TXT_IMAGE_TRANSFORM_HINT='图片变换：橙色中心=平移，蓝点=旋转，右下角=等比缩放，顶边中点=切变；只改图片，不动任何标注对象；图片角点靠近场地边角时自动吸附';
 (function (global) {
   'use strict';
   const DICT = {
@@ -277,7 +278,7 @@ const TXT_TABLE_IMPORT_HINT='可更新：名称、业务类型、图层、基点
     '文字：单击输入文字内容':'Text: click to enter text',
     '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
-    '图片变换：橙色中心=平移，蓝点=旋转，右下角=等比缩放，顶边中点=切变；只改图片，不动任何标注对象；图片角点靠近场地边角时自动吸附':
+    [TXT_IMAGE_TRANSFORM_HINT]:
       'Image transform: orange center = move, blue dot = rotate, bottom-right = uniform scale, top-edge midpoint = shear; affects the image only (objects stay put); image corners snap to site corners',
     '比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用':
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',

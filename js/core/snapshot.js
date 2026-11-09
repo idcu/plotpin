@@ -343,8 +343,10 @@ function diffSnapshots(a,b){
 }
 /** 差异叠加态（渲染层读取；仅预览期间开启，关闭弹窗时清除） */
 let diffOverlay={on:false,items:[],aId:'',bId:''};
+/* F22：列表与画布叠加共用同一上限；差异数万时每帧只遍历前 N 条 */
+const DIFF_ITEM_MAX=2000;
 function setDiffOverlay(on,items,ids){
-  diffOverlay={on:!!on,items:on&&Array.isArray(items)?items:[],aId:ids&&ids.aId||'',bId:ids&&ids.bId||''};
+  diffOverlay={on:!!on,items:on&&Array.isArray(items)?items.slice(0,DIFF_ITEM_MAX):[],aId:ids&&ids.aId||'',bId:ids&&ids.bId||''};
   if(typeof requestRender==='function') requestRender();
 }
 function clearDiffOverlay(){ setDiffOverlay(false,[]); }
