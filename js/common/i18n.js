@@ -588,6 +588,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     'DXF 读取失败：{msg}': 'DXF read failed: {msg}',
     'DXF 导入失败：{msg}': 'DXF import failed: {msg}',
     'PDF 导入失败：{msg}': 'PDF import failed: {msg}',
+    'PDF 导入失败（已回滚）：{msg}': 'PDF import failed (rolled back): {msg}',
     '目录已导入：{n} 个型号': 'Catalog imported: {n} models',
     '目录导入失败：{msg}': 'Catalog import failed: {msg}',
     '工程导入失败：{msg}': 'Project import failed: {msg}',

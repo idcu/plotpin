@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 数据完整性（data-io P3-20）：PDF 导入提交阶段事务化
+
+- **Commit Hash**：`待回填`
+- **核心问题**：`importPdfFile` 解析/限额校验通过后直接改 `state.background`、批量 push 对象与 `text.builtin` 类型、扩场地，全程无回滚；中途异常（如 `baseObject`/`fitView` 抛错）会留下半套对象、已改底图与残留类型，且成功 toast/落盘可能已发生。
+- **核心改动**：
+  - 提交阶段前统一 `snapshotHistoryState(state)` + 一次 `pushHistory()`；移除图片/矢量两条路径各自的 `pushHistory()`。
+  - 整个提交块包进 `try/catch`：失败时 `materializeHistoryState(backup)` 还原现场、弹出刚压入的历史帧、恢复 `future`、还原 `bgDataUrl/bgImage/bgImageState`，清选择并重绘；提示改为「PDF 导入失败（已回滚）：…」。
+  - 把 `fitView()` 提到 `commitChange()` 之前：视图阶段异常不会再先报“已导入”成功。
+- **预算**：dist **831,034 → 831,559 B（+525 B）**；gzip **259,030 → 259,065 B**；余量 **8,646 → 8,121 B**（>8,000 预警线）；SW `VERSION=131 → 132`。
+- **验证数据**（先红后绿）：
+  - 新增 selftest 分区 37d：成功路径导入文本对象；失败路径用真实最小 PDF + `fitView` 抛错，断言对象/底图/场地/类型数量全部还原、撤销栈不新增、错误提示含「已回滚」、无误报成功。旧实现下 `fitView` 异常直接抛出、测试红；新实现 **9/9 通过**。
+  - 全量 selftest **3673 通过 / 0 失败**（+9，分区 136 → 137）；i18n 覆盖率 **47.18%**（新增回滚模板 +0.04pp）、缺口 10、TEMPLATES 111。
+  - e2e 123 通过 + 1 跳过；五道门禁全绿（见提交前实测）。
+- **公共抽象清单**：无新增；复用既有 `snapshotHistoryState / materializeHistoryState` 事务模式与 DXF 导入同款回滚路径。
+- **遗留风险**：失败前已写入 IndexedDB 的 PDF 内嵌图资产会成为孤儿，交由后续 `pruneBgAssets` 回收（不误删旧资产）；回滚不恢复用户原有选中集（与 DXF/JSON 导入一致，统一清空）。
+
 ## 2026-11-10 · 离线协作（MERGE-10）：图层/类型删除传播
 
 - **Commit Hash**：`待回填`

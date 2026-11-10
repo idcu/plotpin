@@ -312,6 +312,11 @@ async function importPdfFile(f){
   }
   const pdfErrs=importLimitErrors({entities:pagePaths.length+pageTexts.length});
   if(pdfErrs.length) return toast(L('PDF 导入失败：{msg}',{msg:importLimitMessage(pdfErrs)}),'error');
+  /* P3-20：解析与限额校验通过后，提交阶段整体事务化；失败回滚到导入前现场 */
+  const backup=snapshotHistoryState(state), prevFuture=history.future;
+  const prevBgDataUrl=bgDataUrl, prevBgImage=bgImage, prevBgImageState=bgImageState;
+  pushHistory();
+  try{
   /* 扫描件/带底图的 PDF：第 1 页内嵌图作为图片底图 */
   let bgNote='';
   let bgStored=true;
@@ -328,7 +333,6 @@ async function importPdfFile(f){
     const id=assetIdFor(bin);
     try{ await assetPut(id,{bytes:bin,mime}); }
     catch(e){ bgStored=false; }   /* IndexedDB 不可用时降级：保留 dataUrl，避免静默丢图 */
-    pushHistory();
     state.background.kind='image';
     state.background.fileName=f.name.replace(/\.pdf$/i,'')+'（PDF内嵌图）';
     state.background.assetId=bgStored?id:'';
@@ -345,7 +349,6 @@ async function importPdfFile(f){
   /* 矢量内容：路径转折线/区域，文本转文字对象。点→米。只取第 1 页。 */
   const counts={line:0,area:0,text:0};
   const wM=(page1?page1.width:pdf.pageWidth)*k, hM=(page1?page1.height:pdf.pageHeight)*k;
-  if((pagePaths.length||pageTexts.length)&&!img) pushHistory();
   /* 矢量内容批量建对象：同样使用编号作用域，避免逐个扫描全量 state */
   withObjectNameScope(allObjectNames(), () => {
     for(const p of pagePaths){
@@ -376,10 +379,19 @@ async function importPdfFile(f){
   selectedIds.clear();
   const totalPages=pageList?pageList.length:(Number(pdf.pageCount)||1);
   const pageNote=totalPages>1?' / '+L('共 {n} 页，已导入第 1 页',{n:totalPages}):'';
+  fitView();
   commitChange(L('PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}',
     {line:counts.line,area:counts.area,text:counts.text,notes:pageNote+(bgNote?' / '+bgNote:'')}));
   if(!bgStored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');
-  fitView();
+  }catch(e){
+    state=materializeHistoryState(backup);
+    if(history.past.length) history.past.pop();
+    history.future=prevFuture;
+    bgDataUrl=prevBgDataUrl; bgImage=prevBgImage; bgImageState=prevBgImageState;
+    selectedIds.clear();
+    requestRender(); updateHistoryButtons();
+    toast(L('PDF 导入失败（已回滚）：{msg}',{msg:e&&e.message||e}),'error');
+  }
 }
 
 /* -------------------- 底图/场地：选择弹窗与矢量场地应用 -------------------- */

@@ -99,7 +99,7 @@ code += `\n;globalThis.__api = {
   get state(){ return state; },
   get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
-  importJsonFile, openProjectById,
+  importJsonFile, importPdfFile, openProjectById,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, assertProjectWithinLimits, baseObject,
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
   importLimitErrors, importLimitMessage, dsvRowsExceed, handleImportFile,
@@ -3109,6 +3109,44 @@ asyncSuites.push((async()=>{
   eq('N09-文本内容不变', scaled.texts[0].text, 'CTM');
 })());
 
+});
+
+/* 37d. P3-20 PDF 导入事务：中途失败回滚 -------------------------------- */
+await section("37d. P3-20 PDF 导入事务：中途失败回滚", async () => {
+{
+  const obj=(n,body)=>n+' 0 obj\n'+body+'\nendobj\n';
+  const pdfSrc=(()=>{
+    let s='%PDF-1.4\n';
+    s+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+    s+=obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    s+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+    const body='BT /F1 12 Tf 5 7 Td (TX) Tj ET\n';
+    s+=obj(4,'<< /Length '+body.length+' >>\nstream\n'+body+'endstream');
+    return s;
+  })();
+  const file=()=>({name:'p320.pdf',arrayBuffer:async()=>new TextEncoder().encode(pdfSrc).buffer});
+  api.resetState();
+  await api.importPdfFile(file());
+  eq('P3-20 成功路径导入文本', api.state.objects.length, 1);
+  eq('P3-20 成功路径文本类型', api.state.objects[0].typeId, 'text.builtin');
+
+  api.resetState();
+  const hist0=api.history.past.length;
+  const bg0=JSON.stringify(api.state.background), site0=JSON.stringify(api.state.site);
+  const ot0=api.state.objectTypes.length;
+  const msgs=[]; const origToast=sandbox.toast, origFit=sandbox.fitView;
+  sandbox.toast=(m,t)=>msgs.push({m,t});
+  sandbox.fitView=()=>{ throw new Error('boom'); };
+  await api.importPdfFile(file());
+  sandbox.fitView=origFit; sandbox.toast=origToast;
+  eq('P3-20 失败后对象未残留', api.state.objects.length, 0);
+  eq('P3-20 失败后底图未变', JSON.stringify(api.state.background), bg0);
+  eq('P3-20 失败后场地未变', JSON.stringify(api.state.site), site0);
+  eq('P3-20 失败后类型未残留', api.state.objectTypes.length, ot0);
+  eq('P3-20 失败后撤销栈不新增', api.history.past.length, hist0);
+  ok('P3-20 失败提示已回滚', msgs.some(x=>x.t==='error'&&String(x.m).includes('已回滚')));
+  ok('P3-20 失败不误报成功', !msgs.some(x=>x.t==='success'));
+}
 });
 
 /* 38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆盖率与盲区 ------------------- */
