@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 导出健壮性（data-io P3-04）：导出统一错误出口；合并语义待产品决策
+
+- **Commit Hash**：`待回填`
+- **P3-04（已完整修复）**：CSV/TSV/XLSX/PNG/SVG/DXF（以及 JSON/PDF/报价/目录/标签）原先直接调用，同步异常与异步 rejection 都会变成未处理错误；PDF/打印已有自己的 try/catch。
+  - `js/features/io-export.js` 新增 `runExport(fn)`：同步异常立即提示，返回 thenable 时挂 `.catch`；导出分发器 12 个分支统一经它调用，插件导出分支保持原路径（`plugins.js` 已有 catch）。
+  - 错误文案复用 `L('导出失败：{msg}')`（补英文条目，缺口不增）。
+- **合并语义（P3-09/10/11，本轮未改）**：三条都改变跨设备合并的可见结果（未知字段丢弃、图层/类型远端删除不传播、空名回退），属产品取舍；已写入 `docs/known-issues.md` §2.14 并列出需要的决策。P2-12（墓碑上限）实测当前已是 `TOMBSTONE_MAX = OBJECTS_MAX = 100000`，无需处理。
+- **预算**：动手前预估 +250~350 B，实际 **+439 B**（i18n 条目与新分支比预估多）；余量 5,555 → **5,116 B**（仍 >5,000 停线）。
+- **验证数据**（先红后绿）：
+  - 28.8 新增 2 条断言：修复前 `runExport is not defined` 加载失败；修复后同步 throw 与 `Promise.reject` 都产生 `error` 级「导出失败：…」提示，15/15 通过。
+  - dist **834,125 → 834,564 B（+439 B）**；gzip 259,816 → 259,905；余量 **5,116 B**；SW `VERSION=126`；selftest **3638 / 0**（+2）。
+- **公共抽象清单（新增）**：`runExport(fn)`（`js/features/io-export.js`，导出统一错误出口）；影响调用方：`exportBtn` 分发器的 12 个导出分支，插件导出路径未改。
+- **遗留 TODO / 风险**：合并语义三项待产品决策（见 known-issues §2.14）；`runExport` 只负责把错误转成提示，不改变各导出格式本身的产物语义。
+
 ## 2026-11-10 · 渲染分配（core-kernel P2-3）：objectBounds 解析式改造标记不做
 
 - **Commit Hash**：`待回填`

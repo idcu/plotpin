@@ -163,7 +163,7 @@ code += `\n;globalThis.__api = {
   formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg, exportFooterText, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
-  normalizeExportColor, dxfSanitizeName,
+  normalizeExportColor, dxfSanitizeName, runExport,
   outlineOf, objectIndexById, dragObjectIndex, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
@@ -2027,6 +2027,14 @@ await section("28.8 N-10 导出层转义与结构注入加固", async () => {
   try{ api.pathToPolylines('A10,10 0 0 0 20,20'); }catch(e){ threw=true; }
   eq('N10-A 起始裸路径不抛异常', threw, false);
   eq('N10-合法 M+A 路径可离散', api.pathToPolylines('M0,0 A5,5 0 0 1 10,0').length, 1);
+  /* P3-04：导出统一错误出口，同步异常与异步 rejection 都必须变成可见提示 */
+  const msgs=[], prevToast=sandbox.toast;
+  sandbox.toast=(m,k)=>msgs.push({m,k});
+  api.runExport(()=>{ throw new Error('boom'); });
+  ok('导出错误-同步异常有可见提示', msgs.some(x=>x.k==='error'&&/导出失败：boom/.test(x.m)));
+  await api.runExport(()=>Promise.reject(new Error('async-boom')));
+  ok('导出错误-异步拒绝有可见提示', msgs.some(x=>x.k==='error'&&/async-boom/.test(x.m)));
+  sandbox.toast=prevToast;
   api.resetState();
 }
 });

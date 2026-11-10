@@ -553,7 +553,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '插件已加载：':'Plugin loaded: ',
     '插件已卸载：':'Plugin unloaded: ',
     '未保存':'Unsaved',
-    '导出失败：':'Export failed: ',
+    '导出失败：':'Export failed: ', '导出失败：{msg}':'Export failed: {msg}',
     '已清理未引用资产，正在重试保存':'Unused assets cleared; retrying save',
     '测':'Measure',
     '无':'None',

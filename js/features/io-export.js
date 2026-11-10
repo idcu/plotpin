@@ -3,21 +3,31 @@
 $('exportBtn').onclick=()=>{
   const kind=$('exportKind').value;
   if(kind.startsWith('plugin:')){ if(typeof exportViaPlugin==='function') exportViaPlugin(kind.slice(7)); return; }
-  if(kind==='json') exportJSON();
-  if(kind==='png') exportPNG();
-  if(kind==='svg') exportSVG();
-  if(kind==='pdf') exportPDF();
-  if(kind==='dxf') exportDXF();
-  if(kind==='csv') exportDelimited(',','csv','text/csv;charset=utf-8');
-  if(kind==='tsv') exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8');
-  if(kind==='xlsx') exportXlsx();
-  if(kind==='quote-csv') exportQuote('csv');
-  if(kind==='quote-xlsx') exportQuote('xlsx');
-  if(kind==='catalog-json') exportCatalogJSON();
+  if(kind==='json') runExport(()=>exportJSON());
+  if(kind==='png') runExport(()=>exportPNG());
+  if(kind==='svg') runExport(()=>exportSVG());
+  if(kind==='pdf') runExport(()=>exportPDF());
+  if(kind==='dxf') runExport(()=>exportDXF());
+  if(kind==='csv') runExport(()=>exportDelimited(',','csv','text/csv;charset=utf-8'));
+  if(kind==='tsv') runExport(()=>exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8'));
+  if(kind==='xlsx') runExport(()=>exportXlsx());
+  if(kind==='quote-csv') runExport(()=>exportQuote('csv'));
+  if(kind==='quote-xlsx') runExport(()=>exportQuote('xlsx'));
+  if(kind==='catalog-json') runExport(()=>exportCatalogJSON());
   if(kind==='catalog-delete') deleteCatalog();
-  if(kind==='labels') exportLabelSheet();
+  if(kind==='labels') runExport(()=>exportLabelSheet());
   if(kind==='title-block') openTitleBlockDialog();
 };
+/** 导出统一错误出口：同步异常与异步 rejection 都转成可见提示（审计 P3-04）。
+ *  返回可 await 的 Promise（同步路径为 undefined），便于自测等待 rejection 被消费。 */
+function runExport(fn){
+  const fail=e=>toast(L('导出失败：{msg}',{msg:e&&e.message||e}),'error');
+  try{
+    const r=fn();
+    if(r&&typeof r.catch==='function') return r.catch(fail);
+    return r;
+  }catch(e){ fail(e); }
+}
 function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800);
 }
