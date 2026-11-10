@@ -293,7 +293,8 @@ function mergeFloorMeta(fa, fb, stats){
   if (stats && siteLost && siteNewer && !fb.site) stats.siteCleared++;
   return {
     id: fa.id,
-    name: newer ? fb.name : (fa.name || fb.name),
+    /* MERGE-11：空名不是有效覆盖（重建时会被归一化成 F<n>）；较新侧为空时回退旧名 */
+    name: (newer && fb.name) || fa.name || fb.name || '',
     updatedAt: newer ? fb.updatedAt : fa.updatedAt,
     background: newer ? (fb.background || fa.background) : (fa.background || fb.background),
     site,

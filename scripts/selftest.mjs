@@ -6312,6 +6312,11 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   const ids = p => (p.objects || []).map(o => o.id).join(',');
   const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0, siteDeleted: 0, siteCleared: 0 };
 
+  /* MERGE-11：远端较新但楼层名为空时，必须回退旧名，不能被归一化成 F<n> */
+  const floorLocal=P([], {floors:[{id:'floor.default',name:'旧名',updatedAt:T1}]});
+  const floorRemote=P([], {floors:[{id:'floor.default',name:'',updatedAt:T2}]});
+  eq('合并-远端空楼层名回退旧名', M(floorLocal,floorRemote).project.floors.find(f=>f.id==='floor.default').name, '旧名');
+
   const m1 = M(P([]), P([O('A', T1)]));
   eq('合并-新增对象数量', m1.project.objects.length, 1);
   eq('合并-新增统计', m1.stats.added, 1);
