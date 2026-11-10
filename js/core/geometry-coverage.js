@@ -42,7 +42,7 @@ function pointInFootprint(p,cam){
 function regionPolygons(st){
   const out=[];
   for(const o of st.objects){
-    if(!isVisible(o)) continue;
+    if(!effectiveVisible(o)) continue;
     if(o.kind==='rect'){
       const pts=shapeWorldPoints(o), area=shapeArea(o);
       if(pts.length>=3&&area>0) out.push({id:o.id,name:o.name||'未命名区域',points:pts,area});
@@ -91,7 +91,7 @@ function coverageGridPlan(items,opt){
  */
 function analyzeCoverage(st,opt){
   opt=opt||{};
-  const cameras=st.objects.filter(o=>isVisible(o)).map(cameraFootprint).filter(Boolean);
+  const cameras=st.objects.filter(o=>effectiveVisible(o)).map(cameraFootprint).filter(Boolean);
   /* 摄像机参数预计算：半径平方 / 朝向单位向量 / half 角余弦平方；
      包围盒用于廉价预筛，绝大多数格心离所有设备都很远 */
   const cams=cameras.map(c=>{
@@ -102,7 +102,7 @@ function analyzeCoverage(st,opt){
       half:c.fov?c.fov/2:180,
       ...cameraPrefilterBox(c,cosA,sinA)};
   });
-  const ignored=st.objects.filter(o=>o.kind==='point'&&isVisible(o)&&!(Number(o.phys)>0)).length;
+  const ignored=st.objects.filter(o=>o.kind==='point'&&effectiveVisible(o)&&!(Number(o.phys)>0)).length;
   const raw=regionPolygons(st).map(r=>{
     const bb=polygonBBox(r.points);
     return {id:r.id,name:r.name,points:r.points,area:r.area,bb};

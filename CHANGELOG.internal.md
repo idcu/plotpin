@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · core 跨层依赖（core-kernel P2-18）：按方案 A 下沉 effectiveVisible
+
+- **Commit Hash**：`待回填`
+- **背景**：上一条 `003bcbd` 只出影响报告（方案 A 属搬迁函数，按约束等待授权）。本轮获授权后执行方案 A。
+- **核心改动**：
+  - `js/core/model.js` 新增 `effectiveVisible(o)`（紧随 `layerOf`），成为「对象 + 图层可见」的唯一实现。
+  - `js/core/render.js` 删除本体，只保留 `isVisible(o){ return effectiveVisible(o); }` 兼容别名；`render.js` 内部与 features 层调用方零改动。
+  - `js/core/geometry-coverage.js` 的 3 处 `isVisible(` 改为 `effectiveVisible(`，覆盖率层不再依赖 render。
+- **影响范围**：`isVisible` 8 处调用、`effectiveVisible` 4 处调用签名与语义不变；加载顺序 model（301）先于 geometry-coverage（305）/render（311），运行期解析安全。
+- **验证数据**（先红后绿）：
+  - selftest 新增 2 条静态断言：修复前「覆盖率不直接调用 isVisible」实测 `true`（应为 false）、「effectiveVisible 在 model 层」为 false；修复后 47 分区 31/31 通过，N05「新旧同源」断言继续通过。
+  - dist **834,564 → 834,585 B（+21 B，预估 ±20）**；gzip 259,921；余量 **5,095 B**（>5,000 停线）；SW `VERSION=127`；selftest **3640 / 0**（+2）。
+- **公共抽象清单（调整）**：`effectiveVisible` 从 `render.js` 迁至 `model.js`（公共签名不变）；`isVisible` 保留为别名。
+- **遗留 TODO / 风险**：`js/core/interaction.js:499` 仍调用 `isVisible` 别名（core→render 边仍在）；如需彻底消除可单独改一行，本轮只处理审计点名的覆盖率层。
+
 ## 2026-11-10 · 导出健壮性（data-io P3-04）：导出统一错误出口；合并语义待产品决策
 
 - **Commit Hash**：`待回填`

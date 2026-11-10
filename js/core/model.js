@@ -547,6 +547,8 @@ function typeDisplayName(t){
 }
 function typesOfKind(kind){ return state.objectTypes.filter(t => t.kind === kind); }
 function layerOf(o){ return state.layers.find(l => l.id === o.layerId) || state.layers[0]; }
+/** 有效可见：对象自身 visible 且所属图层 visible。画布、覆盖率与所有图纸类导出共用此唯一判断源（P2-18：下沉到 model 层，避免 core 反向依赖 render）。 */
+function effectiveVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
 function styleVal(o, key, fallback){
   if (o.style && o.style[key] !== undefined && o.style[key] !== '') return o.style[key];
   const t = getType(o.typeId);

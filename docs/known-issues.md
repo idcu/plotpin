@@ -311,32 +311,23 @@
 
 > 处理方式：启用 `ngm verify --deep` 前，先用 ngm 重新锁定 `packages/format/zip`、`packages/format/pdf` 与 `packages/format/dxf` 并提交新的 `moduleDigest`；修改任何 vendor 文件后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest`。
 
-### 2.13 core 跨层依赖反转：影响范围报告（本轮未动代码）
+### 2.13 core 跨层依赖反转：已按方案 A 拆解（2026-11-10）
 
-> 审计 core-kernel P2-18 要求「core 不反向依赖 render/feature」。本轮约束是**不改行为、不改公共签名**；任何方案都需要把函数从 `render.js` 搬到 `model.js`（即搬迁函数），按指令先出报告、不动刀。
+> 审计 core-kernel P2-18 要求「core 不反向依赖 render/feature」。方案 A 已执行：`effectiveVisible` 下沉到 `model.js`，`render.js` 仅保留 `isVisible` 兼容别名，`geometry-coverage.js` 直接调用 model 层实现。
 
 **现状证据（本机核对）**
 
 | 依赖 | 位置 | 说明 |
 |---|---|---|
-| 覆盖率 → 渲染层 | `js/core/geometry-coverage.js:45/94/105` 调用 `isVisible(o)` | `isVisible` 定义在 `js/core/render.js:12`，是 `effectiveVisible` 的兼容别名 |
-| 可见性判定本体 | `js/core/render.js:10` `effectiveVisible` → `layerOf`（`js/core/model.js:549`） | 判定逻辑本身只依赖 `state.layers`，与渲染无关 |
-| 其他调用方 | `js/core/render.js:18/174/180/1021`、`js/core/interaction.js:499`、`js/features/rules.js:511`、`js/features/ui-panels.js:428`、`js/features/io-export.js:137`、`js/features/io-fields.js:44` | `isVisible` 共 8 处、`effectiveVisible` 共 4 处（含 selftest 契约断言 `N05-…同源`） |
+| 覆盖率 → model 层 | `js/core/geometry-coverage.js:45/94/105` 调用 `effectiveVisible(o)` | 定义在 `js/core/model.js:551`，只依赖同文件 `layerOf`；不再引用 `render.js` 的 `isVisible` |
+| 兼容别名 | `js/core/render.js:10` `isVisible(o){ return effectiveVisible(o); }` | 保留旧名与签名；`render.js` 内部与 features 层调用方无需改动 |
+| 其他调用方 | `js/core/render.js:17/173/179/1020`、`js/core/interaction.js:499`、`js/features/rules.js:511`、`js/features/ui-panels.js:428`、`js/features/io-export.js:137`、`js/features/io-fields.js:44` | `isVisible` 与 `effectiveVisible` 语义完全一致；selftest `N05-…同源` 继续守护 |
 | geometry → geometry-site | `js/core/geometry.js:94` 调用 `siteBoundaryPoints`（`js/core/geometry-site.js`） | 同属 core 层，不构成 core→feature 反转，本轮不处理 |
 | render → DOM | `js/core/render.js` 的 `drawDraft`/`finishDraft` 读 `$('lineClosed')` 等 | 渲染层内部行为，非 core 反向依赖，本轮不处理 |
 
-**可行方案与影响范围**
+**验证**：`selftest` 新增静态断言「覆盖率不直接调用 `isVisible(`」「`effectiveVisible` 定义在 model 层」，修复前 2 条红、修复后绿；N05 同源断言与全部覆盖率用例保持通过。dist +21 B（模型/别名位置变化），余量见 `facts.md`。
 
-- 方案 A（唯一不改变行为/签名的拆解）：把 `effectiveVisible` 从 `render.js` 搬到 `model.js`（紧随 `layerOf`），`render.js` 仅保留 `isVisible` 别名并改调 `model.js` 版本。
-  - 删除声明 1 处、新增声明 1 处（全局经典脚本不允许同名重复声明，必须删除原声明）；`isVisible` 签名与语义不变。
-  - 加载顺序：`model.js`（index.html:301）先于 `render.js`（:311），运行期调用安全。
-  - 需要同步的两处直接引用：`io-export.js:137`、`io-fields.js:44` 仍解析到全局 `effectiveVisible`，无需改动；`selftest.mjs:161/1794-1796` 的契约断言继续有效。
-  - 行为与字节：函数体逐字搬运，判定结果不变；预计 dist 变化在 ±20 B 内（文件边界与压缩差异）。
-  - 风险：`check.mjs` 的模块分层判据只校验目录与加载顺序，不会因函数搬家变红；真正风险是遗漏同名声明导致加载期 `SyntaxError`，需 selftest 兜底。
-- 方案 B（注入可见性谓词）：改 `analyzeCoverage` 等公共签名，属破坏性变更，否决。
-- 方案 C（在覆盖率内重写判定）：复制 `layerOf` 逻辑，违反「禁止复制粘贴式公共逻辑」，否决。
-
-**结论**：方案 A 是行为等价的最小改动，但属于「搬迁函数」。按本轮指令，**未执行**，等待明确授权后单独提交（预计 dist ±20 B，需同 commit 跑五道门禁）。
+**剩余**：`js/core/interaction.js:499` 仍通过 `isVisible` 访问可见性（render 层别名）。若要彻底消除 core→render，可把它也改成 `effectiveVisible`；本轮只处理审计点名的覆盖率层，避免扩大改动面。
 
 ### 2.14 合并语义（data-io P3-09/10/11）：需产品决策，本轮未改
 

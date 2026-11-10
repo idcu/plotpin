@@ -4536,6 +4536,12 @@ await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", a
   eq('平移-非整数设备像素禁止搬移', api.panScrollDelta({zoom:2,panX:0.25,panY:0},0,0,2,1), null);
   eq('平移-DPR2 整数像素换算', api.panScrollDelta({zoom:2,panX:0,panY:3},0,0,2,2), [0,6]);
 
+  /* P2-18：core 的覆盖率层不得反向依赖 render；可见性判定下沉到 model 层 */
+  const covSrc=readFileSync(join(root,'js','core','geometry-coverage.js'),'utf8');
+  const modelSrc=readFileSync(join(root,'js','core','model.js'),'utf8');
+  eq('CORE-18 覆盖率不直接调用 render 的 isVisible', /isVisible\s*\(/.test(covSrc), false);
+  ok('CORE-18 可见性判定定义在 model 层', /function effectiveVisible\s*\(/.test(modelSrc));
+
   /* P2-3 裁剪预筛改用 objectSnapBounds：必须始终是 objectBounds 的超集，否则会漏画 */
   const covers=(b,s)=>b.minX<=s.minX+1e-9&&b.maxX>=s.maxX-1e-9&&b.minY<=s.minY+1e-9&&b.maxY>=s.maxY-1e-9;
   const shapeCases=[

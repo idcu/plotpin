@@ -6,9 +6,7 @@ function setCursorScreen(p,inside,wp,snap){ cursorScreen=p?{x:p[0],y:p[1],inside
 let focusNode=null;
 function setFocusNode(v){ focusNode=v; requestRender(); }
 /* -------------------- 命中测试 / 选择 -------------------- */
-/** 有效可见：对象自身 visible 且所属图层 visible。画布与所有图纸类导出共用此唯一判断源。 */
-function effectiveVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
-/** 兼容旧调用名：等价于 effectiveVisible（保留签名，避免改动既有调用方） */
+/** 兼容旧调用名：等价于 model.js 的 effectiveVisible（保留签名，避免改动既有调用方） */
 function isVisible(o){ return effectiveVisible(o); }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
 function hitObject(p,screenP){

@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=126
+version=127
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
@@ -16,14 +16,14 @@ b4b78c3a214ca348d91b52e20d7af72e4acbae8d57e40930eb6243d7d8314ebe  js/common/i18n
 bcddea9a431948fae2f237f8eeb8c6d4b897697356fe11f5ba26eb2d460edbcc  js/common/symbols.js
 44b8475861194cbf1b40e8a5164bf283e2ae5973950f8b0c4cded4d5a67bbf36  js/core/app.js
 2e96ea8c6d8b553b01d32b624b5d067826dd4761de4fab83464dc122a53e12b2  js/core/config.js
-1a70d35174beb9a479a046ed7f4cf9eb65373f11bef831edebfcb2d534b7725a  js/core/geometry-coverage.js
+834bf9ecfad1937489f4dd520c50d53489befa08c228ac8dffef354e668595e1  js/core/geometry-coverage.js
 9f325007e04d786ae5f816958a7d391ab8c74a4955dd48ce35182ac1a1769e7c  js/core/geometry-site.js
 5314889d9e938b19caf1ff72016d6af6c3a1b16f53afdccccb1b856b536989b5  js/core/geometry-transform.js
 64704f6b77e96f853fa19cf9b45a8ea954dae79fa36cbf003e2218ef8e4a7a28  js/core/geometry.js
 3490d5a183a4aa9be17c58f3bb3df5883dd2c08885e432424455271567e7df3c  js/core/interaction.js
-d23e769bc773b2eacad0ec81bf066b595eaf012223e0b4a725fbe41aede43c88  js/core/model.js
+062c4cbfbcc450cde2731818f324817536597e64860d1b95be97fcbdf2725194  js/core/model.js
 fd458593e9ba39c7c7906f7a5889a371c25b655a0c4a3957761a6bd64b12a663  js/core/persistence.js
-cbf6047136d0011827790d340a2c7a1537e0a3ef970faceae6631d64654e8c11  js/core/render.js
+1cf279e34d43b49b5d666e5a71868ffd4f62cc2462d26f5a63d25decaaa485c3  js/core/render.js
 6645f4059b06d2f21fc32624c532b8784b1ae95c786838f268dccf072ce49a6a  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
 c4ecfa089e5f0a86cab9704a622f6ea0877985cfbbdda4673e301cfb0f3ed945  js/core/viewport.js
