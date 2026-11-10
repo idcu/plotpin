@@ -135,10 +135,11 @@ async function openProjectLibrary(){
         if(objErrs.length) throw new Error(L('文件超限：{detail}',{detail:importLimitMessage(objErrs)}));
         const stats=await mergeProjectJSON(incoming);
         closeModal();
-        const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded;
+        const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded||stats.layersDeleted||stats.typesDeleted;
         const conflict=stats.conflicts?L('；冲突 {n} 项按较新版本保留',{n:stats.conflicts}):'';
-        toast(L('合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{conflict}',
-          {added:stats.added,updated:stats.updated,deleted:stats.deleted,floorsAdded:stats.floorsAdded,conflict}),
+        const extra=(stats.layersDeleted||stats.typesDeleted)?' · '+L('图层')+' -'+stats.layersDeleted+' · '+L('类型')+' -'+stats.typesDeleted:'';
+        toast(L('合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}',
+          {added:stats.added,updated:stats.updated,deleted:stats.deleted,floorsAdded:stats.floorsAdded,extra,conflict}),
           changed?'success':'warn');
       }catch(e){ toast(L('合并失败：{msg}',{msg:e.message}),'error'); }
     };

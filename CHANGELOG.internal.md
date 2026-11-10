@@ -4,6 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-10 · 离线协作（MERGE-10）：图层/类型删除传播
+
+- **Commit Hash**：`待回填`
+- **核心问题**：合并只对对象/楼层/场地做墓碑 LWW，图层与对象类型按 id 取并集；一端删除图层/类型后，另一端仍保留定义，离线合并会把已删定义复活。
+- **核心改动**：
+  - 墓碑 kind 扩展为 `object / floor / layer / type`（`TOMBSTONE_KINDS` 单一来源，merge 与 persistence 共用）；`markTombstone` / `sanitizeTombstones` 同步保留新类型。
+  - 本地删除图层/类型时（`migrateRefsAndDelete`）写入对应墓碑；`mergeProjectData` 并集后按墓碑裁剪定义，统计 `layersDeleted/typesDeleted`，有效墓碑保留在结果中继续压制旧副本。
+  - 内置类型与结构兜底 `layer.default` 不参与删除，避免跨工程合并误删公共定义；全部图层被删时保留一侧首个图层，维持「至少一层」不变量。
+  - 被删定义的悬空 `layerId/typeId/site.layerId` 由 `mergeProjectJSON` 落地时的 `migrateProject()` 统一迁移到默认图层/同类类型——复用既有清洗，未在 merge 内重复实现。
+  - 合并提示新增「图层 -N · 类型 -M」；`mergeHistoryNeeded` 纳入两类删除，远端覆盖本地内容时仍可 Ctrl+Z 回滚。
+- **预算**：dist **829,890 → 831,034 B（+1,144 B）**；gzip **258,623 → 259,030 B**；余量 **9,790 → 8,646 B**（>8,000 预警线）；SW `VERSION=130 → 131`。
+- **验证数据**（先红后绿）：
+  - selftest 新增 MERGE-10 断言组：图层/类型墓碑删除、内置类型与 `layer.default` 保护、统计字段、入口合并后引用迁移（默认图层 / `point.marker`）、墓碑 kind 清洗与撤销栈判据；**3664 通过 / 0 失败**（+23）。
+  - `node scripts/i18n-scan.mjs --check`：覆盖率 **47.14%**（模板新增 `{extra}` 占位后 +0.09pp）、缺口 10、UI 硬编码 11、模板内 0。
+  - e2e 123 通过 + 1 跳过；五道门禁全绿（见提交前实测）。
+- **公共抽象清单**：新增 `TOMBSTONE_KINDS`（merge/persistence 共用的墓碑 kind 白名单）、`mergePrunedList`（并集后按墓碑裁剪）；合并统计新增 `layersDeleted / typesDeleted`（`refsMigrated` 因改为复用 `migrateProject` 而未引入）。
+- **遗留风险**：图层/类型没有逐项 `updatedAt`，删除语义为「墓碑即删」——墓碑存在时对端同名同 id 的编辑不会复活定义（`layer.default` 与内置类型已保护）；如需「较新编辑复活定义」，需给图层/类型补时间戳并迁移旧档，另立条目评估。
+
 ## 2026-11-10 · 减字节专项：清理“看似在用、实际从未查表”的字典条目
 
 - **Commit Hash**：`待回填`

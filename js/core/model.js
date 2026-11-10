@@ -45,7 +45,7 @@ let calibUndoStack = [];     /* 校准控制点专用撤销栈（增/删/拖拽�
  * @typedef {Object} Tombstone
  * @property {string} id
  * @property {string} deletedAt ISO 时间
- * @property {'object'|'floor'} [kind]
+ * @property {'object'|'floor'|'layer'|'type'} [kind]
  * @typedef {Object} Layer
  * @property {string} id
  * @property {string} name
@@ -236,7 +236,7 @@ function createInitialState(){
        当前楼层的可编辑数据始终是顶层 state.background / state.site / state.objects（切换与保存时同步）。 */
     floors: [{ id:'floor.default', name:'1F', updatedAt: now }],
     activeFloorId: 'floor.default',
-    /* 删除墓碑（离线 LWW 合并用）：{id, deletedAt, kind:'object'|'floor'}。
+    /* 删除墓碑（离线 LWW 合并用）：{id, deletedAt, kind:'object'|'floor'|'layer'|'type'}。
        对象被删除后保留删除时间，合并他人工程时用于判定「删除」与「较新编辑」谁生效。 */
     tombstones: []
   };

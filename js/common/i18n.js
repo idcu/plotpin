@@ -656,8 +656,8 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '冲突 {n}': 'Conflicts: {n}',
     '已同步：{detail}': 'Synced: {detail}',
     '已同步：{detail} · 可按 Ctrl+Z 回滚': 'Synced: {detail} · Ctrl+Z to roll back',
-    '合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{conflict}':
-      'Merge complete: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{conflict}',
+    '合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}':
+      'Merge complete: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{extra}{conflict}',
     '；冲突 {n} 项按较新版本保留': '; {n} conflicts kept by the newer version',
     '已对齐 {n} 个对象': 'Aligned {n} objects',
     '已分布 {n} 个对象': 'Distributed {n} objects',

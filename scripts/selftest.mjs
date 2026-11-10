@@ -1952,6 +1952,7 @@ await section("28.7b F17 删除图层/类型跨楼层迁移单调打点", async 
   ok('F17-当前层图层迁移打点递增', oa.updatedAt>t0a);
   ok('F17-非当前层图层迁移打点递增', ob.updatedAt>t0b);
   ok('F17-图层条目已删除', !st.layers.some(x=>x.id==='layer.f17'));
+  ok('F17-图层删除写入墓碑', st.tombstones.some(t=>t.id==='layer.f17'&&t.kind==='layer'));
   const t1a=oa.updatedAt, t1b=ob.updatedAt;
   const nType=api.migrateRefsAndDelete('type','type.f17','point.marker');
   eq('F17-类型迁移覆盖两层', nType, 2);
@@ -1959,6 +1960,7 @@ await section("28.7b F17 删除图层/类型跨楼层迁移单调打点", async 
   eq('F17-非当前层类型已迁移', ob.typeId, 'point.marker');
   ok('F17-类型迁移两层都打点递增', oa.updatedAt>t1a && ob.updatedAt>t1b);
   ok('F17-类型条目已删除', !st.objectTypes.some(x=>x.id==='type.f17'));
+  ok('F17-类型删除写入墓碑', st.tombstones.some(t=>t.id==='type.f17'&&t.kind==='type'));
   eq('F17-stampObjectsIn 空集合返回 0', api.stampObjectsIn([]), 0);
   eq('F17-stampObjectsIn 按引用计数', api.stampObjectsIn([ob,null]), 1);
   eq('F17-stampObjects 仍只覆盖当前层', api.stampObjects([ob.id]), 0);
@@ -6310,7 +6312,7 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   });
   const M = (a, b) => api.mergeProjectData(a, b);
   const ids = p => (p.objects || []).map(o => o.id).join(',');
-  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0, siteDeleted: 0, siteCleared: 0 };
+  const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0, siteDeleted: 0, siteCleared: 0, layersDeleted: 0, typesDeleted: 0 };
 
   /* MERGE-11：远端较新但楼层名为空时，必须回退旧名，不能被归一化成 F<n> */
   const floorLocal=P([], {floors:[{id:'floor.default',name:'旧名',updatedAt:T1}]});
@@ -6344,6 +6346,30 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   const m5z = M(P([O('A', T1, 1)]), P([Object.assign(O('A', T1, 1), { z: 5 })]));
   eq('合并-仅叠放顺序不同不算冲突', m5z.stats.conflicts, 0);
   eq('合并-仅叠放顺序不同保留本地', m5z.project.objects[0].z, 0);
+
+  /* MERGE-10：图层/类型墓碑传播 + 引用迁移 */
+  const l10A = P([], { layers: [
+    { id: 'layer.default', name: '默认图层' },
+    { id: 'layer.L2', name: '二号层' }
+  ] });
+  const m10Layers = M(l10A, P([], { tombstones: [{ id: 'layer.L2', deletedAt: T2, kind: 'layer' }] }));
+  eq('MERGE-10 图层墓碑删除定义', m10Layers.project.layers.some(l => l.id === 'layer.L2'), false);
+  eq('MERGE-10 图层删除统计', m10Layers.stats.layersDeleted, 1);
+  ok('MERGE-10 图层墓碑保留在结果', m10Layers.project.tombstones.some(t => t.id === 'layer.L2' && t.kind === 'layer'));
+  const m10Default = M(l10A, P([], { tombstones: [{ id: 'layer.default', deletedAt: T2, kind: 'layer' }] }));
+  ok('MERGE-10 layer.default 不被墓碑删除', m10Default.project.layers.some(l => l.id === 'layer.default'));
+  eq('MERGE-10 layer.default 不计删除', m10Default.stats.layersDeleted, 0);
+
+  const t10A = P([], { objectTypes: [
+    { id: 'point.marker', kind: 'point', name: '点位', builtin: true },
+    { id: 'custom.type', kind: 'point', name: '自定义' }
+  ] });
+  const m10Types = M(t10A, P([], { tombstones: [{ id: 'custom.type', deletedAt: T2, kind: 'type' }] }));
+  eq('MERGE-10 类型墓碑删除定义', m10Types.project.objectTypes.some(t => t.id === 'custom.type'), false);
+  eq('MERGE-10 类型删除统计', m10Types.stats.typesDeleted, 1);
+  const m10Builtin = M(t10A, P([], { tombstones: [{ id: 'point.marker', deletedAt: T2, kind: 'type' }] }));
+  ok('MERGE-10 内置类型不被墓碑删除', m10Builtin.project.objectTypes.some(t => t.id === 'point.marker'));
+  eq('MERGE-10 内置类型不计删除', m10Builtin.stats.typesDeleted, 0);
 
   /* P1-5 属性面板写路径统一打点：旧实现先手写 o.updatedAt=nowISO() 再调 commitObjectEdit()（不传 ids），
      stampObjects 不生效；同一毫秒内连续编辑时间戳不递增，合并时本地较新值会被远端旧值判胜覆盖。 */
@@ -6617,20 +6643,28 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   ok('墓碑-重复删除刷新时间', tRec2 >= tRec);
   api.markTombstone('floor.F2', 'floor');
   eq('墓碑-楼层类型独立计数', api.state.tombstones.filter(t => t.kind === 'floor').length, 1);
+  api.markTombstone('layer.L9', 'layer');
+  api.markTombstone('type.T9', 'type');
+  eq('墓碑-图层类型保留', api.state.tombstones.filter(t => t.kind === 'layer').length, 1);
+  eq('墓碑-对象类型保留', api.state.tombstones.filter(t => t.kind === 'type').length, 1);
   api.markTombstone('');
-  eq('墓碑-忽略空 id', api.state.tombstones.length, 2);
+  eq('墓碑-忽略空 id', api.state.tombstones.length, 4);
 
   const cleaned = api.sanitizeTombstones([
     { id: 'A', deletedAt: T1, kind: 'object' },
     { id: 'A', deletedAt: T3, kind: 'object' },
     { id: 'F', deletedAt: T2, kind: 'floor' },
+    { id: 'L', deletedAt: T2, kind: 'layer' },
+    { id: 'TY', deletedAt: T2, kind: 'type' },
     { id: 'X', deletedAt: '' },
     { id: 'Y', deletedAt: 'not-a-date' },
     null, { foo: 1 }
   ]);
-  eq('墓碑清洗-去重与过滤', cleaned.length, 2);
+  eq('墓碑清洗-去重与过滤', cleaned.length, 4);
   eq('墓碑清洗-取最晚删除时间', cleaned[0].id, 'A');
   eq('墓碑清洗-楼层墓碑保留', cleaned.some(t => t.id === 'F' && t.kind === 'floor'), true);
+  eq('墓碑清洗-图层墓碑保留', cleaned.some(t => t.id === 'L' && t.kind === 'layer'), true);
+  eq('墓碑清洗-类型墓碑保留', cleaned.some(t => t.id === 'TY' && t.kind === 'type'), true);
   const huge = api.sanitizeTombstones(Array.from({ length: api.TOMBSTONE_LIMIT + 100 }, (_, i) => ({ id: 'T' + i, deletedAt: T1 })));
   eq('墓碑清洗-总量上限', huge.length, api.TOMBSTONE_LIMIT);
 
@@ -6665,6 +6699,25 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   eq('合并入口-历史栈增加', api.history.past.length, histBefore + 1);
   eq('合并入口-不接管他人工程绑定', api.state.meta.projectId, 'PRJ_LOCAL');
   eq('合并入口-工程名保持本地', api.state.meta.name, '未命名图纸工程');
+
+  /* MERGE-10：图层/类型墓碑经入口删除后，悬空引用由 migrateProject 统一迁移 */
+  api.resetState();
+  api.state.layers.push({ id: 'layer.L2', name: '二号层', visible: true, locked: false });
+  api.state.objectTypes.push({ id: 'custom.type', kind: 'point', name: '自定义', color: '#123456', icon: 'pin', builtin: false });
+  api.state.objects.push(api.baseObject('point', 'custom.type', { name: '引用对象', layerId: 'layer.L2' }));
+  const m10Stats = await api.mergeProjectJSON(P([], { tombstones: [
+    { id: 'layer.L2', deletedAt: T2, kind: 'layer' },
+    { id: 'custom.type', deletedAt: T2, kind: 'type' }
+  ] }));
+  eq('MERGE-10 入口-图层删除统计', m10Stats.layersDeleted, 1);
+  eq('MERGE-10 入口-类型删除统计', m10Stats.typesDeleted, 1);
+  ok('MERGE-10 入口-图层已删除', !api.state.layers.some(l => l.id === 'layer.L2'));
+  ok('MERGE-10 入口-类型已删除', !api.state.objectTypes.some(t => t.id === 'custom.type'));
+  const m10Obj = api.state.objects.find(o => o.name === '引用对象');
+  eq('MERGE-10 入口-对象迁移默认层', m10Obj.layerId, 'layer.default');
+  eq('MERGE-10 入口-对象迁移内置类型', m10Obj.typeId, 'point.marker');
+  /* 恢复后续旧对象用例所需的本地现场 */
+  api.resetState(); api.state.objects.push(O('OBJ_MERGE', T2, 1));
 
   const legacyObj = O('OBJ_MERGE', T1, 99);
   delete legacyObj.updatedAt;
@@ -6961,6 +7014,8 @@ await section("62. 实时协作：长消息分块与本地提交防抖（WebRTC/
   ok('合并历史-删除写栈', api.mergeHistoryNeeded({deleted:1}) === true);
   ok('合并历史-楼层元数据覆盖写栈', api.mergeHistoryNeeded({floorMetaUpdated:1}) === true);
   ok('合并历史-整层删除写栈', api.mergeHistoryNeeded({floorsDeleted:1}) === true);
+  ok('合并历史-图层删除写栈', api.mergeHistoryNeeded({layersDeleted:1}) === true);
+  ok('合并历史-类型删除写栈', api.mergeHistoryNeeded({typesDeleted:1}) === true);
   ok('合并历史-场地删除写栈', api.mergeHistoryNeeded({siteDeleted:1}) === true);
   ok('合并历史-场地清空写栈', api.mergeHistoryNeeded({siteCleared:1}) === true);
 }

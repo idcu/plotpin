@@ -2,14 +2,14 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=130
+version=131
 9b857e3fa5359491af22ca36137095995402d03b46973a6f544253dc1b1b3c9a  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 9147e082d9e26a674ac37159843da07385931ae6422da8051a9a58f79254f836  index.html
 14ed1b58f8ede3f67815b23111da2d8a403bc6d40b8c805d6bbf8e26d77cccd2  js/common/content-assets.js
 a4122a38c0ac51ba7ea5ba1287a91ee2dc9a640891144470649390192df9a226  js/common/dxf.js
-a0195e81bec961d18d4a68fb7e858214b2907b8b7ab41ec9adcfcaa34b458bc5  js/common/i18n.js
-61895534bc865d36167008f3954df98ce1a4f971b776bf4178aeed82cf0e9c70  js/common/merge.js
+efe2f1f3640080dda18013b41992bb80caf867b2eedee108661fc9054eec9f1a  js/common/i18n.js
+5450d483e7b9c339d458cdcf90d0d55c035f102edbb751586c9b19f4f2a9691f  js/common/merge.js
 884b70dd99ebe2b47ed86126b57bd9a1343d8606c4b44368ac5fa4a8745bc2ac  js/common/pdf-read.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
 2b64520f255a3e712eec295380877150b9193988ad29b35914cf75480685fc7c  js/common/qr.js
@@ -21,8 +21,8 @@ bcddea9a431948fae2f237f8eeb8c6d4b897697356fe11f5ba26eb2d460edbcc  js/common/symb
 5314889d9e938b19caf1ff72016d6af6c3a1b16f53afdccccb1b856b536989b5  js/core/geometry-transform.js
 64704f6b77e96f853fa19cf9b45a8ea954dae79fa36cbf003e2218ef8e4a7a28  js/core/geometry.js
 3490d5a183a4aa9be17c58f3bb3df5883dd2c08885e432424455271567e7df3c  js/core/interaction.js
-062c4cbfbcc450cde2731818f324817536597e64860d1b95be97fcbdf2725194  js/core/model.js
-fd458593e9ba39c7c7906f7a5889a371c25b655a0c4a3957761a6bd64b12a663  js/core/persistence.js
+fbd505259cbe4514f701fc14740068b07a4f8948d020ecf4f3f5ffe7031f6d63  js/core/model.js
+6fd5b5c90cb1bfeaa1ce9c39efd2f10bc4885fc5837cb2ebfa8a3f1dbcda5428  js/core/persistence.js
 1cf279e34d43b49b5d666e5a71868ffd4f62cc2462d26f5a63d25decaaa485c3  js/core/render.js
 6645f4059b06d2f21fc32624c532b8784b1ae95c786838f268dccf072ce49a6a  js/core/snapshot.js
 d48cab45c7caad1648318b6251bd0da0e7a151349fa7f4feefdb5220c82eb22d  js/core/tab-lease.js
@@ -33,7 +33,7 @@ d23c143a6cd4ab54d1bd0ae04f66c643b7e97b75e8907ce997fc19dd96ad1735  js/features/io
 0606182636fdfbcca156e3d73810358b170f9c97f6fc710f9fe97297c064f41b  js/features/io-fields.js
 e5942556712ade513e297c079be2cf995a20242d00f6d425a0b8a749fc08eaae  js/features/io-import.js
 d9bcc54d2763c476c306ba042f86b853a8379a174b99ccd5c138ae8cb8ef678d  js/features/io-table.js
-3cac4ffdc1e93723798552bffd883485fec8459bbc05aeb10f668d563c03e7be  js/features/io.js
+9c8e9201ce9510a9a9e65830704d45ce02b0648ca9f8cfeb7405e73cc9399367  js/features/io.js
 50c1d532668c21dc93fc0273686fa0514b7fcb66010458f9a500bdfe505ea706  js/features/parking.js
 65e1e73cd64983fa70af19f9e3d63f432f72b0118b5cad388cc75c5b22758cdf  js/features/plugins.js
 3006e34895251a16f38ee93c2522007ce811356c3811dc00819aaad9793a8945  js/features/props.js

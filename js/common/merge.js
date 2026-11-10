@@ -4,7 +4,9 @@
  * 合并单位是对象（按 id），冲突按 updatedAt 较新者胜出；同一时间戳用内容字典序兜底，保证结果确定。
  * 删除通过墓碑（tombstones）传播：删除时间**不早于**对象更新时间即生效（平局删除胜，保证「已删除」不会被同毫秒编辑复活）；
  * 删除时间早于对象更新时间时墓碑失效并被清理，较新的编辑可以让对象「复活」。
- * 楼层按 id 合并：新增楼层追加；楼层墓碑晚于该层最后写入时整层删除。图层/对象类型按 id 取并集，本地优先。
+ * 楼层按 id 合并：新增楼层追加；楼层墓碑晚于该层最后写入时整层删除。图层/对象类型按 id 取并集，
+ * 本地优先；两者的墓碑直接删除对应定义（内置类型与结构兜底 layer.default 除外），
+ * 被删定义的悬空引用由调用方的 migrateProject 统一迁移（本函数保持纯合并、不重复实现清洗）。
  */
 /** 规则配置取非空的一侧（本地优先）；mergeNormalizeSide 会把缺失侧归一为 {}，这里不能只看真值 */
 function mergeRuleSide(local, incoming){
@@ -17,7 +19,7 @@ function mergeRuleSide(local, incoming){
 function mergeProjectData(currentRaw, incomingRaw){
   const A = mergeNormalizeSide(currentRaw);
   const B = mergeNormalizeSide(incomingRaw);
-  const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0, floorMetaUpdated:0, floorsDeleted:0, siteDeleted:0, siteCleared:0 };
+  const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0, floorMetaUpdated:0, floorsDeleted:0, siteDeleted:0, siteCleared:0, layersDeleted:0, typesDeleted:0 };
   const tombs = mergeTombstoneMaps(A.tombstones, B.tombstones);
   const floors = new Map();
   const order = [];
@@ -73,7 +75,14 @@ function mergeProjectData(currentRaw, incomingRaw){
   const metaTs = mergeLater(A.meta, B.meta);
   if (metaTs) meta.updatedAt = metaTs;
   const settings = Object.assign({}, mergeClone(B.settings || {}), mergeClone(A.settings || {}));
-  const tombstones = Array.from(tombs.object.values()).concat(Array.from(tombs.floor.values()))
+  /* MERGE-10：图层/类型墓碑直接删除定义；内置类型与 layer.default 不参与删除（结构与跨工程兜底） */
+  const layers = mergePrunedList(A.layers, B.layers, tombs.layer, stats, 'layersDeleted', 'layer.default', false);
+  if (!layers.length) {
+    const fb = A.layers[0] || B.layers[0];
+    layers.push(fb ? mergeClone(fb) : { id:'layer.default', name:'1F', visible:true, locked:false });
+  }
+  const objectTypes = mergePrunedList(A.objectTypes, B.objectTypes, tombs.type, stats, 'typesDeleted', '', true);
+  const tombstones = Array.from(tombs.object.values()).concat(Array.from(tombs.floor.values()), Array.from(tombs.layer.values()), Array.from(tombs.type.values()))
     .sort((x, y) => {
       const kx = x.kind + ':' + x.id, ky = y.kind + ':' + y.id;
       return kx < ky ? -1 : (kx > ky ? 1 : 0);
@@ -87,8 +96,8 @@ function mergeProjectData(currentRaw, incomingRaw){
     viewport: mergeClone(active.viewport || {}),
     background: mergeClone(active.background || {}),
     site: mergeClone(active.site || null),
-    layers: mergeListById(A.layers, B.layers),
-    objectTypes: mergeListById(A.objectTypes, B.objectTypes),
+    layers,
+    objectTypes,
     objects: mergeCloneObjects(active),
     floors: outFloors,
     activeFloorId,
@@ -170,11 +179,12 @@ function mergeIdList(arr){
 }
 
 /** 原始 tombstone 数组 → 按 (kind,id) 去重、保留最晚删除时间 */
+const TOMBSTONE_KINDS=['object','floor','layer','type'];
 function mergeTombstoneMap(raw){
-  const out = { object:new Map(), floor:new Map() };
+  const out = { object:new Map(), floor:new Map(), layer:new Map(), type:new Map() };
   (raw && Array.isArray(raw.tombstones) ? raw.tombstones : []).forEach(t => {
     if (!t || typeof t !== 'object' || t.id === undefined || t.id === null) return;
-    const kind = t.kind === 'floor' ? 'floor' : 'object';
+    const kind = TOMBSTONE_KINDS.includes(t.kind) ? t.kind : 'object';
     const deletedAt = typeof t.deletedAt === 'string' ? t.deletedAt.trim() : '';
     if (!deletedAt || !Number.isFinite(Date.parse(deletedAt))) return;
     const id = String(t.id);
@@ -185,10 +195,10 @@ function mergeTombstoneMap(raw){
 }
 /** 两侧墓碑取并集，同一 (kind,id) 保留最晚删除时间 */
 function mergeTombstoneMaps(a, b){
-  const out = { object:new Map(), floor:new Map() };
+  const out = { object:new Map(), floor:new Map(), layer:new Map(), type:new Map() };
   [a, b].forEach(src => {
     if (!src) return;
-    ['object', 'floor'].forEach(kind => {
+    TOMBSTONE_KINDS.forEach(kind => {
       const m = src[kind];
       if (!m || typeof m.forEach !== 'function') return;
       m.forEach((t, id) => {
@@ -361,7 +371,15 @@ function mergeListById(local, incoming){
   });
   return out;
 }
-
+/** MERGE-10：并集后按墓碑裁剪图层/类型；skipId 与内置类型不参与删除 */
+function mergePrunedList(local, incoming, tom, stats, statsKey, skipId, protectBuiltin){
+  return mergeListById(local, incoming).filter(x => {
+    const id = String(x.id);
+    if (!tom || !tom.get(id) || id === skipId || (protectBuiltin && x.builtin)) return true;
+    stats[statsKey]++;
+    return false;
+  });
+}
 function mergeCloneObjects(f){
   return (f ? f.order : []).map((id, i) => {
     const o = mergeClone(f.objects.get(id));
