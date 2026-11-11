@@ -13,10 +13,10 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-10） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **136 个分区 / 3,664 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **141 个分区 / 3,741 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **35 个 spec / 124 个用例**（默认 123 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否** |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 12 种人为破坏 | 是 |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
 
 三层职责不同，**数据不可互换**：
 
@@ -140,7 +140,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 12 种「应当失败」的改动，
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 13 种「应当失败」的改动，
 断言对应门禁非 0 退出且输出命中目标错误关键字：
 
 | # | 破坏 | 期望变红 |
@@ -158,6 +158,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 10 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验：规则删空即红） |
 | 11 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成，需先 bump） |
 | 12 | `css/*.css` 追加未闭合的 `@media`（花括号不配平） | `check.mjs --selftest`（CSS 结构判据） |
+| 13 | `css/style.css` 注入远程 `url(https://…)` | `check.mjs --selftest`（离线承诺判据） |
 
 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，
 干净检出同样生效；bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单（未 bump 时 `--update` 会拒绝写入）

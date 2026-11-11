@@ -99,6 +99,8 @@ async function pruneSnapshots(pid){
     changed=true;
   }
   if(changed) await snapshotIndexSave(pid,metas);
+  /* R-06：被淘汰快照可能独占资产引用，及时调度 GC（失败不影响快照写入结果） */
+  if(changed&&typeof scheduleAssetGc==='function') scheduleAssetGc();
   return metas.length;
 }
 /**
@@ -131,6 +133,8 @@ async function deleteSnapshot(pid,sid){
   await idbDeleteKey(snapshotKey(pid,sid));
   const metas=(await snapshotIndexLoad(pid)).filter(m=>m&&m.snapshotId!==sid);
   await snapshotIndexSave(pid,metas);
+  /* R-06：快照独占的资产在删除后应可回收；延迟调度避免与索引写入抢同一轮 */
+  if(typeof scheduleAssetGc==='function') scheduleAssetGc();
   return true;
 }
 /** 删除某工程的全部快照（删除工程时清理孤儿记录；只扫 `snap:<pid>:`，不影响其它工程） */
@@ -139,6 +143,7 @@ async function deleteSnapshotsForProject(pid){
   try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(snapshotProjectPrefix(pid))); }catch(_){ return 0; }
   for(const k of keys){ try{ await idbDeleteKey(k); }catch(_){} }
   try{ await idbDeleteKey(snapshotIndexKey(pid)); }catch(_){}
+  if(keys.length&&typeof scheduleAssetGc==='function') scheduleAssetGc();
   return keys.length;
 }
 /**

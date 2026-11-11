@@ -104,7 +104,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
 | `node scripts/bench.mjs` | Node 桩渲染/覆盖率/规则/符号阈值 | 是 | `test` job |
 | `node scripts/build.mjs --check` | 单文件产物重建与登记比对 | 是 | `test` job |
-| `node scripts/check-gates.mjs` | 正面基线 + 12 种人为破坏 | 是 | `test` job |
+| `node scripts/check-gates.mjs` | 正面基线 + 13 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
 | `node scripts/e2e.mjs` | Chromium 功能 e2e | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`）；**CI 实际执行未验证** |
@@ -162,7 +162,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 ### 3.4 门禁牙齿（`check-gates.mjs`）
 
-在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **12 种**破坏，断言对应门禁非 0 退出
+在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **13 种**破坏，断言对应门禁非 0 退出
 且输出命中目标错误关键字；仓库本身一个字节不改：
 
 | # | 破坏 | 期望变红的门禁 |
@@ -180,6 +180,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 10 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验） |
 | 11 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成） |
 | 12 | `css/*.css` 花括号不配平（未闭合 `@media`） | `check.mjs --selftest`（CSS 结构判据） |
+| 13 | `css/style.css` 注入远程 `url(https://…)` | `check.mjs --selftest`（离线承诺判据） |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 
@@ -216,14 +217,14 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 `headers.root`、`enums` 至少 1 条缺一即报违约；全部核对完成后读数还须 ≥ 6，低于基线同样报违约。
 `check-gates` 场景 11 在临时副本里清空契约并断言 `check-contracts.mjs` 非 0 退出。
 
-### 4.2 `contracts/plugin-api.json`（23 个顶层键）
+### 4.2 `contracts/plugin-api.json`（24 个顶层键）
 
 `check-plugin-api.mjs` 双向比对 `js/features/plugins.js` 的 `PlotPin` **顶层键**与清单：
 
 - 代码有、清单无 → API 泄漏（插件可依赖、下次改名即静默破坏兼容）；
 - 清单有、代码无 → 承诺落空（运行时 `undefined`）。
 
-`--selftest` 用含内层花括号、方法简写、getter 的对象字面量验证解析器只取顶层键。
+`--selftest` 用含内层花括号、方法简写、ES6 简写属性与 getter 的对象字面量验证解析器只取顶层键。
 同时校验契约描述中的 API 版本与能力列表必须与 `PLUGIN_API_VERSION` / `PLUGIN_CAPABILITIES` 同源。
 
 ### 4.3 插件 API 版本与能力白名单
@@ -236,7 +237,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 - 隔离：`loadPlugin` 把插件源码放进 `Blob`，用 `new Worker(blobURL)` 执行；主线程与 Worker 只通过带随机 token 的
   `postMessage` 通信。Worker 内硬化 `fetch`、`indexedDB`、`XMLHttpRequest`、`WebSocket`、`EventSource`、
   `importScripts`、`caches`、`localStorage`、`sessionStorage`、`navigator`、`location`、`postMessage`、
-  `addEventListener`、`self`、`Worker`、`SharedWorker`（全局与原型链）。
+  `addEventListener`、`self`、`Worker`、`SharedWorker`、`BroadcastChannel`、`MessageChannel`、`MessagePort`（全局与原型链）。
 - 超时：初始化与每次调用（含导出/导入）上限 **2000 ms**，超时由主线程 `worker.terminate()` 硬终止；
   失败只让该插件进入 `disabled` 并 toast，主工程继续可操作。
 - 明确限制：一个插件一个 Worker；`code` 必须为字符串（`file://` 下不能 `fetch` 插件文件）；

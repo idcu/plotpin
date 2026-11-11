@@ -421,6 +421,48 @@ test('N-16：断线待发队列刷新页面后仍补发', async ({ page, context
   await expect.poll(() => page.evaluate(() => collabPendingLoad()), { timeout: 4000 }).toBe(null);
 });
 
+test('R-01：待发队列按工程分键，切工程不补发他人快照', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-r01');
+  await page.evaluate(() => { state.meta.projectId = 'PROJ-A'; });
+  await p2.evaluate(() => { state.meta.projectId = 'PROJ-A'; });
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* 断线并产生 A 工程的待发快照 */
+  const keyA = await page.evaluate(() => {
+    try { collabBC.close(); } catch (_) {}
+    collabBC = null;
+    collabActive = false;
+    collabStopWatchdog();
+    const o = state.objects[0];
+    o.name = 'A_ONLY';
+    o.updatedAt = nowISO();
+    commitObjectEdit();
+    collabPendingStore(persistableState());
+    return collabPendingKeyFor(collabProjectToken());
+  });
+  expect(await page.evaluate(k => !!localStorage.getItem(k), keyA)).toBe(true);
+
+  /* 切到 B 工程：当前工程读不到 A 的待发，重连也不得把 A 的快照补发出去 */
+  await page.evaluate(() => { state.meta.projectId = 'PROJ-B'; });
+  expect(await page.evaluate(() => collabPendingLoad())).toBe(null);
+  await startLocal(page, ch);
+  await closeModal(page);
+  await expect.poll(() => page.evaluate(() => collabPendingLoad('p:PROJ-A') !== null), { timeout: 4000 }).toBe(true);
+
+  /* 还原工程标识，避免影响后续用例 */
+  await page.evaluate(() => { state.meta.projectId = 'E2E_PROJ'; });
+});
+
 test('N-17：跨工程消息隔离与纯冲突可见', async ({ page, context }) => {
   const p2 = await context.newPage();
   const p3 = await context.newPage();

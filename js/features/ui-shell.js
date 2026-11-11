@@ -217,13 +217,15 @@ function openDemoProject(){
 }
 let rescueText;
 function showLoadAuditBanner(result){
-  const fallback=result.fallback?'已从本地备份恢复':'';
+  const srcLabel=result&&result.source==='rescue'?'救援副本':(result&&result.source==='localStorage'?'本地备份':'');
+  const fallback=result.fallback?(srcLabel?'已从'+srcLabel+'恢复':'已从本地备份恢复'):'';
+  const newer=(result.newerThanIdb?'已采用较新草稿，原自动保存仍在本地':'');
   const err=result.audit.level==='error';
   const msgs=(err?result.audit.errors:result.audit.warnings).slice(0,3);
-  if(!err&&!fallback&&!msgs.length) return;
+  if(!err&&!fallback&&!newer&&!msgs.length) return;
   rescueText=result.rescue?result.rescue.text:null;
   setRescueHold(err);
-  const text=[err?'工程加载异常':'',fallback,msgs.join('；')].filter(Boolean).join('：');
+  const text=[err?'工程加载异常':'',fallback,newer,msgs.join('；')].filter(Boolean).join('：');
   const bar=document.createElement('div');
   bar.id='loadBanner'; bar.className='load-banner '+(err?'error':'warn');
   bar.innerHTML='<span>'+esc(text)+'</span>'+(rescueText

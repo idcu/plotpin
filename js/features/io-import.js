@@ -155,7 +155,10 @@ function dxfFidelityLines(meta,parsed){
   lines.push('块定义：'+(meta.blocks||0)+' 个');
   if(Object.keys(meta.supplementalTypes||{}).length) lines.push('补充解析：'+Object.keys(meta.supplementalTypes).join(' / '));
   const uns=Object.keys(meta.unsupportedTypes||{});
-  if(uns.length) lines.push('暂不支持（已跳过）：'+uns.join(' / ')+'（'+Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0)+' 条）');
+  if(uns.length) lines.push('未落地（已跳过）：'+uns.join(' / ')+'（'+Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0)+' 条）');
+  /* ARC/ELLIPSE/SPLINE/INSERT 由解析器统一展开为多段线（含块插入变换），报告里如实给出条数 */
+  const approx=['ARC','ELLIPSE','SPLINE','INSERT'].filter(t=>meta.entityCounts&&meta.entityCounts[t]);
+  if(approx.length) lines.push('折线近似落地：'+approx.map(t=>t+' '+meta.entityCounts[t]).join(' / ')+'（弧/椭圆/样条按折线，块参照按插入变换展开）');
   if(meta.r12Bulge) lines.push('R12 凸度：'+meta.r12Bulge+' 段 VERTEX 42 会被拉直');
   return lines;
 }
@@ -180,9 +183,9 @@ async function importDxfFile(f){
   if(!ents.length){
     if(uns.length){
       const n=Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0);
-      return toast('DXF 中暂未找到可导入实体；文件含暂不支持的类型：'+uns.join(' / ')+'（'+n+' 条），已无法保真转换','error');
+      return toast('DXF 中暂未找到可导入实体；文件含未落地类型：'+uns.join(' / ')+'（'+n+' 条），已无法保真转换','error');
     }
-    return toast('DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）','error');
+    return toast('DXF 中未找到支持的实体（线/多段线/圆/弧/椭圆/样条/块参照/点/文字）','error');
   }
   const entErrs=importLimitErrors({entities:ents.length});
   if(entErrs.length) return toast(L('DXF 导入失败：{msg}',{msg:importLimitMessage(entErrs)}),'error');

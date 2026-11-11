@@ -4,7 +4,24 @@
 > 分类口径：**已修复**=有可复跑判据；**仍存在**=代码路径确证但未修；**已降级为限制**=产品边界或质量取舍，不是缺陷。
 > 新问题的编号与审计报告一一对应，便于后续计划映射：`IO-*`、`CORE-*`、`RT-*` 分别见本地过程材料 `audit-out/audit-io.md`、`audit-out/audit-core.md`、`audit-out/audit-runtime.md`（该目录不入库，不随仓库分发）。
 
-## 1. 已修复（46 条）
+## 1. 已修复（56 条）
+
+### 1.1 本轮（2026-11-11）风险清单修复（10 条）
+
+| 编号 | 原问题 | 修复依据（仓库内可复跑 / 可核对） | 复核结论 |
+|---|---|---|---|
+| R-01 | 协作待发队列只有一个全局键，切换工程后会补发别的工程的快照 | `scripts/selftest.mjs`「R-01：不同工程的待发记录互不覆盖、互不补发 / 旧单键 v1 迁移 / 迁移前备份 / 无 pid 落 `__nopid__`」；`node scripts/e2e.mjs` 的 `collab.spec.mjs` | 已关闭；v2 键 `plotpin.collab.pending.v2.<pid>`，无 pid 记录隔离到 `__nopid__` 不丢弃 |
+| R-02 | 顶层活动楼层 `site` 不参与入站时钟夹取，未来时间戳可永久压制本地 | `scripts/selftest.mjs`「28.16 R-02 顶层 site 时间戳夹取」：顶层/楼层 site 未来时间均置空、`stats.clockClamped` 计数、未来场地不覆盖本地 | 已关闭；`mergeClampTimestamps` 夹取顶层 `site`，`sanitizeSite` 用 `normalizeTimestamp` 拒绝非法/未来值 |
+| R-03 | `flushBeforeUnload` 绕过救援/租约守卫，救援模式仍可能覆盖 `current` | `scripts/selftest.mjs`「R-03/R-05 救援保存与串行写」：救援时 IDB 与 `LS_KEY` 均未写、救援副本已写；`node scripts/e2e.mjs` 的 `load-audit.spec.mjs` / `save-failure.spec.mjs` | 已关闭；`saveBlockState()` 统一返回 `ok/rescue/lease`，三处入口共用 |
+| R-04 | 加载只按 IDB→localStorage 顺序读，更新的草稿/救援副本会被旧 IDB 压过 | `scripts/selftest.mjs`「28.14 R-04 加载择优」：三候选按 `meta.updatedAt` 择优、同刻优先 IDB、损坏候选转救援副本、择优不删除本地副本 | 已关闭；返回 `source/fallback/newerThanIdb`，`e2e` 的 `persistence.spec.mjs` 通过 |
+| R-05 | 保存无串行化，慢写回包可能覆盖新快照 | `scripts/selftest.mjs`「R-03/R-05」：同一时刻只有一条写链路、最后落盘为最新快照、过期序号丢弃 | 已关闭；`saveChain + saveSeq/lastSavedSeq`，快照在首个 await 前取定 |
+| R-06 | 资产可达集漏算 localStorage 草稿/救援/协作待发，GC 会误删在用图片 | `scripts/selftest.mjs`「R-06 资产可达集」：草稿/救援/待发/旧待发四个命名空间、仅本地副本引用的资产存活、损坏命名空间返回空删除集且不调用删除 | 已关闭；`assetRefsByNamespace` 三组介质并集，删除阶段逐条并收集失败 |
+| R-07 | 场地/底图手柄拖拽逐帧重建静态层 | `tests/perf/p2-perf.perf.mjs`「R-07 场地手柄拖拽：静态层重建次数与整帧耗时」：拖拽期重建 0 次（基线 40 次），p95 18.8 ms（基线 265.3 ms） | 已关闭；`staticDragScene()` 把两类拖拽摘到动态层，静态位图只整层搬移 |
+| R-08 | DXF 弧/椭圆/样条/块参照被静默丢弃，报告不显示未落地实体 | `scripts/selftest.mjs`「36.3 R-08」：四类实体各落地 1 条折线、点数与起止点、块插入平移/缩放/旋转、未落地仅 DIMENSION、报告含「折线近似落地」与「未落地（已跳过）」 | 已关闭；上游解析器已展开为 `LWPOLYLINE`，本轮补齐报告与断言 |
+| R-25 | 插件契约门禁把所有 ES6 简写属性误报为泄漏，导致契约只能写成 `key: value` | `node scripts/check-plugin-api.mjs --selftest`（简写方法/简写属性/getter 用例）；`node scripts/check-plugin-api.mjs` 输出 24/24、0 泄漏 0 落空 | 已关闭；解析器识别 `a(n){}`、`d,`、`get c(){}` |
+| R-26 | 离线承诺只扫 HTML，CSS `url()` 与 JS 远程引用不被门禁发现 | `node scripts/check.mjs --selftest`（新增破坏样例：`css/style.css` 注入远程 `url(...)` 报红）；`node scripts/check-gates.mjs` 场景 13；`node scripts/pack-core.mjs` 内联后二次扫描 | 已关闭；白名单仅 `http(s)://www.w3.org/*` |
+
+### 1.2 历史修复（46 条）
 
 | 编号 | 原问题 | 修复依据（仓库内可复跑 / 可核对） | 复核结论 |
 |---|---|---|---|
@@ -151,15 +168,15 @@
 
 | 审计项 | 结论 | 依据 / 影响调用方 |
 |---|---|---|
-| `historyValueEqual` 两套比较语义 | 保留（仅自测入口） | 生产路径无调用；`scripts/selftest.mjs:7095-7096` 两条断言直接覆盖，删除即删断言（本段硬边界禁止）。生产快照仍用 `sharedHistoryValue` 的「引用相等 + 变更即复制」 |
-| `mergeStable` 仅此处使用 | 无重复，不改 | `js/common/merge.js:352` 单一定义；调用方 `merge.js:260/346/349`、`js/core/persistence.js:925` |
+| `historyValueEqual` 两套比较语义 | 保留（仅自测入口） | 生产路径无调用；`scripts/selftest.mjs:8286-8287` 两条断言直接覆盖，删除即删断言（本段硬边界禁止）。生产快照仍用 `sharedHistoryValue` 的「引用相等 + 变更即复制」 |
+| `mergeStable` 仅此处使用 | 无重复，不改 | `js/common/merge.js:406` 单一定义；调用方 `merge.js:305/400/403` |
 | `buildSnapCandidates` 双重分配 | 已收敛（N-22） | `js/core/geometry.js:32` 单趟 `collectSnap`；`collectSnapCandidates`（`:107`）与 `collectSnapEdges`（`:110`）只是按位掩码的薄包装 |
-| `drawSelection` 无用分配 | 已删除 | `js/core/render.js:947` 的 `drawSelection` 原先每帧执行 `objectPoints(o).map(toS)` 且结果未被任何分支使用；现已删除，产物 −36 B，画布像素不变（e2e 109 通过） |
-| `normalizeColor` 分散 | 已收敛（N-10） | 唯一实现 `normalizeExportColor`（`js/features/io-export.js:371`），SVG 图例/对象/文字/标记 4 处调用同源 |
-| 覆盖率口径常量未收敛 | 已收敛（N-20） | `APP_LIMITS.COVERAGE_TARGET_CELLS/MAX_CELLS/CELL_MIN_M/CELL_MAX_M`（`js/core/config.js:42-45`）；`geometry-coverage.js` 全部引用，无重复字面量 |
+| `drawSelection` 无用分配 | 已删除 | `js/core/render.js` 原 `drawSelection` 每帧执行 `objectPoints(o).map(toS)` 且结果未被任何分支使用；现已删除，产物 −36 B，画布像素不变（e2e 109 通过） |
+| `normalizeColor` 分散 | 已收敛（N-10） | 唯一实现 `normalizeExportColor`（`js/features/io-export.js:391`），SVG 图例/对象/文字/标记 4 处调用同源 |
+| 覆盖率口径常量未收敛 | 已收敛（N-20） | `APP_LIMITS.COVERAGE_TARGET_CELLS/MAX_CELLS/CELL_MIN_M/CELL_MAX_M`（`js/core/config.js:55-58`）；`geometry-coverage.js` 全部引用，无重复字面量 |
 | 门禁脚本 CSS/MJS 解析器两套 | 已收敛遍历/JSON 读取（2026-11-10） | `check-discipline.mjs` 不含 CSS/MJS 解析器；`check-ngm.mjs` 的 `walkFiles`/`readJson` 已改用 `scripts/lib/fs-utils.mjs`：共享遍历新增 `exts` / `skipDir` 选项后范围完全等价（`.git`/`node_modules`/`ngm.vendor` 等跳过规则逐条保留），`readJson` 仍保留「缺文件即 fail」的容错语义（薄包装，不改报告方式）；`check-ngm` 输出与改动前一致 |
-| `sanitizeLayers` 多份 | 无重复，不改 | `js/core/persistence.js:1063` 单一定义，`:778` 单一调用 |
-| `objectIndexById` 调用点未统一 | 已统一 | `js/core/model.js:523` 单一定义；5 处调用（`js/core/interaction.js:306/393/681/706`、`js/core/persistence.js:154`） |
+| `sanitizeLayers` 多份 | 无重复，不改 | `js/core/persistence.js:1299` 单一定义，`:993` 单一调用 |
+| `objectIndexById` 调用点未统一 | 已统一 | `js/core/model.js:565` 单一定义；`dragObjectIndex`（`model.js:576-577`）、`persistence.js:203`、`render.js:272` 统一走同一助手 |
 
 ### 2.5 B 类文档口径归档（13 条）
 
@@ -345,13 +362,13 @@
 | 编号 | 限制 | 为什么按限制处理 |
 |---|---|---|
 | K2 | 未引入通用文本测量缓存、通用 Path2D 缓存、图层/对象索引、拾取索引 | A/B 实测收益低于运行噪声，未纳入；仅符号路径按类型有窄缓存例外。性能上限未承诺，大场景卡顿已在 CORE-P1-4/5 单列 |
-| K3 | PDF 图纸页为位图 | PDF 写出器只做栅格页；清单独立分页。界面选项名含“矢量”属文案问题，改名由 UI 任务处理，不影响数据 |
+| K3 | PDF 图纸页为位图 | PDF 写出器只做栅格页；清单独立分页。导出菜单已不再提供“矢量 PDF”选项，文档与代码一致 |
 | K4 | DXF 仅近似：场地独立图层、圆/扇形折线化、不还原填充 | 兼容目标为 CAD 可编辑，不承诺视觉 1:1；已有降级报告 |
 | K5 | 协作二维码约 42 字节 | 内置编码器容量边界；超长改用可粘贴文本，不渲染假二维码 |
 | K6 | 覆盖率是栅格估算，v1/v2/v3 数值不可直接对比 | 口径变更以保证可复现；历史报告需标注口径版本。v3（N-20）起区域面积统一用解析公式，统计/图表/面板/导出同源 |
 | K7 | 规则检查只判几何，不内置规范数值 | 产品明确“不是消防/规范审图”，避免误导 |
 | K8 | 符号 DXF 折线近似；内置 36 个；搜索不支持拼音 | 体积与安全取舍；旧工程靠自身类型表保留图标（A1） |
-| K9 | 插件隔离不是语言级安全沙箱 | 仅承诺能力白名单与超时；已知逃逸单列 P0-4，需按 P0 修复后再收紧 |
+| K9 | 插件隔离不是语言级安全沙箱 | 仅承诺能力白名单与超时；`BroadcastChannel`/`MessageChannel`/`MessagePort` 逃逸已在 P0-4 关闭，但仍不承诺语言级隔离 |
 | K10 | 协作按对象/楼层时间取较新，无服务端权威 | 无服务器是产品约束；冲突可见性缺陷单列 RT-P1-03 |
 | K12 | 文件/对象/表格/快照/目录等容量上限 | 浏览器与本机存储的现实边界；数值见 [features.md](features.md) 第 20 节 |
 | K13 | `objectBounds` 对圆/椭圆/扇形仍物化 72 点采样 | 解析式包围盒需新增椭圆/扇形分支，属净增字节；本轮要求字节 ≤0，且 `objectSnapBounds` 的保守外接盒不能替代（会放宽框选/命中范围，属行为变更）。裁剪预筛已改用 `objectSnapBounds`；剩余调用在动态层绘制、框选与统计。解析式改造待有字节余量时单独提交 |

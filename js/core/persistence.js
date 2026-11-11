@@ -11,6 +11,9 @@
  */
 async function assetRefsByNamespace(){
   const ns=assetRefsInMemory();
+  /* R-06：localStorage 里的兜底草稿、救援副本、协作待发队列同样可能引用资产；
+     漏扫会在 GC 时误删"只在副本里存活"的底图/照片。读取或解析失败即整体放弃回收（fail-safe）。 */
+  assetRefsFromLocalStorage(ns);
   /* 读不到工程库就不动资产：宁可晚回收，也不能删掉看不见的工程 */
   const keys=await idbAllKeys();
   for(const key of keys){
@@ -27,6 +30,37 @@ async function assetRefsByNamespace(){
     else ns.set(`project:${k.slice(PROJECT_PREFIX.length)}`,ids);
   }
   return ns;
+}
+/**
+ * localStorage 命名空间资产引用（R-06）：草稿、救援副本、协作待发（含旧单键与备份）。
+ * 任一记录解析失败抛错，由 pruneBgAssets 捕获后整体跳过回收，避免"扫不全就误删"。
+ * @param {Map<string,string[]>} ns 原地写入
+ */
+function assetRefsFromLocalStorage(ns){
+  const read=(key,label,wrap)=>{
+    let raw=null;
+    try{ raw=localStorage.getItem(key); }
+    catch(e){ throw new Error('读取本地副本失败：'+(e&&e.message||e)); }
+    if(!raw) return;
+    let rec=null;
+    try{ rec=JSON.parse(raw); }
+    catch(e){ throw new Error('本地副本 '+label+' 解析失败，已取消资产回收'); }
+    const snapshot=wrap?wrap(rec):rec;
+    if(!snapshot) return;
+    const ids=ContentAssets.collectAssetRefs(snapshot);
+    if(ids.length) ns.set(label,ids);
+  };
+  read(LS_KEY,'ls:draft',r=>r);
+  read(RESCUE_KEY,'rescue:draft',r=>r&&r.snapshot);
+  if(typeof COLLAB_PENDING_KEY==='string') read(COLLAB_PENDING_KEY,'collab:legacy',r=>r&&r.project);
+  if(typeof COLLAB_PENDING_BAK_KEY==='string') read(COLLAB_PENDING_BAK_KEY,'collab:backup',r=>r&&r.project);
+  if(typeof COLLAB_PENDING_PREFIX==='string'){
+    let keys=[];
+    try{
+      for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith(COLLAB_PENDING_PREFIX)) keys.push(k); }
+    }catch(e){ throw new Error('枚举协作待发队列失败，已取消资产回收'); }
+    keys.forEach(k=>read(k,'collab:'+k.slice(COLLAB_PENDING_PREFIX.length),r=>r&&r.project));
+  }
 }
 /**
  * 内存内可达集（同步、纯函数）：当前草稿 + 撤销/重做栈 + 剪贴板 + 拖拽原件。
@@ -60,12 +94,18 @@ function unionAssetRefs(namespaces){
 async function reachableAssetIds(){
   return unionAssetRefs(await assetRefsByNamespace());
 }
-/** 资产 GC：失败（含 IndexedDB 不可用）时**不删除任何资产** */
+/** 资产 GC：失败（含 IndexedDB 不可用 / 本地副本不可解析）时**不删除任何资产** */
 async function pruneBgAssets(){
   try{
     const keep=await reachableAssetIds();
     return await assetPrune(keep);
   }catch(_){ return []; }
+}
+/** 删除快照/历史后延迟回收资产，避免与保存、快照索引写入抢同一事件循环 */
+let assetGcTimer=null;
+function scheduleAssetGc(delay){
+  clearTimeout(assetGcTimer);
+  assetGcTimer=setTimeout(()=>{ assetGcTimer=null; pruneBgAssets(); },Number.isFinite(delay)?delay:800);
 }
 /** 撤销/重做按钮可用态：空栈即置灰（禁用），避免点击后无反馈 */
 function updateHistoryButtons(){
@@ -257,6 +297,14 @@ function idbReq(store,method,arg){
   }));
 }
 async function idbPutKey(key,project){ return idbTx(DB_STORE,'readwrite',s=>s.put(project,key)); }
+/** R-05：current 与工程库副本同属一个 object store，放进同一事务写入，避免半写。
+ *  projectId 为空时只写 current（草稿工程不占工程库键）。 */
+async function idbPutCurrentAndProject(project,projectId){
+  return idbTx(DB_STORE,'readwrite',s=>{
+    s.put(project,'current');
+    if(projectId) s.put(project,projectKey(projectId));
+  });
+}
 async function idbGetKey(key){ return idbReq('readonly','get',key); }
 async function idbDeleteKey(key){ return idbReq('readwrite','delete',key); }
 async function idbAllKeys(){
@@ -299,7 +347,8 @@ function assertProjectWithinLimits(raw,label){
 /** 切工程前强制落盘：清掉 450ms 防抖/重试定时器并立即保存旧现场。
  *  租约被另一标签占用或落盘失败时抛错，由调用方取消切换并提示，不再静默丢弃最后一次编辑。 */
 async function flushPendingSave(){
-  const pending=!!saveTimer||!!saveRetryTimer;
+  /* R-05：在途写也算 pending，否则切换工程会与上一条保存并发，旧快照可能后落盘 */
+  const pending=!!saveTimer||!!saveRetryTimer||saveInFlight>0;
   clearTimeout(saveTimer); saveTimer=null;
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
   if(!pending||rescueHold) return;
@@ -622,6 +671,29 @@ function renameFloor(id,name){
 let rescueHold=false;
 /** 加载审计为 error 时阻止自动保存覆盖原记录；用户确认后解除 */
 function setRescueHold(v){ rescueHold=!!v; }
+/* R-03：救援模式专用同步副本。pagehide 里无法可靠 await IndexedDB，救援场景只允许写这个键，
+   绝不能写 'current' / LS_KEY，否则会用半可信现场覆盖原记录。 */
+const RESCUE_KEY='plotpin.rescue.draft';
+/** 统一保存闸门：三个写入入口（scheduleSave / flushPendingSave / flushBeforeUnload）共用同一判据 */
+function saveBlockState(){
+  if(rescueHold) return 'rescue';
+  if(leaseSaveBlocked()) return 'lease';
+  return 'ok';
+}
+function writeRescueDraft(snapshot){
+  try{ localStorage.setItem(RESCUE_KEY,JSON.stringify({v:1,at:nowISO(),snapshot})); return true; }catch(_){ return false; }
+}
+function readRescueDraft(){
+  let raw='';
+  try{ raw=localStorage.getItem(RESCUE_KEY)||''; }catch(_){ return null; }
+  if(!raw) return null;
+  try{
+    const rec=JSON.parse(raw);
+    if(!rec||rec.v!==1||!rec.snapshot||!isReadableSchema(rec.snapshot.schema)) return null;
+    return rec;
+  }catch(_){ return null; }
+}
+function clearRescueDraft(){ try{ localStorage.removeItem(RESCUE_KEY); }catch(_){} }
 /** 草稿 localStorage 兜底唯一写法；返回是否写入成功 */
 function writeLocalDraft(s){
   try{ localStorage.setItem(LS_KEY,JSON.stringify(s)); return true; }catch(_){ return false; }
@@ -657,29 +729,48 @@ function reportSaveFailure(e,phase){
   saveHealth.retry=saveRetry;
   return delay;
 }
+/* R-05：保存串行化。同一时刻只允许一条写链路（saveChain），并用递增序号丢弃过期结果，
+   防止两次保存并发时"旧快照后落盘"覆盖新数据。flushPendingSave 依据 saveInFlight 判断是否有在途写。 */
+let saveSeq=0,lastSavedSeq=0,saveInFlight=0,saveChain=Promise.resolve();
 async function runSave(){
+  const seq=++saveSeq;
+  saveInFlight++;
+  const task=saveChain.then(()=>saveOnce(seq));
+  saveChain=task.catch(()=>{}).then(()=>{ saveInFlight=Math.max(0,saveInFlight-1); });
+  return task;
+}
+async function saveOnce(seq){
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
+  /* 定时器已触发/已被本函数接管，必须置空，否则 flushPendingSave 会永久误判"还有待保存" */
+  saveTimer=null;
   /* 落盘前统一资产化：内嵌 dataUrl（PDF 导入 / JSON 导入 / 旧草稿）必须先拿到 assetId，
      否则 persistableState 会剥离 dataUrl，重开即永久丢图（N-03） */
   await ensureProjectBackgroundAssets(state);
+  /* 快照一旦取出就不再读 state，避免 await 期间状态变化导致"写新状态、记旧序号"的错配 */
   const snapshot=persistableState();
-  let warn=0;
+  if(seq<lastSavedSeq) return false;
   try{
-    await idbPut(snapshot);
-    if(state.meta.projectId) await idbPutKey(projectKey(state.meta.projectId),snapshot).catch(e=>{ warn=1; reportSaveFailure(e,'project'); });
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(state.settings)));
-    if(!warn){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:nowISO(),retry:0}; hideSaveFailureBanner(); }
-    saveStatus((state.meta.projectId?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString());
+    await idbPutCurrentAndProject(snapshot,snapshot.meta&&snapshot.meta.projectId||'');
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(snapshot.settings)));
+    if(seq<lastSavedSeq) return false;
+    lastSavedSeq=seq;
+    saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:nowISO(),retry:0}; hideSaveFailureBanner();
+    const pid=snapshot.meta&&snapshot.meta.projectId;
+    saveStatus((pid?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString());
+    return true;
   }catch(e){
+    if(seq<lastSavedSeq) return false;
     const ok=writeLocalDraft(snapshot);
     const delay=reportSaveFailure(e,'idb');
     saveHealth.state=ok?'degraded':'failed';
     if(delay>0) saveRetryTimer=setTimeout(runSave,delay);
+    return false;
   }
 }
 function scheduleSave(){
-  if(rescueHold){ saveStatus('救援模式：原记录未被覆盖'); return; }
-  if(leaseSaveBlocked()){ saveStatus(L('另一标签页正在编辑，已暂停自动保存')); return; }
+  const block=saveBlockState();
+  if(block==='rescue'){ saveStatus('救援模式：原记录未被覆盖'); return; }
+  if(block==='lease'){ saveStatus(L('另一标签页正在编辑，已暂停自动保存')); return; }
   saveStatus(L('待保存…'));
   clearTimeout(saveTimer);
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
@@ -713,36 +804,65 @@ function auditProject(raw){
   if(site!==undefined&&(!site||typeof site!=='object'||Array.isArray(site))) warnings.push('场地损坏');
   return {level:errors.length?'error':(warnings.length?'warn':'ok'),errors,warnings};
 }
+/** 工程新鲜度：meta.updatedAt 的毫秒值；缺失/非法按 0 处理，旧档不会因此抢赢新档 */
+function projectFreshness(p){
+  const t=p&&p.meta&&p.meta.updatedAt;
+  const n=Date.parse(t||'');
+  return Number.isFinite(n)?n:0;
+}
+/**
+ * 加载工程：R-04 —— IndexedDB current、localStorage 兜底草稿、救援副本三处候选统一比较新鲜度，
+ * 采用「可读 + schema 兼容 + meta.updatedAt 最大」的一份；时间相同优先 IndexedDB（主存储）。
+ * 采用较新草稿时绝不删除 IndexedDB 记录，原自动保存保留在本地，避免"选新反而丢旧"。
+ * 不可读候选原样转为救援副本（rescue），由横幅提供导出入口。
+ * @returns {Promise<{state:object|null,audit:object,rescue:{source:string,text:string}|null,fallback:boolean,source:string,newerThanIdb:boolean}>}
+ */
 async function loadSavedProject(){
-  const ok={level:'ok',errors:[],warnings:[]};
-  let st=null,audit=ok,rescue=null,idbFailed=false,lsHit=false;
+  const emptyAudit={level:'ok',errors:[],warnings:[]};
+  const candidates=[];
   try{
     const p=await idbGet();
-    if(p&&typeof p==='object'){
-      audit=auditProject(p);
-      if(audit.level==='error'){ rescue={source:'IndexedDB',text:JSON.stringify(p)}; idbFailed=true; }
-      else if(isReadableSchema(p.schema)){ st=migrateProject(p); noteDroppedObjects(audit); }
+    if(p!==undefined&&p!==null) candidates.push({source:'IndexedDB',raw:p});
+  }catch(e){ /* 读取失败按无候选处理，继续看本地副本 */ }
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(raw) candidates.push({source:'localStorage',raw});
+  }catch(e){}
+  const rescueRec=readRescueDraft();
+  if(rescueRec) candidates.push({source:'rescue',raw:rescueRec.snapshot});
+  if(!candidates.length) return {state:null,audit:emptyAudit,rescue:null,fallback:false,source:'',newerThanIdb:false};
+  const audited=candidates.map(c=>{
+    let p=c.raw;
+    if(typeof p==='string'){
+      try{ p=JSON.parse(p); }
+      catch(_){ return {source:c.source,raw:c.raw,p:null,audit:{level:'error',errors:['JSON 损坏'],warnings:[]}}; }
     }
-  }catch(e){ idbFailed=true; }
-  if(!st){
-    try{
-      const raw=localStorage.getItem(LS_KEY);
-      if(raw){
-        lsHit=true;
-        const a=auditProject(raw);
-        if(a.level==='error'){ if(!rescue) rescue={source:'localStorage',text:raw}; audit=a; }
-        else{
-          const p=JSON.parse(raw);
-          if(isReadableSchema(p.schema)){ st=migrateProject(p); audit=a; noteDroppedObjects(audit); }
-        }
-      }
-    }catch(e){}
+    return {source:c.source,raw:c.raw,p,audit:auditProject(p)};
+  });
+  /* 不可读候选保留为救援副本；IndexedDB 优先作为原始文本来源 */
+  let rescue=null;
+  audited.forEach(c=>{
+    if(c.audit.level!=='error'||rescue) return;
+    const text=typeof c.raw==='string'?c.raw:(c.p==null?'':JSON.stringify(c.p));
+    rescue={source:c.source,text};
+  });
+  const usable=audited.filter(c=>c.p&&c.audit.level!=='error'&&isReadableSchema(c.p.schema));
+  let chosen=null;
+  usable.forEach(c=>{
+    const at=projectFreshness(c.p);
+    if(!chosen||at>chosen.at||(at===chosen.at&&c.source==='IndexedDB')) chosen={source:c.source,p:c.p,audit:c.audit,at};
+  });
+  if(!chosen){
+    const bad=audited.find(c=>c.audit.level==='error')||audited[0];
+    return {state:null,audit:bad.audit,rescue,fallback:false,source:'',newerThanIdb:false};
   }
-  if(st){
-    state=st;
-    await ensureBackgroundAsset(state);
-  }
-  return {state:st,audit,rescue,fallback:!!st&&lsHit&&idbFailed};
+  const idbCand=usable.find(c=>c.source==='IndexedDB');
+  const newerThanIdb=chosen.source!=='IndexedDB'&&(!idbCand||projectFreshness(chosen.p)>projectFreshness(idbCand.p));
+  const st=migrateProject(chosen.p);
+  noteDroppedObjects(chosen.audit);
+  state=st;
+  await ensureBackgroundAsset(st);
+  return {state:st,audit:chosen.audit,rescue,fallback:chosen.source!=='IndexedDB',source:chosen.source,newerThanIdb};
 }
 /**
  * 若工程携带内嵌 dataUrl（旧版草稿 / 跨设备导入的 JSON），转存为内容寻址资产。
@@ -1078,6 +1198,15 @@ function sanitizeSiteAnnot(raw){
   SITE_ANNOT_SETTING_KEYS.forEach(k=>{ if(typeof raw[k]==='boolean') out[k]=raw[k]; });
   return out;
 }
+/** 时间戳清洗：不可解析或超前本机 now+5s 一律置空（与 mergeClampTimestamps 同口径，
+ *  防止清洗环节把已被夹取的空值“还原”为未来时间）。 */
+function normalizeTimestamp(v,nowMs){
+  if(typeof v!=='string'||!v) return '';
+  const t=Date.parse(v);
+  const tol=typeof MERGE_FUTURE_TOLERANCE_MS==='number'?MERGE_FUTURE_TOLERANCE_MS:5000;
+  const max=(Number.isFinite(nowMs)?nowMs:Date.now())+tol;
+  return (!Number.isFinite(t)||t>max)?'':v;
+}
 function sanitizeSite(rawSite,layers){
   if(!rawSite||typeof rawSite!=='object') return null;
   const allowed=['rect',CIR,ELL,SEC,PARA,'polygon'];
@@ -1094,7 +1223,7 @@ function sanitizeSite(rawSite,layers){
   site.locked=!!rawSite.locked;
   site.annot=sanitizeSiteAnnot(rawSite.annot);
   site.style=sanitizeSiteStyle(rawSite.style);
-  site.updatedAt=typeof rawSite.updatedAt==='string'?rawSite.updatedAt:'';
+  site.updatedAt=normalizeTimestamp(rawSite.updatedAt);
   site.kind=shape.type;
   return site;
 }

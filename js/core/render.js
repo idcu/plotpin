@@ -123,15 +123,28 @@ function staticDragIds(){
   if(drag.type==='node'||drag.type==='rotate'||drag.type==='rect'||drag.type==='shapeHandle') return [drag.id];
   return null;
 }
-/** 静态层内容签名：只随“画什么”变化，不含缩放/平移（平移可整像素搬移位图） */
+/** 当前拖拽是否让场地/底图逐帧变化（R-07）。
+ *  场地手柄改 state.site、图片手柄改 background.transform，二者都会让静态层签名每帧变化；
+ *  把它们从静态层里摘出来、改由动态层每帧绘制，静态层只在拖拽开始/结束时各重建一次。
+ *  返回 '' | 'site' | 'background'。 */
+function staticDragScene(){
+  if(!drag) return '';
+  if(drag.type==='siteHandle') return 'site';
+  if(drag.type==='imageHandle'&&drag.moved) return 'background';
+  return '';
+}
+/** 静态层内容签名：只随“画什么”变化，不含缩放/平移（平移可整像素搬移位图）
+ *  R-07：场地手柄拖拽时形状与取景框都在变，但 syncFramePan 已保证世界→屏幕映射不变，
+ *  位图仍然有效，签名里用固定占位符把这两个逐帧变化项排除，避免每帧重建。 */
 function sceneStaticContentKey(cssW,cssH,d){
   const bg=state.background||{};
   const dyn=staticDragIds();
+  const scene=staticDragScene();
   return [cssW,cssH,dpr||1,staticRev,
-    d.minX,d.minY,d.maxX,d.maxY,
+    scene==='site'?'#drag-frame':[d.minX,d.minY,d.maxX,d.maxY].join(','),
     JSON.stringify(state.settings),
-    JSON.stringify(state.site||null),
-    bg.transform?JSON.stringify(bg.transform):'',
+    scene==='site'?'#drag-site':JSON.stringify(state.site||null),
+    scene==='background'?'#drag-bg':(bg.transform?JSON.stringify(bg.transform):''),
     bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,
     bg.metersPerPixel||0,
     bgImage?1:0,(bgDataUrl||'').length,
@@ -158,10 +171,11 @@ function visibleWorldRect(v,d,cssW,cssH,padPx=48){
   const a=s2w([-padPx,-padPx],v,d), b=s2w([cssW+padPx,cssH+padPx],v,d);
   return {minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
 }
-/** 静态层全部内容（不含动态层）；view/strip 决定对象裁剪范围 */
-function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view){
-  drawBackground(sc,v,d,cssW,cssH,toS);
-  drawSite(sc,v,toS);
+/** 静态层全部内容（不含动态层）；view/strip 决定对象裁剪范围。
+ *  skip：拖拽中的底图/场地从静态层排除（R-07），由动态层在主画布最底层先画。 */
+function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view,skip){
+  if(!skip||!skip.bg) drawBackground(sc,v,d,cssW,cssH,toS);
+  if(!skip||!skip.site) drawSite(sc,v,toS);
   drawGrid(sc,v,d,cssW,cssH,toS);
   drawCoverage(sc,v,d);
   drawSiteAnnotations(sc,v,toS);
@@ -188,7 +202,7 @@ function panScrollDelta(v,prevX,prevY,prevZoom,k){
   if(Math.abs(dx-ix)>0.01||Math.abs(dy-iy)>0.01) return null;
   return [ix,iy];
 }
-function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet){
+function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,skip){
   const k=dpr||1, delta=panScrollDelta(v,staticPanX,staticPanY,staticZoom,k);
   if(!delta) return false;
   const ix=delta[0], iy=delta[1];
@@ -212,7 +226,7 @@ function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet){
     const a=s2w([r[0]-48,r[1]-48],v,d), b=s2w([r[0]+r[2]+48,r[1]+r[3]+48],v,d);
     const strip={minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
     sc.save(); sc.beginPath(); sc.rect(r[0],r[1],r[2],r[3]); sc.clip();
-    drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,strip);
+    drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,strip,skip);
     sc.restore();
   });
   return true;
@@ -228,20 +242,29 @@ function drawScene(c,v,cssW,cssH,opt={}){
   if(cacheable){
     /* 只有逐帧改形的对象从静态层排除；选中但静止的对象留在位图里（N-23） */
     const dyn=staticDragIds(), dynSet=dyn?new Set(dyn):null;
+    /* R-07：拖拽中的场地/底图从静态层摘出，静态位图只在拖拽开始/结束重建 */
+    const scene=staticDragScene();
+    const skip=scene?{bg:true,site:scene==='site'}:null;
     const sig=sceneStaticContentKey(cssW,cssH,d);
-    const key=sig+'|'+v.zoom+'|'+v.panX+'|'+v.panY;
+    /* 场景拖拽期 pan 与取景框同步变化但屏幕映射不变：不参与缓存键，避免误走位图搬移 */
+    const key=scene?(sig+'|'+v.zoom):(sig+'|'+v.zoom+'|'+v.panX+'|'+v.panY);
     if(key!==staticKey){
       const sc=ensureStaticLayer(cssW,cssH);
       const scrolled=staticSig===sig&&staticZoom===v.zoom
-        ?scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet):false;
+        ?scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,skip):false;
       if(!scrolled){
         sc.clearRect(0,0,cssW,cssH);
-        drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,visibleWorldRect(v,d,cssW,cssH));
+        drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,visibleWorldRect(v,d,cssW,cssH),skip);
         staticPanX=v.panX; staticPanY=v.panY;
       }
       staticKey=key; staticSig=sig; staticZoom=v.zoom;
     }
     c.clearRect(0,0,cssW,cssH);
+    /* 静态层已空缺的底图/场地先画在主画布最底层，再由位图覆盖其上（层级与全量绘制一致） */
+    if(scene){
+      drawBackground(c,v,d,cssW,cssH,toS);
+      if(scene==='site') drawSite(c,v,toS);
+    }
     c.drawImage(staticCanvas,0,0,cssW,cssH);
     /* 拖拽中的对象逐帧变化，单独绘制在静态位图之上 */
     if(dynSet){

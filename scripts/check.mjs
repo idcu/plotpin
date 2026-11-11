@@ -4,7 +4,7 @@
  * 1) 语法校验：对 js/ 下每个脚本执行 `node --check`
  * 2) 资源完整性：index.html 引用的本地脚本/样式/manifest 必须存在
  * 3) 入口完整性：js/ 下每个脚本都必须被 index.html 引用（Service Worker 例外）
- * 4) 离线承诺：入口不得引用任何远程脚本/样式/资源
+ * 4) 离线承诺：入口 / CSS / JS 不得引用会发起网络请求的远程资源（白名单集中在 lib/offline-scan.mjs）
  * 5) 断言数一致：README 徽章/正文/命令注释与 selftest 实际断言数一致
  * 6) 契约判据：contracts/conventions.json 里列出的约定（版本三处一致 / i18n 键对齐 /
  *    文件头唯一 / 枚举同源）由 scripts/check-contracts.mjs 逐条核对（总是真实核对）
@@ -24,6 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 import { walkFiles } from './lib/fs-utils.mjs';
+import { findRemoteRefs } from './lib/offline-scan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -59,9 +60,19 @@ for (const f of jsFiles) {
   if (!scriptSet.has(rel)) errors.push(`脚本未被 index.html 引用：${rel}`);
 }
 
-/* 4. 离线承诺：不得有远程脚本/样式/图片 */
-for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
-  errors.push(`入口引用远程资源（破坏离线双击即用）：${m[1]}`);
+/* 4. 离线承诺：入口、样式、脚本都不得引用会发起网络请求的远程资源 */
+for (const { file, kind, text } of [
+  { file: 'index.html', kind: 'html', text: html },
+  ...walkFiles(join(root, 'css'), { ext: '.css' }).map(f => (
+    { file: relative(root, f).replace(/\\/g, '/'), kind: 'css', text: readFileSync(f, 'utf8') }
+  )),
+  ...jsFiles.map(f => (
+    { file: relative(root, f).replace(/\\/g, '/'), kind: 'js', text: readFileSync(f, 'utf8') }
+  ))
+]) {
+  for (const hit of findRemoteRefs(text, kind)) {
+    errors.push(`远程资源（破坏离线双击即用）：${file}:${hit.line} ${hit.url}`);
+  }
 }
 
 /* 5. 断言数一致性 */

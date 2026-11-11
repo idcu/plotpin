@@ -9,9 +9,12 @@
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { minifyCss, minifyJs } from './minify-core.mjs';
+import { findRemoteRefs } from './lib/offline-scan.mjs';
 
 export function buildStandalone(html, readFile) {
-  let out = String(html);
+  /* 结构缩进在 HTML 渲染里等价于一个空白：去掉「换行 + 空白 + 紧跟标签」的行首缩进与空白行，
+     渲染结果不变（仍保留一个换行），省下约 1.7 KB。文本内容与属性值不受影响。 */
+  let out = String(html).replace(/\n[ \t]+(?=<)/g, '\n').replace(/\n[ \t]*\n/g, '\n');
   const cspHashes = [];
 
   /* 样式内联（构建期无损压缩：只删注释/多余空白，源文件保持可读） */
@@ -61,6 +64,11 @@ export function buildStandalone(html, readFile) {
   ];
   for (const re of leftovers) {
     if (re.test(out)) throw new Error('单文件打包后仍有外部引用：' + re);
+  }
+  /* 内联后的样式/脚本同样会联网：按 CSS/JS 词法再扫一遍，避免「已内联」被当成「离线安全」 */
+  for (const kind of ['html', 'css', 'js']) {
+    const hits = findRemoteRefs(out, kind);
+    if (hits.length) throw new Error('单文件打包后仍有远程引用：' + hits[0].url);
   }
   return out;
 }

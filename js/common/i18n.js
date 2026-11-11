@@ -487,7 +487,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '转换在你的本机完成，PlotPin 只读取 DXF/PDF，单文件承诺不变。':'Conversion happens locally; PlotPin only reads DXF/PDF, and the single-file promise is unchanged.',
     '转 DXF 后选择文件':'Choose the converted DXF file',
     '转 PDF 后选择文件':'Choose the converted PDF file',
-    'DXF 中暂未找到可导入实体；文件含暂不支持的类型：':'No importable entities were found in this DXF; it contains unsupported types:',
+    'DXF 中暂未找到可导入实体；文件含未落地类型：':'No importable entities were found in this DXF; it contains unsupported types:',
     '按文件（未声明，按米处理）':'By file (undeclared; treat as metres)',
     '先核对版本、单位与保真度，再决定落点；导入失败会整批回滚。':'Check version, units and fidelity first, then choose the target; a failed import rolls back the whole batch.',
     '单位确认':'Unit confirmation',
@@ -730,7 +730,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '工程已导入':'Project imported',
     'JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）':'Invalid JSON project (expected a PlotPin v1 project file)',
     'XLSX 中没有可导入的工作表':'The XLSX has no importable worksheet',
-    'DXF 中未找到支持的实体（LINE/多段线/圆/弧/点/文字）':'No supported DXF entities found (LINE/polyline/circle/arc/point/text)',
+    'DXF 中未找到支持的实体（线/多段线/圆/弧/椭圆/样条/块参照/点/文字）':'No supported DXF entities found (LINE/polyline/circle/arc/ellipse/spline/block/point/text)',
     'PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）':
       'No usable graphics found in the PDF (scanned image without embedded raster, or unsupported compression)',
     '请选择图片文件（PNG/JPG/WebP/BMP/GIF/SVG）':'Choose an image file (PNG/JPG/WebP/BMP/GIF/SVG)',

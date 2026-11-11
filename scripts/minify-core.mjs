@@ -1,16 +1,20 @@
 /**
  * minify-core.mjs —— 构建期无损压缩（纯函数，便于自测）
  *
- * 只做**语义安全**的删减，不做重命名/改写：
+ * 只做**语义安全**的删减，不做重命名：
  *   - JS：删注释、行首缩进、空行、行尾空白；空白串折叠为单个空格；
  *     字符串 / 模板字面量 / 正则字面量内容逐字节保留；跨行块注释保留一个换行，
  *     避免改变自动分号插入（ASI）行为。
+ *     另做两条等价替换（有明确语法前提，见 NO_NL_AFTER / LITERAL_ALIAS）：
+ *     ① 前一个词法单位已自终止（`; { [ , : =`）时的换行可直接省掉——这些位置不可能触发 ASI；
+ *     ② 表达式位置的 `true/false/undefined` 写作 `!0/!1/void 0`，属性名与成员名保持原样。
  *   - CSS：删注释与多余空白；引号字符串与 `url(...)` 内容原样保留。
  *
  * 源文件保持可读；压缩只发生在 `pack-core.mjs` 内联时，CSP 哈希按压缩后内容重算。
  */
 
 const ID_CHAR = /[A-Za-z0-9_$]/;
+const ID_START = /[A-Za-z_$]/;
 const KEYWORD_BEFORE_REGEX = new Set([
   'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
   'case', 'do', 'else', 'yield', 'await', 'throw'
@@ -18,6 +22,34 @@ const KEYWORD_BEFORE_REGEX = new Set([
 const REGEX_PREFIX_CHARS = '([{,;:?=!&|+-*%^~<>';
 
 const isIdChar = ch => !!ch && (ID_CHAR.test(ch) || ch.charCodeAt(0) > 0x7e);
+
+/* 向前找下一个有效字符（跳过空白与注释），用于判断标识符是否处于属性名位置 */
+function nextSignificant(s, j) {
+  while (j < s.length) {
+    const c = s[j];
+    if (c === '/' && s[j + 1] === '/') {
+      const e = s.indexOf('\n', j);
+      if (e < 0) return '';
+      j = e;
+      continue;
+    }
+    if (c === '/' && s[j + 1] === '*') {
+      const e = s.indexOf('*/', j + 2);
+      if (e < 0) return '';
+      j = e + 2;
+      continue;
+    }
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f' || c === '\v') { j++; continue; }
+    return c;
+  }
+  return '';
+}
+
+/* 等长或更短的等价字面量替换（只在表达式位置生效，属性名/成员名保持原样） */
+const LITERAL_ALIAS = new Map([['true', '!0'], ['false', '!1'], ['undefined', 'void 0']]);
+
+/* 这些字符之后换行不承担自动分号插入（ASI），可以直接省掉 */
+const NO_NL_AFTER = ';{[,:=';
 
 /* 正则字面量：命中返回结束位置（含 flags），失败返回 -1（按除号处理） */
 function scanRegex(s, i) {
@@ -110,7 +142,12 @@ export function minifyJs(text) {
 
     if (c === '\n') {
       pendingSpace = false;
-      if (!lineStart) { out += '\n'; lineStart = true; }
+      if (!lineStart) {
+        /* 前一个词法单位已自终止（分号/开括号/逗号/冒号/等号），换行不承担 ASI，
+           直接省掉（下一行缩进同样丢弃，不会补空格） */
+        if (NO_NL_AFTER.includes(prevSig)) lineStart = true;
+        else { out += '\n'; lineStart = true; }
+      }
       lastWord = '';
       i++;
       continue;
@@ -198,6 +235,28 @@ export function minifyJs(text) {
       lastWord = '';
       i++;
       continue;
+    }
+
+    /* 字面量别名：true→!0、false→!1、undefined→void 0（表达式位置，属性名/成员名不动） */
+    if (ID_START.test(c)) {
+      let j = i + 1;
+      while (j < s.length && isIdChar(s[j])) j++;
+      const word = s.slice(i, j);
+      let repl = LITERAL_ALIAS.get(word) || '';
+      if (repl) {
+        const next = nextSignificant(s, j);
+        if (prevSig === '.' || (next === ':' && (prevSig === '{' || prevSig === ','))) repl = '';
+      }
+      if (repl) {
+        if (pendingSpace && !lineStart) out += ' ';
+        pendingSpace = false;
+        out += repl;
+        lineStart = false;
+        prevSig = repl[repl.length - 1];
+        lastWord = repl;
+        i = j;
+        continue;
+      }
     }
 
     if (pendingSpace && !lineStart) out += ' ';

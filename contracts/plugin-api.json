@@ -26,6 +26,7 @@
     "listImporters": "列出导入器（不含 run）",
     "findExporter": "按 id 查导出器",
     "findImporter": "按扩展名查导入器",
-    "state": "实时工程状态（只读快照语义，插件改它不会落盘）"
+    "state": "实时工程状态（只读快照语义，插件改它不会落盘）",
+    "syncExportOptions": "把已注册插件导出器同步到导出下拉（移除并重建 option[data-plugin]）；DOM 缺失时静默返回，供注册/注销后手动刷新菜单"
   }
 }

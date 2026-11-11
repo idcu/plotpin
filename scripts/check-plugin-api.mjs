@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const CONTRACT = path.join(ROOT, 'contracts', 'plugin-api.json');
 
-/** 从对象字面量里取顶层键：`name(` / `get name` / `name:`，按花括号配对离开内层。 */
+/** 从对象字面量里取顶层键：`name(` / `get name` / `name:` / ES6 简写 `name,`，按花括号配对离开内层。 */
 function topLevelKeys(source, objectName) {
   const start = source.indexOf('const ' + objectName + ' = {');
   if (start < 0) throw new Error('找不到 const ' + objectName + ' = {');
@@ -52,7 +52,8 @@ function topLevelKeys(source, objectName) {
     else if (ch === '}' || ch === ')' || ch === ']') d--;
     if (d === 0 && lineStart) {
       const rest = body.slice(i);
-      const m = rest.match(/^(?:get\s+|set\s+)?([A-Za-z_$][\w$]*)\s*(?:\(|:)/);
+      /* 末尾的 `,` / `}` / 换行用于识别 ES6 简写属性（`syncExportOptions` 这类只写名字的键） */
+      const m = rest.match(/^(?:get\s+|set\s+)?([A-Za-z_$][\w$]*)\s*(?:[(:,}]|$)/);
       if (m) {
         keys.push(m[1]);
         // 跳到该键的结束（顶层逗号）
@@ -113,10 +114,10 @@ function check() {
 }
 
 if (process.argv.includes('--selftest')) {
-  const src = 'const X = { a(n) { return { b: 1 }; }, b: 2, get c() { return 3; } };';
+  const src = 'const X = { a(n) { return { b: 1 }; }, b: 2, get c() { return 3; }, d, e: 4 };';
   const got = topLevelKeys(src, 'X').join(',');
-  if (got !== 'a,b,c') {
-    console.error('SELFTEST FAILED：期望 a,b,c，实得 ' + got);
+  if (got !== 'a,b,c,d,e') {
+    console.error('SELFTEST FAILED：期望 a,b,c,d,e，实得 ' + got);
     process.exit(1);
   }
   const f = apiFacts("const PLUGIN_API_VERSION = '1.2.3';\n"
@@ -130,7 +131,7 @@ if (process.argv.includes('--selftest')) {
     console.error('SELFTEST FAILED：契约描述解析期望 1.2.3 + a,b:c，实得 ' + cf.listed.join(','));
     process.exit(1);
   }
-  console.log('plugin-api selftest: 解析器对内层花括号、方法简写、getter 三种形态都取对了；版本/能力与契约描述解析一致');
+  console.log('plugin-api selftest: 解析器对内层花括号、方法简写、getter、ES6 简写属性四种形态都取对了；版本/能力与契约描述解析一致');
   process.exit(0);
 }
 

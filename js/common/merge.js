@@ -242,6 +242,9 @@ function mergeClampTimestamps(raw,nowMs){
   };
   if(raw&&typeof raw==='object'){
     fix(raw.meta);
+    /* R-02：顶层 site 是活动楼层场地的权威副本，必须与 floors[].site 一样参与夹取，
+       否则远端可用未来时间戳让场地永久压制本地编辑。 */
+    fix(raw.site);
     (Array.isArray(raw.objects)?raw.objects:[]).forEach(fix);
     (Array.isArray(raw.floors)?raw.floors:[]).forEach(f=>{
       if(!f||typeof f!=='object') return;
@@ -277,11 +280,15 @@ function mergeSiteFromBackground(bg){
   if (!bg || typeof bg !== 'object') return null;
   return bg.kind && bg.kind !== 'image' && bg.kind !== 'empty' ? bg : null;
 }
-/** 场地 LWW 时间：优先 site.updatedAt（场地独立编辑），否则退回楼层 updatedAt */
+/** 场地 LWW 时间：优先 site.updatedAt（场地独立编辑），字段缺失（旧档）时退回楼层 updatedAt。
+ *  R-02：site.updatedAt 存在但为空串/非法 = 已被时间戳夹取或清洗，视为"无效时间"，
+ *  不得回退到楼层 updatedAt——否则较新的楼层时间会让被判无效的远端场地重新胜出。 */
 function mergeSiteTime(f){
   if (!f) return '';
   const t = f.site && f.site.updatedAt;
-  return typeof t === 'string' && t ? t : f.updatedAt;
+  if (typeof t === 'string' && t) return t;
+  if (f.site && typeof f.site.updatedAt === 'string') return '';
+  return f.updatedAt;
 }
 /** 同名楼层元数据：名称/底图/场地按最后写入较新的一方，视口保持本地。
  *  场地 LWW 的 **null 是有效值**（显式清空）：较新一侧为 null 时必须清空，

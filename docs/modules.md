@@ -59,7 +59,7 @@
 | `io-import.js` | 图片/DXF/DWG/PDF/SVG 导入、单位与保真提示、场地选择与底图缩放 | `extOfFile / dwgVersionInfo / pickConvertedFile / applyDxfImport / applyVectorSite / backgroundScalePlan / openSitePicker` | `pdf-read`、`dxf`、`geometry-transform`、`model`、`ui-shell` | DWG 需要外部转换器，缺转换器必须给明确原因而不是当作 DXF。DXF 保真度要列出"保留/降级/丢弃"；PDF 只导入第 1 页并在多页时提示页数。导入失败必须事务化回滚。 |
 | `io-table.js` | CSV/TSV/XLSX 表格预览、批量布点、条件批量替换 | `showTableImportPreview / applyTableImport / rowsToObjectsPlan / applyRowShape / applyLedgerCells / rowMatchesObject / checkRowGeom` | `io-fields`、`model`、几何、`ui-shell` | 严格模式整批事务化：任一行非法则整体失败，不允许半量写入。坐标/楼层/类型/编号解析规则必须与清单展示一致；布尔与数字解析不得用 `parseInt` 近似。 |
 | `parking.js` | 停车位规划：沿边布置、角度/间距、预览与落图 | `PARKING_LAYER / parkingLayout / parkingSite / parkingOptionsFromInputs / openParkingPlanner / ensureParkingLayer / applyParkingLayout` | `geometry-site`、`model`、`render`、`ui-shell` | 自动创建 `PARKING_LAYER` 但不得覆盖同名业务图层；落图必须一次性 `commitChange`，不能逐位保存。旧文档未登记此文件，但它**不是死文件**：`index.html` 的 `parkingBtn` 在文件末尾绑定。 |
-| `plugins.js` | 插件 API、清单校验、类型/导出器/导入器/规则注册表、Worker 沙箱、插件面板 | `PlotPin`（23 个契约键）、`exportViaPlugin / importViaPlugin`；内部 `PLUGIN_API_VERSION / PLUGIN_CAPABILITIES / loadPlugin / validatePluginManifest` | `model`（类型/对象清洗）、`rules`、`io-export`、`ui-shell` → 启动、面板 | API 1.1.0，只接受主机兼容版本；能力 8 项白名单。沙箱 Worker 删除网络/存储/Worker/self 等入口，单次 2000ms 超时并 `terminate`。清单 192KB、代码 64KB。注销被对象使用的类型必须拒绝。 |
+| `plugins.js` | 插件 API、清单校验、类型/导出器/导入器/规则注册表、Worker 沙箱、插件面板 | `PlotPin`（24 个契约键）、`exportViaPlugin / importViaPlugin / syncExportOptions`；内部 `PLUGIN_API_VERSION / PLUGIN_CAPABILITIES / loadPlugin / validatePluginManifest` | `model`（类型/对象清洗）、`rules`、`io-export`、`ui-shell` → 启动、面板 | API 1.1.0，只接受主机兼容版本；能力 8 项白名单（`rules` 仅声明意图，沙箱内无注册入口）。沙箱 Worker 删除网络/存储/Worker/self 与 `BroadcastChannel`/`MessageChannel`/`MessagePort` 等入口，单次 2000ms 超时并 `terminate`。清单 192KB、代码 64KB。注销被对象使用的类型必须拒绝。 |
 | `props.js` | 属性面板：单对象/多选、场地与图片属性、节点编辑、标注开关 | `renderProps / renderMultiProps / renderSiteProps / imagePropsHTML / renderNodeEditor / bindNodeEditorEvents / applyField / rotateSelected / renderAnnotToggles / renderSiteAnnotToggles` | `model`、几何、`persistence`、`ui-panels` | 所有写回必须走 `commitObjectEdit` 并先 `pushHistory`；批量标注开关复用单对象字段，不得新增平行状态。旋转/位移输入要保留数值宽度与 44px 触控目标。 |
 | `rules.js` | 几何规则检查：重叠/最小间距/越界、配置 UI、违规列表/定位/CSV | `RULE_REGISTRY / registerRule / unregisterRule / listRules / runRuleCheck / ruleOverlapCheck / ruleSpacingCheck / ruleBoundsCheck / ruleViolationsCsv / renderRuleConfig / ruleRunAndRender` | `model`、几何、`io-fields`、`ui-shell` → 面板、插件 | 只做几何检查，**不是消防/规范审图**，阈值由用户填写。违规上限 5000；对象重叠要排除相邻贴合容差；越界区分完全/部分。配置存 `state.rules` 随工程保存，旧配置按 `RULE_CONFIG_VERSION` 归一。 |
 | `snapshot-ui.js` | 快照面板、差异分类文案、叠加开关、回滚确认 | `DIFF_CATEGORY_LABELS / snapSizeText / snapTimeText / snapLabel / snapDiffFieldText / snapSelectOptions / openSnapshotManager / openSnapshotCompare` | `snapshot`、持久化、`ui-shell` → 面板 | 叠加只在当前楼层绘制，不参与静态缓存、不进入导出。回滚前必须二次确认并 `pushHistory`；快照删除不得影响工程。 |
@@ -75,10 +75,10 @@
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
 | `check.mjs` | 零依赖工程质量门禁（13 步） | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
-| `selftest.mjs` | 逻辑层自测（3,641 断言 / 136 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
+| `selftest.mjs` | 逻辑层自测（3,741 断言 / 141 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
-| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 10 种人为破坏并断言对应门禁变红 | 仓库副本 → 通过/失败 | CI |
+| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 13 种人为破坏并断言对应门禁变红 | 仓库副本 → 通过/失败 | CI |
 | `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性、消费方导出，以及 vendor 实际字节 ↔ `scripts/ngm-vendor-digest.json` 逐文件 sha256；`--update-vendor-digest` 重写清单 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor` → 报告 | CI、`npm test` |
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致 | 仓库 → 报告 | `check.mjs` |
 | `check-plugin-api.mjs` | 运行时 `PlotPin` 键集合与 `contracts/plugin-api.json` 一致 | 源码/契约 → 报告 | `check.mjs` |

@@ -310,6 +310,83 @@ test.describe('P2 批次 11 · 真实 Chromium 性能打点', () => {
     expect(data.probe.areaCalls, 'objectArea 调用次数').toBe(10000);
     expect(data.baseline.total.p50, '10k 行构建耗时必须可测').toBeGreaterThan(0);
   });
+
+  test('R-07 场地手柄拖拽：静态层重建次数与整帧耗时', async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await page.evaluate(installScene, 10000);
+
+    /* 场地四角手柄：取右上角，向右下拖会持续放大场地（每帧都改 state.site） */
+    const getTarget = () => page.evaluate(() => {
+      currentTool = 'site-node';
+      requestRender();
+      const hs = siteHandleList();
+      const h = hs[1] || hs[0];
+      const s = w2s([h.x, h.y]);
+      const r = canvas.getBoundingClientRect();
+      return { x: r.left + s[0], y: r.top + s[1], handles: hs.length };
+    });
+    const handles = (await getTarget()).handles;
+
+    /* 同一 harness 跑两种实现：disableScene=true 模拟改造前（场地留在静态层，每帧重建） */
+    const run = async (disableScene) => {
+      await page.evaluate(installScene, 10000);          /* 每轮重置场地，避免上一轮放大后手柄出界 */
+      const target = await getTarget();
+      await page.evaluate(d => {
+        if (!window.__origScene) window.__origScene = staticDragScene;
+        if (!window.__origEnsure) window.__origEnsure = ensureStaticLayer;
+        window.staticDragScene = d ? () => '' : window.__origScene;
+        window.__rebuilds = 0;
+        window.__frames = [];
+        window.ensureStaticLayer = function () { window.__rebuilds++; return window.__origEnsure.apply(null, arguments); };
+        window.__rafStop = false;
+        const loop = () => {
+          if (window.__rafStop) return;
+          const t0 = performance.now();
+          requestAnimationFrame(() => {
+            if (window.__rafStop) return;
+            window.__frames.push(performance.now() - t0);
+            loop();
+          });
+        };
+        loop();
+      }, disableScene);
+      await page.mouse.move(target.x, target.y);
+      await page.mouse.down();
+      await page.mouse.move(target.x - 24, target.y + 16);   /* 越过 2px 拖动阈值，进入稳态 */
+      await page.evaluate(() => { window.__rebuilds = 0; window.__frames = []; });
+      const N = 40;
+      for (let i = 0; i < N; i++) {
+        /* 向左下拖（始终朝画布内侧），手柄不会移出画布导致下一轮抓不到 */
+        await page.mouse.move(target.x - 40 - (i % 5) * 12, target.y + 30 + (i % 7) * 8);
+        await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+      }
+      const during = await page.evaluate(() => ({ rebuilds: window.__rebuilds, frames: window.__frames.slice() }));
+      await page.mouse.up();
+      const after = await page.evaluate(() => {
+        window.__rafStop = true;
+        window.ensureStaticLayer = window.__origEnsure;
+        window.staticDragScene = window.__origScene;
+        return { rebuilds: window.__rebuilds };
+      });
+      return { duringRebuilds: during.rebuilds, endRebuilds: after.rebuilds, frames: during.frames };
+    };
+
+    const cur = await run(false);
+    const old = await run(true);
+    const data = {
+      case: 'R-07 场地手柄拖拽静态层重建',
+      fixture: { objects: 10000, moves: 40, handles },
+      current: { duringRebuilds: cur.duringRebuilds, totalRebuilds: cur.endRebuilds, frame: stat(cur.frames) },
+      baseline: { duringRebuilds: old.duringRebuilds, totalRebuilds: old.endRebuilds, frame: stat(old.frames) }
+    };
+    record(data);
+    expect(data.baseline.duringRebuilds, '改造前每帧重建静态层').toBeGreaterThanOrEqual(20);
+    expect(data.current.duringRebuilds, '改造后拖拽期间不重建静态层').toBeLessThanOrEqual(2);
+    expect(data.current.frame.p95, '改造后帧间隔 p95 必须可测').toBeGreaterThan(0);
+    /* 真实对比：改造后拖拽期帧间隔 p95 不得高于改造前（同一机器、同一 harness、同一次运行） */
+    expect(data.current.frame.p95, '拖拽期帧间隔 p95 不高于改造前').toBeLessThanOrEqual(data.baseline.frame.p95);
+  });
 });
 
 test.afterAll(save);

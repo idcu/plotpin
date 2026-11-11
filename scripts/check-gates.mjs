@@ -19,6 +19,7 @@
  *  10. CSS 花括号未配平（@media 未闭合）→ node scripts/check.mjs --selftest 必须非 0
  *  11. 契约规则被清空                 → node scripts/check-contracts.mjs 必须非 0
  *  12. 输入变更未 bump 就执行 --update → node scripts/check-sw.mjs --update 必须非 0
+ *  13. 样式引入远程资源（离线承诺破坏）→ node scripts/check.mjs --selftest 必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
@@ -221,6 +222,16 @@ const scenarios = [
       /* CSS 语法不需要闭合也能被浏览器解析：未闭合的 @media 会把其后所有规则吞进媒体查询，
          页面照常加载、只是样式错位，node --check 与 e2e 都可能看不出来。 */
       appendFileSync(join(dir, 'css', 'style.css'), '\n@media print{\n');
+    }
+  },
+  {
+    name: '样式引入远程资源（离线承诺被破坏）',
+    expected: 'node scripts/check.mjs --selftest 退出码非 0',
+    args: ['scripts/check.mjs', '--selftest'],
+    expect: /远程资源/,
+    sabotage(dir) {
+      /* 内联进单文件后仍会发起网络请求：只扫 index.html 的 src/href 看不出来 */
+      appendFileSync(join(dir, 'css', 'style.css'), '\n.remote-probe{background:url(https://cdn.example.com/a.png)}\n');
     }
   }
 ];

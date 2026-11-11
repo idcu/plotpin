@@ -85,14 +85,24 @@
       },
       removeId(id) { return assets().then(a => a.remove(id)); },
       allKeys() { return assets().then(a => a.ids()); },
-      /** 删除未被 keepIds 引用的条目；返回被删除的 id 列表（保持旧返回值） */
+      /** 删除未被 keepIds 引用的条目；返回被删除的 id 列表（保持旧返回值）。
+       *  逐条删除并收集失败项：Core 资产库没有批量事务接口，失败项留在库内下次 GC 重试，
+       *  调用方（pruneBgAssets）仍按"已删列表"返回，避免部分失败被伪装成全部成功。 */
       async prune(keepIds) {
         const a = await assets();
         const keep = new Set(keepIds || []);
         const all = await a.ids();
         const dead = all.filter(id => !keep.has(id));
-        for (const id of dead) await a.remove(id);
-        return dead;
+        const deleted = [];
+        const failed = [];
+        for (const id of dead) {
+          try { await a.remove(id); deleted.push(id); }
+          catch (e) { failed.push(id); }
+        }
+        if (failed.length && typeof console !== 'undefined' && console.warn) {
+          console.warn('资产回收部分失败，保留待下次重试：' + failed.length + ' 项');
+        }
+        return deleted;
       },
       /** 内容寻址写入：返回 id（同内容自动去重） */
       put(bytes, mime) { return assets().then(a => a.put(bytes, { mime: String(mime || 'application/octet-stream') })); }

@@ -8,8 +8,13 @@ const COLLAB_INBOUND_MAX_BYTES=COLLAB_MAX*2;
 const COLLAB_HELLO_DEDUP_MS=1500;
 const COLLAB_DC_BUFFER_LIMIT=2*1024*1024;
 const COLLAB_ID_MAX=96;
-/* N-16：断线待发队列（localStorage 只保留最新整工程快照）与自动重连退避 */
+/* N-16：断线待发队列（localStorage 只保留最新整工程快照）与自动重连退避。
+   R-01：按工程分键，避免 A 工程断线时写入的快照在切到 B 工程后被补发出去；
+   无 projectId 的旧记录隔离到 __nopid__ 段，只在当前工程同样无 projectId 时补发。 */
 const COLLAB_PENDING_KEY='plotpin.collab.pending';
+const COLLAB_PENDING_PREFIX='plotpin.collab.pending.v2.';
+const COLLAB_PENDING_NOPID='__nopid__';
+const COLLAB_PENDING_BAK_KEY='plotpin.collab.pending.v1.bak';
 const COLLAB_PENDING_MAX=2*1024*1024;
 const COLLAB_RECONNECT_BASE_MS=1000;
 const COLLAB_RECONNECT_MAX_MS=5*60*1000;
@@ -136,47 +141,94 @@ function collabBackoffDelay(attempt){
   const n=Math.max(0,Math.floor(Number(attempt)||0));
   return Math.min(COLLAB_RECONNECT_MAX_MS, COLLAB_RECONNECT_BASE_MS*Math.pow(2,n));
 }
+/** 工程快照 → 协作身份令牌；与 collabProjectToken() 同口径（草稿为空串）。 */
+function collabTokenOfProject(project){
+  const id=project&&project.meta&&typeof project.meta.projectId==='string'?project.meta.projectId.trim():'';
+  return id?'p:'+id:'';
+}
+/** 待发队列键：按令牌分片；无令牌统一落 __nopid__，不与其他工程混用。 */
+function collabPendingKeyFor(token){
+  return COLLAB_PENDING_PREFIX+((token&&String(token))||COLLAB_PENDING_NOPID);
+}
+/** R-01 一次性迁移：旧单键记录按快照内的 projectId 搬到分片键，原键先备份再删除。
+ *  只迁移可读记录；不可读的原样保留（不删数据，交给用户导出/排查）。 */
+let collabPendingMigrated=false;
+function collabPendingMigrateLegacy(){
+  if(collabPendingMigrated) return false;
+  collabPendingMigrated=true;
+  let raw='';
+  try{ raw=localStorage.getItem(COLLAB_PENDING_KEY)||''; }
+  catch(_){ return false; }
+  if(!raw) return false;
+  let rec=null;
+  try{ rec=JSON.parse(raw); }catch(_){ rec=null; }
+  if(!rec||!rec.project||!isReadableSchema(rec.project.schema)) return false;
+  const token=collabTokenOfProject(rec.project);
+  const key=collabPendingKeyFor(token);
+  let moved=false;
+  try{
+    localStorage.setItem(COLLAB_PENDING_BAK_KEY,raw);
+    const prev=localStorage.getItem(key);
+    let keepNew=true;
+    if(prev){
+      try{ const old=JSON.parse(prev); keepNew=String(rec.at||'')>=String(old&&old.at||''); }catch(_){ keepNew=true; }
+    }
+    if(keepNew) localStorage.setItem(key,JSON.stringify({v:2,at:rec.at||nowISO(),pid:token,project:rec.project}));
+    localStorage.removeItem(COLLAB_PENDING_KEY);
+    moved=true;
+  }catch(_){ moved=false; collabPendingMigrated=false; }
+  return moved;
+}
 /** 断线期间的本地改动落盘为「最新一份整工程快照」：快照幂等，重连后走 LWW 合并。
  *  超过上限或 localStorage 写不进时必须显式提示，不得静默丢弃（仍在内存/下次全量快照补发）。 */
 function collabPendingStore(project){
   if(!project) return false;
+  collabPendingMigrateLegacy();
+  const token=collabTokenOfProject(project);
   let payload='';
-  try{ payload=JSON.stringify({v:1,at:nowISO(),project}); }
+  try{ payload=JSON.stringify({v:2,at:nowISO(),pid:token,project}); }
   catch(_){ return false; }
   if(payload.length>COLLAB_PENDING_MAX){
     const text=L('离线待发快照超过 {n} KB，未写入本地队列（仍在内存，重连后补发）',{n:Math.round(COLLAB_PENDING_MAX/1024)});
     collabRecordError(text); collabNotifyThrottled(text,'warn');
     return false;
   }
-  try{ localStorage.setItem(COLLAB_PENDING_KEY,payload); return true; }
+  try{ localStorage.setItem(collabPendingKeyFor(token),payload); return true; }
   catch(e){
     const text=L('离线待发队列写入失败：{msg}',{msg:(e&&e.message)||e});
     collabRecordError(text); collabNotifyThrottled(text,'error');
     return false;
   }
 }
-/** 读取并校验待发记录；版本或工程结构不符时视为无待发（不把坏数据发出去） */
-function collabPendingLoad(){
+/** 读取并校验待发记录；版本、工程令牌或结构不符时视为无待发（不把坏数据发出去）。
+ *  不传 token 时按当前工程令牌读取。 */
+function collabPendingLoad(token){
+  collabPendingMigrateLegacy();
+  const want=arguments.length?String(token||''):collabProjectToken();
   let raw='';
-  try{ raw=localStorage.getItem(COLLAB_PENDING_KEY)||''; }
+  try{ raw=localStorage.getItem(collabPendingKeyFor(want))||''; }
   catch(_){ return null; }
   if(!raw) return null;
   try{
     const rec=JSON.parse(raw);
-    if(!rec||rec.v!==1||!rec.project||!isReadableSchema(rec.project.schema)) return null;
+    if(!rec||rec.v!==2||!rec.project||!isReadableSchema(rec.project.schema)) return null;
+    if(String(rec.pid||'')!==want) return null;
     return rec;
   }catch(_){ return null; }
 }
-function collabPendingClear(){
-  try{ localStorage.removeItem(COLLAB_PENDING_KEY); }catch(_){}
+function collabPendingClear(token){
+  const want=arguments.length?String(token||''):collabProjectToken();
+  try{ localStorage.removeItem(collabPendingKeyFor(want)); }catch(_){}
 }
-/** 传输就绪后先补发离线快照；发送成功才清队列，失败留待下次重连 */
+/** 传输就绪后先补发当前工程的离线快照；发送成功才清队列，失败留待下次重连。
+ *  只补发当前工程令牌对应的键，其他工程的待发记录原样保留。 */
 function collabFlushPending(){
   if(!collabTransportReady()) return false;
-  const rec=collabPendingLoad();
+  const token=collabProjectToken();
+  const rec=collabPendingLoad(token);
   if(!rec) return false;
   const ok=collabSendObject({t:'snapshot',project:rec.project});
-  if(ok) collabPendingClear();
+  if(ok) collabPendingClear(token);
   return ok;
 }
 function collabReconnectClear(){

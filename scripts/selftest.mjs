@@ -107,6 +107,8 @@ code += `\n;globalThis.__api = {
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
+  assetRefsByNamespace, assetRefsFromLocalStorage, pruneBgAssets, scheduleAssetGc,
+  get assetGcTimer(){ return assetGcTimer; },
   translateObject, alignObjects, distributeObjects, objectBounds, objectSnapBounds,
   renumberObjects, restackObjects, allObjectNames, nextObjectId, objectNameScopeFor, beginObjectNameScope, withObjectNameScope,
   get history(){ return history; },
@@ -182,10 +184,12 @@ code += `\n;globalThis.__api = {
   collabInviteEncode, collabInviteDecode, collabQrFit, collabSweepInbound,
   collabInboundBytes, collabHelloDup, mergeHistoryNeeded,
   collabBackoffDelay, collabPendingStore, collabPendingLoad, collabPendingClear,
+  collabPendingKeyFor, collabPendingMigrateLegacy, collabTokenOfProject,
+  get collabPendingMigrated(){ return collabPendingMigrated; }, set collabPendingMigrated(v){ collabPendingMigrated=!!v; },
   collabFlushPending, collabCheckTransport, collabBroadcastFloor,
   collabHandleMessage, collabProjectToken, collabMergeChanged, collabMergeOverwritten,
   collabSweepPeers, COLLAB_PEER_TTL_MS,
-  COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY,
+  COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY, COLLAB_PENDING_PREFIX, COLLAB_PENDING_NOPID, COLLAB_PENDING_BAK_KEY,
   get collabMode(){ return collabMode; }, set collabMode(v){ collabMode=v; },
   get collabReconnectAttempt(){ return collabReconnectAttempt; },
   get collabForeignDropped(){ return collabForeignDropped; },
@@ -221,6 +225,7 @@ code += `\n;globalThis.__api = {
   addFloor, deleteFloor,
   snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
   snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById, createSnapshot, sameJson,
+  deleteSnapshot, deleteSnapshotsForProject,
   snapshotFloorMetas, diffSceneItems,
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS, DIFF_ITEM_MAX,
@@ -241,9 +246,12 @@ code += `\n;globalThis.__api = {
   resetSaveHealth(){ saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0}; },
   LEASE_CHANNEL, LEASE_TTL_MS, LEASE_HEARTBEAT_MS, LEASE_FUTURE_SKEW_MS, acquireEditorLease, releaseEditorLease, leaseIngest,
   leaseConflictAt, leaseClaim, leaseSyncProject, leaseStatus, onLeaseConflict,
+  get saveState(){ return {saveTimer,saveRetryTimer,saveSeq,lastSavedSeq,saveInFlight}; },
+  get idbPutCurrentAndProject(){ return idbPutCurrentAndProject; }, set idbPutCurrentAndProject(fn){ idbPutCurrentAndProject=fn; },
+  setRescueHold, saveBlockState, writeRescueDraft, readRescueDraft, clearRescueDraft, RESCUE_KEY,
   leaseSaveBlocked, flushBeforeUnload, LS_KEY,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
-  mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps,
+  mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps, mergeClampTimestamps, normalizeTimestamp,
   CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
   get catalogLoadError(){ return catalogLoadError; },
   quoteTable, quoteAggregate, quoteColumns, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
@@ -2296,7 +2304,97 @@ await section("28.12 P2-A4 加载丢对象计数可见 + 审计 layerId 修正",
 }
 });
 
-/* 28.13 P2-A5 替换底图重置旧校准 ---------------------------------------- */
+/* 28.14 R-04 加载择优：IndexedDB / localStorage / 救援副本 ------------------ */
+await section("28.14 R-04 加载择优：IndexedDB / localStorage / 救援副本", async () => {
+{
+  const prevIdb=api.idbGet;
+  const T1='2026-01-01T00:00:00.000Z',T2='2026-01-02T00:00:00.000Z',T3='2026-01-03T00:00:00.000Z';
+  const mk=(name,at)=>{ const s=api.resetState(); s.meta.name=name; s.meta.createdAt=at; s.meta.updatedAt=at; return JSON.parse(JSON.stringify(s)); };
+  try{
+    sandbox.localStorage.clear(); api.clearRescueDraft();
+    /* ① IDB 最新 */
+    api.idbGet=async()=>mk('IDB-NEW',T3);
+    sandbox.localStorage.setItem(api.LS_KEY, JSON.stringify(mk('LS-OLD',T1)));
+    let r=await api.loadSavedProject();
+    eq('R-04-IDB 较新时采用 IDB', r.state.meta.name, 'IDB-NEW');
+    eq('R-04-来源标注 IndexedDB', r.source, 'IndexedDB');
+    eq('R-04-未标记为降级', r.fallback, false);
+    eq('R-04-未标记较新草稿', r.newerThanIdb, false);
+    /* ② 本地草稿更新：采用草稿且不删除 IDB 记录 */
+    api.idbGet=async()=>mk('IDB-OLD',T1);
+    sandbox.localStorage.setItem(api.LS_KEY, JSON.stringify(mk('LS-NEW',T3)));
+    let removed=0;
+    const origRemove=sandbox.localStorage.removeItem.bind(sandbox.localStorage);
+    sandbox.localStorage.removeItem=k=>{ removed++; return origRemove(k); };
+    r=await api.loadSavedProject();
+    sandbox.localStorage.removeItem=origRemove;
+    eq('R-04-草稿更新时采用草稿', r.state.meta.name, 'LS-NEW');
+    eq('R-04-草稿来源标注', r.source, 'localStorage');
+    eq('R-04-标记采用较新草稿', r.newerThanIdb, true);
+    eq('R-04-择优时不删除任何本地副本', removed, 0);
+    /* ③ 救援副本最新 */
+    api.idbGet=async()=>mk('IDB-OLD2',T1);
+    sandbox.localStorage.clear();
+    api.writeRescueDraft(mk('RESCUE-NEW',T2));
+    r=await api.loadSavedProject();
+    eq('R-04-救援副本较新时采用', r.state.meta.name, 'RESCUE-NEW');
+    eq('R-04-救援来源标注', r.source, 'rescue');
+    api.clearRescueDraft();
+    /* ④ 不可读候选不参与择优，转为救援副本 */
+    api.idbGet=async()=>'{bad';
+    sandbox.localStorage.setItem(api.LS_KEY, JSON.stringify(mk('LS-OK',T1)));
+    r=await api.loadSavedProject();
+    eq('R-04-损坏 IDB 让位本地草稿', r.state.meta.name, 'LS-OK');
+    ok('R-04-损坏候选进入救援副本', !!r.rescue&&r.rescue.source==='IndexedDB');
+    /* ⑤ 时间相同优先 IDB */
+    api.idbGet=async()=>mk('IDB-TIE',T2);
+    sandbox.localStorage.setItem(api.LS_KEY, JSON.stringify(mk('LS-TIE',T2)));
+    r=await api.loadSavedProject();
+    eq('R-04-同刻优先 IndexedDB', r.state.meta.name, 'IDB-TIE');
+  }finally{
+    api.idbGet=prevIdb;
+    sandbox.localStorage.clear();
+    api.clearRescueDraft();
+    api.resetState();
+  }
+}
+});
+
+/* 28.16 R-02 顶层 site 时间戳夹取 ---------------------------------------- */
+await section("28.16 R-02 顶层 site 时间戳夹取", async () => {
+{
+  const now=Date.now();
+  const iso=new Date(now).toISOString();
+  const raw={
+    meta:{updatedAt:iso},
+    site:{updatedAt:'2999-01-01T00:00:00.000Z'},
+    floors:[{id:'floor.default',site:{updatedAt:'2999-01-01T00:00:00.000Z'}}],
+    objects:[],
+    tombstones:[]
+  };
+  const n=api.mergeClampTimestamps(raw,now);
+  eq('R-02-顶层 site 未来时间被夹取', raw.site.updatedAt, '');
+  eq('R-02-楼层 site 未来时间被夹取', raw.floors[0].site.updatedAt, '');
+  ok('R-02-夹取计数包含两处 site', n>=2);
+  eq('R-02-清洗拒绝未来时间', api.normalizeTimestamp('2999-01-01T00:00:00.000Z',now), '');
+  eq('R-02-清洗拒绝非法时间', api.normalizeTimestamp('not-a-date',now), '');
+  eq('R-02-清洗保留合法时间', api.normalizeTimestamp(iso,now), iso);
+  /* 端到端：远端未来 site 不能压制本地较旧但合法的场地 */
+  api.resetState();
+  api.state.site.name='LOCAL';
+  api.state.site.updatedAt=new Date(now-3600*1000).toISOString();
+  api.state.floors[0].site=JSON.parse(JSON.stringify(api.state.site));
+  const inbound=JSON.parse(JSON.stringify(api.persistableState()));
+  inbound.site.name='REMOTE-FUTURE';
+  inbound.site.updatedAt='2999-01-01T00:00:00.000Z';
+  if(inbound.floors&&inbound.floors[0]) inbound.floors[0].site=JSON.parse(JSON.stringify(inbound.site));
+  await api.mergeProjectJSON(inbound,{history:false});
+  eq('R-02-未来场地不覆盖本地', api.state.site.name, 'LOCAL');
+  api.resetState();
+}
+});
+
+/* 28.15 P2-A5 替换底图重置旧校准 ---------------------------------------- */
 await section("28.13 P2-A5 替换底图重置旧校准", async () => {
 {
   const bg={kind:'image',fileName:'old.png',assetId:'old-id',width:1200,height:900,
@@ -2980,6 +3078,52 @@ await section("36.2 B-02：DWG 版本识别 + DXF 预检保真度/单位确认/�
 
 });
 
+/* 36.3 R-08：ARC/ELLIPSE/SPLINE/INSERT 折线近似落地 + 未落地类型报告 --------------- */
+await section("36.3 R-08：DXF 弧/椭圆/样条/块参照折线近似落地", async () => {
+{
+  const P=(c,v)=>c+'\n'+v+'\n';
+  const blocks=P(0,'SECTION')+P(2,'BLOCKS')
+    +P(0,'BLOCK')+P(8,'0')+P(2,'B')+P(70,0)+P(10,0)+P(20,0)
+    +P(0,'LINE')+P(8,'0')+P(10,0)+P(20,0)+P(11,1)+P(21,1)
+    +P(0,'ENDBLK')+P(8,'0')+P(0,'ENDSEC');
+  const ents=P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'ARC')+P(8,'0')+P(10,100)+P(20,100)+P(40,50)+P(50,0)+P(51,90)
+    +P(0,'ELLIPSE')+P(8,'0')+P(10,0)+P(20,0)+P(11,10)+P(21,0)+P(40,0.5)+P(41,0)+P(42,6.283185307179586)
+    +P(0,'SPLINE')+P(8,'0')+P(71,3)+P(40,0)+P(40,0)+P(40,0)+P(40,0)+P(40,1)+P(40,1)+P(40,1)+P(40,1)
+    +P(10,0)+P(20,0)+P(10,1)+P(20,2)+P(10,3)+P(20,2)+P(10,4)+P(20,0)
+    +P(0,'INSERT')+P(8,'L1')+P(2,'B')+P(10,100)+P(20,0)+P(41,2)+P(42,2)+P(50,90)
+    +P(0,'DIMENSION')+P(8,'0')+P(10,0)+P(20,0)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const text=blocks+ents;
+  const meta=api.Dxf.inspect(text);
+  eq('R-08-四类实体各计数 1', ['ARC','ELLIPSE','SPLINE','INSERT'].filter(t=>meta.entityCounts[t]!==1).join(','), '');
+  eq('R-08-未落地类型只剩 DIMENSION', Object.keys(meta.unsupportedTypes).join(','), 'DIMENSION');
+  eq('R-08-块定义计数', meta.blocks, 1);
+  const r=api.Dxf.parseDxf(text);
+  eq('R-08-四类实体全部落地', r.entities.filter(e=>e.type==='LWPOLYLINE').length, 4);
+  const arc=r.entities[0];
+  eq('R-08-ARC 折线点数', arc.points.length, 25);
+  eq('R-08-ARC 起点', JSON.stringify(arc.points[0]), JSON.stringify([150,100]));
+  approx('R-08-ARC 终点 x', arc.points[24][0], 100, 1e-9);
+  approx('R-08-ARC 终点 y', arc.points[24][1], 150, 1e-9);
+  const ell=r.entities[1];
+  eq('R-08-ELLIPSE 闭合', ell.closed, true);
+  eq('R-08-ELLIPSE 点数', ell.points.length, 65);
+  const spl=r.entities[2];
+  eq('R-08-SPLINE 点数', spl.points.length, 49);
+  approx('R-08-SPLINE 起点', spl.points[0][0], 0, 1e-9);
+  approx('R-08-SPLINE 终点', spl.points[48][0], 4, 1e-9);
+  const ins=r.entities[3];
+  eq('R-08-INSERT 展开后是折线', ins.type, 'LWPOLYLINE');
+  eq('R-08-INSERT 应用平移/缩放/旋转', JSON.stringify(ins.points), JSON.stringify([[100,0],[98,2]]));
+  const lines=api.dxfFidelityLines(meta,r);
+  ok('R-08-报告列出折线近似条数', lines.some(l=>l.startsWith('折线近似落地：')&&l.includes('ARC 1')&&l.includes('INSERT 1')));
+  ok('R-08-报告用未落地措辞', lines.some(l=>l.startsWith('未落地（已跳过）：')&&l.includes('DIMENSION')));
+}
+
+
+});
+
 /* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
 await section("37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG", async () => {
 asyncSuites.push((async()=>{
@@ -3574,26 +3718,51 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     ok('N-16-退避单调不减', [0,1,2,3,4,5,6,7].every(i=>api.collabBackoffDelay(i)<=api.collabBackoffDelay(i+1)));
     eq('N-16-退避封顶5分钟', api.collabBackoffDelay(20), 300000);
     eq('N-16-退避非法输入按0', api.collabBackoffDelay(-5), 1000);
-    /* 待发队列：最新一份可落盘、可读回、可清除 */
+    /* 待发队列：最新一份可落盘、可读回、可清除（R-01：按工程分键 v2） */
     api.resetState();
+    sandbox.localStorage.clear();
+    api.collabPendingMigrated=false;
     api.state.meta.name='N16';
     const proj=api.persistableState();
     ok('N-16-待发快照落盘', api.collabPendingStore(proj));
     const rec=api.collabPendingLoad();
-    ok('N-16-待发快照可读回', !!rec&&rec.v===1);
+    ok('N-16-待发快照可读回', !!rec&&rec.v===2);
     eq('N-16-待发快照内容一致', rec.project.meta.name, 'N16');
+    eq('N-16-无工程标识落 nopid 段', rec.pid, '');
+    ok('N-16-无工程标识键名', sandbox.localStorage.getItem(api.COLLAB_PENDING_PREFIX+api.COLLAB_PENDING_NOPID)!==null);
     ok('N-16-无传输不补发', api.collabFlushPending()===false);
     ok('N-16-无传输仍保留待发', !!api.collabPendingLoad());
     api.collabPendingClear();
     eq('N-16-待发快照清除', api.collabPendingLoad(), null);
+    /* R-01：不同工程的待发记录互不覆盖、互不补发 */
+    api.state.meta.projectId='P-A'; api.state.meta.name='A';
+    ok('R-01-A 工程待发落盘', api.collabPendingStore(api.persistableState()));
+    api.state.meta.projectId='P-B'; api.state.meta.name='B';
+    ok('R-01-B 工程待发落盘', api.collabPendingStore(api.persistableState()));
+    eq('R-01-当前工程只读自己的待发', api.collabPendingLoad().project.meta.name, 'B');
+    eq('R-01-A 工程待发未被覆盖', api.collabPendingLoad('p:P-A').project.meta.name, 'A');
+    eq('R-01-两个工程键不同', api.collabPendingKeyFor('p:P-A')!==api.collabPendingKeyFor('p:P-B'), true);
+    api.collabPendingClear('p:P-A'); api.collabPendingClear('p:P-B');
+    /* R-01：旧单键 v1 记录按快照内 projectId 迁移，原键先备份再删除 */
+    const legacyProj={schema:api.SCHEMA,meta:{id:'PRJ_LEG',projectId:'P-LEG',name:'legacy'},objects:[],floors:[{id:'floor.default',name:'1F'}]};
+    sandbox.localStorage.setItem(api.COLLAB_PENDING_KEY,JSON.stringify({v:1,at:'2026-01-01T00:00:00.000Z',project:legacyProj}));
+    api.collabPendingMigrated=false;
+    ok('R-01-旧待发迁移成功', api.collabPendingMigrateLegacy());
+    ok('R-01-迁移前已备份旧键', !!sandbox.localStorage.getItem(api.COLLAB_PENDING_BAK_KEY));
+    eq('R-01-旧单键已删除', sandbox.localStorage.getItem(api.COLLAB_PENDING_KEY), null);
+    eq('R-01-迁移后可按工程读取', api.collabPendingLoad('p:P-LEG').project.meta.name, 'legacy');
+    sandbox.localStorage.removeItem(api.COLLAB_PENDING_BAK_KEY);
+    api.collabPendingClear('p:P-LEG');
     /* 超限显式拒绝且不写坏数据 */
+    api.state.meta.projectId='';
     const huge={schema:api.SCHEMA,meta:{name:'x'.repeat(2*1024*1024)}};
     eq('N-16-待发超限拒绝', api.collabPendingStore(huge), false);
     eq('N-16-待发超限不落盘', api.collabPendingLoad(), null);
-    /* 坏记录不当作待发 */
-    sandbox.localStorage.setItem(api.COLLAB_PENDING_KEY,'{bad');
+    /* 坏记录不当作待发（当前令牌对应的 v2 键） */
+    api.resetState();
+    sandbox.localStorage.setItem(api.collabPendingKeyFor(''),'{bad');
     eq('N-16-坏待发记录忽略', api.collabPendingLoad(), null);
-    sandbox.localStorage.removeItem(api.COLLAB_PENDING_KEY);
+    sandbox.localStorage.removeItem(api.collabPendingKeyFor(''));
     /* 楼层消息类型：发送表与接收表互逆 */
     ok('N-16-楼层消息add', api.COLLAB_FLOOR_OPS.add==='floor-add'&&api.COLLAB_FLOOR_TYPES['floor-add']==='add');
     ok('N-16-楼层消息delete', api.COLLAB_FLOOR_OPS.delete==='floor-delete'&&api.COLLAB_FLOOR_TYPES['floor-delete']==='delete');
@@ -8538,6 +8707,129 @@ await section("D-08 保存失败分类与有限退避", async () => {
 
 });
 
+/* ---------------- R-03/R-05 救援保存与串行写 ---------------- */
+await section("R-03/R-05 救援保存与串行写", async () => {
+{
+  const prevId=api.state.meta.projectId;
+  api.state.meta.projectId='';
+  sandbox.localStorage.clear();
+  api.resetState();
+  /* R-03：救援模式只写救援副本，绝不覆盖 current / LS 兜底草稿 */
+  api.state.meta.name='R03';
+  eq('R-03-默认闸门为 ok', api.saveBlockState(), 'ok');
+  api.setRescueHold(true);
+  eq('R-03-救援闸门', api.saveBlockState(), 'rescue');
+  eq('R-03-救援时不写 IndexedDB', api.flushBeforeUnload(), false);
+  eq('R-03-救援时不写本地兜底草稿', sandbox.localStorage.getItem(api.LS_KEY), null);
+  const rescue=api.readRescueDraft();
+  ok('R-03-救援副本已写', !!rescue&&rescue.snapshot.meta.name==='R03');
+  api.setRescueHold(false);
+  eq('R-03-解除后闸门恢复', api.saveBlockState(), 'ok');
+  api.clearRescueDraft();
+  eq('R-03-救援副本可清除', api.readRescueDraft(), null);
+  /* R-05：保存串行化——同一时刻只有一条写链路，最后落盘的是最新快照 */
+  const prevPut=api.idbPutCurrentAndProject;
+  let active=0,maxActive=0; const pending=[];
+  api.idbPutCurrentAndProject=()=>new Promise(resolve=>{
+    active++; maxActive=Math.max(maxActive,active);
+    pending.push(()=>{ active--; resolve(); });
+  });
+  api.state.meta.name='R05-1';
+  const p1=api.runSave();
+  api.state.meta.name='R05-2';
+  const p2=api.runSave();
+  await new Promise(r=>setTimeout(r,0));
+  eq('R-05-同一时刻只有一条写链路', maxActive, 1);
+  for(let guard=0;guard<10&&pending.length;guard++){
+    pending.shift()();
+    await new Promise(r=>setTimeout(r,0));
+  }
+  await Promise.all([p1,p2]);
+  const st=api.saveState;
+  eq('R-05-保存后防抖定时器已清空', st.saveTimer, null);
+  eq('R-05-完成后无在途写', st.saveInFlight, 0);
+  eq('R-05-最后一次成功写即最新序号', st.lastSavedSeq, st.saveSeq);
+  /* R-04 配套：没有待保存内容时关闭页面不再重复写草稿，避免"空草稿"压过工程库里的完整工程 */
+  eq('R-05-无待保存内容时关闭页面不重复落盘', api.flushBeforeUnload(), false);
+  eq('R-05-无待保存内容时不写兜底草稿', sandbox.localStorage.getItem(api.LS_KEY), null);
+  api.idbPutCurrentAndProject=prevPut;
+  api.state.meta.projectId=prevId;
+  api.resetState();
+  sandbox.localStorage.clear();
+}
+});
+
+/* ---------------- R-06 资产可达集：本地草稿/救援副本/协作待发 + 快照 GC ---------------- */
+await section("R-06 资产可达集：本地草稿/救援副本/协作待发 + 快照 GC", async () => {
+{
+  const savedIdb={get:sandbox.idbGetKey,put:sandbox.idbPutKey,del:sandbox.idbDeleteKey,keys:sandbox.idbAllKeys};
+  const savedPrune=sandbox.assetPrune, savedGc=sandbox.scheduleAssetGc;
+  const store=new Map();
+  sandbox.idbGetKey=async k=>store.get(k);
+  sandbox.idbPutKey=async(k,v)=>{ store.set(k,v); };
+  sandbox.idbDeleteKey=async k=>{ store.delete(k); };
+  sandbox.idbAllKeys=async()=>Array.from(store.keys());
+  let keeps=null, pruneCalls=0;
+  sandbox.assetPrune=async keep=>{ pruneCalls++; keeps=keep.slice(); return []; };
+  try{
+    sandbox.localStorage.clear();
+    api.resetState();
+    api.history.past.length=0; api.history.future.length=0;
+    api.state.background.assetId='';
+    api.state.objects=[];
+    /* 三份"只在本地副本里"的引用：内存与工程库都不引用它们 */
+    sandbox.localStorage.setItem(api.LS_KEY, JSON.stringify({background:{assetId:'bg_ls'}}));
+    api.writeRescueDraft({objects:[{props:{photoId:'as_rescue'}}]});
+    sandbox.localStorage.setItem(api.collabPendingKeyFor('p:R06'), JSON.stringify({v:2,at:'2026-01-01T00:00:00.000Z',pid:'p:R06',project:{background:{assetId:'bg_pending'}}}));
+    sandbox.localStorage.setItem(api.COLLAB_PENDING_KEY, JSON.stringify({v:1,at:'2026-01-01T00:00:00.000Z',project:{objects:[{props:{photoId:'as_legacy'}}]}}));
+    const ns=await api.assetRefsByNamespace();
+    ok('R-06-草稿命名空间', (ns.get('ls:draft')||[]).includes('bg_ls'));
+    ok('R-06-救援命名空间', (ns.get('rescue:draft')||[]).includes('as_rescue'));
+    ok('R-06-待发队列命名空间', (ns.get('collab:p:R06')||[]).includes('bg_pending'));
+    ok('R-06-旧待发键命名空间', (ns.get('collab:legacy')||[]).includes('as_legacy'));
+    await api.pruneBgAssets();
+    ok('R-06-仅被本地副本引用的资产不回收',
+      keeps.includes('bg_ls')&&keeps.includes('as_rescue')&&keeps.includes('bg_pending')&&keeps.includes('as_legacy'));
+    /* fail-safe：任一本地副本损坏 → 整体放弃回收，一个都不删 */
+    const callsBefore=pruneCalls;
+    sandbox.localStorage.setItem(api.LS_KEY,'{bad');
+    eq('R-06-损坏命名空间时返回空删除集', await api.pruneBgAssets(), []);
+    eq('R-06-损坏命名空间不调用删除', pruneCalls, callsBefore);
+    sandbox.localStorage.clear();
+
+    /* 快照删除/淘汰后调度既有防抖 GC 入口（不新增定时器体系） */
+    let gcCalls=0;
+    sandbox.scheduleAssetGc=()=>{ gcCalls++; };
+    const pid='R06-P', metas=[];
+    for(let i=0;i<21;i++){
+      const sid='S'+i, meta={snapshotId:sid,bytes:10,createdAt:new Date(2026,0,1,0,0,i).toISOString()};
+      metas.push(meta); store.set(api.snapshotKey(pid,sid),{meta,data:{}});
+    }
+    store.set(api.snapshotIndexKey(pid),{metas});
+    eq('R-06-淘汰最旧快照', await api.pruneSnapshots(pid), 20);
+    eq('R-06-快照淘汰触发 GC', gcCalls, 1);
+    await api.deleteSnapshot(pid,'S20');
+    eq('R-06-删除快照触发 GC', gcCalls, 2);
+    eq('R-06-无快照工程不触发 GC', await api.deleteSnapshotsForProject('R06-NONE'), 0);
+    eq('R-06-无快照工程不新增 GC', gcCalls, 2);
+    eq('R-06-删除工程快照触发 GC', await api.deleteSnapshotsForProject(pid), 19);
+    eq('R-06-删除工程快照计入 GC', gcCalls, 3);
+
+    /* 防抖入口本身：定时器在触发后清空，避免重复回收 */
+    api.scheduleAssetGc(5);
+    ok('R-06-GC 使用防抖定时器', api.assetGcTimer!==null);
+    await new Promise(r=>setTimeout(r,20));
+    eq('R-06-GC 触发后清空定时器', api.assetGcTimer, null);
+  }finally{
+    sandbox.idbGetKey=savedIdb.get; sandbox.idbPutKey=savedIdb.put;
+    sandbox.idbDeleteKey=savedIdb.del; sandbox.idbAllKeys=savedIdb.keys;
+    sandbox.assetPrune=savedPrune; sandbox.scheduleAssetGc=savedGc;
+    sandbox.localStorage.clear(); api.clearRescueDraft(); api.resetState();
+  }
+}
+
+});
+
 /* ---------------- D-09 多标签同工程编辑租约（假时钟） ---------------- */
 await section("D-09 多标签同工程编辑租约（假时钟）", async () => {
 {
@@ -8569,6 +8861,7 @@ await section("D-09 多标签同工程编辑租约（假时钟）", async () => 
   ok('D-09 冲突时给出可见保存状态', /另一标签页正在编辑/.test(api.$('saveState').textContent||''));
   ok('D-09 冲突时仍写本地兜底草稿', !!sandbox.localStorage.getItem(api.LS_KEY));
   api.leaseIngest({type:'release',tabId:'PEER9'},leaseNow);
+  api.scheduleSave();                            /* 模拟一笔待保存编辑，flush 才应恢复落盘 */
   eq('D-09 对端离开后 flush 恢复落盘', api.flushBeforeUnload(), true);
   api.releaseEditorLease();
   api.state.meta.projectId=prevId;

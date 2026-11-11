@@ -1247,16 +1247,32 @@ window.addEventListener('keyup',e=>{
 
 /* 关闭/刷新页面前强制落盘：IndexedDB 事务尽力触发，localStorage 同步兜底，杜绝最后编辑丢失。
    多标签租约冲突时（另一标签正在编辑）不得写 'current'，否则会覆盖对端草稿；
+   救援模式下（原记录审计为 error）只写救援副本，连 LS_KEY 也不碰，避免覆盖待救援的原始数据。
+   正常模式只在确实有未落盘内容（防抖/重试定时器或在途写）时才写，避免每次关闭都产出一份
+   时间戳更新的空草稿、在加载择优时压过工程库里的完整工程。
    本地兜底草稿仍写入，并复用自动保存的状态提示，返回 false 表示未写 IndexedDB。 */
 function flushBeforeUnload(){
   try{
-    clearTimeout(saveTimer);
+    /* 先记录是否有待保存内容，再清定时器（清完就无法判断是否真的需要落盘） */
+    const pending=!!saveTimer||!!saveRetryTimer||saveInFlight>0;
+    clearTimeout(saveTimer); saveTimer=null;
+    clearTimeout(saveRetryTimer); saveRetryTimer=null;
     const snapshot=persistableState();
-    writeLocalDraft(snapshot);
-    if(leaseSaveBlocked()){
+    const block=saveBlockState();
+    if(block==='rescue'){
+      writeRescueDraft(snapshot);
+      saveStatus('救援模式：仅写救援副本，原记录未被覆盖');
+      return false;
+    }
+    if(block==='lease'){
+      writeLocalDraft(snapshot);
       saveStatus(L('另一标签页正在编辑，已暂停自动保存'));
       return false;
     }
+    /* 没有待保存内容时关闭页面不重复落盘：否则每次关闭都会写出一份"更新时刻更晚"的
+       本地兜底草稿，加载择优（R-04）会让它压过工程库里更旧但完整的工程记录。 */
+    if(!pending) return false;
+    writeLocalDraft(snapshot);
     idbPut(snapshot).catch(()=>{});
     return true;
   }catch(e){ return false; }
