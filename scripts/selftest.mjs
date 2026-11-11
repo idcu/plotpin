@@ -17,6 +17,7 @@ import { deflateSync, deflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { buildStandalone } from './pack-core.mjs';
+import { minifyJs } from './minify-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -5683,6 +5684,54 @@ await section("56.1 type.icon 白名单 + esc：4 条注入路径（审计 A-02�
   ok('CSP-不允许远程源', !/https?:/.test(csp));
 }
 
+});
+
+/* 56.2 构建期压缩：换行省略与字面量别名的语义等价（ASI 边界） ----------------
+ * 压缩规则里唯一有语义风险的是「自终止词法单位（; { [ , : =）后的换行省略」。
+ * 这里把未压缩源码与 minifyJs 产物分别放进 vm 执行，比对结果值或错误类型，
+ * 而不是断言压缩后的字符串长什么样：规则失效（该留的换行被删）、过度保守
+ * （该省的没省）、别名改到属性名，都会在断言里暴露。 */
+await section("56.2 构建期压缩：换行省略与字面量别名的语义等价（ASI 边界）", async () => {
+{
+  const run = src => {
+    const ctx = vm.createContext({ __out: '__unset__' });
+    try {
+      vm.runInContext(src, ctx, { timeout: 2000 });
+      const v = ctx.__out, s = JSON.stringify(v);
+      return { value: s === undefined ? String(v) : s };
+    } catch (e) {
+      return { error: String((e && e.name) || e), out: String(ctx.__out) };
+    }
+  };
+  const same = (name, src) => {
+    const before = run(src), after = run(minifyJs(src));
+    eq('压缩语义等价-' + name, after, before);
+  };
+
+  /* ASI 危险位置：这些换行必须保留（删掉会改变语句切分，或让非法代码变合法） */
+  same('return 后换行吞掉返回值', 'function f(){ return\n1 }\n__out = f();');
+  same('return 后换行带缩进', 'function f(){ return\n  42 }\n__out = f();');
+  same('throw 后换行是语法错误', 'function f(){ throw\nnew Error("x") }\n__out = f();');
+  same('throw 同行正常抛出', 'function f(){ throw new Error("boom") }\ntry{ f() }catch(e){ __out = e.message }');
+  same('break 后换行不带走标签', 'let hits=0;\nouter: for(let i=0;i<2;i++){ for(let j=0;j<2;j++){ hits++; break\nouter } }\n__out = hits;');
+  same('continue 后换行不带走标签', 'let hits=0;\nouter: for(let i=0;i<3;i++){ for(let j=0;j<3;j++){ if(j===1){ continue\nouter } hits++ } }\n__out = hits;');
+  same('前缀 ++ 前换行不并入上一行', 'let a=1, b=0; a\n++b\n__out = [a,b];');
+  same('前缀 -- 前换行不并入上一行', 'let a=2, b=9; a\n--b\n__out = [a,b];');
+  same('async 后换行不是 async function', 'async\nfunction f(){}\n__out = "ok";');
+  same('对照：真正的 async function', 'async function f(){ return 1 }\n__out = typeof f;');
+  same('箭头函数体换行', 'const f = x =>\n x * 2\n__out = f(21);');
+  same('模板字符串内部换行保留', 'const s = `line1\n   line2`;\n__out = [s.length, s.indexOf("   line2")];');
+  same('正则字面量转义斜杠', 'const r = /a\\/b/g;\n__out = [r.test("a/b"), r.source];');
+  same('等号后换行仍按正则解析', 'const m =\n /x+/.exec("axxb");\n__out = m && m[0];');
+  same('注释边界：行尾注释与跨行块注释', 'const a = 1 // 行尾注释\nconst b = /* 跨\n行 */ 2\n__out = a + b;');
+  same('自终止字符后换行：对象/数组/实参', 'const o = {\n  a: 1,\n  b: 2\n};\nconst f = (x, y) => x + y;\nconst arr = [\n  1,\n  2\n];\n__out = f(o.a + o.b, arr.length);');
+  same('三元与 case 冒号后换行', 'const n = 2;\nconst t = n === 1 ?\n "one" :\n "other";\nswitch(n){ case 2:\n __out = t; break; }');
+  same('字面量别名不动属性名与成员名', 'const o = {true: 1, false: 2, undefined: 3};\n__out = [o.true, o.false, o.undefined, true, false, undefined === void 0];');
+
+  /* 规则确实在生效：否则上面的等价断言会退化成「什么都没压缩」也能通过 */
+  ok('压缩-自终止字符后的换行被省略', !/\n/.test(minifyJs('const a =\n1;\nconst b =\n2;\n__out = a + b;')));
+  ok('压缩-ASI 依赖的换行被保留', /return\n/.test(minifyJs('function f(){ return\n1 }')));
+}
 });
 
 /* 57. 插件注册点：导出器 / 导入器注册、校验、查找与注销 -------------------- */
