@@ -26,3 +26,5 @@ test-results/
 playwright-report/
 blob-report/
 acceptance-evidence/
+# 评审过程产物（日期目录只留本地磁盘，不入库）
+2026-11-11/
