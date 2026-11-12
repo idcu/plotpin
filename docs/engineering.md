@@ -108,6 +108,27 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
 - 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；**V-5 收口后的余量 8,063 B 即新的冻结基线**——低于基线不得开新功能，必须先用实测（raw 与 gzip 各自降幅）证明有可兑现的回收来源，或先砍口径；不得放宽上限，也不得把 `size-report` 的账面值当回收承诺。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量 + 相对 8,063 B 基线的关系」。逼近上限时只能做无损回收，**不得调高上限**。
 
+#### 2.3.1 备选：terser 局部 mangle（当前不采用，2026-11-13 实测）
+
+- **定位：备选方案，当前不接入构建链。** 触发条件：余量逼近停线（< 8,000 B 预警、< 6,000 B 强警告）且无损回收已榨干时，才重新评估。
+- 做法：`pack-core.mjs` 合并出单脚本后交给 terser，`compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希。
+- 测法：`buildStandalone` 真实构建一次 + `gzipSync` 量字节；基线复测 831,617 / 262,795，与现 dist 逐字节一致。探针装在仓库外临时目录，未改动 `package.json` / lock。
+
+| 变体 | 配置 | raw | gzip | 相对基线（raw / gzip） | `vm.Script` 解析 |
+|---|---|---|---|---|---|
+| A | 仅 compress | 813,204 | 260,607 | −18,413 / −2,188 | 通过 |
+| **C** | compress + 局部 mangle | **744,042** | **241,842** | **−87,575 / −20,953** | 通过 |
+| B / F | compress + toplevel mangle | 675,640 / 697,771 | 229,688 / 233,131 | −155,977～−133,846 / −33,107～−29,664 | 通过，但**不可用** |
+
+- **B / F 排除理由**：全量改名会抹掉 861 个顶层全局名。浏览器实测 `typeof state` 直接抛错，`window.toast / scheduleSave / populateSelects / renderTypes / requestRender / markDirty / commitChange / pushHistory / sanitizeObjects / downloadBlob` 全部 undefined——这是 `plugins.js` 按名探测的产品路径失效，不是测试依赖名字。F 用 350 个保留名（对 1,991 个测试标识符在 baseline 页面运行时探测生成）换回大部分语义，但名单取自测试内部实现，易碎且需随测试演进重新生成。
+- **C 的代价**：
+  1. 新增构建期 devDependency `terser`（实测 5.51.2），**必须精确锁版本**；否则压缩结果变化会让产物 SHA256 漂移，`build.mjs --check` 失败、SW 版本抖动；
+  2. 构建耗时 **+2.5～3 s**（792 KB 合并体的 compress + 局部 mangle）；
+  3. 生产栈帧全部变短名，降低可调试性（含 `Function.prototype.name` 一类依赖）；
+  4. 对未文档化全局名的隐式依赖（第三方插件、调试脚本）会静默失效。
+- **验证状态（如实）**：C **未跑全量 e2e**；A 跑了 dist 冒烟子集（smoke + interaction + file-dist）9/9 通过；F 的全量 e2e **未取得干净结论**——前 59 条通过（覆盖 18 个 spec，含 csp / file-dist / collab / history），后 91 条因端口冲突 `ERR_CONNECTION_REFUSED` 中断，**不得视为通过**。
+- 本节数字不改变任何预算常数；上限、预警阈值与 8,063 B 冻结基线仍以 `scripts/lib/budget.mjs` / `dist-manifest.json` 为准。
+
 ### 2.4 单文件发行版与 Service Worker 的边界
 
 - **源码多文件入口**（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 52 个（含 `sw.js` 自身）；`file://` 下不注册。
