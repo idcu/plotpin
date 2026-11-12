@@ -6,7 +6,7 @@
 
 ## 1. 运行形态
 
-PlotPin 是一个**无构建的单页应用**：`index.html` 用 45 个 classic `<script>` 顺序加载 35 个项目脚本和 10 个 vendor 模块，共享同一个全局词法作用域；不使用 ES Module、打包器或运行时依赖。加载顺序即依赖顺序，`scripts/check.mjs` 的分层检查会拒绝把脚本放到错误目录或提前加载。
+PlotPin 是一个**无构建的单页应用**：`index.html` 用 47 个 classic `<script>` 顺序加载 37 个项目脚本和 10 个 vendor 模块，共享同一个全局词法作用域；不使用 ES Module、打包器或运行时依赖。加载顺序即依赖顺序，`scripts/check.mjs` 的分层检查会拒绝把脚本放到错误目录或提前加载。
 
 - 唯一的可编辑状态是 `js/core/model.js` 里的全局 `let state`。非活动楼层的数据保存在 `state.floors` 中，活动的 `background / site / objects / viewport` 始终提升到 `state` 顶层；切换楼层时由 `syncActiveFloor()` 先回写，再装载目标楼层（[persistence.js](file:///d:/os/proj/js/plotpin/js/core/persistence.js) `switchFloorData`）。
 - `js/core/app.js` 最后加载：读取设置、恢复工程、建立 Service Worker 之外的启动流程（[app.js](file:///d:/os/proj/js/plotpin/js/core/app.js)）。

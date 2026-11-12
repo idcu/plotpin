@@ -120,10 +120,13 @@ function requestRender(){
  * 只有开始/结束拖拽时改形集合变化，静态层才重建一次（N-23）。
  * 导出 / 打印走「直接全量绘制」路径，保证产物与旧行为一致。 */
 let staticCanvas=null, staticCtx=null, staticKey='', staticRev=0;
+/* R-09：最近一次静态层中各对象的世界包围盒（id → [minX,minY,maxX,maxY]），
+   供属性面板逐键编辑时只重绘受影响区域；整层重建/作废时同步清空。 */
+const staticBounds=new Map();
 /* 内容签名（不含视口缩放/平移）与上一次静态层对应的视口，用于平移时整像素搬移位图 */
 let staticSig='', staticPanX=0, staticPanY=0, staticZoom=0, staticScroll=null;
 /** 显式作废静态层：对象增删改、载入/撤销/重做、覆盖率结果变化时调用 */
-function invalidateStatic(){ staticRev++; staticKey=''; }
+function invalidateStatic(){ staticRev++; staticKey=''; staticBounds.clear(); }
 /**
  * 当前逐帧改形、必须从静态层排除的对象 id（N-23）。
  * - move：越过 2px 阈值后才排除 originals 里的全部对象；
@@ -164,7 +167,8 @@ function sceneStaticContentKey(cssW,cssH,d){
     bgImage?1:0,(bgDataUrl||'').length,
     (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
     dyn?dyn.slice().sort().join(','):'',   /* 只跟“正在拖拽改形”有关，与选中集无关 */
-    coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0'
+    coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0',
+    typeof ghostSig==='function'?ghostSig():'0'   /* G-1：幽灵参考层参数变化必须重建静态层 */
   ].join('|');
 }
 /** 静态层缓存签名：内容签名 + 视口（缩放必须重建；平移可在整数像素时搬移） */
@@ -190,6 +194,7 @@ function visibleWorldRect(v,d,cssW,cssH,padPx=48){
 function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view,skip){
   if(!skip||!skip.bg) drawBackground(sc,v,d,cssW,cssH,toS);
   if(!skip||!skip.site) drawSite(sc,v,toS);
+  if(typeof ghostPaint==='function') ghostPaint(sc,v,toS);   /* G-1：参考层压在底图/场地之上、网格与对象之下 */
   drawGrid(sc,v,d,cssW,cssH,toS);
   drawCoverage(sc,v,d);
   drawSiteAnnotations(sc,v,toS);
@@ -199,7 +204,44 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
   const bnd={minX:0,minY:0,maxX:0,maxY:0};
   state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
     .sort((a,b)=>a.z-b.z)
-    .forEach(o=>{ if(boundsIntersect(objectSnapBounds(o,bnd),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
+    .forEach(o=>{
+      if(!boundsIntersect(objectSnapBounds(o,bnd),view)) return;
+      drawObject(sc,o,v,toS,iconBoost,exportGain);
+      staticBounds.set(o.id,[bnd.minX,bnd.minY,bnd.maxX,bnd.maxY]);
+    });
+}
+/** R-09：局部重绘——属性面板逐键编辑时只按受影响对象的屏幕矩形修补静态位图，
+ *  把每次击键的静态层成本从 O(全部对象) 降到 O(矩形内对象)。
+ *  任一前提不成立（位图缺失/视口已变/对象从未绘制过/区域过大/正在拖拽/有覆盖率叠加）
+ *  返回 false，调用方退回 invalidateStatic 整层重建，保证不会画出错误内容。 */
+function patchStaticObjects(ids){
+  if(!staticCanvas||!staticKey||typeof drag!=='undefined'&&drag) return false;
+  const v=state.viewport, k=dpr||1, cssW=wrap.clientWidth, cssH=wrap.clientHeight;
+  if(staticZoom!==v.zoom||staticPanX!==v.panX||staticPanY!==v.panY) return false;
+  if(staticCanvas.width!==Math.max(1,Math.round(cssW*k))||staticCanvas.height!==Math.max(1,Math.round(cssH*k))) return false;
+  const list=ids instanceof Map?Array.from(ids.keys()):Array.from(ids||[]);
+  if(!list.length||list.length>32) return false;
+  const d=worldDims(), toS=p=>w2s(p,v,d), pad=96;   /* 预留标签/图标溢出，避免旧字残影 */
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const id of list){
+    const b=staticBounds.get(id);
+    if(!b) return false;                            /* 未记录包围盒：无法确定清理范围 */
+    const a=toS([b[0],b[1]]), c=toS([b[2],b[3]]);
+    x0=Math.min(x0,a[0],c[0]); x1=Math.max(x1,a[0],c[0]);
+    y0=Math.min(y0,a[1],c[1]); y1=Math.max(y1,a[1],c[1]);
+  }
+  const px=Math.max(0,Math.floor(x0-pad)), py=Math.max(0,Math.floor(y0-pad));
+  const pw=Math.min(cssW,Math.ceil(x1+pad))-px, ph=Math.min(cssH,Math.ceil(y1+pad))-py;
+  if(pw<=0||ph<=0||pw*ph>cssW*cssH*0.6) return false;
+  const sc=ensureStaticLayer(cssW,cssH);
+  const ia=s2w([px,py],v,d), ib=s2w([px+pw,py+ph],v,d);
+  const view={minX:Math.min(ia[0],ib[0]),maxX:Math.max(ia[0],ib[0]),minY:Math.min(ia[1],ib[1]),maxY:Math.max(ia[1],ib[1])};
+  const iconBoost=Number(state.settings.markerScale)||1;
+  sc.save(); sc.beginPath(); sc.rect(px,py,pw,ph); sc.clip();
+  sc.clearRect(px,py,pw,ph);
+  drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,1,null,view,null);
+  sc.restore();
+  return true;
 }
 /** 动态层待绘对象：按 id 直取、过滤失效引用并按 z 升序（P2-4，取代全量 filter 扫描） */
 function dragDrawObjects(ids,idx){

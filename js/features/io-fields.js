@@ -49,7 +49,7 @@ const EXPORT_FIELD_DEFS=[
   /* 合成列：PDF 清单与打印报告共用；CSV/TSV/XLSX 不输出（列头与旧版完全一致） */
   {key:'参数',table:false,get:c=>exportParamText(c)}
 ];
-const EXPORT_FIELD_BY_KEY=new Map(EXPORT_FIELD_DEFS.map(f=>[f.key,f]));
+/* EXPORT_FIELD_DEFS 是字段唯一源；按 key 取值直接用 find（调用点极少，不建索引） */
 /** 完整表格列（CSV/TSV/XLSX 表头，顺序即字段表顺序；兼容旧全局名） */
 const TABLE_COLUMNS=EXPORT_FIELD_DEFS.filter(f=>f.table).map(f=>f.key);
 /** 设备台账字段（导出与导入共用；key=中文列名，value=props 键） */

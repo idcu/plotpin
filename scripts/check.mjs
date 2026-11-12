@@ -1,7 +1,7 @@
 /**
  * check.mjs —— 零依赖工程质量门禁（CI 前置）
  *
- * 1) 语法校验：对 js/ 下每个脚本执行 `node --check`
+ * 1) 语法校验：对 js/ 与 scripts/（含 lib/）下每个脚本执行 `node --check`
  * 2) 资源完整性：index.html 引用的本地脚本/样式/manifest 必须存在
  * 3) 入口完整性：js/ 下每个脚本都必须被 index.html 引用（Service Worker 例外）
  * 4) 离线承诺：入口 / CSS / JS 不得引用会发起网络请求的远程资源（白名单集中在 lib/offline-scan.mjs）
@@ -33,8 +33,8 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 
 /* 1. 语法校验 */
 const jsFiles = walkFiles(join(root, 'js'), { ext: '.js' });
-/* 工程脚本（开发工具）只需语法校验，不参与入口引用检查 */
-const toolFiles = readdirSync(join(root, 'scripts')).filter(n => n.endsWith('.mjs')).map(n => join(root, 'scripts', n));
+/* 工程脚本（开发工具）只需语法校验，不参与入口引用检查；scripts/lib 递归纳入，避免共享库语法错误逃逸 */
+const toolFiles = walkFiles(join(root, 'scripts'), { ext: '.mjs' });
 /* Service Worker 必须在站点根目录：放在 js/ 下默认 scope 仅 /js/，无法接管 index.html 与全站离线缓存 */
 const swFile = join(root, 'sw.js');
 if (!existsSync(swFile)) errors.push('Service Worker 缺失：sw.js 必须位于站点根目录');

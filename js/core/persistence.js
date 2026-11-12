@@ -187,14 +187,21 @@ const MARK_DIRTY_PROFILES=Object.freeze({
   floor:Object.freeze({ui:'none',broadcast:false}),
   settings:Object.freeze({ui:'full',broadcast:true})
 });
-function markDirty(kind){
+function markDirty(kind, ids){
   const p=MARK_DIRTY_PROFILES[kind]||MARK_DIRTY_PROFILES.object;
+  const hadCoverage=!!coverageResult;
   clearCoverageResult();               /* 对象/楼层变更后覆盖率叠加层失效，需重新分析 */
-  invalidateStatic();                /* 静态层（非选中对象）需要重建 */
+  /* R-09：属性面板逐键编辑优先局部修补静态层；任一前提不成立才整层重建 */
+  const patched=kind==='objectEdit'&&!hadCoverage&&typeof patchStaticObjects==='function'&&patchStaticObjects(ids);
+  if(!patched) invalidateStatic();     /* 静态层（非选中对象）需要重建 */
   scheduleSave();
   requestRender();
   if(p.ui==='full') refreshUI();
-  else if(p.ui==='lists'){ renderList(); renderLayers(); renderStats(); }
+  else if(p.ui==='lists'){
+    /* R-09：逐键编辑的对象表/统计重绘合并为一次，避免 5k 行表格阻塞输入 */
+    if(kind==='objectEdit'&&typeof scheduleListsRefresh==='function') scheduleListsRefresh();
+    else { renderList(); renderLayers(); renderStats(); }
+  }
   if(p.broadcast&&typeof collabOnLocalChange==='function') collabOnLocalChange();
 }
 /** 单个对象单调打点：新时间必须严格大于旧值（同一毫秒连续提交也递增）。 */
@@ -241,7 +248,7 @@ function commitObjectEdit(ids){
   touchFloor();
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
-  markDirty('objectEdit');
+  markDirty('objectEdit', ids);
 }
 /**
  * 清空当前楼层全部内容：图片底图槽、矢量场地槽、业务对象与标注、校准草稿/选中态、
@@ -374,10 +381,25 @@ async function idbAllKeys(){
   const keys=await idbReq('readonly','getAllKeys',undefined);
   return Array.from(keys||[]).filter(k=>typeof k==='string');
 }
-/** 工程库摘要列表（不装载底图），按更新时间倒序 */
+/** R-29：按前缀枚举键（openKeyCursor 区间扫描），避免先把全库键物化再过滤；
+ *  当前工程库与资产共用同一 DB 但不同 object store，仍限定在 DB_STORE 内。 */
+async function idbKeysByPrefix(prefix){
+  const db=await openDB();
+  return new Promise((resolve,reject)=>{
+    const out=[];
+    const tx=db.transaction(DB_STORE,'readonly');
+    const r=tx.objectStore(DB_STORE).openKeyCursor(IDBKeyRange.bound(prefix,prefix+'\uffff'));
+    r.onsuccess=()=>{ const c=r.result; if(!c) return; out.push(String(c.key)); c.continue(); };
+    r.onerror=()=>reject(r.error||new Error('IndexedDB 读取失败'));
+    tx.onerror=()=>reject(tx.error||new Error('IndexedDB 读取失败'));
+    tx.oncomplete=()=>resolve(out);
+    tx.onabort=()=>reject(tx.error||new Error('IndexedDB 读取已中止'));
+  });
+}
+/** 工程库摘要列表（不装载底图），按更新时间倒序；R-29 只枚举 proj: 前缀键 */
 async function listProjects(){
   let keys=[];
-  try{ keys=(await idbAllKeys()).filter(k=>k.startsWith(PROJECT_PREFIX)); }catch(e){ return []; }
+  try{ keys=await idbKeysByPrefix(PROJECT_PREFIX); }catch(e){ return []; }
   const out=[];
   for(const key of keys){
     let p=null; try{ p=await idbGetKey(key); }catch(e){}

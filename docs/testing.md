@@ -13,8 +13,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-10） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **153 个分区 / 3,858 条断言 / 加载 45 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **41 个 spec / 145 个用例**（默认 144 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **157 个分区 / 3,936 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **43 个 spec / 147 个用例**（默认 146 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（主 CI 不跑；夜间 `perf-nightly.yml` 定时/手动采集并归档 `test-results/perf-*.json`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
 
@@ -74,7 +74,7 @@
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
 - CI 侧新增 `e2e` job（`npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`，Node 20 / `ubuntu-latest`）。
-  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 144 用例通过 + 1 条件跳过，无法复现 runner 的网络、系统库与浏览器下载；
+  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 145 用例通过 + 1 条件跳过，无法复现 runner 的网络、系统库与浏览器下载；
   首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
@@ -94,9 +94,9 @@
 | i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
-| 界面加固 | ui-hardening(2)（触控尺寸/溢出等界面回归） |
+| 界面加固 | ui-hardening(2)（触控尺寸/溢出等界面回归）、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
 
-合计 **145** 个用例、**41** 个 spec（默认 144 跑 + 1 条件跳过；逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
+合计 **146** 个用例、**42** 个 spec（默认 145 跑 + 1 条件跳过；逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
 口径校正（2026-11-12）：本节旧表停留在 124/35，已按 `--list` 实测重排；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令

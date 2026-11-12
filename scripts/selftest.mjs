@@ -105,6 +105,7 @@ code += `\n;globalThis.__api = {
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
   importLimitErrors, importLimitMessage, dsvRowsExceed, handleImportFile,
   PdfCore: globalThis.__idcuPdf,
+  pdfVectorPlan, pdfVectorLabelCount,
   polygonArea, polylineLength, dimensionAngleDeg, pointInPolygon, distanceToSegment, nearestPointOnSegment,
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
@@ -172,7 +173,7 @@ code += `\n;globalThis.__api = {
   outlineOf, objectIndexById, dragObjectIndex, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
-  PdfRead: globalThis.PdfRead, Qr: globalThis.Qr,
+  PdfRead: globalThis.PdfRead, PdfVec: globalThis.PdfVec, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
   SYMBOL_CATEGORIES: globalThis.SYMBOL_CATEGORIES, SYMBOL_LIMITS: globalThis.SYMBOL_LIMITS,
   searchSymbols: globalThis.searchSymbols, buildSymbolIndex: globalThis.buildSymbolIndex,
@@ -5851,7 +5852,7 @@ await section("56. 单文件发行包：内联、去外链、图标 data URI、C
   const files={'a.css':'body{color:red}','a.js':'console.log("a")','b.js':'const x="</script>";','icon.svg':'<svg/>','manifest.webmanifest':'{}'};
   const out=buildStandalone(sample,p=>files[p]);
   ok('打包-样式内联', out.includes('<style>')&&out.includes('body{color:red}'));
-  ok('打包-脚本顺序保留', out.indexOf('/* a.js */')<out.indexOf('/* b.js */'));
+  ok('打包-脚本顺序保留', out.indexOf('console.log')<out.indexOf('const x'));
   ok('打包-无脚本外链', !/<script\s+src=/.test(out));
   ok('打包-manifest移除', !out.includes('manifest.webmanifest'));
   ok('打包-图标转dataURI', out.includes('data:image/svg+xml;base64,'));
@@ -9716,6 +9717,169 @@ await section("P2-17 DXF 文本控制字符清洗", async () => {
   ok('P2-17 控制字符折叠为空格且文本保留', out.includes('A B C D E'));
   const plain=api.Dxf.buildDxf([{type:'TEXT',x:0,y:0,height:1,text:'普通文本'}],[]);
   ok('P2-17 常规文本原样输出', plain.includes('普通文本'));
+}
+
+});
+
+/* ---------------- V-2a 矢量 PDF 几何映射：世界→pt / 矩形与旋转 / 圆椭圆锚点 / 闭合语义 ---- */
+await section("V-2a 矢量 PDF 几何映射：等比适配 / 矩形与旋转 / 圆椭圆锚点 / 闭合语义", async () => {
+{
+  const P = api.PdfVec;
+  const frame = { minX: -12.5, minY: 3.25, w: 50, h: 30 };
+  const fit = P.fit(frame, 842, 595, 24);
+  /* golden：k / 原点由「宽度受限 + 等比 + 居中 + 留白」手算，不回读实现 */
+  approx('V-2a 适配比例', fit.k, 15.88, 1e-9);
+  approx('V-2a 原点 X（含 frame.minX）', fit.ox, 222.5, 1e-9);
+  approx('V-2a 原点 Y（含 frame.minY）', fit.oy, 7.69, 1e-9);
+  const p00 = P.mapPt(fit, 0, 0), p104 = P.mapPt(fit, 10, 4);
+  approx('V-2a 锚点 世界(0,0)→pt.x', p00[0], 222.5, 1e-9);
+  approx('V-2a 锚点 世界(0,0)→pt.y', p00[1], 7.69, 1e-9);
+  approx('V-2a 锚点 世界(10,4)→pt.x', p104[0], 381.3, 1e-9);
+  approx('V-2a 锚点 世界(10,4)→pt.y', p104[1], 71.21, 1e-9);
+
+  /* 矩形顶点来自 outlineOf（与画布/SVG/DXF 同源），逐点坐标断言；旋转 90° 单独一例 */
+  const rect = { kind: 'rect', x: 0, y: 0, width: 10, height: 4, angle: 0 };
+  const rectPts = api.outlineOf(rect);
+  eq('V-2a 矩形顶点数', rectPts.length, 4);
+  const rc = P.mapPt(fit, rectPts[2][0], rectPts[2][1]);
+  approx('V-2a 矩形右上角 x', rc[0], 381.3, 1e-9);
+  approx('V-2a 矩形右上角 y', rc[1], 71.21, 1e-9);
+  const rotPts = api.outlineOf({ kind: 'rect', x: 0, y: 0, width: 10, height: 4, angle: 90 });
+  approx('V-2a 旋转矩形锚点1 x', rotPts[1][0], 0, 1e-9);
+  approx('V-2a 旋转矩形锚点1 y', rotPts[1][1], 10, 1e-9);
+
+  /* 圆：72 点采样；四象限锚点落在中心 ± 半径（坐标断言，包围盒仅作附加检查） */
+  const cp = api.outlineOf({ kind: 'rect', x: 5, y: 5, width: 0, height: 0, shape: { type: 'circle', r: 2 } });
+  eq('V-2a 圆采样段数', cp.length, 72);
+  const at = i => P.mapPt(fit, cp[i][0], cp[i][1]);
+  approx('V-2a 圆 0° 锚点 x', at(0)[0], 333.66, 1e-6);
+  approx('V-2a 圆 0° 锚点 y', at(0)[1], 87.09, 1e-6);
+  approx('V-2a 圆 90° 锚点 x', at(18)[0], 301.9, 1e-6);
+  approx('V-2a 圆 90° 锚点 y', at(18)[1], 118.85, 1e-6);
+  approx('V-2a 圆 180° 锚点 x', at(36)[0], 270.14, 1e-6);
+  approx('V-2a 圆 270° 锚点 y', at(54)[1], 55.33, 1e-6);
+
+  /* 椭圆（rx3 / ry1，旋转 30°）：0° 与 90° 锚点同时验证半径与旋转进入映射 */
+  const ep = api.outlineOf({ kind: 'rect', x: 5, y: 5, width: 0, height: 0, angle: 30, shape: { type: 'ellipse', rx: 3, ry: 1 } });
+  const e0 = P.mapPt(fit, ep[0][0], ep[0][1]), e18 = P.mapPt(fit, ep[18][0], ep[18][1]);
+  approx('V-2a 椭圆 0° 锚点 x', e0[0], 343.1575, 1e-3);
+  approx('V-2a 椭圆 0° 锚点 y', e0[1], 110.91, 1e-3);
+  approx('V-2a 椭圆 90° 锚点 x', e18[0], 293.96, 1e-3);
+  approx('V-2a 椭圆 90° 锚点 y', e18[1], 100.8425, 1e-3);
+
+  /* 路径命令与闭合语义：坐标统一两位小数 */
+  const cmds = P.path(fit, [[0, 0], [10, 0], [10, 4]], true);
+  eq('V-2a 闭合路径命令数', cmds.length, 4);
+  eq('V-2a 闭合路径追加 h', cmds[3][0], 'h');
+  eq('V-2a 路径序列化', P.stream(cmds), '222.5 7.69 m\n381.3 7.69 l\n381.3 71.21 l\nh');
+  eq('V-2a 开放路径不带 h', P.path(fit, [[0, 0]], false).length, 1);
+  eq('V-2a 空点列返回空命令', P.path(fit, [], true).length, 0);
+
+  /* 附加检查：取景框四角映射到页面内缩 pad（等比居中，不是拉伸） */
+  const fb = P.path(fit, [[-12.5, 3.25], [37.5, 3.25], [37.5, 33.25], [-12.5, 33.25]], true).filter(c => c.length > 1).map(c => c.slice(1));
+  approx('V-2a 取景框包围盒左', Math.min(...fb.map(p => p[0])), 24, 1e-6);
+  approx('V-2a 取景框包围盒右', Math.max(...fb.map(p => p[0])), 818, 1e-6);
+  approx('V-2a 取景框包围盒下', Math.min(...fb.map(p => p[1])), 59.3, 1e-6);
+  approx('V-2a 取景框包围盒上', Math.max(...fb.map(p => p[1])), 535.7, 1e-6);
+}
+
+});
+
+/* ---------------- V-2b 扇形 / 多段线 / 符号折线：复用 outlineOf 与 symbolPolylinesInWorld ----- */
+await section("V-2b 扇形 / 多段线 / 符号折线映射：闭合语义与多子路径", async () => {
+{
+  const P = api.PdfVec;
+  const fit = P.fit({ minX: -12.5, minY: 3.25, w: 50, h: 30 }, 842, 595, 24);
+
+  /* 扇形：outlineOf = 圆心 + 73 个圆弧点（0°→90°），锚点逐点断言 */
+  const sec = api.outlineOf({ kind: 'rect', x: 0, y: 0, width: 0, height: 0, shape: { type: 'sector', r: 5, a0: 0, a1: 90 } });
+  eq('V-2b 扇形顶点数=圆心+73', sec.length, 74);
+  const secCmds = P.path(fit, sec, true);
+  eq('V-2b 扇形命令数=74+闭合', secCmds.length, 75);
+  approx('V-2b 扇形圆心 x', secCmds[0][1], 222.5, 1e-9);
+  approx('V-2b 扇形圆心 y', secCmds[0][2], 7.69, 1e-9);
+  approx('V-2b 扇形弧起点 x', secCmds[1][1], 301.9, 1e-6);
+  approx('V-2b 扇形弧起点 y', secCmds[1][2], 7.69, 1e-6);
+  approx('V-2b 扇形弧终点 x', secCmds[73][1], 222.5, 1e-6);
+  approx('V-2b 扇形弧终点 y', secCmds[73][2], 87.09, 1e-6);
+  eq('V-2b 扇形闭合追加 h', secCmds[74][0] === 'h', true);
+
+  /* 多段线：开放 3 点 = m+2l；闭合追加 h；顶点来自 outlineOf 的节点序列 */
+  const poly = [[0, 0], [10, 0], [10, 4]];
+  const line = { kind: 'line', points: poly, closed: false };
+  eq('V-2b 开放折线命令数', P.path(fit, api.outlineOf(line), line.closed).length, 3);
+  const lineC = { kind: 'line', points: poly, closed: true };
+  eq('V-2b 闭合折线命令数', P.path(fit, api.outlineOf(lineC), lineC.closed).length, 4);
+  approx('V-2b 折线第3点 x', P.mapPt(fit, 10, 4)[0], 381.3, 1e-9);
+
+  /* 符号折线：直接消费 symbolPolylinesInWorld 的 [{points,closed}]，一条子路径一个 m */
+  const t = api.BUILTIN_TYPES.find(x => api.symbolPathsFor(x).length > 0);
+  const sym = api.symbolPolylinesInWorld(t, 5, 5, 2, 0, t.symbolViewBox);
+  ok('V-2b 符号可折线化', sym.length > 0);
+  const symCmds = sym.flatMap(sp => P.path(fit, sp.points, sp.closed));
+  eq('V-2b 子路径起点数=m 数', symCmds.filter(c => c[0] === 'm').length, sym.length);
+  const want = P.mapPt(fit, sym[0].points[0][0], sym[0].points[0][1]);
+  approx('V-2b 符号首点 x 对齐映射', symCmds[0][1], want[0], 1e-9);
+  approx('V-2b 符号首点 y 对齐映射', symCmds[0][2], want[1], 1e-9);
+  ok('V-2b 符号坐标全部有限', symCmds.every(c => c.slice(1).every(v => Number.isFinite(v))));
+  eq('V-2b 空子路径返回空', P.path(fit, [], false).length, 0);
+  eq('V-2b 非有限点被过滤', P.path(fit, [[0, 0], [NaN, 1], [2, 2]], false).length, 2);
+}
+
+});
+
+/* ---------------- V-3a 图片 XObject + SMask / 文字 DPI 分级 / 图片落位命令 ---------------- */
+await section("V-3a 图片 XObject + SMask / 文字 DPI 分级 / 图片落位命令", async () => {
+{
+  const P = api.PdfVec;
+  eq('V-3a 默认档 200 DPI', api.pdfVectorPlan(10).dpi, 200);
+  eq('V-3a 300 标签仍为 200 DPI', api.pdfVectorPlan(300).dpi, 200);
+  eq('V-3a 301 标签降到 150 DPI', api.pdfVectorPlan(301).dpi, 150);
+  eq('V-3a 图片落位命令', P.image('Im0', 10, 20, 30, 40), 'q 30 0 0 40 10 20 cm /Im0 Do Q');
+  const img = { w: 1, h: 1, rgb: new Uint8Array([255, 0, 0]), alpha: new Uint8Array([128]) };
+  const bytes = P.docPages(100, 100, [{ body: P.image('Im0', 0, 0, 10, 10), images: [img] }]);
+  const s = String.fromCharCode.apply(null, Array.from(bytes));
+  ok('V-3a PDF 头保留', s.startsWith('%PDF-1.4\n'));
+  eq('V-3a 图片页对象数', (s.match(/ 0 obj/g) || []).length, 6);
+  ok('V-3a RGB 图片对象', s.indexOf('/Subtype /Image') >= 0 && s.indexOf('/ColorSpace /DeviceRGB') >= 0);
+  ok('V-3a 灰度 SMask', s.indexOf('/SMask 6 0 R') >= 0 && s.indexOf('/ColorSpace /DeviceGray') >= 0);
+  eq('V-3a 资源字典登记', s.indexOf('/XObject << /Im0 5 0 R >>') >= 0, true);
+  eq('V-3a RGB 流长度=3', s.indexOf('/Length 3 ') >= 0, true);
+  eq('V-3a 掩码流长度=1', s.indexOf('/Length 1 ') >= 0, true);
+  const xref = Number(/startxref\n(\d+)/.exec(s)[1]);
+  eq('V-3a startxref 指向 xref', s.slice(xref, xref + 4), 'xref');
+  eq('V-3a xref 条目数=对象数', (s.slice(xref).match(/ 00000 n /g) || []).length, 6);
+  try { P.docPages(100, 100, [{ body: '中文' }]); ok('V-3a 非 ASCII 必须抛错', false); } catch (e) { ok('V-3a 非 ASCII 必须抛错', /ASCII/.test(e.message)); }
+  eq('V-3a flate 已导出', typeof P.flate, 'function');
+}
+
+});
+
+/* ---------------- V-3b1 矢量 PDF 导出选项：档位决策与降级原因 ---------------- */
+await section("V-3b1 矢量 PDF 导出选项：档位决策与降级原因", async () => {
+{
+  const plan = api.pdfVectorPlan;
+  eq('V-3b1 0 标签默认 200 DPI', plan(0).dpi, 200);
+  eq('V-3b1 0 标签无降级原因', plan(0).reason, '');
+  eq('V-3b1 0 标签不回退位图', plan(0).fallback, false);
+  eq('V-3b1 300 标签仍为 200 DPI', plan(300).dpi, 200);
+  eq('V-3b1 301 标签降到 150 DPI', plan(301).dpi, 150);
+  eq('V-3b1 301 标签原因为标签超限', plan(301).reason, 'labels');
+  eq('V-3b1 301 标签不退回位图', plan(301).fallback, false);
+  eq('V-3b1 非数值按 0 处理', plan('abc').dpi, 200);
+  eq('V-3b1 负数按 0 处理', plan(-5).dpi, 200);
+  /* 标签计数：活动层对象在 state.objects，非活动层在 floor.objects，两者都要计入 */
+  const st = api.state;
+  const base = api.pdfVectorLabelCount();
+  st.objects.push(api.baseObject('text', 'text.builtin', { name: 'V3B1-A', text: '甲' }));
+  eq('V-3b1 活动层文字计入标签数', api.pdfVectorLabelCount(), base + 1);
+  const extra = { id: 'floor.v3b1', name: 'V3B1', objects: [] };
+  st.floors.push(extra);
+  extra.objects.push(api.baseObject('text', 'text.builtin', { name: 'V3B1-B', text: '乙' }));
+  eq('V-3b1 非活动层文字也计入', api.pdfVectorLabelCount(), base + 2);
+  st.floors.pop();
+  st.objects.pop();
+  eq('V-3b1 计数可回到基线', api.pdfVectorLabelCount(), base);
 }
 
 });

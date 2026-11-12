@@ -342,11 +342,14 @@
       'g.clearInterval=function(id){tmi.delete(id);return _ci(id);};',
       'if(typeof _qm==="function")g.queueMicrotask=function(fn){return _qm(function(){if(frozen)return;return fn();});};',
       'var V=', JSON.stringify(PLUGIN_API_VERSION), ',CAPS=', JSON.stringify(rec.caps),
-      ',TOKEN=', JSON.stringify(rec.token), ',T=', String(T), ';',
+      ',TOKEN=', JSON.stringify(rec.token), ',T=', String(T), ',MAXCH=', String(APP_LIMITS.PLUGIN_RPC_MAX_CHARS), ';',
       'var seq=0,pend={},runs={exporter:{},importer:{}},dls=[];',
       'function send(m){m.__pp=1;m.token=TOKEN;post(m);}',
       'function need(c){if(CAPS.indexOf(c)<0)throw new Error("能力未声明："+c);}',
-      'function rpc(method,args){return new Promise(function(ok,no){var id=++seq;pend[id]={ok:ok,no:no};send({type:"rpc",id:id,method:method,args:args||[]});later(function(){if(pend[id]){delete pend[id];no(new Error("插件调用超时（>"+T+"ms）"));}},T);});}',
+      'function rpc(method,args){var a=args||[];',
+      /* R-24：写入类调用在 Worker 侧先按 JSON 字符数拦截，超大 props/points 不进主线程（避免克隆即卡死） */
+      'if(method==="addObjects"||method==="addAnnotation"){var n=0;try{n=JSON.stringify(a).length;}catch(e){n=Infinity;}if(n>+MAXCH)return Promise.reject(new Error("调用参数超过 2 MB 上限"));}',
+      'return new Promise(function(ok,no){var id=++seq;pend[id]={ok:ok,no:no};send({type:"rpc",id:id,method:method,args:a});later(function(){if(pend[id]){delete pend[id];no(new Error("插件调用超时（>"+T+"ms）"));}},T);});}',
       'function toast(msg,level){send({type:"toast",message:String(msg==null?"":msg).slice(0,200),level:String(level||"")});}',
       'function dl(callId,name,data){var base={type:"download",callId:callId,name:String(name||"").slice(0,120)};var p;',
       'if(typeof data==="string"){send(Object.assign({},base,{kind:"text",text:data}));p=Promise.resolve();}',
@@ -428,11 +431,20 @@
       throw e;
     }
   }
-  /** getState RPC：限流 + 能力校验 + 深拷贝快照 */
+  /** getState RPC：限流 + 能力校验 + 深拷贝快照。
+   *  R-24：快照序列化体积设上限，超限只拒绝本次调用（callRejected），不因工程过大而禁用插件。 */
   function pluginGetState(rec) {
     needCap(rec, 'state:read');
     pluginRateLimit(rec, 'getState');
-    return cloneJSON(global.persistableState ? global.persistableState() : appState());
+    const snap = cloneJSON(global.persistableState ? global.persistableState() : appState());
+    const maxBytes = APP_LIMITS.PLUGIN_GETSTATE_MAX_BYTES;
+    const bytes = utf8Length(JSON.stringify(snap));
+    if (bytes > maxBytes) {
+      const e = new Error('getState 快照超过 ' + Math.round(maxBytes / 1048576) + ' MB 上限（当前约 ' + Math.ceil(bytes / 1048576) + ' MB）');
+      e.callRejected = true;
+      throw e;
+    }
+    return snap;
   }
   function pluginAddObjects(rec, list, msg, annotationOnly) {
     pluginRateLimit(rec, annotationOnly ? 'addAnnotation' : 'addObjects');
@@ -528,9 +540,9 @@
       ok = false;
       value = undefined;
       replyRpc(rec, d, false, undefined, e && e.message || e);
-      /* B11：限流只拒绝本次调用，不禁用插件；其它异常仍按既有策略禁用 */
+      /* B11：限流只拒绝本次调用，不禁用插件；R-24 的超大快照同理（callRejected）；其它异常仍按既有策略禁用 */
       if (rec.status === 'loading') rec.errors.push(String(e && e.message || e));
-      else if (rec.status === 'active' && !(e && e.rateLimited)) disablePlugin(rec, '插件异常：' + String(e && e.message || e));
+      else if (rec.status === 'active' && !(e && (e.rateLimited || e.callRejected))) disablePlugin(rec, '插件异常：' + String(e && e.message || e));
       return;
     }
     replyRpc(rec, d, ok, value);

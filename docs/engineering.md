@@ -39,6 +39,8 @@ ngm.json / ngm.lock   第三方依赖清单与锁（vendor 接线）
 
 classic `<script>` 共享全局作用域，**目录边界是唯一还能被机器核对的模块边界**；跨层直接读取下层数据是允许的，反向依赖不允许新增。
 
+**PDF 出图的两条路径**：默认 `pdf` 是整页位图（JPEG）+ 清单页，字节与旧版灯片基线可比；显式 `pdf-vector` 为混合模式——底图/场地/网格为整页 JPEG（DCTDecode），对象轮廓与尺寸线为矢量内容流，文字/名称/面积/周长/尺寸、点位图标、标题栏与页脚为透明位图（Flate RGB + SMask），清单页仍为整页 JPEG。文字层不可选不可搜、放大发虚；标签数 >300 自动降到 150 DPI；`CompressionStream` 不可用时回退为整页位图，不产出坏文件。
+
 ---
 
 ## 2. 构建与打包
@@ -50,7 +52,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 | 源码直开 | `index.html` | 双击即可用；脚本逐文件加载，便于调试 |
 | 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成，内联全部 CSS/JS，可离线分发 |
 
-`scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；
+`scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进；内联标记用短名——`js/` 取文件基名、vendor 取包路径、CSS 取文件名，均两两唯一，用于在 dist 里定位来源），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；
 字符串 / 模板字面量 / 正则逐字节保留；标点相邻的空格、自终止词法单位后的换行可省（连续正负号之间例外），
 `}` 前的语句分号可省（`{a();}`→`{a()}`，`}` 前由 ASI 补分号；删除后若变成语法错误由构建期解析拦下），
 `return`/`throw`/`typeof` 等关键字与紧随的 `(`/`[`/`{`/字面量引号之间无空格，
@@ -83,7 +85,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 - gzip 硬上限：**286,720 B（280 KiB）**；`GZIP_WARN_BYTES = 266,240` 只预警（同上，`lib/budget.mjs` 单一来源）。
 - 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-12 实测：`bytes = 813,273`、gzip `258,004`、余量 `26,407 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-12 实测：`bytes = 830,743`、gzip `263,479`、余量 `8,937 B`（`node scripts/build.mjs --check` 复算一致）。
 - 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；余量 **< 8,000 B 冻结改功能**，只能做无损回收后重新评估。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
@@ -198,7 +200,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |
 | `i18n-scan.mjs` | 只按静态字面量扫描，不证明译文语义正确；JSON/HTML 内的动态拼接可能漏扫 |
-| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 145 用例（144 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
+| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 146 用例（145 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
 | `perf:browser` | **不在任何 CI job 中**；本机为 SwiftShader，数据不能当真实 GPU 结论 |
 | `.github/workflows/ci.yml` | `discipline` job 的步骤名仍写着「十问看板」，实际为 **13 问**；为文案滞后，不影响执行 |
 | `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用「本地 ci 绿」代替全部门禁 |
@@ -394,3 +396,4 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 跨工程清理资产 | 资产必须按工程命名空间隔离，禁止跨工程 prune |
 | 在导出中绕过公式注入防护 | CSV/TSV/XLSX 必须沿用统一 `formulaGuard` |
 | 用人工验收替代自动化门禁 | 人工结果只说明当次设备/语料可用，不能替代 `ci`/`selftest`/`bench`/`gates` |
+| 未备份就改代码 | 每个任务开工前先建 `2026-11-12/dev-plan/backup/<任务>/` 存原件，并在改动清单登记一行；无登记不得开工 |

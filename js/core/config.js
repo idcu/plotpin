@@ -53,6 +53,8 @@ const APP_LIMITS = Object.freeze({
   PLUGIN_MANIFEST_MAX_BYTES: 192 * 1024,    /* 插件清单字节上限（UTF-8），解析前先按原文长度拦截 */
   PLUGIN_CODE_MAX_BYTES: 64 * 1024,         /* 插件源码字节上限（UTF-8） */
   PLUGIN_GETSTATE_PER_MIN: 60,              /* 沙箱 getState 每分钟调用上限：每次都会克隆整工程 */
+  PLUGIN_GETSTATE_MAX_BYTES: 16 * 1024 * 1024, /* 沙箱 getState 快照序列化字节上限：超限只拒绝本次调用，不禁用插件 */
+  PLUGIN_RPC_MAX_CHARS: 2 * 1024 * 1024,    /* 沙箱调用参数 JSON 字符上限（Worker 侧发送前拦截，防超大 props/points） */
   PLUGIN_ADD_OBJECTS_PER_MIN: 30,           /* 沙箱 addObjects 每分钟调用上限（单次仍≤500 对象） */
   PLUGIN_ADD_ANNOTATION_PER_MIN: 60,        /* 沙箱 addAnnotation 每分钟调用上限 */
   PLUGIN_RATE_WINDOW_MS: 60 * 1000,         /* 插件限流窗口 */

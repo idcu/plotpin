@@ -78,7 +78,7 @@ test('导入目录 → 绑定型号/数量 → 跨楼层 BOM → 导出 CSV/XLSX
   await page.selectOption('#exportKind', 'quote-xlsx');
   await page.click('#exportBtn');
   const xlsxDownload = await xlsxWait;
-  expect(xlsxDownload.suggestedFilename()).toMatch(/产品报价\.xlsx$/);
+  expect(xlsxDownload.suggestedFilename()).toMatch(/-\d{8}-\d{4}-产品报价\.xlsx$/);
   expect(statSync(await xlsxDownload.path()).size).toBeGreaterThan(0);
 
   /* 6. 替换目录（同型号单价 1200 → 2000）：行集合不变，重导沿用快照单价 */

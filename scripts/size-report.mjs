@@ -5,8 +5,9 @@
  *   node scripts/size-report.mjs          人类可读报告
  *   node scripts/size-report.mjs --json   JSON（便于前后对比）
  *
- * 口径（P2-06 修正）：
- *   - 组成：按 dist/plotpin-standalone.html 中的 `/* 文件 *​/` 标记切分（与 build 完全同源），
+ * 口径（P2-06 修正，V-3R 去标记）：
+ *   - 组成：按 index.html 中 `<script src>` / `<link rel=stylesheet>` 的声明顺序，
+ *     与 dist 里的 `<script>` / `<style>` 块逐一对应切分（构建不再嵌来源标记），
  *     剩余部分记作 HTML 其余（含 CSP/图标 data URI/内联壳）。
  *   - 注释/缩进/空行：统计对象是 **dist 内联后的分块文本**（构建期已删注释、行首缩进与空行），
  *     得到的是「当前产物还能再回收多少」；另给 `sourcePotential` 作为源文件潜在值参考，
@@ -38,16 +39,23 @@ const total = bytes(bundle);
 const gzipBytes = gzipSync(Buffer.from(bundle, 'utf8')).length;
 const budget = budgetStatus({ bytes: total, gzipBytes });
 
-/* ---- 1. 按构建标记切分组成 ---- */
-const parts = [];
-for (const m of bundle.matchAll(/<script>\n\/\* ([^*]+) \*\/\n([\s\S]*?)\n<\/script>/g)) {
-  /* text 为 dist 内联后的实际文本：后续所有统计都基于它，不再回读源文件 */
-  parts.push({ path: m[1].trim(), bytes: bytes(m[2]), text: m[2] });
+/* ---- 1. 按 index.html 声明顺序切分组成 ---- */
+/* 构建不再嵌来源标记：dist 里每个 <script>/<style> 块与 index.html 的声明一一对应、顺序一致 */
+const entry = read('index.html');
+const srcList = [...entry.matchAll(/<script\s+src="([^"]+)"><\/script>/g)].map(m => m[1]);
+const cssList = [...entry.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/g)].map(m => m[1]);
+const scriptBodies = [...bundle.matchAll(/<script>\n([\s\S]*?)\n<\/script>/g)].map(m => m[1]);
+const styleBodies = [...bundle.matchAll(/<style>\n([\s\S]*?)\n<\/style>/g)].map(m => m[1]);
+if (scriptBodies.length !== srcList.length || styleBodies.length !== cssList.length) {
+  console.error(`区块数与 index.html 声明不一致：脚本 ${scriptBodies.length}/${srcList.length}、`
+    + `样式 ${styleBodies.length}/${cssList.length}（dist 与源可能不同步，请先重新构建）`);
+  process.exit(1);
 }
-const cssMatch = bundle.match(/<style>\n\/\* ([^*]+) \*\/\n([\s\S]*?)\n<\/style>/);
-if (cssMatch) parts.push({ path: cssMatch[1].trim(), bytes: bytes(cssMatch[2]) });
+const parts = [];
+scriptBodies.forEach((text, i) => parts.push({ path: srcList[i], bytes: bytes(text), text, kind: 'js' }));
+styleBodies.forEach((text, i) => parts.push({ path: cssList[i], bytes: bytes(text), text, kind: 'css' }));
 const marked = parts.reduce((a, p) => a + p.bytes, 0);
-parts.push({ path: '(HTML 其余：CSP/图标/内联壳)', bytes: total - marked });
+parts.push({ path: '(HTML 其余：CSP/图标/内联壳)', bytes: total - marked, kind: 'html' });
 parts.sort((a, b) => b.bytes - a.bytes);
 
 /* ---- 2. 注释 / 缩进 / 空行（状态机） ---- */
@@ -107,7 +115,7 @@ function scanJs(text) {
   return { comment, indent, blank, template };
 }
 
-const jsParts = parts.filter(p => p.path.endsWith('.js') && p.path !== '(HTML 其余：CSP/图标/内联壳)');
+const jsParts = parts.filter(p => p.kind === 'js');
 
 /* 产物口径：dist 分块文本里还剩多少可回收（构建期压缩后的真实值）。 */
 const savings = { comment: 0, indent: 0, blank: 0, templateInside: 0 };
@@ -119,7 +127,9 @@ for (const p of jsParts) {
 /* 源文件潜在值：仅供跨版本比较，不能当作 dist 预算（构建期已删注释/缩进/空行）。 */
 const sourceSavings = { comment: 0, indent: 0, blank: 0, templateInside: 0 };
 for (const p of jsParts) {
-  const s = scanJs(read(p.path));
+  let src;
+  try { src = read(p.path); } catch (_) { continue; }
+  const s = scanJs(src);
   sourceSavings.comment += s.comment; sourceSavings.indent += s.indent;
   sourceSavings.blank += s.blank; sourceSavings.templateInside += s.template;
 }

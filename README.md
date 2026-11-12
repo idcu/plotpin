@@ -4,11 +4,11 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-3858%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-3936%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 
 PlotPin 是一个在浏览器里运行的图纸标注工具：在一张图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量与标注尺寸，并把图纸和台账导出为常见格式。运行时不需要安装、服务器或网络；入口是仓库根目录的 `index.html`，托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-当前共 **3858 项断言全部通过**。
+当前共 **3936 项断言全部通过**。
 
 > 文档口径：行为以代码为准。本文只做入口索引，不重复实现细节；易漂移的数字统一指向单一来源（见[数字口径](#数字口径)），不在此处复制多个版本。最后核对日期：2026-11-08。
 
@@ -71,7 +71,7 @@ npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实浏览器 e2e（需先装 Playwright）
 npm run perf:browser  # 真实 Chromium 性能基线（可选）
 npm run discipline    # 方法论自检看板
-# 3858 assertions, no dependencies
+# 3936 assertions, no dependencies
 ```
 
 `node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、模块分层、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。CI 另外串行执行 `bench`、`build --check`、`check-gates`、`check-ngm` 与 `check-discipline`。
@@ -132,7 +132,7 @@ CHANGELOG.internal.md      内部追溯：提交、改动点、实测数据、�
 
 ## 已知限制
 
-- **PDF 导出是整页位图**，不是矢量 PDF；需要矢量交付时使用 SVG 或 DXF。
+- **PDF 默认导出是整页位图**（图纸位图+清单）；另有一个显式矢量选项 `PDF（矢量·文字为位图）`：对象轮廓与尺寸线为矢量，底图/文字/点位/标题栏为位图，文字不可选不可搜、放大发虚，>300 标签自动降 150 DPI。纯矢量交付仍建议 SVG 或 DXF。
 - **DXF 中符号按折线近似**；画布/SVG/PNG/PDF 使用同一路径源，DXF 属明确的降级表达。
 - **旧版兼容未实测**：当前版本可读 v1、写入 v2；旧版 App 是否拒绝 v2、忽略 `site` 后回写丢失场地，未在本次复核中验证。
 - **几何规则检查不是消防/规范审图**：不内置任何规范数值，阈值由用户填写。

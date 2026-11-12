@@ -18,6 +18,13 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('precisionSetting'))}</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>${esc(T('languageLabel'))}</label><select id="setLang"><option value="zh" ${state.settings.lang!=='en'?'selected':''}>中文</option><option value="en" ${state.settings.lang==='en'?'selected':''}>English</option></select>
       <label>${esc(T('pluginSessionOnly'))}</label><div id="pluginPanel">${pluginPanelHTML()}</div>
+      <label>${esc(T('ghostLayer'))}</label><div class="hint-text" id="ghostPanel">
+        <input type="file" id="ghostFile" accept="image/*,application/pdf" style="display:none">
+        <button type="button" id="ghostPick">${esc(T('ghostPick'))}</button>
+        <button type="button" id="ghostClear">${esc(T('ghostClear'))}</button>
+        <span style="margin-left:8px">${esc(T('ghostOpacity'))}</span>
+        <input type="range" id="ghostOpacity" min="10" max="100" step="5" value="${Math.round((ghostLayer?ghostLayer.opacity:.5)*100)}" style="width:120px">
+      </div>
       <label>${esc(T('runtimeSetting'))}</label><div class="hint-text">${esc(capabilitySummary())}</div>
       <label>${esc(T('siteBgSetting'))}</label><div class="hint-text">${esc(siteDescription())}<br>${esc(T('siteBgHint'))}</div>
     </div>`,[
@@ -44,6 +51,19 @@ $('settingsBtn').onclick=()=>{
     }}
   ]);
   bindPluginPanel();
+  /* G-2：幽灵参考层控件——即时生效，不进入 settings/工程/撤销栈 */
+  $('ghostPick').onclick=()=>$('ghostFile').click();
+  $('ghostFile').onchange=async e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(f) await ghostLoadFile(f);
+    e.target.value='';
+  };
+  $('ghostClear').onclick=()=>ghostClear();
+  $('ghostOpacity').oninput=e=>{
+    if(!ghostLayer) return;
+    ghostLayer.opacity=Math.max(.1,Math.min(1,Number(e.target.value)/100));
+    invalidateStatic(); requestRender();
+  };
 };
 
 /** D-05 插件面板：列表（id/版本/能力/状态/原因）+ 清单导入 + 卸载；仅会话内，不持久化 */

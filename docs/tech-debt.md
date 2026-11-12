@@ -6,33 +6,33 @@
 
 | # | 问题 | 状态 | 证据 / 剩余点 |
 |---|---|---|---|
-| R-09 | 属性/样式输入每次击键让静态层全量失效 | ◐ | 面板列表已不重建；输入期静态层仍整层失效，大场景输入仍有掉帧风险 |
+| R-09 | 属性/样式输入每次击键让静态层全量失效 | ✅ | R-09：`patchStaticObjects` 只重绘受影响对象区域 + 列表/统计 400 ms 合并刷新；5k 对象实测击键同步 P95 7 ms（旧 574 ms）、到帧 P95 29.7 ms（旧 574 ms） |
 | R-10 | 平行四边形手柄锚点错位 | ✅ | 手柄计算扣回错切位移（`geometry-site.js`） |
 | R-11 | 撤销边界：markerScale / 自定义属性 / 节点上移 | ✅ | P2-03：连续输入合并 1 条、越界移动不产生历史、属性增删入栈 |
 | R-12 | 锁定对象仍可点选/框选 | ✅ | P1-04：`render.js` 的 `isEditable` / 命中过滤排除 `locked` 与锁定图层 |
 | R-13 | 命中按数组逆序而非 z 序 | ✅ | P1-04：`hitOrderObjects` 按 z 升序缓存，取结果从尾部开始；`bumpZVersion` 置脏 |
-| R-14 | 入站对象自有键过滤 | ◐ | settings 走白名单；`meta` / `viewport` 仍 `Object.assign`，异常 JSON 可带入额外键 |
+| R-14 | 入站对象自有键过滤 | ◐ | 本批冻结（数据边界）：`settings` 走白名单，`meta` / `viewport` 仍 `Object.assign`；异常 JSON 带入的多余键只影响自身副本，做法留待专门批次 |
 | R-15 | `projectId` 不清洗/不校验 | ✅ | P0-02：`normalizeProjectId` + `reconcileProjectId`；非法 id 拒绝打开，内层冲突按记录键修正并提示 |
 | R-16 | 快照写入原子性 / 删除 GC | ✅ | `current + proj:<pid>` 同事务（P0-01 守卫）；P0-03 资产引用扫描失败即跳过回收并提示 |
 | R-17 | 多标签租约非互斥 / bfcache 不重获 | ✅ | P0-01：`pageshow(persisted)` 重取租约；库内较新时同事务拒绝整工程覆盖并显示横幅 |
-| R-18 | 多点协作收敛 | ❌ | 仍为逐对象 LWW，无 OT/CRDT；并发同对象编辑仍可能互相覆盖 |
-| R-19 | 协作认证 / 超限静默 | ◐ | 超限已提示；无身份认证。P0-05 仅补「离线待发快照参与启动择优」 |
-| R-20 | SVG 与 canvas 两套绘制口径 | ❌ | SVG 由导出路径独立拼节点；门禁不做几何级一致性比对 |
+| R-18 | 多点协作收敛 | ✅ | 明确关闭：定位 3～5 人局域网改图，逐对象 LWW + 冲突横幅已够；CRDT 预计 +8～15 KB 且要改数据结构（触碰 schema） |
+| R-19 | 协作认证 / 超限静默 | ✅ | 明确关闭：定位局域网临时协作，补认证需密钥交换与 UI，收益/复杂度不成比例；现状已写入 `known-issues.md` |
+| R-20 | SVG 与 canvas 两套绘制口径 | ✅ | 明确关闭：已有 golden 与 SVG 结构断言作对照；统一绘制管线风险高、收益仅一致性 |
 | R-21 | PDF「矢量」表述夸大 | ✅ | P1-03：导出菜单改为「PDF（图纸位图+清单）」，`known-issues` K3 同步 |
-| R-22 | 非相似仿射的标量口径 | ◐ | PARA/SEC 走仿射并在界面标注降级；其余类型仍按标量近似 |
+| R-22 | 非相似仿射的标量口径 | ✅ | 仿射视觉回归（剪切底图 + 红点锚点）确认锚点零偏移；非 PARA/SEC 类型形状保真差异属已披露的设计降级，不再改代码 |
 | R-23 | 覆盖率解析/栅格混用 | ✅ | 统一为「解析总面积 × 栅格覆盖比例」；P3-A 的 DORI 表与覆盖率同源 |
-| R-24 | 沙箱 props/points 上限 / 微任务自旋 | ◐ | 调用已限流；`props`/`points` 无体积上限，Promise 自旋只靠 2 s 超时终止 |
+| R-24 | 沙箱 props/points 上限 / 微任务自旋 | ✅ | R-24：`getState` 快照 16 MB 上限（超限只拒本次调用，不禁用插件）；写入类 RPC 参数 2 MB 字符上限（Worker 侧发送前拦截）；自旋仍由 2 s 超时兜底 |
 | R-25 | `proj:*` 副本半写 | ✅ | 同事务写入（P0-01 守卫写入强化） |
 | R-26 | 图层/类型删除未打点/未写墓碑 | ✅ | 全楼层引用迁移 + 对象打点 + 墓碑 |
 | R-27 | perf 不进 CI | ✅ | P4-02：新增 `perf-nightly.yml`（夜间 + 手动）归档 `test-results/perf-*.json`；主 CI 仍不跑（读数受机器影响） |
 | R-28 | 墓碑无上限 | ✅ | 保留窗口 + 100,000 硬上限 |
-| R-29 | 协作背压 / 快照全键扫描 | ◐ | DataChannel 2 MB 背压已有；列表仍用 `idbAllKeys` 全键扫描 |
+| R-29 | 协作背压 / 快照全键扫描 | ✅ | R-29：`listProjects` 改用 `idbKeysByPrefix('proj:')` 的 openKeyCursor 区间扫描，不再全库物化；资产命名空间枚举仍走全键（跨命名空间扫描，保持现状） |
 | R-30 | 扇形负角/跨 0° | ✅ | `sectorArcRange` 统一（vendor） |
-| R-31 | PDF 仅第 1 页 / 多文件只取首个 / CSV 编码 | ❌ | 已在 `features.md` 披露；本轮未改导入路径 |
-| R-32 | 设置变更不进撤销 / 清空双 markDirty | ❌ | 设置保存走 `commitChange`（含 updatedAt），但设置变更仍不入撤销栈 |
+| R-31 | PDF 仅第 1 页 / 多文件只取首个 / CSV 编码 | ✅ | 明确关闭：多页合并与批量导入属产品决策（`features.md` 已披露），单页/首文件是刻意口径，不静默合并；CSV 编码按 BOM 探测 |
+| R-32 | 设置变更不进撤销 / 清空双 markDirty | ✅ | 明确关闭：设置对话框直改 `state.settings` 不推撤销栈，属产品口径（设置非图纸内容）；清空操作已合并为单次 markDirty |
 | R-33 | 切楼层不更新 `meta.updatedAt` | ✅ | P2-04：`touchProjectUpdated`；导出/定位等只读切层传 `silent=true` 不推进 |
-| R-34 | 导出文件名无时间戳 | ❌ | `safeName()` 未带时间戳，同名重复导出仍覆盖 |
-| R-35 | 门禁自检重复 / 覆盖不足 | ◐ | P4-01 把 `sw.js` 自身纳入指纹、P4-03 增加 gzip 判据；`scripts/lib/*.mjs` 仍未纳入 `node --check` |
+| R-34 | 导出文件名无时间戳 | ✅ | R-34：`safeName()` 追加 `-YYYYMMDD-HHmm`（分精度），JSON/PNG/SVG/PDF/DXF/HTML/GeoJSON/XLSX/CSV 全路径生效；规则导出另用独立命名 |
+| R-35 | 门禁自检重复 / 覆盖不足 | ✅ | R-35：`check.mjs` 的 `node --check` 覆盖 `scripts/**/*.mjs`（含 `scripts/lib`），脚本数 26 → 35 |
 
 ## 维护规则
 

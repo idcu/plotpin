@@ -5,7 +5,7 @@ if (!__geo) throw new Error('geometry.js：缺少 @idcu/core-geometry，请检�
 /* -------------------- 几何工具（委托模块） -------------------- */
 const add=(a,b)=>__geo.vecAdd(a,b);
 const sub=(a,b)=>__geo.vecSub(a,b);
-const mul=(a,s)=>__geo.vecScale(a,s);
+/* 向量运算转发（vecScale 等保留在 __geo，避免重复实现） */
 const dist=(a,b)=>__geo.distance(a,b);
 function rotatePoint(p,c,angDeg){ return __geo.rotatePoint(p,c,angDeg); }
 function polygonArea(points){ return __geo.polygonArea(points); }

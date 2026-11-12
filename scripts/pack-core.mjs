@@ -20,9 +20,13 @@ export function buildStandalone(html, readFile) {
     .replace(/\n[ \t]+(?=<)/g, '\n').replace(/\n[ \t]*\n/g, '\n');
   const cspHashes = [];
 
+  /* 内联后不再嵌来源标记：产物里的脚本/样式按 index.html 的声明顺序排列，
+     size-report 按同一顺序切分定位来源（去掉 47 条标记，省约 700 B）。 */
+  const inner = (body) => `\n${body}\n`;
+
   /* 样式内联（构建期无损压缩：只删注释/多余空白，源文件保持可读） */
   out = out.replace(/<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/g,
-    (_, href) => `<style>\n/* ${href} */\n${minifyCss(readFile(href))}\n</style>`);
+    (_, href) => `<style>${inner(minifyCss(readFile(href)))}</style>`);
 
   /* 脚本内联（保持原有顺序）；先做构建期无损压缩，再转义 </script> 防止提前闭合。
      哈希必须按浏览器看到的**脚本文本内容**计算（含压缩后的换行）。
@@ -31,9 +35,9 @@ export function buildStandalone(html, readFile) {
     const code = minifyJs(String(readFile(src))).replace(/<\/script/gi, '<\\/script');
     try { new vm.Script(code, { filename: src }); }
     catch (e) { throw new Error(`压缩后脚本无法解析（${src}）：${e.message}`); }
-    const inner = `\n/* ${src} */\n${code}\n`;
-    cspHashes.push(createHash('sha256').update(inner, 'utf8').digest('base64'));
-    return `<script>${inner}</script>`;
+    const text = inner(code);
+    cspHashes.push(createHash('sha256').update(text, 'utf8').digest('base64'));
+    return `<script>${text}</script>`;
   });
 
   /* CSP 升级：只给内联脚本签哈希，其余策略原样保留 */

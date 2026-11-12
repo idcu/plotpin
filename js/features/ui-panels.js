@@ -125,6 +125,14 @@ function filteredObjects(f){
   const ff=f||listFilterState();
   return state.objects.filter(o=>objectMatchesFilter(o,ff));
 }
+/* -------------------- 对象列表 -------------------- */
+let listsRefreshTimer=null;
+/** R-09：逐键编辑时把对象表/图层/统计的整块重绘合并为一次（400ms 尾触发），
+ *  避免 5k 行表格与几何检查在每次击键都重建；画布静态层由 patchStaticObjects 局部修补。 */
+function scheduleListsRefresh(){
+  if(listsRefreshTimer) return;
+  listsRefreshTimer=setTimeout(()=>{ listsRefreshTimer=null; renderList(); renderLayers(); renderStats(); },400);
+}
 function renderList(){
   const rows=filteredObjects(listFilterState());
   $('headSelectChk').checked=rows.length>0&&rows.every(o=>selectedIds.has(o.id));
