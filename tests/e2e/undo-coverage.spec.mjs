@@ -29,6 +29,9 @@ test('P2-03：markerScale 修改可撤销且一次只回退一步', async ({ pag
 test('P2-03：自定义属性新增/删除可撤销', async ({ page }) => {
   await page.goto('/index.html');
   await expect(page.locator('#canvas')).toBeVisible();
+  /* 启动末尾 afterStateLoaded/refreshUI + fitView 会重绘属性面板；
+     早于它建对象/填面板，点击 #propAdd 时面板可能已被重置（Firefox dist 下偶发）。等启动落定。 */
+  await page.waitForFunction(() => state.viewport.zoom !== 1, null, { timeout: 3000 }).catch(() => {});
   await page.evaluate(() => {
     state.objects.push(baseObject('point', 'point.marker', { name: 'P2-03', x: 5, y: 5 }));
     commitChange('P2-03 建对象');

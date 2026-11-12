@@ -129,8 +129,9 @@ test('file:// 探针：应用启动、CSP 内联哈希生效，存储/下载/SW 
   expect(probe.cspHashes).toBe(1);
   expect(probe.inlineBlocked).toBe(true);
   expect(probe.cspViolations.length).toBeGreaterThanOrEqual(1);
-  /* 注入脚本被拦会产生预期的 CSP 违规日志；除它之外不允许任何控制台错误 */
-  const cspNoise = /Executing inline script violates|Refused to execute inline script|Content Security Policy/i;
+  /* 注入脚本被拦会产生预期的 CSP 违规日志；除它之外不允许任何控制台错误。
+     兼容 Chromium 与 Firefox 的两种文案（后者为连字符版 Content-Security-Policy）。 */
+  const cspNoise = /Executing inline script violates|Refused to execute inline script|Content[- ]Security[- ]Policy/i;
   expect(errors.filter(e => !cspNoise.test(e))).toEqual([]);
 });
 

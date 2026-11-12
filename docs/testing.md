@@ -72,12 +72,14 @@
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
+  非 Chromium 下另有 B-10（CDP 堆测量）1 条 skip；dist 入口另有 `sw.spec` 1 条 skip。
 - **三条跑法，全量 44 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
   - **`file://` 入口**：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
   - dist 入口的跳过项：既有协作 soak 1 条 + `sw.spec` 1 条（单文件发行版不含 `js/`、`css/`、`sw.js`，SW 预缓存计数只对源码入口有判定意义；显式 `test.skip` 带原因，不测 harness）。
   - 实测（2026-11-12）：源码 **149 passed / 0 failed / 1 skipped**，exit 0；dist **148 passed / 0 failed / 2 skipped**，exit 0。
+  - 跨浏览器（同日）：Firefox 源码 **149 / 0 / 2**、dist **148 / 0 / 3**，均 exit 0；WebKit on Windows 不稳定，不作支持目标。支持矩阵与差异清单见 [engineering.md](engineering.md) §2.5。
 - `file://` 与 http 的实测差异（Chromium，2026-11-12）：
   - **IndexedDB 可用**（`readwrite-ok`），`localStorage` 可用，自动保存与工程恢复与 http 一致；
   - **下载可触发**：PDF 与 CSV 都能拿到 `download` 事件与完整文件（PDF > 280 KB、CSV 含表头与数据行）；
@@ -85,6 +87,21 @@
   - **Service Worker 不注册**：`navigator.serviceWorker` 在 Chromium 的 file:// 下存在，但产品按协议显式关闭（`detectCapabilities` 的 `sw=false`），不尝试注册、无报错；PWA 安装与预缓存只对源码多入口成立，这是设计边界而非缺陷。
   - 唯一环境差异是 SW/PWA，其余能力与 http 相同；未发现 file:// 专属产品缺陷。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
+- **跨浏览器实测（2026-11-12）**：同一套用例支持 `--browser=firefox` / `--browser=webkit`；结论见 [engineering.md](engineering.md) §2.5（Chromium 全量通过；Firefox 全量通过；WebKit on Windows 不作支持目标）。为跑通 Firefox 只改测试侧判定，**没有产品改动**，逐条如下：
+
+| 文件 | 改的是 | 具体改动 |
+|---|---|---|
+| `csp.spec.mjs` | 判定 | 违规日志正则同时认 Chromium（`Content Security Policy`/`Refused to`）与 Firefox（`Content-Security-Policy…`）；拦截断言未放宽 |
+| `file-dist.spec.mjs` | 判定 | 预期 CSP 噪音白名单补 Firefox 文案；其余断言不变 |
+| `ui-hardening.spec.mjs` | 判定（放宽） | `backgroundImage` 由单值 `initial` 放宽为 `initial|none`；本组唯一放宽断言处 |
+| `history-increment.spec.mjs` | 判定（跳过范围） | B-10 真实堆测量依赖 CDP，非 Chromium 显式 skip；Chromium 仍执行 |
+| `i18n-template.spec.mjs` | 判定 | 「切语言 → 渲染 → 读取」放进同一同步块并等启动落定；期望文案不变 |
+| `publish-state.spec.mjs` | 判定 | 加启动落定等待；产品未改 |
+| `history.spec.mjs` | 判定 | 刷新后先等 `state.floors[0].objects` 就绪；产品未改 |
+| `rev-compare.spec.mjs` | 判定 | 先等启动末尾 `fitView()` 落定（`zoom !== 1`）再按可视范围取景；产品未改 |
+| `undo-coverage.spec.mjs` | 判定 | 属性面板用例先等启动落定再建对象、填面板（dist 下偶发面板被启动重绘重置）；产品未改 |
+
+> 启动落定的原因与写法见 [known-issues.md](known-issues.md) K14：`applyLocalSettings()` 会整体替换 `state.settings`，「载入优先」是有意行为；测试必须等启动落定，不得为此加产品守卫。
 - CI 侧 `e2e` job 用 **matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`）：
   每套约 3～4 分钟，并行后墙钟接近一套；不分组、不挑子集，任何一侧失败都保留另一侧结果。
   **CI 实际执行未验证**：本机只验证了同样的命令在本地 Chromium 下 149 用例通过 + 1 条件跳过（dist 入口另为 148 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；

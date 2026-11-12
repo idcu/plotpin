@@ -112,6 +112,9 @@ test('新增楼层：新层绘制对象后刷新，楼层/活动层/对象都保
   }), { floors: 2, active: added.id, objects: 1, firstObjects: 0 });
 
   await page.reload();
+  /* 启动是异步的（恢复工程 + 目录加载）：先等 state 真正就绪，否则慢内核会在
+     expect.poll 的首次求值就抛「floors[0].objects undefined」，属于等待不足而非数据错误 */
+  await page.waitForFunction(() => typeof state === 'object' && state.floors && state.floors[0] && Array.isArray(state.floors[0].objects));
   await expect.poll(() => page.evaluate(() => ({
     floors: state.floors.length,
     active: state.activeFloorId,

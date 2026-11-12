@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
+/* 启动是异步的：applyLocalSettings 会把 state.settings 整体替换一次，
+   替换前写入的开关会被静默丢弃（表现为「仅导出已交付」偶发失效）。
+   等 settings 句柄被替换（或 1.2s 内无替换，说明启动已完成）再操作。 */
+async function waitBootSettled(page) {
+  await page.waitForFunction(() => typeof state === 'object' && !!state.settings);
+  const prev = await page.evaluateHandle(() => state.settings);
+  try {
+    await page.waitForFunction(p => state.settings !== p, prev, { timeout: 1200 });
+  } catch (_) { /* 启动已完成 */ }
+}
+
 /* P2-01（G-03）：交付状态 + 「仅导出已交付」。
    1) 单对象标记 → 按钮文案与清单徽标变化；开启过滤后 CSV/XLSX/图纸/PDF 清单同口径只含已交付；
    2) 全无已交付时导出中止，不产生下载。 */
@@ -61,6 +72,7 @@ test('P2-01：标记交付后台账/图纸/PDF 清单只含已交付', async ({ 
 test('P2-01：全无已交付对象时导出中止且不生成文件', async ({ page }) => {
   await page.goto('/index.html');
   await expect(page.locator('#canvas')).toBeVisible();
+  await waitBootSettled(page);
 
   await page.evaluate(() => {
     state.objects.push(baseObject('point', 'point.marker', { name: 'RAW-1', x: 10, y: 10 }));

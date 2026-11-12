@@ -8,6 +8,10 @@ const MARK = { added: [22, 163, 74], removed: [220, 38, 38], moved: [37, 99, 235
 test('V-5 参照版：导入 → 三类差异 → 闪烁 → 标定提示 → 清除无痕', async ({ page }) => {
   await page.goto('/index.html');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  /* 启动末尾（app.js init 第 20~22 行）在空工程上会 fitView()，把 zoom 1 调到适应值。
+     这一步发生在首个 evaluate 之后；早于它取景，对象坐标会落到窗外（Firefox 比 Chromium 晚一拍）。
+     等视口落定再取可视范围，避免差异标记画在画布外导致像素采样为 0（不是产品行为差异）。 */
+  await page.waitForFunction(() => state.viewport.zoom !== 1, null, { timeout: 3000 }).catch(() => {});
   await page.evaluate(() => { try { closeModal(); } catch (e) {} });
 
   /* 1. 准备当前工程：三个点放在当前视口中心附近；参照版删一个、加一个、移一个 */

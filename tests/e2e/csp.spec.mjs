@@ -106,7 +106,9 @@ test('注入路径 4/4：类型列表渲染对未清洗数据全量转义', asyn
 test('CSP 兜底：内联 <script> 与 onerror/onclick 属性均被拒绝执行', async ({ page }) => {
   await openApp(page);
   const violations = [];
-  page.on('console', m => { if (/Content Security Policy|Refused to/i.test(m.text())) violations.push(m.text()); });
+  /* 文案因内核而异：Chromium 用「Content Security Policy / Refused to」，
+     Firefox 用连字符版「Content-Security-Policy: The page’s settings blocked…」 */
+  page.on('console', m => { if (/Content[- ]Security[- ]Policy|Refused to/i.test(m.text())) violations.push(m.text()); });
 
   const result = await page.evaluate(async () => {
     window.__pwned_inline = undefined;

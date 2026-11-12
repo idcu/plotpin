@@ -17,7 +17,8 @@ test('对象清单类型色经白名单校验，脏色值不逃逸 style 属性'
   });
   const dirty = await page.locator('#objectTbody .dot').first().getAttribute('style');
   expect(dirty).toBe('background:#666');
-  expect(await page.evaluate(() => document.querySelector('#objectTbody .dot').style.backgroundImage)).toBe('initial');
+  /* CSSOM 对「清空/初始值」的序列化因内核而异：Chromium 回报 initial，Firefox 回报 none */
+  expect(['initial', 'none']).toContain(await page.evaluate(() => document.querySelector('#objectTbody .dot').style.backgroundImage));
   await page.evaluate(() => { getType(state.objects[0].typeId).color = '#00ff00'; renderList(); });
   expect(await page.locator('#objectTbody .dot').first().getAttribute('style')).toContain('#00ff00');
 });

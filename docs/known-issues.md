@@ -69,12 +69,12 @@
 
 原 CSS-P1-1、CORE-P1-8、RT-P1-09 已于 2026-11-08 修复并移入 §1（`6cdb093` / `d58af8b` / `f9a5843`），复跑依据见对应行；本轮无遗留 P1。
 
-### 2.2.1 需人工 / 真机验证（8 条，未验证）
+### 2.2.1 需人工 / 真机验证（7 条，未验证）
 
 | 编号 | 项目 | 未验证原因 |
 |---|---|---|
 | M1 | 移动端 iOS/Android 安装、离线、手势 | 无真机环境 |
-| M2 | Firefox / Safari 的导入、下载、沙箱、打印 | 仅 Chromium 验证 |
+| M2 | Safari 的导入、下载、沙箱、打印 | 需 macOS；Firefox 已由 2026-11-12 全量 e2e 覆盖（[engineering.md](engineering.md) §2.5），WebKit on Windows 不作支持目标 |
 | M3 | 双设备 WebRTC 直连 | 无双设备环境；未用双标签页冒充 |
 | M4 | 英文译文语义质量 | 未做人工语言评审 |
 | M5 | 低端设备帧率/首屏 | 未做真机或限速实测 |
@@ -357,7 +357,7 @@
 - **已确认不阻塞**：P2-12（墓碑上限小于对象上限）在当前代码已满足 `TOMBSTONE_MAX = OBJECTS_MAX = 100000`（`js/core/config.js:42/46`），无需再改。
 - **导出 try/catch（P3-04）**：已修复，见 `CHANGELOG.internal.md`（`runExport` 统一同步异常与异步 rejection）。
 
-## 3. 已降级为限制（10 条，不是缺陷）
+## 3. 已降级为限制（11 条，不是缺陷）
 
 | 编号 | 限制 | 为什么按限制处理 |
 |---|---|---|
@@ -372,5 +372,6 @@
 | K10 | 协作按对象/楼层时间取较新，无服务端权威 | 无服务器是产品约束；冲突可见性缺陷单列 RT-P1-03 |
 | K12 | 文件/对象/表格/快照/目录等容量上限 | 浏览器与本机存储的现实边界；数值见 [features.md](features.md) 第 20 节 |
 | K13 | `objectBounds` 对圆/椭圆/扇形仍物化 72 点采样 | 解析式包围盒需新增椭圆/扇形分支，属净增字节；本轮要求字节 ≤0，且 `objectSnapBounds` 的保守外接盒不能替代（会放宽框选/命中范围，属行为变更）。裁剪预筛已改用 `objectSnapBounds`；剩余调用在动态层绘制、框选与统计。解析式改造待有字节余量时单独提交 |
+| K14 | 启动期 `applyLocalSettings()` 整体替换 `state.settings`，覆盖窗口内写入的设置 | **有意行为，不是缺陷**：启动以「载入优先」为准，本地保存的工程与设置覆盖页面默认值。触发窗口是 `js/core/app.js` 的 `await loadSavedProject()` → `applyLocalSettings()`（`state.settings = sanitizeSettings(raw)`）→ `await catalogLoad()` → `I18N.setLang(state.settings.lang)` 全部完成之前；此窗口内从外部改 `state.settings`（`lang`、`exportOnlyDelivered` 等）会被整体替换静默丢弃，表现为「切了 en 仍显示中文」「开关没生效」。**测试写法**：先等启动落定——记下 `state.settings` 句柄并 `waitForFunction` 等待它被替换（超时即启动已结束），再写入设置；或把「改设置 → 渲染 → 读取」放进同一个同步 `evaluate`。参考 `tests/e2e/i18n-template.spec.mjs`、`tests/e2e/publish-state.spec.mjs` 的 `waitBootSettled()`。不要为此加启动守卫，否则会改变「载入优先」的产品语义 |
 
 > 说明：A4 已并入 M8（真实误报率未验证），不再单列；K1、K11 已修复，不再列为限制。
