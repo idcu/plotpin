@@ -1598,6 +1598,7 @@ async function afterStateLoaded(fit=true,opts={}){
   bgReadyPromise=new Promise(res=>{ bgReadyResolve=res; resolveMine=res; });
   bgImage=null; bgImageState='none'; bgDataUrl='';
   try{
+    if(fit) revClear();                      /* 切换/载入工程：参照版是运行时状态，随工程清空，避免跨工程残留 */
     resetTransientInteractionState(opts);   /* 草稿/拖拽/捕捉/参考线/覆盖层统一复位；校准语义见函数注释 */
     bumpZVersion();                          /* 整状态替换（载入/撤销/重做）：命中缓存失效 */
     invalidateStatic();                       /* 状态整体替换：静态层必须重建 */

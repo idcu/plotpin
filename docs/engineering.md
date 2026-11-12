@@ -87,21 +87,33 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
 - gzip 硬上限：**286,720 B（280 KiB）**；`GZIP_WARN_BYTES = 266,240` 只预警（同上，`lib/budget.mjs` 单一来源）。
 - 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-12 实测（V-4a 合并后）：`bytes = 827,476`、gzip `261,624`、余量 `12,204 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-12 实测（V-5 收口后）：`bytes = 831,617`、gzip `262,795`、余量 `8,063 B`（`node scripts/build.mjs --check` 复算一致）。
+- V-5 图纸修订参照版增量拆分（入口 827,476 / 261,624 → 出口 831,617 / 262,795，总 **+4,141 raw / +1,171 gzip**，以整包实测为准）：
+  1. `ghost.js` 参照版运行时 + 标定判定 + 闪烁：+2,393 raw；
+  2. `ui-shell.js` 设置面板信息行与绑定：+1,378 raw；
+  3. `i18n.js` 新增 9 键与 1 模板：+331 raw；
+  4. `render.js` 签名接入 + 垫底调用：+21 raw；
+  5. `persistence.js` 工程切换清空参照版（`afterStateLoaded` 内 `if(fit) revClear()`）：+18 raw；
+  6. `snapshot.js` / `snapshot-ui.js`：0（差异叠加复用现有 `setDiffOverlay`，快照来源已按体积口径砍掉）。
+- V-5 回收结论（2026-11-12，防止把账面值当预算；上表 gzip 增量为整包实测）：
+  1. 「dist 注释可回收 2,192 B」**误报**：`size-report` 的扫描器把正则字面量 `/^\//`、`/^image\//` 里的 `\/` 当成 `//`；修复后 dist 实测**注释 0 B、行首缩进 0 B、空行 0 B**（模板内换行 75,950 B 不可删）。
+  2. 「缩进可回收 155 B」**误报**：剩余行首空白全在（含嵌套的）模板字符串内部，删除会改变生成内容。
+  3. 「重复字符串池化省 37,979 B」**负收益**：实测 raw −4,081 / gzip **+5,552**，且改写后 `vm.Script` 解析失败 → **不采用**。
+  4. 真实节省来自**缩口径**：删快照来源、固定 1 Hz 闪烁、去差异计数行与冗余文案，把首版 +7,671 压到 +4,141。`size-report` 的重复字符串/重复行是**压缩前账面值**，只能当线索，不得直接当预算来源（其自带的"可回收"为 0 才可与预算对照）。
 - V-4a 收益拆分（入口 830,743 / 263,479 → 出口 827,476 / 261,624，总 **−3,267 raw / −1,855 gzip**，供复核）：
   1. **CSP 哈希 47→1**：−2,484 raw / −1,776 gzip（把 46 条同格式随机 hash 注回现产物实测，随机分布下 1,765～1,776 B）；
   2. **内联标记**：0 / 0（V-3R 已删来源标记，本期未新增）；
   3. **合并本身**（46 组 `<script>` 包装 → 1 组、46 处 `;`+换行分隔）：−783 raw / −79 gzip（总降幅减 CSP 项的残差）。
   gzip 三项为实测 + 残差，不严格可加；raw 三项严格可核对。
-- 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；余量 **< 8,000 B 冻结改功能**，只能做无损回收后重新评估。
-- 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
+- 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；**V-5 收口后的余量 8,063 B 即新的冻结基线**——低于基线不得开新功能，必须先用实测（raw 与 gzip 各自降幅）证明有可兑现的回收来源，或先砍口径；不得放宽上限，也不得把 `size-report` 的账面值当回收承诺。
+- 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量 + 相对 8,063 B 基线的关系」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ### 2.4 单文件发行版与 Service Worker 的边界
 
 - **源码多文件入口**（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 52 个（含 `sw.js` 自身）；`file://` 下不注册。
 - **单文件发行版**（`dist/plotpin-standalone.html`）：**不含 Service Worker**，也不含 `js/`、`css/`、`sw.js`；CSS/JS/图标全部内联，离线由文件自身保证。
 - PWA 安装、预缓存与版本升级**只对源码多文件入口成立**；dist 既不承诺也不需要。
-- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 43 个 spec 两个入口都全量执行（见 [testing.md](testing.md) §3.1）。
+- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 44 个 spec 两个入口都全量执行（见 [testing.md](testing.md) §3.1）。
 - `file://` 实测（Chromium，2026-11-12）：IndexedDB 读写、`localStorage`、Blob 下载、CSP 内联哈希都正常——导入图片/PDF 底图、比例预设、点位与区域、PDF/CSV 导出全部通过；唯一差异是 SW/PWA（`detectCapabilities` 按协议置 `sw=false`，不注册、不报错）。这是浏览器安全模型与产品设计的边界，不是缺陷。
 
 ---
@@ -129,7 +141,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-gates.mjs` | 正面基线 + 13 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
-| `node scripts/e2e.mjs` | Chromium 功能 e2e（44 spec / 150 用例，含 `file://` 发行版路径） | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`），matrix 双入口并行（源码 4173 / dist 4174），各自全量；**CI 实际执行未验证** |
+| `node scripts/e2e.mjs` | Chromium 功能 e2e（45 spec / 151 用例，含 `file://` 发行版路径） | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`），matrix 双入口并行（源码 4173 / dist 4174），各自全量；**CI 实际执行未验证** |
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI（SwiftShader 读数不能当真实 GPU 结论）；由 `.github/workflows/perf-nightly.yml` 夜间定时 + 手动触发，读数上传为 artifact |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 

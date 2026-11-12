@@ -1,5 +1,6 @@
-/* ghost.js —— 会话级幽灵参考层（G-1/G-2）：本地图片或 PDF 第 1 页光栅图，
-   叠在底图之上、业务对象之下。只活在 ghostLayer 里，不进 state/JSON/协作/导出。 */
+/* ghost.js —— 会话级参考层：幽灵图（G-1/G-2）与图纸修订参照版（V-5）。
+   两者都只活在运行时变量里，不进 state/JSON/协作/导出，灭失即释放。
+   参照版复用同一条静态层签名 + 同一个 drawObject 渲染路径，不另建缓存/通道。 */
 let ghostLayer=null;   /* {canvas,x,y,wm,hm,opacity,sig}；x,y=世界左下角，wm/hm=世界尺寸 */
 
 /** 静态层签名项：任一参数变化必须重建，否则留残影 */
@@ -92,5 +93,93 @@ function ghostSet(canvas){
     x=R.minX+(R.maxX-R.minX-wm)/2; y=R.minY+(R.maxY-R.minY-hm)/2;
   }
   ghostLayer={canvas,x,y,wm,hm,opacity:.5,sig:Date.now().toString(36)};
+  invalidateStatic(); requestRender();
+}
+
+/* -------------------- V-5 图纸修订参照版（双版对比） --------------------
+   rRef 只存活在运行时：参照工程（已清洗）+ 按楼层分组对象 + 标定/差异结论。
+   不写 state/JSON/协作/导出；revClear 置 null 即释放。
+   rOp=不透明度，rBl={on,phase,timer}=闪烁（1 Hz 相位交替）。 */
+let rRef=null;
+let rOp=.45;
+let rBl={on:false,phase:false,timer:0};
+let rSeq=0;
+/** 静态层签名：参照版（内容/不透明度/闪烁相位任一变化必须重建；幽灵图由 sceneStaticKey 另计） */
+function refSig(){
+  return rRef?rRef.sig+','+rOp+','+(rBl.on?+rBl.phase:'-'):'0';
+}
+/** 按当前楼层取参照对象（载入时已分组，绘制 O(1)） */
+function revPaint(c,v,toS,ib,eg,view){
+  if(!rRef||rOp<=0||(rBl.on&&!rBl.phase)) return;   /* 相位 A 只留当前工程 */
+  const b={minX:0,minY:0,maxX:0,maxY:0};
+  const list=rRef.byFloor.get(state.activeFloorId)||rRef.byFloor.get(rRef.data.activeFloorId)||[];
+  c.save(); c.globalAlpha=rOp;
+  list.forEach(o=>{
+    if(o.visible!==false&&boundsIntersect(objectSnapBounds(o,b),view)) drawObject(c,o,v,toS,ib,eg);
+  });
+  c.restore();
+}
+/** 标定判定（纯函数）：只比图片底图三要素，不猜、不自动对位。
+ *  mode: same 一致 / scale 比例不一致 / canvas 画布或原点不一致 / none 两侧均无图片底图 */
+function revCalibCheck(cur,ref){
+  const bg=x=>x&&x.background&&x.background.kind==='image'&&!x.background.transform?x.background:null;
+  const a=bg(cur),b=bg(ref);
+  if(!a||!b) return {mode:a||b?'canvas':'none'};
+  const am=+a.metersPerPixel||0,bm=+b.metersPerPixel||0;
+  if(!(am>0&&bm>0)||+a.width!==+b.width||+a.height!==+b.height) return {mode:'canvas',am,bm};
+  const rel=Math.abs(am-bm)/Math.max(am,bm);
+  return {mode:rel>1e-3?'scale':'same',am,bm};
+}
+/** 按当前工程重算标定与差异（载入/打开面板时调用，不沿用旧结论） */
+function revDiff(){
+  if(!rRef) return;
+  const cur=persistableState();
+  rRef.calib=revCalibCheck(cur,rRef.data);
+  rRef.diff=diffSnapshots(cur,rRef.data);
+  setDiffOverlay(true,rRef.diff.items.slice(0,DIFF_ITEM_MAX),{aId:'',bId:rRef.label});
+}
+/** 载入已清洗的参照工程数据；无可用对象直接拒绝并提示 */
+function revLoad(data,label){
+  const n=countProjectObjects(data);
+  if(!n){ toast(L('参照版为空'),'warn'); return; }
+  const byFloor=new Map(),add=(id,list)=>{
+    if(id&&list) byFloor.set(id,(byFloor.get(id)||[]).concat(list));
+  };
+  add(data.activeFloorId||'floor.default',data.objects);
+  (data.floors||[]).forEach(f=>add(f.id,f.objects));
+  byFloor.forEach(l=>l.sort((a,b)=>(a.z||0)-(b.z||0)));
+  rRef={data,label:String(label||''),byFloor,sig:++rSeq};
+  revDiff();
+  const m=rRef.calib.mode;
+  if(m==='scale'||m==='canvas') toast(revInfoText().split('\n')[1],'warn');   /* 标定不一致必须可见 */
+}
+/** 来源：另一工程的 JSON（与导入同一套 schema 校验/清洗，但不替换现场） */
+async function revFile(file){
+  if(!file) return;
+  try{
+    const p=JSON.parse(await file.text());
+    if(!isReadableSchema(p.schema)) throw new Error(L('不是工程 JSON'));
+    revLoad(buildProject(p),file.name);
+  }catch(e){ toast(L('参照版加载失败：{msg}',{msg:e&&e.message||e}),'error'); }
+}
+/** 闪烁（A/B 交替，1 Hz）：相位进静态层签名，每次切换重建一次 */
+function revBlinkSet(on){
+  clearInterval(rBl.timer);
+  rBl.on=!!on&&!!rRef;
+  rBl.phase=false;
+  if(rBl.on) rBl.timer=setInterval(()=>{
+    if(!rBl.on||!rRef) return;
+    rBl.phase=!rBl.phase;
+    invalidateStatic(); requestRender();
+  },500);
+  invalidateStatic(); requestRender();
+}
+/** 清除即释放：停表、置空、撤差异；不触碰 current/快照/工程记录 */
+function revClear(){
+  if(!rRef&&!rBl.on) return;
+  clearInterval(rBl.timer);
+  rBl={on:false,phase:false,timer:0};
+  rRef=null;                          /* 先置空：clearDiffOverlay 不会把参照差异再叠回来 */
+  clearDiffOverlay();
   invalidateStatic(); requestRender();
 }

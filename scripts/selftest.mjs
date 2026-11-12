@@ -236,6 +236,10 @@ code += `\n;globalThis.__api = {
   objectDiffFields, diffCategoryOf, diffSnapshots, diffFieldLabel, diffValueText,
   DIFF_MOVE_KEYS, DIFF_IGNORE_KEYS, DIFF_FIELD_LABELS, DIFF_ITEM_MAX,
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
+  /* V-5 参照版（运行时状态：不持久化） */
+  revCalibCheck, revInfoText, revLoad, revDiff, revClear, revBlinkSet, refSig,
+  get rRef(){ return rRef; }, get rOp(){ return rOp; }, set rOp(v){ rOp=v; },
+  get rBl(){ return rBl; },
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
   flushPendingSave, guardRescueSwitch,
@@ -9882,6 +9886,83 @@ await section("V-3b1 矢量 PDF 导出选项：档位决策与降级原因", asy
   eq('V-3b1 计数可回到基线', api.pdfVectorLabelCount(), base);
 }
 
+});
+
+/* ---------------- V-5 图纸修订参照版：标定判定、三类差异、清除无痕 ---------------- */
+await section("V-5 参照版：标定判定/三类差异/清除无痕", async () => {
+{
+  const bg=(mpp,w,h,transform)=>({kind:'image',width:w,height:h,metersPerPixel:mpp,...(transform?{transform}:{})});
+  const cal=(a,b)=>api.revCalibCheck(a,b);
+  eq('V-5 两侧无底图 → none', cal({background:{kind:'empty'}},{background:{kind:'empty'}}).mode, 'none');
+  eq('V-5 仅参照有底图 → canvas', cal({background:{kind:'empty'}},{background:bg(.05,100,80)}).mode, 'canvas');
+  const same=cal({background:bg(.05,100,80)},{background:bg(.05,100,80)});
+  eq('V-5 同比例同尺寸 → same', same.mode, 'same');
+  eq('V-5 暴露当前比例', same.am, .05);
+  eq('V-5 暴露参照比例', same.bm, .05);
+  eq('V-5 0.08% 差视为一致', cal({background:bg(.05,100,80)},{background:bg(.05004,100,80)}).mode, 'same');
+  eq('V-5 2% 差判为比例不一致', cal({background:bg(.05,100,80)},{background:bg(.051,100,80)}).mode, 'scale');
+  eq('V-5 尺寸不同判为画布不一致', cal({background:bg(.05,100,80)},{background:bg(.05,101,80)}).mode, 'canvas');
+  eq('V-5 仿射底图不参与比较', cal({background:bg(.05,100,80,{a:1,b:0,c:0,d:1,e:0,f:0})},{background:bg(.05,100,80)}).mode, 'canvas');
+  eq('V-5 比例缺失判为画布不一致', cal({background:bg(0,100,80)},{background:bg(.05,100,80)}).mode, 'canvas');
+
+  api.resetState();
+  const o1=api.baseObject('point','point.marker',{name:'V5-A',x:10,y:10});
+  const o2=api.baseObject('point','point.marker',{name:'V5-B',x:20,y:20});
+  api.state.objects.push(o1,o2);
+  const before=JSON.stringify(api.persistableState());
+  const ref=JSON.parse(JSON.stringify(api.buildProject(api.persistableState())));
+  ref.objects=ref.objects.filter(o=>o.id!==o2.id);                                              /* 参照没有 → 删除 */
+  ref.objects.push(api.baseObject('point','point.marker',{name:'V5-C',x:30,y:30,id:'OBJ.V5C'})); /* 参照多出 → 新增 */
+  ref.objects.find(o=>o.id===o1.id).x+=5;                                                       /* 位置变化 → 移动 */
+  api.revLoad(ref,'ref.json');
+  ok('V-5 载入后参照版在运行时', !!api.rRef);
+  ok('V-5 按楼层分组命中当前楼层', api.rRef.byFloor.has(api.state.activeFloorId));
+  const dc=api.rRef.diff.counts;
+  ok('V-5 差异含新增', dc.added>=1);
+  ok('V-5 差异含删除', dc.removed>=1);
+  ok('V-5 差异含移动/改动', (dc.moved||0)+(dc.modified||0)>=1);
+  eq('V-5 差异标记已打开', api.diffOverlay.on, true);
+  ok('V-5 差异标记条数不超上限', api.diffOverlay.items.length<=api.DIFF_ITEM_MAX);
+  ok('V-5 信息行显示参照文件名', api.revInfoText().indexOf('ref.json')>=0);
+
+  const sig0=api.refSig();
+  ok('V-5 载入后静态层签名非基线', sig0!=='|0');
+  api.rOp=.6;
+  ok('V-5 不透明度变化改签名', api.refSig()!==sig0);
+  api.rOp=.45;
+  api.revBlinkSet(true);
+  eq('V-5 闪烁开启', api.rBl.on, true);
+  await new Promise(r=>setTimeout(r,650));
+  eq('V-5 闪烁 1 Hz 自动切相位', api.rBl.phase, true);
+  api.revBlinkSet(false);
+  await new Promise(r=>setTimeout(r,600));
+  eq('V-5 关闭闪烁后不再切相位', api.rBl.phase, false);
+
+  const refCal=JSON.parse(JSON.stringify(ref));
+  refCal.background=bg(.05,100,80);
+  const origToast=sandbox.toast, warns=[];
+  sandbox.toast=(m,k)=>warns.push({m,k});
+  api.revLoad(refCal,'cal.json');
+  sandbox.toast=origToast;
+  eq('V-5 标定不一致给出 1 条提示', warns.length, 1);
+  eq('V-5 标定提示为 warn', warns[0]&&warns[0].k, 'warn');
+  ok('V-5 标定提示文案可见', /标定不一致|画布不一致/.test(warns[0]&&warns[0].m||''));
+
+  api.revClear();
+  eq('V-5 清除后参照版释放', api.rRef, null);
+  eq('V-5 清除后差异标记关闭', api.diffOverlay.on, false);
+  eq('V-5 清除后静态层签名回基线', api.refSig(), '0');
+  eq('V-5 清除后可持久化状态回到原值', JSON.stringify(api.persistableState()), before);
+  ok('V-5 状态序列化无参照版字段', JSON.stringify(api.persistableState()).indexOf('"rRef"')<0);
+
+  const origToast2=sandbox.toast, msgs=[];
+  sandbox.toast=(m,k)=>msgs.push({m,k});
+  api.revLoad(api.buildProject(api.createInitialState()),'empty.json');
+  sandbox.toast=origToast2;
+  eq('V-5 空参照不进入运行时', api.rRef, null);
+  eq('V-5 空参照给出 warn', msgs[0]&&msgs[0].k, 'warn');
+  api.resetState();
+}
 });
 
 /* ---------------- 结果汇总 ---------------- */

@@ -10,7 +10,8 @@ test('幽灵参考层：导入 → 透明度 → 清除，不落 state/JSON', as
   await page.evaluate(() => { try { closeModal(); } catch (e) {} });
 
   /* 1. 设置面板提供入口；导入前后静态层签名变化 */
-  const ghostPart = () => page.evaluate(() => sceneStaticContentKey(wrap.clientWidth, wrap.clientHeight, worldDims()).split('|').pop());
+  /* V-5 起签名末尾多了 refSig 一段：幽灵层取倒数第二段 */
+  const ghostPart = () => page.evaluate(() => sceneStaticContentKey(wrap.clientWidth, wrap.clientHeight, worldDims()).split('|').slice(0, -1).pop());
   await page.click('#settingsBtn');
   await expect(page.locator('#ghostPick')).toBeVisible();
   expect(await ghostPart()).toBe('0');

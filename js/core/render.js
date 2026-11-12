@@ -168,7 +168,8 @@ function sceneStaticContentKey(cssW,cssH,d){
     (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
     dyn?dyn.slice().sort().join(','):'',   /* 只跟“正在拖拽改形”有关，与选中集无关 */
     coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0',
-    typeof ghostSig==='function'?ghostSig():'0'   /* G-1：幽灵参考层参数变化必须重建静态层 */
+    ghostSig(),                                    /* G-1：幽灵参考层参数变化必须重建静态层 */
+    refSig()                                       /* V-5：参照版内容/不透明度/闪烁相位同样必须重建 */
   ].join('|');
 }
 /** 静态层缓存签名：内容签名 + 视口（缩放必须重建；平移可在整数像素时搬移） */
@@ -194,6 +195,7 @@ function visibleWorldRect(v,d,cssW,cssH,padPx=48){
 function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view,skip){
   if(!skip||!skip.bg) drawBackground(sc,v,d,cssW,cssH,toS);
   if(!skip||!skip.site) drawSite(sc,v,toS);
+  revPaint(sc,v,toS,iconBoost,exportGain,view);   /* V-5：参照版垫底 */
   if(typeof ghostPaint==='function') ghostPaint(sc,v,toS);   /* G-1：参考层压在底图/场地之上、网格与对象之下 */
   drawGrid(sc,v,d,cssW,cssH,toS);
   drawCoverage(sc,v,d);

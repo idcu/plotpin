@@ -13,6 +13,9 @@
  *   - 注释/缩进/空行：统计对象是 **dist 内联后的分块文本**（构建期已删注释、行首缩进与空行），
  *     得到的是「当前产物还能再回收多少」；另给 `sourcePotential` 作为源文件潜在值参考，
  *     不能直接当作 dist 可回收空间（旧口径把两者混为一谈，高估约 200 KB）。
+ *     2026-11-12 修正：扫描器此前不识别正则字面量，`/^\//`、`/^image\//` 里的 `\/` 被当成
+ *     `//` 行注释，虚报约 2.2 KB 可回收；现已按前一个有效 token 判定是否进入正则并跳过。
+ *     若本报告的「可回收」非 0，必须先用独立脚本或人工核对确认，不得直接当预算来源。
  *   - 重复字符串：dist 分块内的字符串字面量（单/双/反引号，长度 ≥ 6），按值分组；
  *     浪费字节 = Σ 长度 × (出现次数 − 1)。
  *   - 重复代码行：dist 分块内去空白后长度 ≥ 24 的非注释行，按内容分组；浪费字节同口径。
@@ -63,58 +66,111 @@ parts.push({ path: '(HTML 其余：CSP/图标/内联壳)', bytes: total - marked
 parts.sort((a, b) => b.bytes - a.bytes);
 
 /* ---- 2. 注释 / 缩进 / 空行（状态机） ---- */
+/* 正则字面量判定：`/` 前一个有效 token 决定它是除号还是正则开头。
+   证据一：前一字符属于「表达式起始位」（`( [ { , ; : = ! & | ? + - * % ~ ^ < >`）；
+   证据二：前一个词是 return/typeof 等关键字。dist 压缩后没有换行提示，只能靠这两类证据；
+   误判只影响统计口径，不参与构建。 */
+const REGEX_PREV = '([{,;:=!&|?+-*%~^<>';
+const REGEX_KW = /^(?:return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
+function isRegexStart(pre, prev) {
+  if (prev === '') return true;
+  if (REGEX_PREV.includes(prev)) return true;
+  const w = pre.match(/([A-Za-z_$][\w$]*)$/);
+  return !!(w && REGEX_KW.test(w[1]));
+}
+/* 跳过正则字面量（含转义与字符类），返回收尾 `/` 之后的下标；未闭合返回文本末尾。 */
+function skipRegex(text, i) {
+  let j = i + 1, inClass = false;
+  while (j < text.length) {
+    const c = text[j];
+    if (c === '\\') { j += 2; continue; }
+    if (inClass) { if (c === ']') inClass = false; }
+    else if (c === '[') inClass = true;
+    else if (c === '/') return j + 1;
+    j++;
+  }
+  return j;
+}
 function scanJs(text) {
   let comment = 0, indent = 0, blank = 0, template = 0;
-  let inBlock = false, inTemplate = false;
+  /* 状态机：code（顶层/表达式代码）| tpl（模板文本）| block（块注释）。
+     模板里遇到 `${` 切回 code，花括号配平后回到 tpl；模板内再嵌模板用栈保存返回帧。
+     旧实现只有 inTemplate 布尔量，嵌套模板（HTML 片段里的 `${cond?`...`}`）会让状态提前翻转，
+     把模板文本当成代码，虚报「行首缩进可回收」约 1.2 KB。 */
+  let mode = 'code', exprOnTpl = false, exprDepth = 0;
+  const stack = [];
   for (const line of text.split('\n')) {
     const lineBytes = bytes(line);
-    if (!line.trim()) { blank += lineBytes + 1; continue; }
-    let codeStart = 0;
-    if (!inBlock && !inTemplate) {
+    if (!line.trim()) {
+      if (mode === 'tpl') template += lineBytes + 1;
+      else if (mode === 'block') comment += lineBytes + 1;
+      else blank += lineBytes + 1;
+      continue;
+    }
+    let i = 0;
+    const topCode = mode === 'code' && !exprOnTpl;
+    if (topCode) {
       const lead = (line.match(/^\s*/) || [''])[0].length;
       indent += bytes(line.slice(0, lead));
-      codeStart = lead;
-    }
-    /* 整行注释：行首（忽略缩进）就是 // 或 /*，且不在字符串/模板内 */
-    const trimmed = line.slice(codeStart);
-    if (!inTemplate && !inBlock && (trimmed.startsWith('//') || trimmed.startsWith('/*'))) {
-      if (trimmed.startsWith('//') || trimmed.includes('*/')) {
-        /* 行注释，或单行块注释 */ comment += lineBytes + 1;
-        if (trimmed.startsWith('/*') && !trimmed.includes('*/')) inBlock = true;
+      i = lead;
+      /* 整行注释：行首（忽略缩进）就是 // 或 /*，且不在字符串/模板内 */
+      const trimmed = line.slice(lead);
+      if (trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+        comment += lineBytes + 1;
+        if (trimmed.startsWith('/*') && !trimmed.includes('*/')) mode = 'block';
         continue;
       }
     }
+    let lastSig = '';
     /* 逐字符更新跨行状态并累计行内块注释字节 */
-    let i = codeStart;
     while (i < line.length) {
       const ch = line[i];
-      if (inBlock) {
+      if (mode === 'block') {
         const end = line.indexOf('*/', i);
         if (end < 0) { comment += bytes(line.slice(i)) + 1; i = line.length; }
-        else { comment += bytes(line.slice(i, end + 2)); inBlock = false; i = end + 2; }
+        else { comment += bytes(line.slice(i, end + 2)); mode = 'code'; i = end + 2; }
         continue;
       }
-      if (inTemplate) {
+      if (mode === 'tpl') {
         if (ch === '\\') { i += 2; continue; }
-        if (ch === '`') inTemplate = false;
+        if (ch === '`') {
+          const f = stack.pop() || { mode: 'code' };
+          mode = f.mode; exprOnTpl = !!f.exprOnTpl; exprDepth = f.exprDepth || 0; i++; continue;
+        }
+        if (ch === '$' && line[i + 1] === '{') {
+          stack.push({ mode: 'tpl' }); mode = 'code'; exprOnTpl = true; exprDepth = 1; i += 2; continue;
+        }
         i++; continue;
       }
       if (ch === '"' || ch === "'") {
         const q = ch; i++;
         while (i < line.length) { if (line[i] === '\\') i += 2; else if (line[i] === q) { i++; break; } else i++; }
-        continue;
+        lastSig = q; continue;
       }
-      if (ch === '`') { inTemplate = true; i++; continue; }
+      if (ch === '`') {
+        stack.push({ mode: 'code', exprOnTpl, exprDepth });
+        mode = 'tpl'; exprOnTpl = false; exprDepth = 0; i++; continue;
+      }
       if (ch === '/' && line[i + 1] === '/') { comment += bytes(line.slice(i)) + 1; break; }
       if (ch === '/' && line[i + 1] === '*') {
         const end = line.indexOf('*/', i + 2);
-        if (end < 0) { inBlock = true; comment += bytes(line.slice(i)) + 1; i = line.length; }
+        if (end < 0) { mode = 'block'; comment += bytes(line.slice(i)) + 1; i = line.length; }
         else { comment += bytes(line.slice(i, end + 2)); i = end + 2; }
         continue;
       }
-      i++;
+      if (ch === '/' && isRegexStart(line.slice(Math.max(0, i - 32), i), lastSig)) {
+        i = skipRegex(line, i); lastSig = '/'; continue;
+      }
+      if (exprOnTpl) {
+        if (ch === '{') exprDepth++;
+        else if (ch === '}') {
+          exprDepth--;
+          if (exprDepth === 0) { const f = stack.pop() || { mode: 'tpl' }; mode = f.mode; exprOnTpl = false; exprDepth = 0; i++; continue; }
+        }
+      }
+      lastSig = ch; i++;
     }
-    if (inTemplate) template += lineBytes + 1;
+    if (mode === 'tpl') template += lineBytes + 1;
   }
   return { comment, indent, blank, template };
 }
@@ -128,11 +184,12 @@ for (const p of jsParts) {
   savings.comment += s.comment; savings.indent += s.indent; savings.blank += s.blank; savings.templateInside += s.template;
 }
 
-/* 源文件潜在值：仅供跨版本比较，不能当作 dist 预算（构建期已删注释/缩进/空行）。 */
+/* 源文件潜在值：仅供跨版本比较，不能当作 dist 预算（构建期已删注释/缩进/空行）。
+   V-4a 起 dist 合并为单个 bundle，此时按 index.html 的脚本声明逐文件取源。 */
 const sourceSavings = { comment: 0, indent: 0, blank: 0, templateInside: 0 };
-for (const p of jsParts) {
+for (const path of (mergedJs ? srcList : jsParts.map(p => p.path))) {
   let src;
-  try { src = read(p.path); } catch (_) { continue; }
+  try { src = read(path); } catch (_) { continue; }
   const s = scanJs(src);
   sourceSavings.comment += s.comment; sourceSavings.indent += s.indent;
   sourceSavings.blank += s.blank; sourceSavings.templateInside += s.template;
@@ -141,12 +198,16 @@ for (const p of jsParts) {
 /* ---- 3. 重复字符串 / 重复代码行 ---- */
 function stringLiterals(text) {
   const out = [];
-  let i = 0, inBlock = false;
+  let i = 0, inBlock = false, prev = '';
   while (i < text.length) {
     const ch = text[i];
+    if (ch === '\n') { prev = ''; i++; continue; }
     if (inBlock) { const e = text.indexOf('*/', i); if (e < 0) break; inBlock = false; i = e + 2; continue; }
     if (ch === '/' && text[i + 1] === '/') { const e = text.indexOf('\n', i); i = e < 0 ? text.length : e; continue; }
     if (ch === '/' && text[i + 1] === '*') { inBlock = true; i += 2; continue; }
+    if (ch === '/' && isRegexStart(text.slice(Math.max(0, i - 32), i), prev)) {
+      i = skipRegex(text, i); prev = '/'; continue;
+    }
     if (ch === '"' || ch === "'" || ch === '`') {
       const q = ch; let v = ''; i++;
       while (i < text.length) {
@@ -155,10 +216,11 @@ function stringLiterals(text) {
         if (text[i] === '\n' && q !== '`') { break; }
         v += text[i++];
       }
+      prev = q;
       if (v.length >= 6) out.push(v);
       continue;
     }
-    i++;
+    prev = ch; i++;
   }
   return out;
 }
@@ -243,7 +305,8 @@ if (process.argv.includes('--json')) {
     + `（模板内换行 ${savings.templateInside} B 不可删；合计 ${report.compressible.total} B）`);
   console.log(`源文件潜在值（构建期已压缩，仅作参考，不可当 dist 预算）：注释 ${sourceSavings.comment} B / 缩进 ${sourceSavings.indent} B`
     + ` / 空行 ${sourceSavings.blank} B（合计 ${report.sourcePotential.total} B）`);
-  console.log(`\n重复字符串：${literals.length} 个，唯一 ${literalMap.size} 个，重复组 ${dupStrings.length}，浪费 ${report.duplicateStrings.wastedBytes} B`);
+  console.log(`\n重复字符串：${literals.length} 个，唯一 ${literalMap.size} 个，重复组 ${dupStrings.length}，浪费 ${report.duplicateStrings.wastedBytes} B`
+    + `（压缩前账面值：跨脚本重复大多已被 gzip 吃掉，能否回收必须做 gzip 实测，收益 <300 B 视为不采用）`);
   for (const d of dupStrings.slice(0, 10)) console.log(`  ×${d.count}  ${d.bytes} B  ${d.value.slice(0, 60)}`);
   console.log(`\n重复代码行：${dupLines.length} 组，浪费 ${report.duplicateLines.wastedBytes} B`);
   for (const d of dupLines.slice(0, 10)) console.log(`  ×${d.count}  ${d.wasted} B  ${d.line.slice(0, 80)}`);

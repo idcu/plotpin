@@ -13,8 +13,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-12） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **157 个分区 / 3,936 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **44 个 spec / 150 个用例**（默认 149 跑 + 1 条件跳过） | 是（独立 `e2e` job，双入口 matrix；**CI 实际执行未验证**，见 §3.1） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 3,969 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 是（独立 `e2e` job，双入口 matrix；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（主 CI 不跑；夜间 `perf-nightly.yml` 定时/手动采集并归档 `test-results/perf-*.json`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
 
@@ -57,7 +57,7 @@
 | 协作/存储 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰、存储 v2 + 楼层 updatedAt、`markDirty`/`dragChanged` 提交协议、版本快照、历史栈共享 |
 | 运行环境/安全 | 49 能力探测、56.1 注入路径、69 转义白名单、70 导入事务 |
 | UI 语义 | 58 中英切换与无障碍标记、60 焦点管理、D-01 引导、D-03 帮助中心、D-07 加载审计、D-08 保存失败、D-09 标签租约 |
-| 领域功能 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划、75/BOM、75.10 图框标题栏、75.11 i18n 模板 |
+| 领域功能 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划、75/BOM、75.10 图框标题栏、75.11 i18n 模板、V-5 参照版（标定判定/三类差异/清除无痕） |
 
 > 完整分区名单以 `node scripts/selftest.mjs --list` 为准；本表只做导航，不作为清单。
 
@@ -98,7 +98,7 @@
 | 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(5)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(6)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
 | 协作 | collab(13)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(6)、pdf-dpi(1)、title-block(1)、export-scope(4)、perf-render(1)、coverage(2)、publish-state(2) |
+| 导出与图面 | pdf-multipage(6)、pdf-dpi(1)、pdf-vector-option(1)、title-block(1)、export-scope(4)、perf-render(1)、coverage(2)、publish-state(2) |
 | 符号与目录 | symbols(3)、catalog(1) |
 | 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(4) |
 | 插件 | plugin-sandbox(22)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
@@ -109,8 +109,9 @@
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
 | 界面加固 | ui-hardening(2)（触控尺寸/溢出等界面回归）、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
+| 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **146** 个用例、**42** 个 spec（默认 145 跑 + 1 条件跳过；逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
+合计 **151** 个用例、**45** 个 spec（默认 150 跑 + 1 条件跳过；逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
 口径校正（2026-11-12）：本节旧表停留在 124/35，已按 `--list` 实测重排；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令

@@ -9,25 +9,25 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 827,476 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致；V-4a 起 47 段脚本合并为 1 段 |
-| gzip 字节 | 261,624 B | 同上（`gzipBytes`） | 硬上限 286,720 B，>266,240 B 预警 |
+| 单文件产物字节 | 831,617 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致；V-4a 起 47 段脚本合并为 1 段 |
+| gzip 字节 | 262,795 B | 同上（`gzipBytes`） | 硬上限 286,720 B，>266,240 B 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/lib/budget.mjs` 的 `MAX_BYTES` / `scripts/dist-manifest.json` 的 `maxBytes` | 不得放宽；两处必须一致 |
-| 体积余量 | 12,204 B | 上限 − 当前值（<8,000 警告、<6,000 强警告） | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=178` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 52 个预缓存输入（含 `sw.js` 自身）与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 8,063 B | 上限 − 当前值（<8,000 警告、<6,000 强警告） | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=182` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 52 个预缓存输入（含 `sw.js` 自身）与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3936 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
-| selftest 分区 | 157 个 | `node scripts/selftest.mjs --list` | 输出 158 行（含 1 行标题） |
+| selftest 断言 | 3969 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 分区 | 158 个 | `node scripts/selftest.mjs --list` | 输出 159 行（含 1 行标题） |
 | 加载脚本 | 47 个（37 项目 + 10 vendor） | `check.mjs` 输出「加载 47 个脚本」 | `js/` 下 37 个 `.js` |
-| e2e 用例 | 150 个（149 通过 + 1 条件跳过），44 个 spec | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak；dist 入口为 148 通过 + 2 跳过（另 1 条为 `sw.spec` 单文件版豁免）；`file-dist.spec` 额外覆盖 dist 的 `file://` 路径 |
-| e2e spec 文件 | 44 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 45 个 `.mjs`（44 个 spec + 1 个 helper） |
+| e2e 用例 | 151 个（150 通过 + 1 条件跳过），45 个 spec | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak；dist 入口为 149 通过 + 2 跳过（另 1 条为 `sw.spec` 单文件版豁免）；`file-dist.spec` 额外覆盖 dist 的 `file://` 路径 |
+| e2e spec 文件 | 45 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 46 个 `.mjs`（45 个 spec + 1 个 helper） |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/`；含 4 项结构校验（规则删空即红） |
 | 插件 API 面 | 24 键 / 清单 24 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
-| i18n 覆盖率 | 46.59% / 缺口 10 / UI 硬编码 20 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
-| i18n 字典规模 | PHRASES 984 / TEMPLATES 113 / DICT.zh 194 | 同上 | |
+| i18n 覆盖率 | 46.58% / 缺口 10 / UI 硬编码 20 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
+| i18n 字典规模 | PHRASES 992 / TEMPLATES 114 / DICT.zh 199 | 同上 | |
 | 门禁牙齿 | 正面基线 6/6 + 人为破坏 13/13 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10/11 场景为契约清空 / 未 bump 就 `--update` |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
 | Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **历史采集值（2026-11-08，本轮未复跑）**；Node 桩数据，不能作为浏览器性能结论 |

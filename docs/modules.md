@@ -42,9 +42,9 @@
 | `geometry-coverage.js` | 视场覆盖、栅格计划、盲区、布点优化 | `cameraFootprint / coverageGridPlan / analyzeCoverage / blindSpotRects / blindSpotRectArea / blindSpotArea / optimizeCameraPlacement` | `APP_LIMITS`、`geometry` → 面板、导出、规则 | 格数来自 `APP_LIMITS.COVERAGE_TARGET_CELLS` 的 `coverageGridPlan`，**不能按视口实时分配**，否则缩放会改变覆盖率结果。隐藏图层不计入统计。5000×5000m 单次分析有 <300ms 的自测阈值。 |
 | `geometry-transform.js` | 图片像素↔世界、仿射求解/组合/求逆、世界整体变换与对象迁移 | `defaultImageTransform / imageTransformOf / bgPixelToWorld / bgWorldToPixel / imageCornerWorld / affApply / affMul / affInv / solveImageAffine / validImageTransform / imageWorldFrame / migrateObjectsByAffine / applyWorldTransform` | `geometry`、`geometry-site` → 导入、交互、导出 | `applyWorldTransform` 默认 `site:false`，这是"场地不随图片校准迁移"的实现点；显式 `site:true` 才迁移。2×3 仿射无法表达四角透视，图片只提供平移/旋转/等比缩放/切变。 |
 | `interaction.js` | 指针/触摸/键盘、工具切换、捕捉、草稿、校准、剪贴板、帮助面板 | `setTool / resolveWorldPoint / calibPrecheck / refreshCalibStatus / cancelActiveDrag / deleteSelected / duplicateSelected / copySelected / pasteClipboard / keyboardRegion / flushBeforeUnload / openShortcutsHelp` | 状态、几何、渲染、持久化 → 启动 | `calibPrecheck` 是所有校准入口的唯一判定源，三处入口不得各写一套条件。拖拽必须在 `pointercancel / lostcapture / Esc` 走 `cancelActiveDrag`，否则会残留并污染下一次历史。`sameSerializable` 忽略 `updatedAt`，用于拖拽起止比较，误改会导致"没动也落盘"。 |
-| `persistence.js` | 保存/恢复、迁移、楼层、资产回收、历史、墓碑、工程库副本、合并落盘、自测注入 | `pushHistory / undo / redo / markDirty / sanitizeReport / stampObjects / commitChange / commitObjectEdit / scheduleSave / auditProject / buildProject / migrateProject / buildDemoProject / mergeProjectJSON / switchFloorData / markTombstone / sanitizeObjects / sanitizeSite / reachableBgAssetIds` | `model`、`config`、`content-assets`、几何 → 启动、特性层 | `pushHistory()` 由调用方在变更前显式调用，不是自动钩子。`markDirty` 的 profile 决定"刷新 UI / 广播 / 入历史"，选错会导致过度重绘或协作漏发。保存失败必须分类：配额不重试，瞬时错误 1/3/9s 重试。资产回收的命名空间必须并集覆盖，漏一个就会删掉仍在用的图。 |
-| `ghost.js` | 会话级幽灵参考层：图片/PDF 第 1 页光栅化、落位、静态层绘制 | `ghostLayer / ghostSig / ghostPaint / ghostClear / ghostLoadFile / ghostRasterImage / ghostRasterPdf / ghostSet` | `pdf-read`、`viewport`、`render` → `render` 静态层 | 只在运行时变量里，不接受 state 结构：**禁止写入 state/JSON/协作/导出**；信号必须进 `sceneStaticKey`，否则改透明度/位置会留残影。PDF 无内嵌图时按折线+文字近似重绘，扫描件按整页铺满。 |
-| `render.js` | Canvas 渲染、静态层缓存、覆盖率/标注/手柄/差异叠加 | `drawScene / requestRender / invalidateStatic / sceneStaticKey / ensureStaticLayer / visibleWorldRect / markSurfaceSize / surfaceCssSize / drawBackground / drawSite / drawCoverage / drawSiteAnnotations / drawObject / drawDimension / drawDiffOverlay / drawCalibration` | 状态、视口、几何、符号、i18n → 启动、交互、导出 | `sceneStaticKey` 必须包含 `site`、底图 transform、设置、选中态与覆盖率摘要；漏字段会留下过期像素。导出走 `interactive=false` 的全量路径，不读缓存；`markerScale!=1` 也强制全量。静态层重建后必须 `markSurfaceSize()`。 |
+| `persistence.js` | 保存/恢复、迁移、楼层、资产回收、历史、墓碑、工程库副本、合并落盘、自测注入 | `pushHistory / undo / redo / markDirty / sanitizeReport / stampObjects / commitChange / commitObjectEdit / scheduleSave / auditProject / buildProject / migrateProject / buildDemoProject / mergeProjectJSON / switchFloorData / markTombstone / sanitizeObjects / sanitizeSite / reachableBgAssetIds` | `model`、`config`、`content-assets`、几何 → 启动、特性层 | `pushHistory()` 由调用方在变更前显式调用，不是自动钩子。`markDirty` 的 profile 决定"刷新 UI / 广播 / 入历史"，选错会导致过度重绘或协作漏发。保存失败必须分类：配额不重试，瞬时错误 1/3/9s 重试。资产回收的命名空间必须并集覆盖，漏一个就会删掉仍在用的图。`afterStateLoaded(fit=true)`（新建/导入/打开工程）会 `revClear()` 清空参照版，避免跨工程残留；同一工程的撤销/重做、切楼层、快照回滚传 `false`，参照版保留。 |
+| `ghost.js` | 会话级幽灵参考层（G-1/G-2）与图纸修订参照版（V-5）：图片/PDF 第 1 页光栅化、落位、静态层绘制；参照工程 JSON 载入、标定判定、按楼层垫底与 A/B 闪烁 | `ghostLayer / ghostSig / ghostPaint / ghostClear / ghostLoadFile / ghostRasterImage / ghostRasterPdf / ghostSet / refSig / revPaint / revCalibCheck / revLoad / revFile / revBlinkSet / revClear` | `pdf-read`、`viewport`、`render`、`snapshot` → `render` 静态层 + 差异叠加 | 幽灵图与参照版都**只在运行时变量里**（`ghostLayer` / `rRef` / `rOp` / `rBl`），**禁止写入 state/JSON/协作/导出**；签名必须进 `sceneStaticKey`（`ghostSig` + `refSig`），否则改透明度/位置/闪烁相位会留残影。参照版只比图片底图三要素（mpp/宽高/是否仿射），mpp 相对差 ≤0.1% 视为一致，其余一律给出「标定不一致/画布不一致」提示，不自动对位；对象按世界坐标垫底，导出路径不调用。 |
+| `render.js` | Canvas 渲染、静态层缓存、覆盖率/标注/手柄/差异叠加 | `drawScene / requestRender / invalidateStatic / sceneStaticKey / ensureStaticLayer / visibleWorldRect / markSurfaceSize / surfaceCssSize / drawBackground / drawSite / drawCoverage / drawSiteAnnotations / drawObject / drawDimension / drawDiffOverlay / drawCalibration` | 状态、视口、几何、符号、i18n → 启动、交互、导出 | `sceneStaticKey` 必须包含 `site`、底图 transform、设置、选中态、覆盖率摘要、`ghostSig` 与 `refSig`；漏字段会留下过期像素。V-5 的参照版垫底在 `drawStaticContent` 里、网格与对象之前调用 `revPaint`，与幽灵图同一条静态层路径。导出走 `interactive=false` 的全量路径，不读缓存；`markerScale!=1` 也强制全量。静态层重建后必须 `markSurfaceSize()`。 |
 | `snapshot.js` | 版本快照的序列化/存取/淘汰/差异分类/叠加数据 | `SNAPSHOT_PREFIX / snapshotKey / snapshotProjectData / snapshotAssetRefs / diffSnapshots / diffOverlay / setDiffOverlay / diffCategoryOf / objectDiffFields` | `persistence`、`model` → 快照面板、导出 | 快照存 `assetId` 引用，不能复制 base64。上限 20 条 / 16MB，超出淘汰最旧且至少留 1 条。差异按对象 id 匹配，分类优先级为新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改；场景级追加场地/底图/楼层名/图层名/类型表结构，旧快照缺 `objectTypes` 时跳过类型表对比；内部不可变字段必须忽略。 |
 | `tab-lease.js` | 同工程多标签的编辑租约（BroadcastChannel + localStorage 心跳） | `acquireEditorLease / releaseEditorLease / leaseSaveBlocked / leaseStatus / onLeaseConflict / LEASE_TTL_MS / LEASE_HEARTBEAT_MS` | `model`、持久化 → 启动、保存 | 租约按 `state.meta.projectId`（工程库绑定 id）归组；未绑定工程为空串，多个未绑定标签会被视为同一工程——是否符合预期**待确认**。租约冲突时只暂缓保存，不丢内存编辑。 |
 | `app.js` | 启动编排：设置、恢复工程、首启引导、能力探测、SW、租约、卸载前落盘 | 无对外函数（`DOMContentLoaded` 执行） | 全部 | 必须最后加载。启动顺序改变会影响 `afterStateLoaded`、首启引导与 SW 注册；新增启动步骤要同步 selftest/e2e 的"加载 45 个脚本"断言。 |
@@ -66,7 +66,7 @@
 | `rules.js` | 几何规则检查：重叠/最小间距/越界、配置 UI、违规列表/定位/CSV | `RULE_REGISTRY / registerRule / unregisterRule / listRules / runRuleCheck / ruleOverlapCheck / ruleSpacingCheck / ruleBoundsCheck / ruleViolationsCsv / renderRuleConfig / ruleRunAndRender` | `model`、几何、`io-fields`、`ui-shell` → 面板、插件 | 只做几何检查，**不是消防/规范审图**，阈值由用户填写。违规上限 5000；对象重叠要排除相邻贴合容差；越界区分完全/部分。配置存 `state.rules` 随工程保存，旧配置按 `RULE_CONFIG_VERSION` 归一。 |
 | `snapshot-ui.js` | 快照面板、差异分类文案、叠加开关、回滚确认 | `DIFF_CATEGORY_LABELS / snapSizeText / snapTimeText / snapLabel / snapDiffFieldText / snapSelectOptions / openSnapshotManager / openSnapshotCompare` | `snapshot`、持久化、`ui-shell` → 面板 | 叠加只在当前楼层绘制，不参与静态缓存、不进入导出。回滚前必须二次确认并 `pushHistory`；快照删除不得影响工程。 |
 | `ui-panels.js` | 页签、对象清单、图层、类型、符号面板、统计、覆盖率入口、总刷新 | `switchTab / renderList / renderLayers / renderTypes / renderSymbolPanel / renderStats / runCoverageAnalysis / refreshUI / populateSelects` | 状态、渲染、几何覆盖、符号、属性、规则 → 启动、全仓 | `refreshUI` 是提交后的统一刷新入口；新增面板状态要在此接入，否则撤销/切层后不刷新。选中态不能在刷新中丢失。大批量清单渲染不得阻塞主线程超过既有基准。 |
-| `ui-shell.js` | 弹窗/toast/转义、i18n 运行时替换、首启引导、加载救援与保存失败横幅、示例工程 | `openModal / closeModal / showConfirm / showPrompt / toast / esc / xmlEscape / modalBody / safeHTML / showFirstRunGuide / openDemoProject / showLoadAuditBanner / showSaveFailureBanner / showLeaseConflictBanner / refreshI18nRuntimeText` | `model`、持久化、i18n → 全仓 | `esc` 用于 HTML 文本/属性，`xmlEscape` 用于 SVG；两者不可互换。首启状态键 `plotpin:firstRunGuide:v1`，仅 completed 永久抑制、skip 下次仍展示。示例工程不得引用图片资产。 |
+| `ui-shell.js` | 弹窗/toast/转义、i18n 运行时替换、首启引导、加载救援与保存失败横幅、示例工程、设置面板（含幽灵层与 V-5 参照版控件） | `openModal / closeModal / showConfirm / showPrompt / toast / esc / xmlEscape / modalBody / safeHTML / showFirstRunGuide / openDemoProject / showLoadAuditBanner / showSaveFailureBanner / showLeaseConflictBanner / refreshI18nRuntimeText / revInfoText / revInfoHTML / revInfoSync` | `model`、持久化、i18n → 全仓 | `esc` 用于 HTML 文本/属性，`xmlEscape` 用于 SVG；两者不可互换。首启状态键 `plotpin:firstRunGuide:v1`，仅 completed 永久抑制、skip 下次仍展示。示例工程不得引用图片资产。V-5 参照版面板只改运行时变量（`rRef/rOp/rBl`），不写 `settings`、不进撤销栈；导入走 `revFile`（schema 校验 + `buildProject` 清洗），标定不一致时打开面板与导入瞬间都会显示提示。 |
 
 ### 文档盲区核对
 
@@ -94,16 +94,16 @@
 | `serve.mjs` | 零依赖静态服务器；`E2E_ENTRY=dist` 时把 `/`、`/index.html` 映射到单文件发行版 | `HOST/PORT/E2E_PORT/E2E_ENTRY` → `127.0.0.1:4173` | 本地/e2e |
 | `pack-core.mjs` | 单文件打包纯函数（便于自测） | 输入文件 → HTML 文本 | `build.mjs`、selftest |
 | `minify-core.mjs` | 构建期无损压缩纯函数 | 文本 → 压缩文本 | `build.mjs`、selftest |
-| `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考）；输出体积余量与 gzip 阈值判断 | `plotpin.html` → 报告 | 体积专项 |
+| `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考）；输出体积余量与 gzip 阈值判断；扫描器识别正则字面量与 `${}` 嵌套模板，dist 可回收应为 0（2026-11-12 修复此前把 `/^\//` 误判为注释、把模板缩进误判为可回收） | `plotpin.html` → 报告 | 体积专项：重复字符串/重复行是压缩前账面值，不得直接当预算 |
 | `lib/budget.mjs` | 体积预算单一来源：`MAX_BYTES` / gzip 阈值 / 余量分级预警 | 字节 + gzip → `ok/warn/error` | `build.mjs`、`size-report.mjs` |
 | `lib/fs-utils.mjs` | 门禁共享工具：递归遍历（`ext` / `exts` / `skip` / `skipDir`）与 JSON 读取 | 目录 → 文件列表；文件 → 对象 | `check*.mjs`、`build.mjs`、`badge.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
 > 脚本层没有"20 个 .mjs"；实际是 `scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 2 个 + `dist-manifest.json` 共 22 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
 
-## tests（64 个）
+## tests（65 个）
 
-### e2e 用例（44 个 spec）
+### e2e 用例（45 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -132,6 +132,7 @@
 | `plugin-compat.spec.mjs` | D-06：版本矩阵，预检回传 major/minor，越界/畸形给可读原因 |
 | `plugin-manifest.spec.mjs` | D-05：合法清单导入、导出器可用、面板可见、卸载后撤销 |
 | `plugin-sandbox.spec.mjs` | 恶意插件：主版本不兼容/缺失 apiVersion 均不创建 Worker；逃逸与死循环被阻断 |
+| `rev-compare.spec.mjs` | V-5：导入参照工程 JSON→新增/删除/移动三类标记上屏→不透明度改静态签名→闪烁开关→标定不一致提示→清除后签名回原值且 `persistableState()` 无参照字段 |
 | `rule-plugin.spec.mjs` | D-04：受信任插件注册规则，来源可见、产出违规、注销后消失 |
 | `rules.spec.mjs` | C-05：重叠/越界/间距，改配置→重查→违规数变化，点击定位与 CSV |
 | `save-failure.spec.mjs` | D-08：配额错误不重试、横幅与手动导出可用、内存编辑不丢 |

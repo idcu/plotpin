@@ -574,6 +574,15 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已批量隐藏标注':'Labels hidden for selection',
     '选中对象标注状态未变化':'Selected objects already have the requested label state',
     '没有可修改标注的选中对象':'No selected objects with editable labels',
+    /* V-5 图纸修订参照版（仅本会话运行时，不持久化） */
+    '参照版':'Reference',
+    '选择 JSON…':'Choose JSON…',
+    '清除参照版':'Clear reference',
+    '闪烁':'Blink',
+    '标定不一致':'calibration mismatch',
+    '画布不一致':'canvas mismatch',
+    '参照版为空':'reference is empty',
+    '不是工程 JSON':'not a project JSON',
     [TXT_SITE_DRAG_HINT]:'Drag the control points on the canvas to adjust the site; you can also enter exact coordinates/parameters here. Coordinates are world coordinates (m) and may be negative; a site and an image base map can coexist.'
   };
 
@@ -706,7 +715,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已导出 {n} 个自定义符号（仅当前工程）': 'Exported {n} custom symbols (this project only)',
     '已导入自定义符号：{n} 个': 'Custom symbols imported: {n}',
     '已导入 {n} 个符号（仅写入当前工程）': 'Imported {n} symbols (this project only)',
-    '符号 JSON 导入失败：{msg}': 'Symbol JSON import failed: {msg}'
+    '符号 JSON 导入失败：{msg}': 'Symbol JSON import failed: {msg}',
+    /* V-5 参照版（含占位） */
+    '参照版加载失败：{msg}': 'reference load failed: {msg}'
   };
   /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
   function fillTemplate(text, params) {

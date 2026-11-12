@@ -1,7 +1,17 @@
 /* ui-shell.js —— 通用弹窗/确认/输入/Toast、工程设置 */
+/** V-5 参照版信息：标定不一致必须显示（一致/无底图不额外占行） */
+function revInfoText(){
+  if(!rRef) return '';
+  const c=rRef.calib||{};
+  return rRef.label+(c.mode==='scale'?'\n'+L('标定不一致')+' '+c.am+' → '+c.bm
+    :c.mode==='canvas'?'\n'+L('画布不一致'):'');
+}
+function revInfoHTML(){ return esc(revInfoText()).replace(/\n/g,'<br>'); }
+function revInfoSync(){ const el=$('revInfo'); if(el) el.innerHTML=revInfoHTML(); }
 /* -------------------- 设置弹窗 -------------------- */
 $('settingsBtn').onclick=()=>{
   const T=I18N.t;
+  revDiff();   /* 打开的瞬间按当前工程重算，不沿用旧结论 */
   openModal(T('settingsTitle'),`
     <div class="form-grid">
       <label>${esc(T('projectName'))}</label><input id="setName" value="${esc(state.meta.name)}">
@@ -24,6 +34,15 @@ $('settingsBtn').onclick=()=>{
         <button type="button" id="ghostClear">${esc(T('ghostClear'))}</button>
         <span style="margin-left:8px">${esc(T('ghostOpacity'))}</span>
         <input type="range" id="ghostOpacity" min="10" max="100" step="5" value="${Math.round((ghostLayer?ghostLayer.opacity:.5)*100)}" style="width:120px">
+      </div>
+      <label>${esc(L('参照版'))}</label><div class="hint-text">
+        <input type="file" id="revFile" accept=".json" hidden>
+        <button type="button" id="revPick">${esc(L('选择 JSON…'))}</button>
+        <button type="button" id="revClearBtn">${esc(L('清除参照版'))}</button>
+        <div id="revInfo">${revInfoHTML()}</div>
+        <div>${esc(T('ghostOpacity'))}
+          <input type="range" id="revOpacity" min="10" max="90" step="5" value="${Math.round(rOp*100)}" style="width:120px"></div>
+        <div><label><input type="checkbox" id="revBlinkChk" ${rBl.on?'checked':''}> ${esc(L('闪烁'))}</label></div>
       </div>
       <label>${esc(T('runtimeSetting'))}</label><div class="hint-text">${esc(capabilitySummary())}</div>
       <label>${esc(T('siteBgSetting'))}</label><div class="hint-text">${esc(siteDescription())}<br>${esc(T('siteBgHint'))}</div>
@@ -59,6 +78,17 @@ $('settingsBtn').onclick=()=>{
     e.target.value='';
   };
   $('ghostClear').onclick=()=>ghostClear();
+  /* V-5 参照版控件：即时生效，只改运行时变量（不写 settings/工程/撤销栈） */
+  $('revPick').onclick=()=>$('revFile').click();
+  $('revFile').onchange=async e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(f) await revFile(f);
+    e.target.value='';
+    revInfoSync();
+  };
+  $('revClearBtn').onclick=()=>{ revClear(); revInfoSync(); };
+  $('revOpacity').oninput=e=>{ rOp=e.target.value/100; invalidateStatic(); requestRender(); };
+  $('revBlinkChk').onchange=e=>revBlinkSet(e.target.checked);
   $('ghostOpacity').oninput=e=>{
     if(!ghostLayer) return;
     ghostLayer.opacity=Math.max(.1,Math.min(1,Number(e.target.value)/100));
