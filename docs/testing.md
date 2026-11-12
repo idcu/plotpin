@@ -11,10 +11,10 @@
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-10） | 是否在 CI |
+| 层 | 入口 | 运行环境 | 规模（2026-11-12） | 是否在 CI |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **157 个分区 / 3,936 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **43 个 spec / 147 个用例**（默认 146 跑 + 1 条件跳过） | 是（独立 `e2e` job；**CI 实际执行未验证**，见 §3.1） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **44 个 spec / 150 个用例**（默认 149 跑 + 1 条件跳过） | 是（独立 `e2e` job，双入口 matrix；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（主 CI 不跑；夜间 `perf-nightly.yml` 定时/手动采集并归档 `test-results/perf-*.json`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
 
@@ -72,15 +72,24 @@
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
-- **两个入口，全量 43 个 spec**：
+- **三条跑法，全量 44 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
+  - **`file://` 入口**：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
   - dist 入口的跳过项：既有协作 soak 1 条 + `sw.spec` 1 条（单文件发行版不含 `js/`、`css/`、`sw.js`，SW 预缓存计数只对源码入口有判定意义；显式 `test.skip` 带原因，不测 harness）。
-  - 实测（2026-11-12）：源码 **146 passed / 0 failed / 1 skipped**，exit 0；dist **145 passed / 0 failed / 2 skipped**，exit 0。
+  - 实测（2026-11-12）：源码 **149 passed / 0 failed / 1 skipped**，exit 0；dist **148 passed / 0 failed / 2 skipped**，exit 0。
+- `file://` 与 http 的实测差异（Chromium，2026-11-12）：
+  - **IndexedDB 可用**（`readwrite-ok`），`localStorage` 可用，自动保存与工程恢复与 http 一致；
+  - **下载可触发**：PDF 与 CSV 都能拿到 `download` 事件与完整文件（PDF > 280 KB、CSV 含表头与数据行）；
+  - **CSP 内联哈希生效**：dist 只有 1 条 `sha256`，注入的第二段内联脚本被拦（控制台只有这一条预期违规）；
+  - **Service Worker 不注册**：`navigator.serviceWorker` 在 Chromium 的 file:// 下存在，但产品按协议显式关闭（`detectCapabilities` 的 `sw=false`），不尝试注册、无报错；PWA 安装与预缓存只对源码多入口成立，这是设计边界而非缺陷。
+  - 唯一环境差异是 SW/PWA，其余能力与 http 相同；未发现 file:// 专属产品缺陷。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
-- CI 侧新增 `e2e` job（`npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`，Node 20 / `ubuntu-latest`）。
-  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 146 用例通过 + 1 条件跳过（dist 入口另为 145 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；
+- CI 侧 `e2e` job 用 **matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`）：
+  每套约 3～4 分钟，并行后墙钟接近一套；不分组、不挑子集，任何一侧失败都保留另一侧结果。
+  **CI 实际执行未验证**：本机只验证了同样的命令在本地 Chromium 下 149 用例通过 + 1 条件跳过（dist 入口另为 148 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；
   首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
+- `npm run ci` 是离线 Node 门禁，**不安装也不依赖 Playwright/Chromium**，因此 `file://` 用例不在 `npm run ci` 里跑；它随 CI 的 `e2e` job 与本地 `node scripts/e2e.mjs` 执行（原因已写在 workflow 注释与本节）。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
 
@@ -95,7 +104,7 @@
 | 插件 | plugin-sandbox(22)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
 | 规则 | rules(1) |
 | 校准/比例/命中 | calibration-precheck(3)、scale-preset(3)、hit-lock(2) |
-| 移动端/离线 | mobile(2)、sw(1) |
+| 移动端/离线/file:// | mobile(2)、sw(1)、file-dist(3) |
 | i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |

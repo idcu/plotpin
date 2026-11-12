@@ -2,7 +2,7 @@
 
 本文件逐文件回答：**它负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑**。设计层面的取舍见 [ARCHITECTURE](ARCHITECTURE.md)，功能边界见 [features](features.md)。
 
-> 口径：47 个浏览器脚本（`js/` 37 + `ngm.vendor/` 10）+ 19 个 `.mjs` 脚本 + 1 个构建清单 + 63 个测试文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的"接口"即这些全局符号。最后核对：2026-11-12。
+> 口径：47 个浏览器脚本（`js/` 37 + `ngm.vendor/` 10）+ 19 个 `.mjs` 脚本 + 1 个构建清单 + 64 个测试文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的"接口"即这些全局符号。最后核对：2026-11-12。
 
 ## 分层与加载顺序
 
@@ -91,7 +91,7 @@
 | `check-discipline.mjs` | 方法论自检看板（13 问；`--strict` 要求 L3/L4） | 仓库+git → 看板 | CI、`npm run discipline` |
 | `e2e.mjs` | Playwright 入口；依赖缺失时以明确原因跳过（退出码 2） | 参数 → 浏览器测试 | `npm run test:e2e` |
 | `perf-browser.mjs` | 真实 Chromium 性能基线入口（不在 `npm run ci` 路径） | 页面 → 基线数据 | `npm run perf:browser` |
-| `serve.mjs` | 零依赖静态服务器 | `HOST/PORT` → `127.0.0.1:4173` | 本地/e2e |
+| `serve.mjs` | 零依赖静态服务器；`E2E_ENTRY=dist` 时把 `/`、`/index.html` 映射到单文件发行版 | `HOST/PORT/E2E_PORT/E2E_ENTRY` → `127.0.0.1:4173` | 本地/e2e |
 | `pack-core.mjs` | 单文件打包纯函数（便于自测） | 输入文件 → HTML 文本 | `build.mjs`、selftest |
 | `minify-core.mjs` | 构建期无损压缩纯函数 | 文本 → 压缩文本 | `build.mjs`、selftest |
 | `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考）；输出体积余量与 gzip 阈值判断 | `plotpin.html` → 报告 | 体积专项 |
@@ -101,9 +101,9 @@
 
 > 脚本层没有"20 个 .mjs"；实际是 `scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 2 个 + `dist-manifest.json` 共 22 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
 
-## tests（63 个）
+## tests（64 个）
 
-### e2e 用例（43 个 spec）
+### e2e 用例（44 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -116,6 +116,7 @@
 | `csp.spec.mjs` | 注入路径 1/4：恶意 `type.name/icon` 不执行 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合实体导入、版本与补充实体可见 |
 | `export-scope.spec.mjs` | N-05：台账全量+「显示」列=有效可见，图纸类只含可见对象；草稿/校准不进 PNG/PDF |
+| `file-dist.spec.mjs` | dist 的 `file://` 真实离线路径：探针（IDB/localStorage/SW/CSP）+ 图片/PDF 底图导入、比例预设、点位与区域、PDF/CSV 导出 |
 | `ghost.spec.mjs` | G-1/G-2：幽灵参考层导入/透明度/清除；不进 `state`/JSON，清除后静态签名回到无参考图 |
 | `help-center.spec.mjs` | D-03：帮助中心三页签与焦点回归 |
 | `history-increment.spec.mjs` | B-10：20 条含照片历史相对整份深拷贝 heap 下降 ≥50%（真实 Chromium） |

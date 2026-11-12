@@ -22,8 +22,8 @@
 | selftest 断言 | 3936 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
 | selftest 分区 | 157 个 | `node scripts/selftest.mjs --list` | 输出 158 行（含 1 行标题） |
 | 加载脚本 | 47 个（37 项目 + 10 vendor） | `check.mjs` 输出「加载 47 个脚本」 | `js/` 下 37 个 `.js` |
-| e2e 用例 | 147 个（146 通过 + 1 条件跳过） | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak；dist 入口（`E2E_ENTRY=dist`）为 145 通过 + 2 跳过（另 1 条为 `sw.spec` 单文件版豁免） |
-| e2e spec 文件 | 43 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 44 个 `.mjs`（43 个 spec + 1 个 helper） |
+| e2e 用例 | 150 个（149 通过 + 1 条件跳过），44 个 spec | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak；dist 入口为 148 通过 + 2 跳过（另 1 条为 `sw.spec` 单文件版豁免）；`file-dist.spec` 额外覆盖 dist 的 `file://` 路径 |
+| e2e spec 文件 | 44 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 45 个 `.mjs`（44 个 spec + 1 个 helper） |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/`；含 4 项结构校验（规则删空即红） |
 | 插件 API 面 | 24 键 / 清单 24 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
 | i18n 覆盖率 | 46.59% / 缺口 10 / UI 硬编码 20 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |

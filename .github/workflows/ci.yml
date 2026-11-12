@@ -33,8 +33,26 @@ jobs:
     # 首次在 GitHub runner 上执行时由本 job 的 install 步骤安装。
     # 注意：本地无法验证 runner 上的真实执行（见 docs/engineering.md §3.5），
     # 该 job 的实际耗时/稳定性以 CI 运行记录为准，不得用本地 e2e 结果代替。
-    name: 浏览器 e2e（Chromium）
+    #
+    # 双入口：matrix 两个 job 并行，各自跑**全量** spec（不分组、不挑子集）。
+    # 选择依据：单套 e2e 本地约 3～4 分钟，两套串行会翻倍；matrix 并行把墙钟压回
+    # 一套的时间，且两个 job 互不影响（fail-fast: false，任一侧失败都保留另一侧结果）。
+    # 源码入口用 4173；dist 入口用 4174，避免 serve.mjs 复用另一个入口的服务器。
+    name: 浏览器 e2e（Chromium，${{ matrix.entry }}）
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - entry: 源码入口
+            dist: ''
+            port: '4173'
+          - entry: dist 入口
+            dist: 'dist'
+            port: '4174'
+    env:
+      E2E_ENTRY: ${{ matrix.dist }}
+      E2E_PORT: ${{ matrix.port }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +63,10 @@ jobs:
         run: npm ci
       - name: 安装 Chromium 与系统依赖
         run: npx playwright install --with-deps chromium
-      - name: Playwright 功能 e2e（145 用例，1 条按环境条件跳过）
+      # 含 file-dist.spec（直接打开 dist 的 file:// 绝对路径）与入口无关，两套都会跑。
+      # 注意：`npm run ci` 是离线 Node 门禁，不含浏览器；file:// 用例在 CI 的 e2e job 执行，
+      # 不在 `npm run ci` 里重复跑（原因：npm run ci 不安装/不依赖 Playwright 与 Chromium）。
+      - name: Playwright 功能 e2e（${{ matrix.entry }}，全量 spec）
         run: node scripts/e2e.mjs
 
   vendor-check:

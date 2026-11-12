@@ -101,7 +101,8 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
 - **源码多文件入口**（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 52 个（含 `sw.js` 自身）；`file://` 下不注册。
 - **单文件发行版**（`dist/plotpin-standalone.html`）：**不含 Service Worker**，也不含 `js/`、`css/`、`sw.js`；CSS/JS/图标全部内联，离线由文件自身保证。
 - PWA 安装、预缓存与版本升级**只对源码多文件入口成立**；dist 既不承诺也不需要。
-- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 42 个 spec 两个入口都全量执行（见 [testing.md](testing.md) §3.1）。
+- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 43 个 spec 两个入口都全量执行（见 [testing.md](testing.md) §3.1）。
+- `file://` 实测（Chromium，2026-11-12）：IndexedDB 读写、`localStorage`、Blob 下载、CSP 内联哈希都正常——导入图片/PDF 底图、比例预设、点位与区域、PDF/CSV 导出全部通过；唯一差异是 SW/PWA（`detectCapabilities` 按协议置 `sw=false`，不注册、不报错）。这是浏览器安全模型与产品设计的边界，不是缺陷。
 
 ---
 
@@ -128,7 +129,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-gates.mjs` | 正面基线 + 13 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
-| `node scripts/e2e.mjs` | Chromium 功能 e2e | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`）；**CI 实际执行未验证** |
+| `node scripts/e2e.mjs` | Chromium 功能 e2e（44 spec / 150 用例，含 `file://` 发行版路径） | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`），matrix 双入口并行（源码 4173 / dist 4174），各自全量；**CI 实际执行未验证** |
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI（SwiftShader 读数不能当真实 GPU 结论）；由 `.github/workflows/perf-nightly.yml` 夜间定时 + 手动触发，读数上传为 artifact |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 
@@ -214,7 +215,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |
 | `i18n-scan.mjs` | 只按静态字面量扫描，不证明译文语义正确；JSON/HTML 内的动态拼接可能漏扫 |
-| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 146 用例（145 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
+| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`），并用 matrix 跑**双入口全量**：源码入口（4173）与 dist 入口（`E2E_ENTRY=dist`、4174）各一套，`fail-fast: false` 并行。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 44 spec / 150 用例（源码 149 通过 + 1 条件跳过；dist 148 通过 + 2 跳过，另 1 条为 `sw.spec` 单文件版豁免）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
 | `perf:browser` | **不在任何 CI job 中**；本机为 SwiftShader，数据不能当真实 GPU 结论 |
 | `.github/workflows/ci.yml` | `discipline` job 的步骤名仍写着「十问看板」，实际为 **13 问**；为文案滞后，不影响执行 |
 | `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用「本地 ci 绿」代替全部门禁 |
