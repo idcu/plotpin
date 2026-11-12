@@ -31,9 +31,13 @@ test('页面加载：无脚本错误、CSP 生效、画布就绪', async ({ page
       canvasW: canvas.width,
       canvasH: canvas.height,
       scriptCount: document.querySelectorAll('script[src]').length,
+      inlineCount: document.querySelectorAll('script:not([src])').length,
+      cspHashes: ((meta && meta.content.match(/'sha256-/g)) || []).length,
       remoteRefs: Array.from(document.querySelectorAll('script[src],link[href],img[src]'))
         .map(el => el.src || el.href || '')
         .filter(u => {
+          /* data: 是内联资源（dist 把图标转成 data URI），不属于远程引用 */
+          if (!u || u.startsWith('data:')) return false;
           try { return new URL(u, location.origin).origin !== location.origin; }
           catch (_) { return false; }
         })
@@ -42,7 +46,15 @@ test('页面加载：无脚本错误、CSP 生效、画布就绪', async ({ page
   expect(info.schema).toBe('offline-drawing-annotation/v2');
   expect(info.canvasW).toBeGreaterThan(0);
   expect(info.canvasH).toBeGreaterThan(0);
-  expect(info.scriptCount).toBeGreaterThan(10);
+  /* 两种入口分别校验脚本形态，且都必须满足 CSP 白名单与脚本一一对应：
+     源码入口 = 47 个外链脚本、CSP 不签哈希；dist 入口 = 合并为 1 段内联脚本、CSP 只签 1 条。 */
+  if (info.scriptCount === 0) {
+    expect(info.inlineCount).toBe(1);
+    expect(info.cspHashes).toBe(1);
+  } else {
+    expect(info.scriptCount).toBeGreaterThan(10);
+    expect(info.cspHashes).toBe(0);
+  }
   expect(info.remoteRefs).toEqual([]);
   expect(info.csp).toContain("script-src 'self'");
   expect(info.csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);

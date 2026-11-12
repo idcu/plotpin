@@ -50,15 +50,17 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 | 形态 | 入口 | 说明 |
 |---|---|---|
 | 源码直开 | `index.html` | 双击即可用；脚本逐文件加载，便于调试 |
-| 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成，内联全部 CSS/JS，可离线分发 |
+| 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成：内联全部 CSS/JS，**47 段脚本合并为 1 段、CSP 只签 1 条 sha256**，可离线分发 |
 
-`scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进；内联标记用短名——`js/` 取文件基名、vendor 取包路径、CSS 取文件名，均两两唯一，用于在 dist 里定位来源），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；
+`scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；
 字符串 / 模板字面量 / 正则逐字节保留；标点相邻的空格、自终止词法单位后的换行可省（连续正负号之间例外），
 `}` 前的语句分号可省（`{a();}`→`{a()}`，`}` 前由 ASI 补分号；删除后若变成语法错误由构建期解析拦下），
 `return`/`throw`/`typeof` 等关键字与紧随的 `(`/`[`/`{`/字面量引号之间无空格，
 `0.5`→`.5`，`}` 后换行接标识符时可省（块结束或同表达式的 `in`/`instanceof`；接 `(`/`[` 等仍保留换行）；
 **源文件不压缩**，`index.html` 仍引用可读源码。
-每个内联脚本压缩后立刻用 `vm.Script` 解析，解析失败直接构建失败。
+脚本按 `index.html` 的声明顺序压缩后合并为 **1 段**（`;` + 换行分隔，显式终止上一条语句，防尾注释/ASI 粘连），
+CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` 解析，顶层 `let/const` 重名等词法冲突会直接让构建失败。
+产物不再嵌来源标记：`size-report` 按声明顺序切分，JS 组成整体显示为一个 bundle 项。
 
 ### 2.2 `build.mjs --check` 的真实判据
 
@@ -85,9 +87,21 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 - gzip 硬上限：**286,720 B（280 KiB）**；`GZIP_WARN_BYTES = 266,240` 只预警（同上，`lib/budget.mjs` 单一来源）。
 - 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-12 实测：`bytes = 830,743`、gzip `263,479`、余量 `8,937 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-12 实测（V-4a 合并后）：`bytes = 827,476`、gzip `261,624`、余量 `12,204 B`（`node scripts/build.mjs --check` 复算一致）。
+- V-4a 收益拆分（入口 830,743 / 263,479 → 出口 827,476 / 261,624，总 **−3,267 raw / −1,855 gzip**，供复核）：
+  1. **CSP 哈希 47→1**：−2,484 raw / −1,776 gzip（把 46 条同格式随机 hash 注回现产物实测，随机分布下 1,765～1,776 B）；
+  2. **内联标记**：0 / 0（V-3R 已删来源标记，本期未新增）；
+  3. **合并本身**（46 组 `<script>` 包装 → 1 组、46 处 `;`+换行分隔）：−783 raw / −79 gzip（总降幅减 CSP 项的残差）。
+  gzip 三项为实测 + 残差，不严格可加；raw 三项严格可核对。
 - 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；余量 **< 8,000 B 冻结改功能**，只能做无损回收后重新评估。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
+
+### 2.4 单文件发行版与 Service Worker 的边界
+
+- **源码多文件入口**（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 52 个（含 `sw.js` 自身）；`file://` 下不注册。
+- **单文件发行版**（`dist/plotpin-standalone.html`）：**不含 Service Worker**，也不含 `js/`、`css/`、`sw.js`；CSS/JS/图标全部内联，离线由文件自身保证。
+- PWA 安装、预缓存与版本升级**只对源码多文件入口成立**；dist 既不承诺也不需要。
+- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 42 个 spec 两个入口都全量执行（见 [testing.md](testing.md) §3.1）。
 
 ---
 
@@ -296,7 +310,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 ### 5.2 产物体积预算
 
 - 硬上限 839,680 B；当前值与余量以 `scripts/dist-manifest.json` 为准（见 2.3）。
-- CSP：单文件包每个内联脚本一条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'`，哈希数必须等于内联脚本数。
+- CSP：单文件包全部脚本合并为 1 段，只签 1 条 `sha256` 白名单；`script-src` 不得含 `'unsafe-inline'`，哈希数必须等于内联脚本数（当前 1 = 1）。
 - 体积专项只允许**无损回收**（合并重复文案、复用现有工具函数、删除确认的死代码）；不得删功能凑数、不得调高上限。
   收口必须给出逐项回收量与总回收量，且 8 种导出 golden 与 selftest 断言数不变。
 

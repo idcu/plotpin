@@ -5857,9 +5857,9 @@ await section("56. 单文件发行包：内联、去外链、图标 data URI、C
   ok('打包-manifest移除', !out.includes('manifest.webmanifest'));
   ok('打包-图标转dataURI', out.includes('data:image/svg+xml;base64,'));
   ok('打包-转义script闭合', out.includes('<\\/script'));
-  /* CSP：两个内联脚本 → 两条 sha256；不得出现 unsafe-inline */
+  /* CSP：两段源脚本合并为 1 段 → 1 条 sha256；不得出现 unsafe-inline */
   const scriptSrc=(out.match(/script-src[^;]*/)||[''])[0];
-  eq('打包-CSP哈希数与内联脚本数一致', (scriptSrc.match(/'sha256-/g)||[]).length, 2);
+  eq('打包-CSP哈希数与内联脚本数一致', (scriptSrc.match(/'sha256-/g)||[]).length, 1);
   ok('打包-CSP无unsafe-inline', !scriptSrc.includes('unsafe-inline'));
   ok('打包-CSP保留原策略', out.includes("default-src 'self'")&&out.includes("img-src 'self'"));
 
@@ -5876,7 +5876,7 @@ await section("56. 单文件发行包：内联、去外链、图标 data URI、C
   /* 统计内联脚本时先剔除 HTML 注释（注释里也会出现文档性的 <script> 字样） */
   const realInline=(real.replace(/<!--[\s\S]*?-->/g,'').match(/<script>/g)||[]).length;
   const realHashes=(real.match(/'sha256-[A-Za-z0-9+/=]+'/g)||[]).length;
-  ok('打包-真实入口CSP哈希全覆盖', realInline>10&&realInline===realHashes);
+  ok('打包-真实入口合并为单脚本且哈希全覆盖', realInline===1&&realInline===realHashes);
 }
 
 });

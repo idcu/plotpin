@@ -72,9 +72,14 @@
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
+- **两个入口，全量 43 个 spec**：
+  - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
+  - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
+  - dist 入口的跳过项：既有协作 soak 1 条 + `sw.spec` 1 条（单文件发行版不含 `js/`、`css/`、`sw.js`，SW 预缓存计数只对源码入口有判定意义；显式 `test.skip` 带原因，不测 harness）。
+  - 实测（2026-11-12）：源码 **146 passed / 0 failed / 1 skipped**，exit 0；dist **145 passed / 0 failed / 2 skipped**，exit 0。
 - 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
 - CI 侧新增 `e2e` job（`npm ci` → `npx playwright install --with-deps chromium` → `node scripts/e2e.mjs`，Node 20 / `ubuntu-latest`）。
-  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 145 用例通过 + 1 条件跳过，无法复现 runner 的网络、系统库与浏览器下载；
+  **CI 实际执行未验证**：本机只验证了同一命令在本地 Chromium 下 146 用例通过 + 1 条件跳过（dist 入口另为 145 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；
   首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）

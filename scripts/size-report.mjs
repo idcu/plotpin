@@ -7,7 +7,8 @@
  *
  * 口径（P2-06 修正，V-3R 去标记）：
  *   - 组成：按 index.html 中 `<script src>` / `<link rel=stylesheet>` 的声明顺序，
- *     与 dist 里的 `<script>` / `<style>` 块逐一对应切分（构建不再嵌来源标记），
+ *     与 dist 里的 `<script>` / `<style>` 块逐一对应切分（构建不再嵌来源标记）；
+ *     V-4a 起 dist 全部脚本合并为 1 段，JS 组成显示为单个 bundle 项（不再逐文件对位），
  *     剩余部分记作 HTML 其余（含 CSP/图标 data URI/内联壳）。
  *   - 注释/缩进/空行：统计对象是 **dist 内联后的分块文本**（构建期已删注释、行首缩进与空行），
  *     得到的是「当前产物还能再回收多少」；另给 `sourcePotential` 作为源文件潜在值参考，
@@ -40,19 +41,22 @@ const gzipBytes = gzipSync(Buffer.from(bundle, 'utf8')).length;
 const budget = budgetStatus({ bytes: total, gzipBytes });
 
 /* ---- 1. 按 index.html 声明顺序切分组成 ---- */
-/* 构建不再嵌来源标记：dist 里每个 <script>/<style> 块与 index.html 的声明一一对应、顺序一致 */
+/* 构建不再嵌来源标记：dist 里每个 <script>/<style> 块与 index.html 的声明一一对应、顺序一致。
+   V-4a 起 dist 把全部脚本合并为 1 段（CSP 只需 1 条哈希），此时 JS 组成合并为单个 bundle 项。 */
 const entry = read('index.html');
 const srcList = [...entry.matchAll(/<script\s+src="([^"]+)"><\/script>/g)].map(m => m[1]);
 const cssList = [...entry.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/g)].map(m => m[1]);
 const scriptBodies = [...bundle.matchAll(/<script>\n([\s\S]*?)\n<\/script>/g)].map(m => m[1]);
 const styleBodies = [...bundle.matchAll(/<style>\n([\s\S]*?)\n<\/style>/g)].map(m => m[1]);
-if (scriptBodies.length !== srcList.length || styleBodies.length !== cssList.length) {
+const mergedJs = scriptBodies.length === 1 && srcList.length > 1;
+if ((scriptBodies.length !== srcList.length && !mergedJs) || styleBodies.length !== cssList.length) {
   console.error(`区块数与 index.html 声明不一致：脚本 ${scriptBodies.length}/${srcList.length}、`
     + `样式 ${styleBodies.length}/${cssList.length}（dist 与源可能不同步，请先重新构建）`);
   process.exit(1);
 }
 const parts = [];
-scriptBodies.forEach((text, i) => parts.push({ path: srcList[i], bytes: bytes(text), text, kind: 'js' }));
+if (mergedJs) parts.push({ path: `bundle(${srcList.length} 个脚本，已合并)`, bytes: bytes(scriptBodies[0]), text: scriptBodies[0], kind: 'js' });
+else scriptBodies.forEach((text, i) => parts.push({ path: srcList[i], bytes: bytes(text), text, kind: 'js' }));
 styleBodies.forEach((text, i) => parts.push({ path: cssList[i], bytes: bytes(text), text, kind: 'css' }));
 const marked = parts.reduce((a, p) => a + p.bytes, 0);
 parts.push({ path: '(HTML 其余：CSP/图标/内联壳)', bytes: total - marked, kind: 'html' });

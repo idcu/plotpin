@@ -4,7 +4,8 @@
  * 产物无任何外部引用，双击即可离线使用。
  *
  * 脚本内联后仍然是「内联脚本」：CSP 的 script-src 不含 'unsafe-inline'，
- * 因此这里把每个内联脚本的 sha256 追加到页面 CSP（hash 由内容确定性计算，构建可复现）。
+ * 因此这里把内联脚本合并为单段，只对合并体追加 1 条 sha256（hash 高熵、gzip 几乎不缩，
+ * 47 条哈希是发行包里最贵的一块固定成本；hash 由内容确定性计算，构建可复现）。
  */
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
@@ -29,16 +30,25 @@ export function buildStandalone(html, readFile) {
     (_, href) => `<style>${inner(minifyCss(readFile(href)))}</style>`);
 
   /* 脚本内联（保持原有顺序）；先做构建期无损压缩，再转义 </script> 防止提前闭合。
-     哈希必须按浏览器看到的**脚本文本内容**计算（含压缩后的换行）。
-     压缩后立刻做语法解析：压缩器只删注释/空白，解析失败说明压缩器有缺陷，构建必须失败。 */
+     47 段合并为 1 段：CSP 只需 1 条哈希；合并体用 `;` + 换行分隔（显式终止上一条语句，
+     防尾注释/ASI 粘连；比 `\n;\n` 每处少 1 B）。
+     合并后立刻做语法解析：顶层 let/const 重名等词法冲突会在这里直接让构建失败。 */
+  const SLOT = '<!--PLOTPIN_SCRIPT_BUNDLE-->';
+  const codes = [];
   out = out.replace(/<script\s+src="([^"]+)"><\/script>/g, (_, src) => {
-    const code = minifyJs(String(readFile(src))).replace(/<\/script/gi, '<\\/script');
-    try { new vm.Script(code, { filename: src }); }
-    catch (e) { throw new Error(`压缩后脚本无法解析（${src}）：${e.message}`); }
-    const text = inner(code);
-    cspHashes.push(createHash('sha256').update(text, 'utf8').digest('base64'));
-    return `<script>${text}</script>`;
+    codes.push(minifyJs(String(readFile(src))).replace(/<\/script/gi, '<\\/script'));
+    return SLOT;
   });
+  if (codes.length) {
+    const body = codes.join(';\n');
+    try { new vm.Script(body, { filename: 'bundle' }); }
+    catch (e) { throw new Error(`合并后脚本无法解析：${e.message}`); }
+    const text = inner(body);
+    cspHashes.push(createHash('sha256').update(text, 'utf8').digest('base64'));
+    out = out.replace(SLOT, () => `<script>${text}</script>`);
+  }
+  /* 其余占位符删除，不留空行 */
+  out = out.replace(new RegExp(`\\n?${SLOT}\\n?`, 'g'), '\n');
 
   /* CSP 升级：只给内联脚本签哈希，其余策略原样保留 */
   if (cspHashes.length) {
