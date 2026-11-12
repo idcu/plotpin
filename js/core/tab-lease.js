@@ -8,6 +8,8 @@ const LEASE_HEARTBEAT_MS=5000;
 /** 对端时钟最多允许超前本地 5s；超出部分按本地 now 钳制，避免伪造未来心跳长期占租约（CORE-P2-17） */
 const LEASE_FUTURE_SKEW_MS=5000;
 let leaseMode='none',leaseTabId='',leaseProjectId='',leaseActive=false,leaseConfirmed=false,leaseConflict=false,leaseLastSent=0,leaseChannel=null,leaseTimer=null,leaseHandler=null;
+/* bfcache 返回后到首个对端心跳之间留出的确认窗口：期间禁止落盘，避免旧标签抢写（H-01） */
+let leasePagehideBound=false,leaseGraceUntil=0;
 const leasePeers=new Map();
 function leaseCurProject(){ return String((state&&state.meta&&state.meta.projectId)||''); }
 /** 广播心跳；1.5s 内重复发送合并；flag='release' 广播释放，flag=1 附带 claim */
@@ -78,7 +80,7 @@ function leaseClaim(now){
 function leaseSaveBlocked(){
   if(!leaseActive||leaseConfirmed) return false;
   leaseSyncProject();
-  return leaseConflictAt(Date.now());
+  return leaseConflictAt(Date.now())||Date.now()<leaseGraceUntil;
 }
 function leaseStatus(){
   return {confirmed:leaseConfirmed,conflict:leaseConflict,lastBeat:leaseFreshTs(Date.now())};
@@ -110,7 +112,7 @@ function acquireEditorLease(){
   if(leaseMode==='none') toast(L('无法检测多标签页，编辑仍可用'),'warn');
   leaseSend(Date.now(),true);
   leaseTimer=setInterval(leaseTick,LEASE_HEARTBEAT_MS);
-  addEventListener('pagehide',releaseEditorLease);
+  if(!leasePagehideBound){ leasePagehideBound=true; addEventListener('pagehide',releaseEditorLease); }
   return leaseStatus();
 }
 function releaseEditorLease(){
@@ -122,3 +124,13 @@ function releaseEditorLease(){
   if(leaseConflict){ leaseConflict=false; leaseEmit(false); }
   leaseMode='none';
 }
+/* H-01：bfcache 返回时 pagehide 已释放租约，必须重新获取并留出心跳确认窗口；
+   否则旧标签在无任何冲突提示的情况下继续整工程落盘。 */
+addEventListener('pageshow',e=>{
+  if(!e||!e.persisted) return;
+  const now=Date.now();
+  leaseGraceUntil=now+LEASE_HEARTBEAT_MS+200;
+  acquireEditorLease();
+  leaseSyncProject(now);
+  leaseApply(now);
+});

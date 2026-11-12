@@ -33,6 +33,21 @@ test('SW：注册后缓存名带版本，旧缓存被清理，断网仍能打开
   expect(cacheInfo.names).not.toContain('plotpin-v1');
   expect(cacheInfo.entries).toBeGreaterThan(10);
 
+  /* P4-01：STATUS 消息回报本次预缓存计数（成功/失败/总数），失败不清空缓存 */
+  const status = await page.evaluate(() => new Promise(resolve => {
+    navigator.serviceWorker.addEventListener('message', ev => {
+      if (ev.data && ev.data.type === 'STATUS') resolve(ev.data);
+    });
+    navigator.serviceWorker.controller.postMessage({ type: 'STATUS' });
+    setTimeout(() => resolve(null), 3000);
+  }));
+  console.log('[P4-01][sw] ' + JSON.stringify(status));
+  expect(status).toBeTruthy();
+  expect(status.version).toBe(cacheInfo.current.replace('plotpin-v', ''));
+  expect(status.total).toBeGreaterThan(10);
+  expect(status.ok).toBe(status.total);
+  expect(status.failed).toBe(0);
+
   /* 断网后打开业务页：由 SW 缓存回退，页面不白屏 */
   await context.setOffline(true);
   await page.goto('/index.html');

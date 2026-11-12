@@ -1,8 +1,8 @@
-# 模块目录（MODULES）
+﻿# 模块目录（MODULES）
 
 本文件逐文件回答：**它负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑**。设计层面的取舍见 [ARCHITECTURE](ARCHITECTURE.md)，功能边界见 [features](features.md)。
 
-> 口径：45 个浏览器脚本（`js/` 35 + `ngm.vendor/` 10）+ 19 个 `.mjs` 脚本 + 1 个构建清单 + 44 个测试文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的"接口"即这些全局符号。最后核对：2026-11-08。
+> 口径：45 个浏览器脚本（`js/` 35 + `ngm.vendor/` 10）+ 19 个 `.mjs` 脚本 + 1 个构建清单 + 61 个测试文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的"接口"即这些全局符号。最后核对：2026-11-12。
 
 ## 分层与加载顺序
 
@@ -83,7 +83,7 @@
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致 | 仓库 → 报告 | `check.mjs` |
 | `check-plugin-api.mjs` | 运行时 `PlotPin` 键集合与 `contracts/plugin-api.json` 一致 | 源码/契约 → 报告 | `check.mjs` |
 | `check-deletions.mjs` | 结构性删除账本：`docs/deletions.md` 与代码中删除标记一致 | 文档+代码 → 报告 | `check.mjs` |
-| `check-sw.mjs` | SW 缓存版本门禁：预缓存输入相对 HEAD 变化必须递增 `VERSION` | git 索引 + `sw.js` → 报告 | CI |
+| `check-sw.mjs` | SW 缓存版本门禁：预缓存输入（含 `sw.js` 自身）的内容指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256`，输入变更必须递增 `VERSION` | 工作树 + 清单 → 报告 | CI、`check.mjs` |
 | `badge.mjs` | 断言数注入/校验 README 三处锚点 | `selftest` → README | `check.mjs`、CI、`npm run badge` |
 | `i18n-scan.mjs` | 中英文案覆盖率扫描与 `--check` 基线 | `js/`、`index.html` → 报告 | `check.mjs`、CI、`npm run i18n:scan` |
 | `check-discipline.mjs` | 方法论自检看板（13 问；`--strict` 要求 L3/L4） | 仓库+git → 看板 | CI、`npm run discipline` |
@@ -99,9 +99,9 @@
 
 > 脚本层没有"20 个 .mjs"；实际是 `scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 2 个 + `dist-manifest.json` 共 22 个文件。新增脚本要同步 `package.json`、`check.mjs` 或 CI，并避免把开发期依赖带进发行包。
 
-## tests（55 个）
+## tests（61 个）
 
-### e2e 用例（35 个 spec）
+### e2e 用例（41 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -164,3 +164,5 @@
 2. 在 `index.html` 的对应位置插入 `<script>`，`check.mjs` 会校验入口引用与分层。
 3. 复用既有公共抽象（`APP_LIMITS`、`siteBounds`、`outlineOf`、`EXPORT_FIELD_DEFS`、`objectIndexById`、`ensureVendor`），不得复制粘贴第二份。
 4. 在本文件补一行；若改变公共 API 或行为，同时在 [ARCHITECTURE](ARCHITECTURE.md) 与 [CHANGELOG.internal.md](../CHANGELOG.internal.md) 记录影响范围。
+
+

@@ -303,7 +303,7 @@ DPR1 三组 + DPR2 一组，**headless=true**，渲染后端 **SwiftShader 软�
 | Node 桩与真实 Canvas 差异 | 2000 对象重建 23.46 ms vs 浏览器 51.6 ms(P95) | 两套阈值必须分别维护；Node 绿不代表浏览器绿 |
 | `getImageData` / 大底图解码 | `APP_LIMITS.BG_MAX_DECODE_PIXELS = 40 MP`，无专项耗时断言 | 超大底图首次解码可能造成一次性卡顿，未能量化 |
 | 长跑内存未验证 | 无 soak 内存曲线 | 不能声称「无泄漏」，只能说门禁内单次读数正常 |
-| 性能门禁不在 CI | `.github/workflows/ci.yml` 只跑 Node bench | 浏览器回归只能靠人工/本地执行 |
+| 性能门禁不在主 CI | `.github/workflows/ci.yml` 只跑 Node bench；浏览器读数由 `perf-nightly.yml` 夜间定时/手动执行 | 合并前不拦截浏览器回归，只能靠夜间读数与人工/本地执行 |
 | 机器差异 | 绝对阈值 | 共享机器负载高时可能误报；记录数据必须带机器信息 |
 
 ---

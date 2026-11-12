@@ -10,6 +10,20 @@ function siteDomainOf(bg){
   return {w:b.w,h:b.h};
 }
 function positiveNum(v,fb){ const n=Number(v); return Number.isFinite(n)&&n>0?n:fb; }
+/** G-01：由「图纸比例 1:scale + 扫描 DPI」换算米/像素。1 英寸 = 0.0254 m，dpi 为每英寸像素数。
+ *  例：1:100 @ 300dpi → 100×0.0254/300 = 0.008466… m/px。非法输入返回 0（调用方据此拒绝）。 */
+function mppFromScale(scale,dpi){
+  const s=Number(scale), d=Number(dpi);
+  if(!Number.isFinite(s)||!Number.isFinite(d)||s<=0||d<=0) return 0;
+  return s*0.0254/d;
+}
+/* 本会话最近一次应用的比例预设（不落盘、不进 schema；刷新后仅显示当前 m/px） */
+var scalePreset=null;
+/** 米/像素的显示文本：4 位有效数字（0.0084666… → 0.008467），不随精度设置抖动 */
+function mppText(v){
+  const n=Number(v);
+  return Number.isFinite(n)&&n>0?String(Number(n.toPrecision(4))):'0';
+}
 /**
  * 矢量场地实际世界包围盒（米，允许负值）：各类形状按真实位置/旋转取轴对齐外接框；
  * 图片底图复用仿射(imageWorldFrame)或像素×m/px。矩形以 shape.x/shape.y 为基点，

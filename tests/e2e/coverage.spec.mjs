@@ -54,3 +54,27 @@ test('覆盖率口径 v3：4 个缩放级别一致、隐藏图层不计入、面
   expect(text).toContain('统计口径 v3');
   expect(text).toContain('固定目标');
 });
+
+test('DORI 最远判读距离：属性写入分辨率/张角后，覆盖率报告同源输出且缺省显示未填', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const cam = baseObject('point', 'point.camera', { name: 'cam-A', x: 10, y: 10, phys: 80, angle: 0 });
+    cam.props.camResPx = 1920; cam.props.camFov = 90;
+    const dome = baseObject('point', 'point.dome', { name: 'dome-B', x: 60, y: 60, phys: 20 });
+    state.objects = [
+      baseObject('rect', 'rect.area', { name: 'R', x: 0, y: 0, width: 100, height: 100 }),
+      cam, dome
+    ];
+  });
+  await page.locator('#coverageBtn').click();
+  const text = await page.locator('#modalBody').innerText();
+  expect(text).toContain('DORI 最远判读距离');
+  expect(text).toContain('cam-A');
+  expect(text).toContain('1920');
+  expect(text).toContain('90°');
+  /* 1920 px ÷ (2×25×tan45°) = 38.4 m：侦测列必须出现 */
+  expect(text).toContain('38.40 m');
+  /* 圆机未填分辨率/张角：对应行显示「未填」 */
+  expect(text).toContain('dome-B');
+  expect(text).toContain('未填');
+});

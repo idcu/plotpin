@@ -20,6 +20,10 @@ const EPS = 1e-8;
 const BG_MAX_EDGE = 3000;
 const BG_JPEG_QUALITY = 0.85;
 const BG_RECOMPRESS_LIMIT = 6 * 1024 * 1024;
+/* PDF 图纸页分辨率：默认 220 dpi（150/220/300 三档），像素最长边复用 BG_MAX_EDGE 封顶。
+   清单页尺寸固定，不随该设置变化。 */
+const PDF_DPI_DEFAULT = 220;
+const PDF_DPI_OPTIONS = [150, 220, 300];
 /* 形状类型字面量的唯一来源：几何/渲染/导入导出/属性面板共用，避免同一拼音串在各文件重复书写。
    值即 schema 中的 shape.type / scaleShape 取值，改动会破坏存档兼容。 */
 const CIR = 'circle', ELL = 'ellipse', SEC = 'sector', PARA = 'parallelogram';
@@ -59,6 +63,15 @@ const APP_LIMITS = Object.freeze({
   SNAPSHOT_MAX_PER_PROJECT: 20,             /* 每个工程保留的版本快照上限（超出淘汰最旧） */
   SNAPSHOT_MAX_BYTES_PER_PROJECT: 16*1048576 /* 每个工程快照数据总量上限（16MB，超出淘汰最旧；单条超限仍保留） */
 });
+/* DORI 光学判读等级像素密度阈值（px/m）：IEC 62676-4 表 1（基于 Johnson 判据）。
+   侦测 25 / 观察 62.5 / 识别 125 / 辨认 250；覆盖率报告的「最远判读距离」唯一来源。
+   改值等同改变报告口径，须同步 docs/engineering.md 的出处说明。 */
+const DORI_LEVELS = Object.freeze([
+  Object.freeze({key:'detect', name:'侦测', pxPerM:25}),
+  Object.freeze({key:'observe', name:'观察', pxPerM:62.5}),
+  Object.freeze({key:'recognize', name:'识别', pxPerM:125}),
+  Object.freeze({key:'identify', name:'辨认', pxPerM:250})
+]);
 /** 导入限值统一校验：传 {bytes,chars,rows,entities,objects,pixels} 的已知项，返回超限字段列表（空=通过） */
 function importLimitErrors(spec){
   const s=spec||{}, errs=[];

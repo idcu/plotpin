@@ -13,8 +13,11 @@ import { findRemoteRefs } from './lib/offline-scan.mjs';
 
 export function buildStandalone(html, readFile) {
   /* 结构缩进在 HTML 渲染里等价于一个空白：去掉「换行 + 空白 + 紧跟标签」的行首缩进与空白行，
-     渲染结果不变（仍保留一个换行），省下约 1.7 KB。文本内容与属性值不受影响。 */
-  let out = String(html).replace(/\n[ \t]+(?=<)/g, '\n').replace(/\n[ \t]*\n/g, '\n');
+     渲染结果不变（仍保留一个换行），省下约 1.7 KB。文本内容与属性值不受影响。
+     HTML 注释先行删除：注释不参与渲染，且必须在脚本内联**之前**删（内联后 JS 里的
+     `<!--` 字符串会被误判成注释起点）。 */
+  let out = String(html).replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\n[ \t]+(?=<)/g, '\n').replace(/\n[ \t]*\n/g, '\n');
   const cspHashes = [];
 
   /* 样式内联（构建期无损压缩：只删注释/多余空白，源文件保持可读） */

@@ -15,6 +15,8 @@ function extOfFile(name){ const m=String(name||'').toLowerCase().match(/\.([a-z0
  * 提交阶段失败回滚到导入前现场（审计 P1-9 / P1-14）。
  */
 async function importJsonFile(f){
+  /* P0-04：救援模式下导入会替换现场，先显式确认 */
+  if(!await guardRescueSwitch()) return;
   /* 替换现场前强制落盘：租约被占用或保存失败时中止导入并提示（P2-A3） */
   try{ await flushPendingSave(); }
   catch(e){ toast(L('工程导入失败：{msg}',{msg:e.message}),'error'); return; }
@@ -292,6 +294,18 @@ function applyDxfImport(fileName,text,meta,opts){
 }
 
 /* -------------------- PDF 底图导入（矢量优先，扫描件取最大内嵌图） -------------------- */
+/** G-01：从 PDF 文本层提取「1:100」类比例（去重升序）。只做提示，绝不参与自动标定 */
+function pdfScaleHints(texts){
+  const out=[];
+  (texts||[]).forEach(t=>{
+    const s=String(t&&t.text||'');
+    for(const m of s.matchAll(/(?:^|[^\d])1\s*[:：]\s*(\d{1,4})/g)){
+      const n=Number(m[1]);
+      if(n>0&&out.indexOf(n)<0) out.push(n);
+    }
+  });
+  return out.sort((a,b)=>a-b);
+}
 async function importPdfFile(f){
   let pdf;
   try{ pdf=await ensureVendor('PdfRead').parsePdf(await f.arrayBuffer()); }
@@ -382,13 +396,24 @@ async function importPdfFile(f){
   commitChange(L('PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}',
     {line:counts.line,area:counts.area,text:counts.text,notes:pageNote+(bgNote?' / '+bgNote:'')}));
   if(!bgStored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');
+  const scaleHints=pdfScaleHints(pageTexts);
+  if(scaleHints.length) toast(L('检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）',{a:scaleHints[0],more:scaleHints.length>1?L('、1:{b}',{b:scaleHints[1]}):''}),'warn');
   fitView();
 }
 
 /* -------------------- 底图/场地：选择弹窗与矢量场地应用 -------------------- */
 function openSitePicker(){
+  const imgBg=isImageBackground(state.background);
   openModal(L('底图 / 场地'),
-    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(L('图片底图：{file}；{site}',{file:(isImageBackground(state.background)?(state.background.fileName||L('已导入')):L('未设置')),site:siteDescription(state.site)}))}</div>
+    `<div class="site-current"><b>${esc(L('当前：'))}</b>${esc(L('图片底图：{file}；{site}',{file:(imgBg?(state.background.fileName||L('已导入')):L('未设置')),site:siteDescription(state.site)}))}</div>
+     ${imgBg?`<div class="form-grid">
+       <label>${esc(L('图纸比例'))}</label>
+       <select id="presetScale">${[50,100,150,200,500].map(v=>`<option value="${v}" ${v===100?'selected':''}>1:${v}</option>`).join('')}</select>
+       <label>${esc(L('扫描 DPI'))}</label>
+       <select id="presetDpi">${[150,200,300,400].map(v=>`<option value="${v}" ${v===300?'selected':''}>${v} dpi</option>`).join('')}</select>
+       <label>${esc(L('像素比例'))}</label>
+       <div class="hint-text"><span id="presetChip"></span> <button type="button" id="presetApply">${esc(L('应用比例'))}</button></div>
+     </div>`:''}
      <div class="site-pick">
        <button class="site-card" data-site="image"><b>🖼 ${esc(L('上传图片底图'))}</b><span class="hint-text">${esc(L('PNG/JPG/WebP/BMP；再用「比例尺」校准米/像素'))}</span></button>
        <button class="site-card" data-site="rect-num"><b>▭ ${esc(L('矩形场地（输入尺寸）'))}</b><span class="hint-text">${esc(L('直接输入长×宽（米）'))}</span></button>
@@ -404,6 +429,31 @@ function openSitePicker(){
      </div>
      <p class="hint-text">${esc(L('图片底图与矢量场地可共存：每层最多 1 张图 + 1 个场地。矢量场地直接以米为世界坐标，缩放时保持真实比例；替换场地不会删除已导入的图片底图，已有标注对象保留（如需请重新对齐）。'))}</p>`,
     [{text:L('关闭'),click:closeModal}]);
+  const sSel=$('presetScale'), dSel=$('presetDpi'), pBtn=$('presetApply'), chip=$('presetChip');
+  if(pBtn&&sSel&&dSel){
+    const chipText=()=>{
+      const mpp=mppFromScale(sSel.value,dSel.value);
+      return mpp>0?L('1 px = {mpp} m（1:{s} @ {d}dpi）',{mpp:mppText(mpp),s:sSel.value,d:dSel.value}):'';
+    };
+    const syncChip=()=>{ if(chip) chip.textContent=chipText(); };
+    sSel.onchange=syncChip; dSel.onchange=syncChip; syncChip();
+    pBtn.onclick=async()=>{
+      const scale=Number(sSel.value), dpi=Number(dSel.value), mpp=mppFromScale(scale,dpi);
+      if(!(mpp>0)) return toast(L('图纸比例与 DPI 必须为正数'),'error');
+      const old=positiveNum(state.background.metersPerPixel,0.05);
+      const ok=await showConfirm(L('将覆盖当前标定：1 px = {old} m → {mpp} m（1:{s} @ {d}dpi）。确定应用？',{old:mppText(old),mpp:mppText(mpp),s:scale,d:dpi}));
+      if(!ok) return;
+      pushHistory();
+      const factor=mpp/old;
+      /* 与两点标定同语义：对象/底图一起等比迁移，已有对象在底图上的像素位置不变 */
+      applyWorldTransform([factor,0,0,0,factor,0]);
+      state.background.metersPerPixel=mpp;
+      state.background.calibrated=true;
+      state.background.transform=null;
+      scalePreset={scale,dpi};
+      closeModal(); refreshCalibStatus(); fitView(); commitChange(L('图纸比例已应用'));
+    };
+  }
   $('modalBody').querySelectorAll('[data-site]').forEach(btn=>btn.onclick=async()=>{
     const act=btn.dataset.site;
     if(act==='image'){ closeModal(); $('bgInput').click(); return; }

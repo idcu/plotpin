@@ -25,7 +25,7 @@ jobs:
         run: node scripts/bench.mjs
       - name: 单文件发行包校验（源重建 ↔ dist-manifest 登记哈希）
         run: node scripts/build.mjs --check
-      - name: 门禁牙齿自测（正面基线 + 12 种人为破坏）
+      - name: 门禁牙齿自测（正面基线 + 13 种人为破坏）
         run: node scripts/check-gates.mjs
 
   e2e:
@@ -45,7 +45,7 @@ jobs:
         run: npm ci
       - name: 安装 Chromium 与系统依赖
         run: npx playwright install --with-deps chromium
-      - name: Playwright 功能 e2e（119+ 用例）
+      - name: Playwright 功能 e2e（145 用例，1 条按环境条件跳过）
         run: node scripts/e2e.mjs
 
   vendor-check:

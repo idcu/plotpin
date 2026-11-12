@@ -220,6 +220,30 @@ function collabPendingClear(token){
   const want=arguments.length?String(token||''):collabProjectToken();
   try{ localStorage.removeItem(collabPendingKeyFor(want)); }catch(_){}
 }
+/** P0-05：启动恢复的第四候选来源——离线协作待发快照（只读采用，不删除队列）。
+ *  只接受 v2、可读 schema、且 pid 与快照内工程令牌一致（__nopid__ 仅限无 pid 草稿）。 */
+function collabPendingCandidates(){
+  const out=[];
+  let keys=[];
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.indexOf(COLLAB_PENDING_PREFIX)===0) keys.push(k);
+    }
+  }catch(_){ return out; }
+  keys.forEach(k=>{
+    let rec=null;
+    try{ rec=JSON.parse(localStorage.getItem(k)||''); }
+    catch(_){ return; }
+    if(!rec||rec.v!==2||!rec.project||!isReadableSchema(rec.project.schema)) return;
+    const token=collabTokenOfProject(rec.project);
+    const pid=String(rec.pid||'');
+    if(pid!==token&&pid!==COLLAB_PENDING_NOPID) return;
+    if(pid===COLLAB_PENDING_NOPID&&token) return;
+    out.push({source:'collabPending',raw:rec.project,nopid:!token,key:k});
+  });
+  return out;
+}
 /** 传输就绪后先补发当前工程的离线快照；发送成功才清队列，失败留待下次重连。
  *  只补发当前工程令牌对应的键，其他工程的待发记录原样保留。 */
 function collabFlushPending(){

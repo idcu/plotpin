@@ -1,0 +1,33 @@
+name: Perf Nightly
+
+# 真实浏览器性能只用于「相对退化」监测：读数依赖 runner 的 GPU/CPU（本机为 SwiftShader），
+# 因此不进主 CI 卡合并，改为夜间定时 + 手动触发，只归档读数与阈值结果。
+on:
+  schedule:
+    - cron: '30 18 * * *'   # UTC 18:30 = Asia/Shanghai 02:30
+  workflow_dispatch:
+
+jobs:
+  perf:
+    name: 真实浏览器性能基线（Chromium）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: 安装开发期依赖（@playwright/test，不进发行包）
+        run: npm ci
+      - name: 安装 Chromium 与系统依赖
+        run: npx playwright install --with-deps chromium
+      - name: 真实浏览器性能采集与阈值
+        run: node scripts/perf-browser.mjs
+      - name: 上传性能读数（test-results/perf-*.json）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: test-results/perf-*.json
+          if-no-files-found: warn
+          retention-days: 14

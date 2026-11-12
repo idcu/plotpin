@@ -12,6 +12,8 @@ const RULE_TYPE_LIMIT = 200;
 const STATS_ISSUE_VERSION = 2;
 
 let state = createInitialState();
+/* 叠放序版本：对象增删/重排/载入时递增，命中缓存据此失效（P1-04） */
+var zVersion = 0;
 let bgImage = null;
 let bgImageState = 'none';
 let bgImageErrorNotified = false;
@@ -222,6 +224,8 @@ function createInitialState(){
       polarStep:45,      /* 极轴角步长（15/30/45/90） */
       segLabelMinPx:APP_LIMITS.SEG_LABEL_MIN_PX, /* 段长标注最小屏幕像素：过短的段不标，避免拥挤 */
       lang:'zh',         /* 界面语言：zh / en（静态 chrome 文案） */
+      exportOnlyDelivered:false, /* G-03：导出（台账/图纸/打印）只含标记为已交付的对象；JSON/报价始终全量 */
+      pdfDpi:220,        /* L-04：PDF 图纸页分辨率（150/220/300），最长边封顶 3000 px（config.PDF_DPI_OPTIONS） */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     rules: createRuleConfig(), /* C-05 几何规则检查配置：随工程保存 */
     viewport: { zoom:1, panX:0, panY:0 },
@@ -340,6 +344,7 @@ function restackObjects(objects,ids,mode){
   sel.forEach(o=>{ o.updatedAt=stamp; });
   arr.length=0; arr.push(...ordered);
   arr.forEach((o,i)=>{ o.z=i; });
+  bumpZVersion();
   return sel.length;
 }
 /** @template T @param {T} v @returns {T} */

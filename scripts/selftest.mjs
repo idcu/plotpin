@@ -101,7 +101,7 @@ code += `\n;globalThis.__api = {
   get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
   importJsonFile, openProjectById,
-  createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, assertProjectWithinLimits, baseObject,
+  createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, ensureObjectCapacity, assertProjectWithinLimits, baseObject,
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
   importLimitErrors, importLimitMessage, dsvRowsExceed, handleImportFile,
   PdfCore: globalThis.__idcuPdf,
@@ -110,6 +110,7 @@ code += `\n;globalThis.__api = {
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
   assetRefsByNamespace, assetRefsFromLocalStorage, pruneBgAssets, scheduleAssetGc,
   get assetGcTimer(){ return assetGcTimer; },
+  get assetGcLastSkip(){ return assetGcLastSkip; },
   translateObject, alignObjects, distributeObjects, objectBounds, objectSnapBounds,
   renumberObjects, restackObjects, allObjectNames, nextObjectId, objectNameScopeFor, beginObjectNameScope, withObjectNameScope,
   get history(){ return history; },
@@ -128,7 +129,7 @@ code += `\n;globalThis.__api = {
   parseRowsStub: DSV.parseRows,
   rowsToObjectsPlan, applyTableImport, applyTableCommonCells, rowMatchesObject,
   TABLE_MATCH_COLUMNS, tableImportColumns, formulaUnguard,
-  siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints,
+  siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints, mppFromScale, pdfScaleHints,
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
   siteDescription, siteDescriptionParts, worldDims, findIssues, STATS_ISSUE_VERSION,
   hitPhysicalPoint, siteKindName,
@@ -152,16 +153,17 @@ code += `\n;globalThis.__api = {
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
+  collabPendingCandidates, collabTokenOfProject, collabPendingKeyFor,
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan, prepareBackgroundBytes,
   createTitleBlock, normalizeTitleBlock, TITLE_BLOCK_FIELDS, TITLE_BLOCK_TEXT_MAX,
   titleBlockEffective, titleBlockSpec, titleBlockRatio, niceScaleBarMeters, titleBlockLegendData,
   exportTitleBlockSvg, drawTitleBlockOnCanvas,
   xmlEscape, modalBody, safeHTML, sanitizeSiteStyle,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
-  getHandles,
+  getHandles, hitObject, hitOrderObjects, bumpZVersion,
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, buildExportRow, exportShapeSummary, exportParamText, xlsxExportTable,
-  effectiveVisible, isVisible, exportScope, pdfDrawObjectsFor, pdfPagePlan,
+  effectiveVisible, isVisible, exportScope, isDelivered, setDelivered, deliveryGuard, pdfDrawObjectsFor, pdfPagePlan, pdfPagePixels,
   EXPORT_FIELD_DEFS, PDF_COLS, REPORT_LIST_COLS,
   formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
@@ -207,6 +209,7 @@ code += `\n;globalThis.__api = {
   formulaGuard, delimitedText, exportJSON,
   TABLE_COLUMNS,
   cameraFootprint, cameraPrefilterBox, pointInFootprint, regionPolygons, polygonBBox, analyzeCoverage, blindSpotRects, blindSpotRectArea, blindSpotArea,
+  doriMaxDistance, camFovOf, doriRows, DORI_LEVELS,
   optimizeCameraPlacement,
   defaultImageTransform, imageTransformOf, bgPixelToWorld, bgWorldToPixel,
   imageCornerWorld, imageWorldFrame, validImageTransform, imageHandleList, imageHandleDragTo,
@@ -223,6 +226,7 @@ code += `\n;globalThis.__api = {
   invalidateStatic, visibleWorldRect, sceneStaticKey, sceneStaticContentKey, panScrollDelta, dragDrawObjects,
   detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
+  touchProjectUpdated,
   addFloor, deleteFloor,
   snapshotKey, snapshotIdOfKey, snapshotProjectData, snapshotAssetRefs, utf8Length, snapshotObjectIndex,
   snapshotIndexKey, snapshotIndexLoad, listSnapshots, pruneSnapshots, restoreSnapshotById, createSnapshot, sameJson,
@@ -233,6 +237,7 @@ code += `\n;globalThis.__api = {
   get diffOverlay(){ return diffOverlay; }, setDiffOverlay, clearDiffOverlay,
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
+  flushPendingSave, guardRescueSwitch,
   clearCurrentFloor, loadSavedProject, applyImageBackground,
   get idbGet(){ return idbGet; }, set idbGet(fn){ idbGet=fn; },
   get calibPoints(){ return calibPoints; }, set calibPoints(v){ calibPoints=v; },
@@ -249,6 +254,9 @@ code += `\n;globalThis.__api = {
   leaseConflictAt, leaseClaim, leaseSyncProject, leaseStatus, onLeaseConflict,
   get saveState(){ return {saveTimer,saveRetryTimer,saveSeq,lastSavedSeq,saveInFlight}; },
   get idbPutCurrentAndProject(){ return idbPutCurrentAndProject; }, set idbPutCurrentAndProject(fn){ idbPutCurrentAndProject=fn; },
+  isStaleSnapshot,
+  normalizeProjectId, reconcileProjectId,
+  get idbPutCurrentAndProjectGuarded(){ return idbPutCurrentAndProjectGuarded; }, set idbPutCurrentAndProjectGuarded(fn){ idbPutCurrentAndProjectGuarded=fn; },
   setRescueHold, saveBlockState, writeRescueDraft, readRescueDraft, clearRescueDraft, RESCUE_KEY,
   leaseSaveBlocked, flushBeforeUnload, LS_KEY,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
@@ -2361,6 +2369,89 @@ await section("28.14 R-04 加载择优：IndexedDB / localStorage / 救援副本
 }
 });
 
+/* 28.14c P0-05 协作待发作为启动第四候选 ------------------------------------ */
+await section("28.14c P0-05 协作待发作为启动候选", async () => {
+{
+  const prevIdb=api.idbGet;
+  const T1='2026-01-01T00:00:00.000Z',T2='2026-01-02T00:00:00.000Z',T3='2026-01-03T00:00:00.000Z';
+  const mk=(name,at,pid,objId)=>{
+    const s=api.resetState();
+    s.meta.name=name; s.meta.createdAt=at; s.meta.updatedAt=at; s.meta.projectId=pid||'';
+    s.objects=[{id:objId,kind:'point',typeId:'point.marker',layerId:'layer.default',x:0,y:0,points:[],props:{},annot:{},visible:true,locked:false,style:{},createdAt:at,updatedAt:at}];
+    return JSON.parse(JSON.stringify(s));
+  };
+  try{
+    sandbox.localStorage.clear(); api.clearRescueDraft();
+    const PEND=api.collabPendingKeyFor('p:P05');
+    sandbox.localStorage.setItem(PEND,JSON.stringify({v:2,at:T3,pid:'p:P05',project:mk('PEND-NEW',T3,'P05','OBJ_PEND')}));
+    /* pid 与内层 projectId 不一致 → 不参选 */
+    sandbox.localStorage.setItem(api.collabPendingKeyFor('p:P06'),JSON.stringify({v:2,at:T3,pid:'p:P05',project:mk('BAD',T3,'P06','OBJ_BAD')}));
+    /* v1 旧记录 → 不参选 */
+    sandbox.localStorage.setItem(api.collabPendingKeyFor('p:P07'),JSON.stringify({v:1,at:T3,pid:'p:P07',project:mk('V1',T3,'P07','OBJ_V1')}));
+    const list=api.collabPendingCandidates();
+    eq('P0-05-只接受 pid 匹配的 v2 记录', list.length, 1);
+    eq('P0-05-候选指向待发工程', list[0].raw.meta.projectId, 'P05');
+    /* ① 待发较新 → 采用，且不删除待发记录 */
+    api.idbGet=async()=>mk('IDB-OLD',T1,'P05','OBJ_IDB');
+    let removed=0;
+    const origRemove=sandbox.localStorage.removeItem.bind(sandbox.localStorage);
+    sandbox.localStorage.removeItem=k=>{ if(String(k).indexOf('plotpin.collab.pending')===0) removed++; return origRemove(k); };
+    let r=await api.loadSavedProject();
+    sandbox.localStorage.removeItem=origRemove;
+    eq('P0-05-待发较新时采用', r.state.meta.name, 'PEND-NEW');
+    eq('P0-05-来源标注 collabPending', r.source, 'collabPending');
+    eq('P0-05-采用后不删除待发记录', removed, 0);
+    ok('P0-05-待发记录仍在本地', !!sandbox.localStorage.getItem(PEND));
+    /* ② 同刻优先 IndexedDB */
+    api.idbGet=async()=>mk('IDB-TIE',T3,'P05','OBJ_TIE');
+    r=await api.loadSavedProject();
+    eq('P0-05-同刻优先 IndexedDB', r.source, 'IndexedDB');
+    /* ③ __nopid__ 待发不覆盖有 pid 的工程 */
+    sandbox.localStorage.clear();
+    sandbox.localStorage.setItem(api.collabPendingKeyFor(''),JSON.stringify({v:2,at:T3,pid:'__nopid__',project:mk('NOPID-NEW',T3,'','OBJ_NOPID')}));
+    api.idbGet=async()=>mk('IDB-PID',T1,'P08','OBJ_PID');
+    r=await api.loadSavedProject();
+    eq('P0-05-无 pid 待发不覆盖有 pid 工程', r.state.meta.projectId, 'P08');
+  }finally{
+    api.idbGet=prevIdb;
+    sandbox.localStorage.clear();
+    api.clearRescueDraft();
+    api.resetState();
+  }
+}
+});
+
+/* 28.14b H-01 同工程写守卫：只阻断同工程较旧快照 ---------------------------- */
+await section("28.14b H-01 同工程写守卫", async () => {
+{
+  const st=p=>({meta:{projectId:'P',updatedAt:p}});
+  ok('H-01 库内较新判 stale', api.isStaleSnapshot(st('2026-01-02T00:00:00Z'),st('2026-01-01T00:00:00Z')));
+  ok('H-01 库内较旧不判 stale', !api.isStaleSnapshot(st('2026-01-01T00:00:00Z'),st('2026-01-02T00:00:00Z')));
+  ok('H-01 同刻不判 stale', !api.isStaleSnapshot(st('2026-01-01T00:00:00Z'),st('2026-01-01T00:00:00Z')));
+  ok('H-01 跨工程不判 stale', !api.isStaleSnapshot({meta:{projectId:'Q',updatedAt:'2026-01-02T00:00:00Z'}},st('2026-01-01T00:00:00Z')));
+  ok('H-01 无库内记录不判 stale', !api.isStaleSnapshot(undefined,st('2026-01-01T00:00:00Z')));
+}
+});
+
+/* 28.14c H-02 工程标识清洗与内层修正 ------------------------------- */
+await section("28.14c H-02 工程标识清洗", async () => {
+{
+  ok('H-02 合法 id 原样通过', api.normalizeProjectId('PRJ_ABC-1')==='PRJ_ABC-1');
+  ok('H-02 首尾空白被清洗', api.normalizeProjectId('  PRJ_X  ')==='PRJ_X');
+  ok('H-02 非法字符拒绝', api.normalizeProjectId('PRJ X')==='');
+  ok('H-02 冒号拒绝（不可拼进键）', api.normalizeProjectId('proj:OTHER')==='');
+  ok('H-02 空串拒绝', api.normalizeProjectId('')==='');
+  ok('H-02 超长拒绝', api.normalizeProjectId('A'.repeat(65))==='');
+  const a={meta:{}};
+  ok('H-02 内层缺失按记录键补齐', api.reconcileProjectId(a,'PRJ_A')==='filled'&&a.meta.projectId==='PRJ_A');
+  const b={meta:{projectId:'OTHER'}};
+  ok('H-02 内层冲突修正为记录键', api.reconcileProjectId(b,'PRJ_B')==='fixed'&&b.meta.projectId==='PRJ_B');
+  const c={meta:{projectId:'PRJ_C'}};
+  ok('H-02 内层一致不改写', api.reconcileProjectId(c,'PRJ_C')===''&&c.meta.projectId==='PRJ_C');
+  ok('H-02 非法记录键不修正', api.reconcileProjectId({meta:{}}, 'bad id')==='');
+}
+});
+
 /* 28.16 R-02 顶层 site 时间戳夹取 ---------------------------------------- */
 await section("28.16 R-02 顶层 site 时间戳夹取", async () => {
 {
@@ -2392,6 +2483,142 @@ await section("28.16 R-02 顶层 site 时间戳夹取", async () => {
   await api.mergeProjectJSON(inbound,{history:false});
   eq('R-02-未来场地不覆盖本地', api.state.site.name, 'LOCAL');
   api.resetState();
+}
+});
+
+/* 28.19 P1-05 加载时对象/楼层时间归一 ------------------------------------ */
+await section("28.19 P1-05 加载时间归一", async () => {
+{
+  const now=Date.now();
+  const future=new Date(now+86400000*365).toISOString();
+  const o1=Object.assign(api.baseObject('point','point.marker',{x:1,y:1}),{updatedAt:future});
+  const o2=Object.assign(api.baseObject('point','point.marker',{x:2,y:2}),{updatedAt:'x'});
+  const raw=api.buildProject(Object.assign(api.createInitialState(),{
+    meta:{name:'T',projectId:'P1T',updatedAt:new Date(now).toISOString()},
+    floors:[{id:'F1',name:'1F',updatedAt:future}],
+    activeFloorId:'F1',
+    objects:[o1,o2]
+  }));
+  const st=api.migrateProject(raw);
+  ok('P1-05 未来 updatedAt 归一为空（LWW 视作最旧）', st.objects[0].updatedAt==='');
+  ok('P1-05 非法 updatedAt 回落为空（不冒充最新）', st.objects[1].updatedAt==='');
+  ok('P1-05 未来楼层 updatedAt 归一为空（LWW 视作最旧）', st.floors[0].updatedAt==='');
+}
+});
+
+/* 28.20 P2-01 交付状态与导出过滤 ---------------------------------------- */
+await section("28.20 P2-01 交付过滤", async () => {
+{
+  const st=api.resetState();
+  const a=api.baseObject('point','point.marker',{x:1,y:1});
+  const b=api.baseObject('point','point.marker',{x:2,y:2});
+  st.objects=[a,b];
+  ok('P2-01 缺省视为未交付', api.isDelivered(a)===false);
+  api.setDelivered([a],true);
+  ok('P2-01 标记后已交付（props.publishState=1）', api.isDelivered(a)===true&&a.props.publishState==='1');
+  ok('P2-01 关闭过滤时台账不因交付状态排除', api.exportScope(b,'table')===true);
+  st.settings.exportOnlyDelivered=true;
+  ok('P2-01 开启过滤后台账排除未交付', api.exportScope(b,'table')===false);
+  ok('P2-01 开启过滤后台账保留已交付', api.exportScope(a,'table')===true);
+  ok('P2-01 图纸口径同样排除未交付', api.exportScope(b,'draw')===false);
+  eq('P2-01 台账行数只含已交付', api.objectRowsAll().length, 1);
+  api.setDelivered([a],false);
+  ok('P2-01 取消交付删除键', !('publishState' in a.props));
+  ok('P2-01 全无已交付时导出中止', api.deliveryGuard()===false);
+  st.settings.exportOnlyDelivered=false;
+  ok('P2-01 关闭过滤后导出放行', api.deliveryGuard()===true);
+}
+});
+
+/* 28.21 P2-02 PDF 图纸页像素自适应 -------------------------------------- */
+await section("28.21 P2-02 PDF 图纸 DPI", async () => {
+{
+  const p220=api.pdfPagePixels(220), p150=api.pdfPagePixels(150), p300=api.pdfPagePixels(300);
+  eq('P2-02 220dpi 宽按 297mm 换算', p220.width, 2572);
+  eq('P2-02 220dpi 高按 210mm 换算', p220.height, 1819);
+  eq('P2-02 150dpi 宽', p150.width, 1754);
+  eq('P2-02 300dpi 最长边封顶 3000', p300.width, 3000);
+  ok('P2-02 封顶后仍为 A4 横纵比（约 1.414）', Math.abs(p300.width/p300.height-297/210)<0.002);
+  eq('P2-02 非法 dpi 回落默认 220', api.pdfPagePixels(999).dpi, 220);
+  ok('P2-02 两档均不超过上限', p220.height<=3000&&p300.height<=3000);
+}
+});
+
+/* 28.22 P2-04 工程更新时间推进（M-14） ---------------------------------- */
+await section("28.22 P2-04 工程更新时间", async () => {
+{
+  const st=api.resetState();
+  st.meta.updatedAt='2000-01-01T00:00:00.000Z';
+  const before=st.meta.updatedAt;
+  api.touchProjectUpdated();
+  ok('P2-04 直接推进 meta.updatedAt', st.meta.updatedAt>before);
+  ok('P2-04 结果仍为 ISO 时间串', /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(st.meta.updatedAt));
+  st.meta.updatedAt='2000-01-01T00:00:00.000Z';
+  const id=await api.addFloor('P204F');
+  ok('P2-04 新增楼层（用户切层）推进更新时间', !!id&&st.meta.updatedAt>'2000-01-01T00:00:00.000Z');
+  eq('P2-04 新增后活动楼层为新层', st.activeFloorId, id);
+}
+});
+
+/* 28.23 P2-05 交互式新增容量校验（M-13） -------------------------------- */
+await section("28.23 P2-05 对象容量校验", async () => {
+{
+  const st=api.resetState();
+  const mk=i=>({id:'CAP'+i,name:'N'+i,kind:'point',typeId:'point.marker',layerId:'layer.default',x:0,y:0,points:[],props:{}});
+  st.objects=Array.from({length:api.APP_LIMITS.OBJECTS_MAX-1},(_,i)=>mk(i));
+  eq('P2-05 满额前一个可添加', api.ensureObjectCapacity(1), true);
+  st.objects.push(mk('last'));
+  eq('P2-05 达到上限对象数', api.countProjectObjects(st), api.APP_LIMITS.OBJECTS_MAX);
+  const hLen=api.history.past.length, nLen=st.objects.length;
+  eq('P2-05 达到上限后再加被拒', api.ensureObjectCapacity(1), false);
+  eq('P2-05 被拒不产生历史条目', api.history.past.length, hLen);
+  eq('P2-05 被拒不改对象数', st.objects.length, nLen);
+  st.objects.pop();
+  eq('P2-05 批量超量一次拒绝', api.ensureObjectCapacity(2), false);
+  eq('P2-05 剩余一个空位仍允许', api.ensureObjectCapacity(1), true);
+  const t0=Date.now(); api.countProjectObjects(st); const ms=Date.now()-t0;
+  ok('P2-05 10 万对象计数 <20ms（实测 '+ms+'ms）', ms<20);
+  st.objects=[];
+}
+});
+
+/* 28.18 P1-04 锁定不可命中 + 命中按 z 序 -------------------------------- */
+await section("28.18 P1-04 命中序与锁定", async () => {
+{
+  const st=api.resetState();
+  const a=api.baseObject('line','line.polyline',{points:[[0,0],[10,0]]});
+  const b=api.baseObject('line','line.polyline',{points:[[0,0],[10,0]]});
+  a.z=0; b.z=1; st.objects=[a,b]; api.bumpZVersion();
+  ok('P1-04 z 升序：命中视觉上层', api.hitObject([5,0],[0,0])===b);
+  a.z=1; b.z=0; api.bumpZVersion();
+  ok('P1-04 交换 z 后命中随视觉改变', api.hitObject([5,0],[0,0])===a);
+  const cached=api.hitOrderObjects();
+  ok('P1-04 命中序缓存复用同一数组', api.hitOrderObjects()===cached);
+  b.z=2; b.locked=true; api.bumpZVersion();
+  ok('P1-04 锁定对象不参与命中', api.hitObject([5,0],[0,0])===a);
+  b.locked=false;
+  st.layers=[{id:'L1',name:'L1',visible:true,locked:false},{id:'LOCK-L',name:'LOCK-L',visible:true,locked:true}];
+  a.layerId='L1'; b.layerId='LOCK-L'; api.bumpZVersion();
+  ok('P1-04 锁定图层对象不参与命中', api.hitObject([5,0],[0,0])===a);
+}
+});
+
+/* 28.17 G-01 图纸比例 + 扫描 DPI → 米/像素 ------------------------------- */
+await section("28.17 G-01 比例预设换算", async () => {
+{
+  const m=api.mppFromScale(100,300);
+  ok('G-01 1:100@300 = 100×0.0254/300', Math.abs(m-100*0.0254/300)<1e-12);
+  ok('G-01 1:100@300 ≈ 0.0084667', Math.abs(m-0.008466666666666667)<1e-9);
+  ok('G-01 1:200@400 与 1:100@200 等值', Math.abs(api.mppFromScale(200,400)-api.mppFromScale(100,200))<1e-12);
+  eq('G-01 比例非法返回 0', api.mppFromScale(0,300), 0);
+  eq('G-01 DPI 非法返回 0', api.mppFromScale(100,-1), 0);
+  eq('G-01 非数值返回 0', api.mppFromScale('x',300), 0);
+  /* P1-02：PDF 文本层比例提示（只提示，不参与标定） */
+  eq('G-01 PDF 文本识别 1:100', api.pdfScaleHints([{text:'图纸比例 1:100'}]).join(','), '100');
+  eq('G-01 PDF 全角冒号与空格识别', api.pdfScaleHints([{text:'比例 1 ： 200'}]).join(','), '200');
+  eq('G-01 PDF 多值去重升序', api.pdfScaleHints([{text:'1:500 / 1:100 / 1:100'}]).join(','), '100,500');
+  eq('G-01 PDF 无比例返回空', api.pdfScaleHints([{text:'SITE PLAN'}]).length, 0);
+  eq('G-01 PDF 非 1:x 前缀不误判', api.pdfScaleHints([{text:'门牌 21:12'}]).length, 0);
 }
 });
 
@@ -3301,6 +3528,24 @@ await section("38. 视场覆盖率分析：扇形/圆形覆盖判定 + 栅格覆
   ctype.fov=oldFov;
   /* 纯位置图标点（phys=0）不计入覆盖 */
   eq('覆盖-图标点无footprint', api.cameraFootprint(api.baseObject('point','point.marker',{x:0,y:0,phys:0})), null);
+
+  /* DORI-lite：IEC 62676-4 阈值 + 最远判读距离（覆盖率面板与导出同源，不另立公式） */
+  eq('DORI-四级阈值', api.DORI_LEVELS.map(l=>l.pxPerM), [25,62.5,125,250]);
+  approx('DORI-1920/90°@25=38.4m', api.doriMaxDistance(1920,90,25), 38.4, 1e-9);
+  approx('DORI-像素线性', api.doriMaxDistance(960,90,25), 19.2, 1e-9);
+  approx('DORI-60°张角', api.doriMaxDistance(1920,60,25), 1920/(50*Math.tan(Math.PI/6)), 1e-9);
+  approx('DORI-识别125', api.doriMaxDistance(1920,90,125), 7.68, 1e-9);
+  eq('DORI-零像素返回0', api.doriMaxDistance(0,90,25), 0);
+  eq('DORI-非法张角返回0', api.doriMaxDistance(1920,180,25), 0);
+  eq('DORI-NaN安全', api.doriMaxDistance('x',NaN,25), 0);
+  const dc=api.baseObject('point','point.camera',{name:'D1',x:0,y:0,phys:50});
+  dc.props.camResPx=1920; dc.props.camFov=90;
+  const dr=api.doriRows(dc);
+  eq('DORI-设备四等级', dr.levels.length, 4);
+  approx('DORI-设备识别距离', dr.levels[2], 7.68, 1e-9);
+  eq('DORI-类型fov回退', api.doriRows(api.baseObject('point','point.camera',{name:'D2',x:0,y:0,phys:50})).fov, 90);
+  eq('DORI-方形设备不参与', api.doriRows(api.baseObject('point','point.charger',{x:0,y:0,phys:10})), null);
+  eq('DORI-缺分辨率各级为0', api.doriRows(api.baseObject('point','point.camera',{name:'D3',x:0,y:0,phys:50})).levels, [0,0,0,0]);
 
   /* E1 旋转方形设备的预筛包围盒必须覆盖旋转后四角 */
   const charger=(angle)=>api.cameraFootprint(api.baseObject('point','point.charger',{x:0,y:0,phys:10,angle}));
@@ -8774,14 +9019,33 @@ await section("R-03/R-05 救援保存与串行写", async () => {
   ok('R-03-救援副本已写', !!rescue&&rescue.snapshot.meta.name==='R03');
   api.setRescueHold(false);
   eq('R-03-解除后闸门恢复', api.saveBlockState(), 'ok');
+  /* P0-04：救援模式下存在待保存编辑时，切换必须抛错而不是静默丢弃 */
+  api.scheduleSave();                       /* 正常模式下制造待保存定时器 */
+  api.setRescueHold(true);
+  let rescueErr='';
+  try{ await api.flushPendingSave(); }catch(e){ rescueErr=e.message; }
+  ok('P0-04-救援模式下待保存切换抛错', rescueErr.includes('救援模式'));
+  /* P0-04：guardRescueSwitch 取消保持现场、确认解除救援、正常模式不打扰 */
+  const origConfirm=sandbox.showConfirm;
+  let asked=0;
+  sandbox.showConfirm=async()=>{ asked++; return false; };
+  eq('P0-04-取消时阻止切换', await api.guardRescueSwitch(), false);
+  eq('P0-04-取消后保持救援', api.saveBlockState(), 'rescue');
+  sandbox.showConfirm=async()=>{ asked++; return true; };
+  eq('P0-04-确认后允许切换', await api.guardRescueSwitch(), true);
+  eq('P0-04-确认后解除救援', api.saveBlockState(), 'ok');
+  eq('P0-04-正常模式不再弹确认', await api.guardRescueSwitch(), true);
+  eq('P0-04-只确认一次', asked, 2);
+  sandbox.showConfirm=origConfirm;
+  api.setRescueHold(false);
   api.clearRescueDraft();
   eq('R-03-救援副本可清除', api.readRescueDraft(), null);
   /* R-05：保存串行化——同一时刻只有一条写链路，最后落盘的是最新快照 */
-  const prevPut=api.idbPutCurrentAndProject;
+  const prevPut=api.idbPutCurrentAndProjectGuarded;
   let active=0,maxActive=0; const pending=[];
-  api.idbPutCurrentAndProject=()=>new Promise(resolve=>{
+  api.idbPutCurrentAndProjectGuarded=()=>new Promise(resolve=>{
     active++; maxActive=Math.max(maxActive,active);
-    pending.push(()=>{ active--; resolve(); });
+    pending.push(()=>{ active--; resolve({stale:false}); });
   });
   api.state.meta.name='R05-1';
   const p1=api.runSave();
@@ -8801,7 +9065,7 @@ await section("R-03/R-05 救援保存与串行写", async () => {
   /* R-04 配套：没有待保存内容时关闭页面不再重复写草稿，避免"空草稿"压过工程库里的完整工程 */
   eq('R-05-无待保存内容时关闭页面不重复落盘', api.flushBeforeUnload(), false);
   eq('R-05-无待保存内容时不写兜底草稿', sandbox.localStorage.getItem(api.LS_KEY), null);
-  api.idbPutCurrentAndProject=prevPut;
+  api.idbPutCurrentAndProjectGuarded=prevPut;
   api.state.meta.projectId=prevId;
   api.resetState();
   sandbox.localStorage.clear();
@@ -8879,6 +9143,35 @@ await section("R-06 资产可达集：本地草稿/救援副本/协作待发 + �
 
 });
 
+/* ---------------- R-07 资产 GC：单键读取失败即中止（M-01） ---------------- */
+await section("R-07 资产 GC：单键读取失败即中止", async () => {
+{
+  const saved={get:sandbox.idbGetKey,keys:sandbox.idbAllKeys,prune:sandbox.assetPrune};
+  let pruneCalls=0;
+  sandbox.idbAllKeys=async()=>['current','proj:BAD'];
+  sandbox.idbGetKey=async k=>{
+    if(k==='proj:BAD') throw new Error('idb read failed');
+    return {background:{assetId:'bg_keep'}};
+  };
+  sandbox.assetPrune=async()=>{ pruneCalls++; return []; };
+  try{
+    sandbox.localStorage.clear();
+    eq('R-07-读取失败时不删除任何资产', await api.pruneBgAssets(), []);
+    eq('R-07-读取失败不调用 assetPrune', pruneCalls, 0);
+    ok('R-07-跳过原因包含失败键', String(api.assetGcLastSkip).includes('proj:BAD'));
+    /* 恢复正常后仍按可达集回收，且清空跳过原因 */
+    sandbox.idbGetKey=async k=>(k==='current'?{background:{assetId:'bg_keep'}}:null);
+    const ns=await api.assetRefsByNamespace();
+    ok('R-07-恢复后可达集包含引用资产', (ns.get('autosave')||[]).includes('bg_keep'));
+    eq('R-07-成功扫描后删除集为空', await api.pruneBgAssets(), []);
+    eq('R-07-成功扫描清空跳过原因', api.assetGcLastSkip, '');
+  }finally{
+    sandbox.idbGetKey=saved.get; sandbox.idbAllKeys=saved.keys; sandbox.assetPrune=saved.prune;
+    sandbox.localStorage.clear();
+  }
+}
+});
+
 /* ---------------- D-09 多标签同工程编辑租约（假时钟） ---------------- */
 await section("D-09 多标签同工程编辑租约（假时钟）", async () => {
 {
@@ -8933,7 +9226,7 @@ await section("D-03 帮助中心：三页签与 i18n", async () => {
   const exp = api.helpExportRows();
   eq('D-03 导出清单 8 种', exp.length, 8);
   eq('D-03 导出格式顺序', exp.map(r => r[0]).join('|'),
-    'JSON 工程|PNG 高清图|SVG 矢量图|PDF 矢量（图纸+清单）|DXF（CAD 互通）|CSV 表格|TSV 表格|Excel (.xlsx)');
+    'JSON 工程|PNG 高清图|SVG 矢量图|PDF（图纸位图+清单）|DXF（CAD 互通）|CSV 表格|TSV 表格|Excel (.xlsx)');
   ok('D-03 导出清单标注 PDF 位图页', exp.some(r => r[1].includes('位图页')));
   ok('D-03 导出清单标注 DXF SITE 图层', exp.some(r => r[1].includes('SITE 图层')));
   ok('D-03 导出清单标注表格公式防护',

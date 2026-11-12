@@ -40,7 +40,7 @@ const refs = [
 ].map(m => m[1])
   .filter(u => u && !u.startsWith('#') && !u.startsWith('data:') && !/^[a-z]+:/i.test(u))
   .map(u => u.replace(/^\.\//, ''));
-const inputs = [...new Set(['index.html', 'css/style.css', 'manifest.webmanifest', 'icon.svg', ...refs])].sort();
+const inputs = [...new Set(['index.html', 'css/style.css', 'manifest.webmanifest', 'icon.svg', 'sw.js', ...refs])].sort();
 
 const sw = readFileSync(join(root, 'sw.js'), 'utf8');
 const cur = (sw.match(/const VERSION\s*=\s*['"](\d+)['"]/) || [])[1];

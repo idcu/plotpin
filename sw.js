@@ -3,13 +3,15 @@
  * 缓存清单从 index.html 动态解析，新增脚本无需手工维护。
  * 版本策略：CACHE 名带版本号；activate 删除所有非当前版本缓存。
  * 更新失败不阻断：单个资源 404/失败不影响安装（Promise.allSettled），注册失败也不影响界面。 */
-const VERSION = '137';
+const VERSION = '158';
 const CACHE = 'plotpin-v' + VERSION;
 const OFFLINE_HTML = '<!doctype html><html lang="zh-CN"><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1"><title>PlotPin 离线</title>' +
   '<body style="font:15px/1.7 system-ui,sans-serif;padding:24px;color:#172033">' +
   '<h3 style="margin:0 0 8px">当前离线，且本机没有可用缓存</h3>' +
   '<p style="margin:0;color:#667085">联网打开一次 PlotPin 后即可离线使用。</p></body></html>';
+
+let lastPrecache = { ok: 0, failed: 0, total: 0 };
 
 async function precache() {
   const cache = await caches.open(CACHE);
@@ -19,8 +21,15 @@ async function precache() {
     .filter(u => u && !u.startsWith('#') && !u.startsWith('data:') && !/^[a-z]+:/i.test(u))
     .map(u => './' + u.replace(/^\.\//, ''));
   const urls = [...new Set(['./', './index.html', './manifest.webmanifest', './icon.svg', './css/style.css', ...scripts, ...assets])];
-  /* 单个资源失败不阻断整体安装，否则一次 404 会让新版本永远装不上 */
-  await Promise.allSettled(urls.map(u => cache.add(u).catch(() => {})));
+  /* 单个资源失败不阻断整体安装，否则一次 404 会让新版本永远装不上；
+     失败只计数并告警（不清空缓存），可通过 STATUS 消息查询本次预缓存结果 */
+  const results = await Promise.allSettled(urls.map(u => cache.add(u)));
+  const failed = results.filter(r => r.status === 'rejected');
+  lastPrecache = { ok: urls.length - failed.length, failed: failed.length, total: urls.length };
+  if (failed.length) {
+    console.warn('[sw] 预缓存失败 ' + failed.length + '/' + urls.length + '：'
+      + failed.map(r => (r.reason && r.reason.message) || r.reason).join('; '));
+  }
 }
 
 self.addEventListener('install', e => {
@@ -36,7 +45,11 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (!e.data) return;
+  if (e.data.type === 'SKIP_WAITING') return void self.skipWaiting();
+  if (e.data.type === 'STATUS' && e.source) {
+    e.source.postMessage(Object.assign({ type: 'STATUS', version: VERSION, cache: CACHE }, lastPrecache));
+  }
 });
 
 self.addEventListener('fetch', e => {

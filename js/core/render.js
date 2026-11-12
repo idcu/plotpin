@@ -9,11 +9,25 @@ function setFocusNode(v){ focusNode=v; requestRender(); }
 /** 兼容旧调用名：等价于 model.js 的 effectiveVisible（保留签名，避免改动既有调用方） */
 function isVisible(o){ return effectiveVisible(o); }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
+/* 命中序缓存（P1-04）：按 z 升序，取结果时从后往前 = 视觉最上层优先。
+   缓存键 = 对象数 + zVersion；增删/重排/载入由 bumpZVersion 置脏。 */
+let hitOrderCache=null,hitOrderKey='';
+function bumpZVersion(){ zVersion++; hitOrderCache=null; }
+function hitOrderObjects(){
+  const objs=state.objects||[];
+  const key=objs.length+'|'+zVersion;
+  if(hitOrderCache&&hitOrderKey===key) return hitOrderCache;
+  hitOrderKey=key;
+  hitOrderCache=objs.slice().sort((a,b)=>(a.z||0)-(b.z||0));
+  return hitOrderCache;
+}
 function hitObject(p,screenP){
   const tol=8/state.viewport.zoom;
-  for(let i=state.objects.length-1;i>=0;i--){
-    const o=state.objects[i];
-    if(!isVisible(o)) continue;
+  const list=hitOrderObjects();
+  for(let i=list.length-1;i>=0;i--){
+    const o=list[i];
+    /* 锁定对象（或锁定图层）不参与命中：点击/框选都不得选中 */
+    if(!isVisible(o)||!isEditable(o)) continue;
     if(o.kind==='point'){
       const shape=getType(o.typeId).scaleShape||'none';
       if((o.phys||0)>0 && shape!=='none' && hitPhysicalPoint(o,shape,p)) return o;
@@ -290,7 +304,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     return;
   }
 
-  /* 直接绘制（导出 / 打印 / 离屏合成） */
+  /* 直接绘制（导出 / 打印 / 离屏合成）；opt.objectFilter 供导出按交付状态等口径收窄对象集 */
   c.clearRect(0,0,cssW,cssH);
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   drawBackground(c,v,d,cssW,cssH,toS);
@@ -299,7 +313,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   drawCoverage(c,v,d);
   drawSiteAnnotations(c,v,toS);
   drawAxes(c,v,toS,cssH);
-  const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
+  const visible=state.objects.filter(opt.objectFilter||isVisible).sort((a,b)=>a.z-b.z);
   const view=visibleWorldRect(v,d,cssW,cssH);
   visible.forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
   if(opt.interactive) drawDiffOverlay(c,v,toS);   /* 差异叠加仅屏幕预览，不进入 PNG/SVG/PDF 导出 */

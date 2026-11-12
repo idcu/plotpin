@@ -14,6 +14,30 @@ function cameraFootprint(o){
   if(shape==='square') return {kind:'square',id:o.id,name:o.name||'',x:o.x,y:o.y,r:r/2,angle:Number(o.angle)||0};
   return null;
 }
+/** DORI 最远判读距离（m）：水平像素 resPx 在水平张角 fov(°) 下的像元密度
+ *  = resPx / (2·d·tan(fov/2))，要求 ≥ pxPerM（阈值见 config.js 的 DORI_LEVELS）→
+ *  d ≤ resPx/(2·pxPerM·tan(fov/2))。参数非法（≤0 或 fov 不在 0–180）返回 0，绝不产生 NaN/Infinity。 */
+function doriMaxDistance(resPx,fov,pxPerM){
+  const w=Number(resPx), a=Number(fov), t=Number(pxPerM);
+  if(!(w>0)||!(a>0&&a<180)||!(t>0)) return 0;
+  return w/(2*t*Math.tan(a*Math.PI/360));
+}
+/** 点设备的水平张角：优先对象级 props.camFov（1–179°），其次类型 fov；都没有返回 0 */
+function camFovOf(o){
+  const own=Number(o&&o.props&&o.props.camFov);
+  if(own>0&&own<180) return own;
+  const f=Number((getType(o&&o.typeId)||{}).fov);
+  return f>0&&f<180?f:0;
+}
+/** 单台点设备的 DORI 结果：仅扇形/圆形覆盖参与；缺分辨率或张角时各级 maxM 为 0（UI 显示「未填」） */
+function doriRows(o){
+  const shape=(getType(o&&o.typeId)||{}).scaleShape;
+  if(shape!==SEC&&shape!==CIR) return null;
+  const resPx=Math.max(0,Math.round(Number(o.props&&o.props.camResPx)||0));
+  const fov=camFovOf(o);
+  return {id:o.id,name:o.name||'',resPx,fov,
+    levels:DORI_LEVELS.map(l=>resPx>0&&fov>0?doriMaxDistance(resPx,fov,l.pxPerM):0)};
+}
 /** 覆盖率预筛包围盒：方形按旋转后的真实外接范围（半边长 r 的正方形旋转后
  *  半宽 = r·(|cos|+|sin|)），扇形/圆形仍为半径 r。预筛只允许偏大，不允许偏小。 */
 function cameraPrefilterBox(c,cosA,sinA){

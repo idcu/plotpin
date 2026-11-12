@@ -9,6 +9,8 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('enableSnap'))}</label><input id="setSnap" type="checkbox" ${state.settings.snap?'checked':''}>
       <label>${esc(T('showGrid'))}</label><input id="setGridVisible" type="checkbox" ${state.settings.gridVisible?'checked':''}>
       <label>${esc(T('crosshair'))}</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
+      <label>${esc(T('exportOnlyDelivered'))}</label><input id="setExportOnlyDelivered" type="checkbox" ${state.settings.exportOnlyDelivered?'checked':''}>
+      <label>${esc(T('pdfDpi'))}</label><select id="setPdfDpi">${PDF_DPI_OPTIONS.map(d=>`<option value="${d}"${state.settings.pdfDpi===d?' selected':''}>${d} dpi</option>`).join('')}</select>
       <label>${esc(T('segLabelMinPxSetting'))}</label><input id="setSegLabelMinPx" type="number" min="${APP_LIMITS.SEG_LABEL_MIN_PX_MIN}" max="${APP_LIMITS.SEG_LABEL_MIN_PX_MAX}" step="1" value="${state.settings.segLabelMinPx}" title="${esc(L('屏幕上短于该像素长度的线段不显示段长标注，避免拥挤'))}">
       <label>${esc(T('osnapSetting'))}</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="${esc(L('自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）'))}">
       <label>${esc(T('polarSetting'))}</label><input id="setPolar" type="checkbox" ${state.settings.polar?'checked':''} title="${esc(L('逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）'))}">
@@ -25,6 +27,8 @@ $('settingsBtn').onclick=()=>{
       state.settings.gridSize=Math.max(.01,Number($('setGrid').value)||1);
       state.settings.snap=$('setSnap').checked; state.settings.gridVisible=$('setGridVisible').checked;
       state.settings.showCursor=$('setCursor').checked;
+      state.settings.exportOnlyDelivered=$('setExportOnlyDelivered').checked;
+      state.settings.pdfDpi=Number($('setPdfDpi').value)||PDF_DPI_DEFAULT;
       const segMin=Number($('setSegLabelMinPx').value);
       state.settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
         Math.round(Number.isFinite(segMin)?segMin:APP_LIMITS.SEG_LABEL_MIN_PX)));
@@ -217,9 +221,11 @@ function openDemoProject(){
 }
 let rescueText;
 function showLoadAuditBanner(result){
-  const srcLabel=result&&result.source==='rescue'?'救援副本':(result&&result.source==='localStorage'?'本地备份':'');
-  const fallback=result.fallback?(srcLabel?'已从'+srcLabel+'恢复':'已从本地备份恢复'):'';
-  const newer=(result.newerThanIdb?'已采用较新草稿，原自动保存仍在本地':'');
+  const pending=!!(result&&result.source==='collabPending');
+  const srcLabel=pending?'协作待发':(result&&result.source==='rescue'?'救援副本':(result&&result.source==='localStorage'?'本地备份':''));
+  const fallback=pending?L('已恢复离线协作待发的最新改动；重连后会补发')
+    :(result.fallback?(srcLabel?'已从'+srcLabel+'恢复':'已从本地备份恢复'):'');
+  const newer=(!pending&&result.newerThanIdb?'已采用较新草稿，原自动保存仍在本地':'');
   const err=result.audit.level==='error';
   const msgs=(err?result.audit.errors:result.audit.warnings).slice(0,3);
   if(!err&&!fallback&&!newer&&!msgs.length) return;
@@ -237,8 +243,28 @@ function showLoadAuditBanner(result){
     setRescueHold(false); bar.remove();
   });
 }
-function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }
-function hideLeaseConflictBanner(){ const bar=$('leaseBanner'); if(bar) bar.remove(); }
+/** P0-04：救援模式下新建/打开/导入前必须显式确认；确认即解除救援（未导出的编辑会丢失） */
+async function guardRescueSwitch(){
+  if(!rescueHold) return true;
+  const ok=await showConfirm(L('当前处于救援模式，未落盘编辑将丢失。请先导出救援 JSON；确定继续？'));
+  if(!ok) return false;
+  setRescueHold(false);
+  const bar=$('loadBanner'); if(bar) bar.remove();
+  return true;
+}
+function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }function hideLeaseConflictBanner(){ const bar=$('leaseBanner'); if(bar) bar.remove(); }
+/** H-01 写冲突横幅：库内副本更新，本页已拒绝覆盖；可导出本页版本或重载最新 */
+function showStaleWriteBanner(){
+  let bar=$('staleWriteBanner');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='staleWriteBanner'; bar.className='load-banner warn';
+    bar.innerHTML='<span>'+esc(L('另一标签页正在编辑，已暂停自动保存'))+'</span><button id="staleExportBtn">'+esc(L('export')+' '+L('exportJson'))+'</button><button id="staleReloadBtn">'+esc(L('重新载入'))+'</button>';
+    document.body.insertBefore(bar,document.body.firstChild);
+    $('staleExportBtn').addEventListener('click',()=>{ exportJSON().catch(e=>toast(L('导出失败：{msg}',{msg:e.message}),'error')); });
+    $('staleReloadBtn').addEventListener('click',()=>location.reload());
+  }
+}
 /** D-09 同工程多标签冲突横幅：最后心跳时刻 + 重新载入 / 确认取得租约 */
 function showLeaseConflictBanner(info){
   let bar=$('leaseBanner');

@@ -97,6 +97,10 @@ if (!checkOnly) {
       if (manifest.bytes !== bytes) {
         errors.push(`产物字节数与登记值不一致：构建 ${bytes} / 登记 ${manifest.bytes}`);
       }
+      if (manifest.gzipBytes !== gzipBytes) {
+        errors.push(`产物 gzip 字节数与登记值不一致：构建 ${gzipBytes} / 登记 ${manifest.gzipBytes}`
+          + '（改了 js/css/index.html 后需运行 node scripts/build.mjs 刷新登记值）');
+      }
       /* 预算常量单一来源：清单里的上限必须与 lib/budget.mjs 一致，防止「改清单绕过门禁」 */
       if (manifest.maxBytes !== MAX_BYTES) {
         errors.push(`dist-manifest.json 的 maxBytes（${manifest.maxBytes}）与 lib/budget.mjs（${MAX_BYTES}）不一致`);

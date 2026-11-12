@@ -21,7 +21,9 @@ async function assetRefsByNamespace(){
     const isSnapshot=k.startsWith(SNAPSHOT_PREFIX);
     if(k!=='current'&&!k.startsWith(PROJECT_PREFIX)&&!isSnapshot) continue;
     let rec=null;
-    try{ rec=await idbGetKey(key); }catch(_){ continue; }
+    /* M-01：单键读取失败不能当作"无引用"跳过，否则该记录引用的资产会被误删 */
+    try{ rec=await idbGetKey(key); }
+    catch(e){ throw new Error('资产引用扫描失败：'+k+(e&&e.message?'（'+e.message+'）':'')); }
     /* 快照记录是 {meta,data} 外壳；资产引用在 data 的工程结构里 */
     const ids=isSnapshot?snapshotAssetRefs(rec):ContentAssets.collectAssetRefs(rec);
     if(!ids.length) continue;
@@ -95,11 +97,21 @@ async function reachableAssetIds(){
   return unionAssetRefs(await assetRefsByNamespace());
 }
 /** 资产 GC：失败（含 IndexedDB 不可用 / 本地副本不可解析）时**不删除任何资产** */
+let assetGcLastSkip='',assetGcSkipNotified=false;
 async function pruneBgAssets(){
   try{
     const keep=await reachableAssetIds();
+    assetGcLastSkip='';
     return await assetPrune(keep);
-  }catch(_){ return []; }
+  }catch(e){
+    /* M-01：扫描不完整就整体放弃回收，并让用户知道"为什么没清理" */
+    assetGcLastSkip=String(e&&e.message||e||'资产引用扫描失败');
+    if(!assetGcSkipNotified&&typeof toast==='function'){
+      assetGcSkipNotified=true;
+      toast(L('资产回收已跳过：{msg}，未删除任何文件',{msg:assetGcLastSkip}),'warn');
+    }
+    return [];
+  }
 }
 /** 删除快照/历史后延迟回收资产，避免与保存、快照索引写入抢同一事件循环 */
 let assetGcTimer=null;
@@ -220,6 +232,7 @@ function commitChange(message, ids, floorId){
   touchFloor(floorId);
   state.meta.updatedAt=nowISO();
   state.objects.forEach((o,i)=>o.z=i);
+  bumpZVersion();
   markDirty('object');
   if(message) toast(message,'success');
 }
@@ -290,7 +303,22 @@ async function idbGet(){
 }
 /* -------------------- 多工程库：除当前草稿外，工程以 proj:<id> 为键独立存取 -------------------- */
 const PROJECT_PREFIX='proj:';
+/** 工程库键只接受清洗后的 id（H-02）：trim、仅 [A-Za-z0-9_-]、1–64 字符；非法返回空串 */
+function normalizeProjectId(id){
+  const s=String(id==null?'':id).trim();
+  return /^[A-Za-z0-9_-]{1,64}$/.test(s)?s:'';
+}
 const projectKey=id=>PROJECT_PREFIX+id;
+/** 以工程库记录键为准修正内层 meta.projectId（H-02）：返回 'filled' | 'fixed' | '' */
+function reconcileProjectId(raw,id){
+  const pid=normalizeProjectId(id);
+  if(!pid||!raw||typeof raw!=='object') return '';
+  raw.meta=raw.meta||{};
+  const inner=String(raw.meta.projectId||'').trim();
+  if(inner===pid) return '';
+  raw.meta.projectId=pid;
+  return inner?'fixed':'filled';
+}
 function idbReq(store,method,arg){
   return idbTx(DB_STORE,store,s=>new Promise((resolve,reject)=>{
     const r=s[method](arg); r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error); r.onblocked=()=>reject(new Error('IndexedDB 被占用'));
@@ -300,9 +328,44 @@ async function idbPutKey(key,project){ return idbTx(DB_STORE,'readwrite',s=>s.pu
 /** R-05：current 与工程库副本同属一个 object store，放进同一事务写入，避免半写。
  *  projectId 为空时只写 current（草稿工程不占工程库键）。 */
 async function idbPutCurrentAndProject(project,projectId){
+  const pid=normalizeProjectId(projectId);
   return idbTx(DB_STORE,'readwrite',s=>{
     s.put(project,'current');
-    if(projectId) s.put(project,projectKey(projectId));
+    if(pid) s.put(project,projectKey(pid));
+  });
+}
+/** 同工程时间比较：只比较同一 projectId（或都未绑定）的记录，时间相同不判冲突。
+ *  跨工程共用一个 current 时不能互相阻断。 */
+function isStaleSnapshot(stored,next){
+  if(!stored||typeof stored!=='object') return false;
+  const a=String((stored.meta&&stored.meta.projectId)||'');
+  const b=String((next&&next.meta&&next.meta.projectId)||'');
+  if(a!==b) return false;
+  return projectFreshness(stored)>projectFreshness(next);
+}
+/** H-01：同一事务内先读同工程副本，只有不比本页新才写 current + proj，避免整工程快照覆盖。 */
+async function idbPutCurrentAndProjectGuarded(project,projectId){
+  const pid=normalizeProjectId(projectId);
+  const db=await openDB();
+  return new Promise((resolve,reject)=>{
+    let out=null;
+    const tx=db.transaction(DB_STORE,'readwrite');
+    const s=tx.objectStore(DB_STORE);
+    const r=pid?s.get(projectKey(pid)):s.get('current');
+    r.onerror=()=>reject(r.error||new Error('IndexedDB 读取失败'));
+    r.onsuccess=()=>{
+      try{
+        if(isStaleSnapshot(r.result,project)){ out={stale:true}; return; }
+        s.put(project,'current');
+        if(pid) s.put(project,projectKey(pid));
+        out={stale:false};
+      }catch(e){          /* 同步抛错（如配额）必须回传，否则保存会静默挂起 */
+        reject(e); tx.abort();
+      }
+    };
+    tx.oncomplete=()=>resolve(out||{stale:false});
+    tx.onerror=()=>reject(tx.error||new Error('IndexedDB 写入失败'));
+    tx.onabort=()=>reject(tx.error||new Error('IndexedDB 写入已中止'));
   });
 }
 async function idbGetKey(key){ return idbReq('readonly','get',key); }
@@ -344,6 +407,12 @@ function assertProjectWithinLimits(raw,label){
   const errs=importLimitErrors({objects:countProjectObjects(raw)});
   if(errs.length) throw new Error(label+'超出上限：'+importLimitMessage(errs));
 }
+/** M-13：交互式新增前容量校验（变更前调用，失败不产生半成品/历史）；批量按数量一次校验 */
+function ensureObjectCapacity(add=1){
+  if(countProjectObjects(state)+add<=APP_LIMITS.OBJECTS_MAX) return true;
+  toast(L('对象数量已达上限（{max}），请先删除部分对象',{max:APP_LIMITS.OBJECTS_MAX}),'warn');
+  return false;
+}
 /** 切工程前强制落盘：清掉 450ms 防抖/重试定时器并立即保存旧现场。
  *  租约被另一标签占用或落盘失败时抛错，由调用方取消切换并提示，不再静默丢弃最后一次编辑。 */
 async function flushPendingSave(){
@@ -351,7 +420,9 @@ async function flushPendingSave(){
   const pending=!!saveTimer||!!saveRetryTimer||saveInFlight>0;
   clearTimeout(saveTimer); saveTimer=null;
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
-  if(!pending||rescueHold) return;
+  if(!pending) return;
+  /* P0-04：救援模式下不做静默返回——有未落盘编辑时必须让调用方停下并要用户确认 */
+  if(rescueHold) throw new Error('救援模式：未落盘编辑尚未导出，已取消切换');
   if(leaseSaveBlocked()) throw new Error('另一标签页正在编辑，已取消切换以保护草稿');
   try{ await runSave(); }
   catch(e){ reportSaveFailure(e,'idb'); throw new Error('旧工程保存失败，已取消切换'); }
@@ -359,10 +430,14 @@ async function flushPendingSave(){
 }
 /** 打开工程库中的工程：先构建候选 → 准备资产 → 原子替换；任何失败保持当前现场（审计 P1-9） */
 async function openProjectById(id){
+  const pid=normalizeProjectId(id);
+  if(!pid) throw new Error('工程标识非法');
   await flushPendingSave();
-  const raw=await idbGetKey(projectKey(id));
+  const raw=await idbGetKey(projectKey(pid));
   if(!raw||!isReadableSchema(raw.schema)) throw new Error('工程不存在或已损坏');
   assertProjectWithinLimits(raw,'工程');
+  /* H-02：内层 projectId 以记录键为准；缺失补齐、冲突一次性修正，只写回 proj:<pid> */
+  if(reconcileProjectId(raw,pid)==='fixed') toast(L('工程标识不一致，已按工程库记录修正'),'warn');
   const next=buildProject(raw);
   await ensureBackgroundAsset(next);          /* 在候选状态上转存资产，不动当前 state */
   const prevState=state, prevHistory=history, prevSelected=new Set(selectedIds), prevDraft=draft;
@@ -568,6 +643,9 @@ function syncActiveFloor(){
   f.objects=state.objects;
   f.viewport=state.viewport;
 }
+/** M-14：工程内容实质变化（用户切层/设置提交）时推进 meta.updatedAt，供工程库排序与协作新鲜度。
+ *  只读路径（导出临时切层、定位违规对象）必须传 silent，不得污染更新时间。 */
+function touchProjectUpdated(){ state.meta.updatedAt=nowISO(); }
 /** 纯数据切换（不触达 DOM/底图加载，便于自测）：成功返回 true */
 function switchFloorData(id){
   if(!Array.isArray(state.floors)||id===state.activeFloorId) return false;
@@ -585,9 +663,10 @@ function switchFloorData(id){
   resetFrameRef();
   return true;
 }
-/** 切换楼层（含底图加载、视图适配、面板刷新） */
-async function switchFloor(id){
+/** 切换楼层（含底图加载、视图适配、面板刷新）；silent=只读临时切层，不推进工程更新时间（M-14） */
+async function switchFloor(id, silent){
   if(!switchFloorData(id)) return false;
+  if(!silent) touchProjectUpdated();
   await afterStateLoaded(false);
   fitView(); requestRender(); renderProps();
   scheduleSave();                  /* 切换也是一次状态变更：刷新后回到上次活动楼层（审计 P0-4 补口） */
@@ -605,12 +684,12 @@ async function withFloor(id, fn){
   const prevId=state.activeFloorId;
   const prevViewport=deepClone(state.viewport);
   const prevSelection=new Set(selectedIds);
-  if(!(await switchFloor(id))) throw new Error('楼层切换失败，已中止导出');
+  if(!(await switchFloor(id, true))) throw new Error('楼层切换失败，已中止导出');
   try{
     if(!(await waitBackgroundReady())) throw new Error('楼层底图未就绪，已中止导出');
     return await fn();
   }finally{
-    if(await switchFloor(prevId)){
+    if(await switchFloor(prevId, true)){
       state.viewport=prevViewport;
       selectedIds.clear(); prevSelection.forEach(x=>selectedIds.add(x));
       invalidateStatic(); resetFrameRef();
@@ -703,6 +782,8 @@ function writeLocalDraft(s){
 const SAVE_RETRY_MS=[1000,3000,9000];
 let saveHealth={state:'ok',errorCode:'',lastOkAt:'',retry:0};
 let saveRetry=0,saveRetryTimer=null;
+/* H-01：落盘时发现库内同工程副本比本页快照更新，置位表示已拒绝覆盖 */
+let staleWrite=false;
 function saveStatus(t){ const e=$('saveState'); if(e) e.textContent=t; }
 /** 错误归类：quota=配额耗尽（不可自动恢复）；idb=IndexedDB 不可用；io=其它瞬时写入异常 */
 function classifySaveError(e){
@@ -750,7 +831,15 @@ async function saveOnce(seq){
   const snapshot=persistableState();
   if(seq<lastSavedSeq) return false;
   try{
-    await idbPutCurrentAndProject(snapshot,snapshot.meta&&snapshot.meta.projectId||'');
+    const write=await idbPutCurrentAndProjectGuarded(snapshot,snapshot.meta&&snapshot.meta.projectId||'');
+    if(write&&write.stale){
+      /* 不覆盖库内更新副本；本地草稿留底，等待用户导出或重载 */
+      writeLocalDraft(snapshot);
+      staleWrite=true;
+      saveStatus(L('另一标签页正在编辑，已暂停自动保存'));
+      if(typeof showStaleWriteBanner==='function') showStaleWriteBanner();
+      return false;
+    }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(snapshot.settings)));
     if(seq<lastSavedSeq) return false;
     lastSavedSeq=seq;
@@ -830,14 +919,17 @@ async function loadSavedProject(){
   }catch(e){}
   const rescueRec=readRescueDraft();
   if(rescueRec) candidates.push({source:'rescue',raw:rescueRec.snapshot});
+  /* P0-05：离线协作待发快照作为第四候选；只读采用，绝不删除待发记录 */
+  if(typeof collabPendingCandidates==='function') collabPendingCandidates().forEach(c=>candidates.push(c));
   if(!candidates.length) return {state:null,audit:emptyAudit,rescue:null,fallback:false,source:'',newerThanIdb:false};
   const audited=candidates.map(c=>{
     let p=c.raw;
+    const tag={nopid:!!c.nopid};
     if(typeof p==='string'){
       try{ p=JSON.parse(p); }
-      catch(_){ return {source:c.source,raw:c.raw,p:null,audit:{level:'error',errors:['JSON 损坏'],warnings:[]}}; }
+      catch(_){ return {source:c.source,raw:c.raw,p:null,audit:{level:'error',errors:['JSON 损坏'],warnings:[]},...tag}; }
     }
-    return {source:c.source,raw:c.raw,p,audit:auditProject(p)};
+    return {source:c.source,raw:c.raw,p,audit:auditProject(p),...tag};
   });
   /* 不可读候选保留为救援副本；IndexedDB 优先作为原始文本来源 */
   let rescue=null;
@@ -847,8 +939,12 @@ async function loadSavedProject(){
     rescue={source:c.source,text};
   });
   const usable=audited.filter(c=>c.p&&c.audit.level!=='error'&&isReadableSchema(c.p.schema));
+  /* __nopid__ 待发记录只与无 pid 草稿同权：存在任何带 pid 的候选时不得参选 */
+  const hasPid=usable.some(c=>c.p&&c.p.meta&&String(c.p.meta.projectId||''));
+  const currentPid=state&&state.meta&&String(state.meta.projectId||'');
+  const pool=usable.filter(c=>c.source!=='collabPending'||!c.nopid||(!hasPid&&!currentPid));
   let chosen=null;
-  usable.forEach(c=>{
+  pool.forEach(c=>{
     const at=projectFreshness(c.p);
     if(!chosen||at>chosen.at||(at===chosen.at&&c.source==='IndexedDB')) chosen={source:c.source,p:c.p,audit:c.audit,at};
   });
@@ -967,6 +1063,8 @@ function sanitizeSettings(raw){
   settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
     Math.round(finiteNumber(settings.segLabelMinPx,APP_LIMITS.SEG_LABEL_MIN_PX))));
   settings.lang=settings.lang==='en'?'en':'zh';
+  settings.exportOnlyDelivered=!!settings.exportOnlyDelivered;   /* 旧档缺省=全量导出 */
+  settings.pdfDpi=PDF_DPI_OPTIONS.includes(settings.pdfDpi)?settings.pdfDpi:PDF_DPI_DEFAULT;
   return settings;
 }
 /** 本机设置存储视图：只取白名单键，新增设置项不会因忘记改字面量而漏存。 */
@@ -1026,8 +1124,9 @@ function buildProject(p){
       const name=normalizeFloorName(f.name||('F'+(i+1)))||('F'+(i+1));
       /* N-08：旧工程可能已有重名楼层，加载只告警不阻断、不改名（不静默改数据） */
       if(seenFloorNames.has(name)) dupFloorName++; else seenFloorNames.add(name);
-      /* v1→v2：保留已有楼层时间；旧档缺失时写空串，避免迁移瞬间把旧楼层当成最新写入 */
-      const updatedAt=typeof f.updatedAt==='string'?f.updatedAt:'';
+      /* v1→v2：保留已有楼层时间；旧档缺失时写空串，避免迁移瞬间把旧楼层当成最新写入。
+         M-04：未来/非法时间归一为空串（LWW 视作最旧），与对象同一 normalizeTimestamp 口径 */
+      const updatedAt=normalizeTimestamp(f.updatedAt);
       const entry={id,name,updatedAt};
       if(f.id!==p.activeFloorId){
         const fslots=migrateBackgroundAndSite(f,layers);
@@ -1392,7 +1491,10 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
       subtype:['ruler','distance','area','angle'].includes(raw.subtype)?raw.subtype:'distance',
       phys:Math.max(0,finiteNumber(raw.phys,0)),
       visible:raw.visible!==false, locked:!!raw.locked, z:finiteNumber(raw.z,out.length),
-      createdAt:typeof raw.createdAt==='string'?raw.createdAt:nowISO(), updatedAt:typeof raw.updatedAt==='string'?raw.updatedAt:nowISO()
+      createdAt:typeof raw.createdAt==='string'?raw.createdAt:nowISO(),
+      /* M-04：未来/非法 updatedAt 归一为空串（LWW 视作最旧，不得借机压制对端）；
+         本就没有该字段的旧对象仍按载入时间补，与历史行为一致。createdAt 不参与 LWW 不夹取 */
+      updatedAt:typeof raw.updatedAt==='string'?normalizeTimestamp(raw.updatedAt):nowISO()
     });
     if(kind==='rect'){
       const s=sanitizeAreaShape(raw.shape);
@@ -1475,6 +1577,7 @@ async function afterStateLoaded(fit=true,opts={}){
   bgImage=null; bgImageState='none'; bgDataUrl='';
   try{
     resetTransientInteractionState(opts);   /* 草稿/拖拽/捕捉/参考线/覆盖层统一复位；校准语义见函数注释 */
+    bumpZVersion();                          /* 整状态替换（载入/撤销/重做）：命中缓存失效 */
     invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
     resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
     const oversizePhotos=await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */

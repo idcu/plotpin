@@ -143,8 +143,23 @@ async function exportJSON(){
 /** 导出口径唯一源（N-05）：
  *  - 'table'：台账类（CSV/TSV/XLSX）保留全量对象，隐藏状态由「显示」列反映有效可见；
  *  - 'draw' ：图纸类（PNG/SVG/DXF/PDF 图纸页与清单/二维码标签/图例）只输出有效可见对象。
- *  有效可见统一定义在 render.js 的 effectiveVisible（对象 visible 且所属图层 visible）。 */
-function exportScope(o, mode){ return mode==='draw' ? effectiveVisible(o) : true; }
+ *  有效可见统一定义在 render.js 的 effectiveVisible（对象 visible 且所属图层 visible）。
+ *  G-03：settings.exportOnlyDelivered 为真时两类口径都再收窄到「已交付」，JSON/报价不走此口径。 */
+function exportScope(o, mode){
+  if(mode==='draw'&&!effectiveVisible(o)) return false;
+  /* G-03：开启「仅导出已交付」后，台账与图纸都只含 props.publishState==='1' 的对象 */
+  return !((state.settings||{}).exportOnlyDelivered&&!isDelivered(o));
+}
+/** 交付状态唯一判据（props 可选键，缺失=未交付；不新增 schema 字段） */
+function isDelivered(o){ return !!(o&&o.props&&o.props.publishState==='1'); }
+/** 写入/清除交付标记（清除时删键，props 不留空值） */
+function setDelivered(objs,on){ (objs||[]).forEach(o=>{ o.props=o.props||{}; if(on) o.props.publishState='1'; else delete o.props.publishState; }); }
+/** 开启过滤却一个已交付对象都没有时中止导出：不生成空文件 */
+function deliveryGuard(){
+  if(!(state.settings||{}).exportOnlyDelivered||objectRowsAll().length) return true;
+  toast(L('没有已交付对象：请先标记交付，或在设置中关闭「仅导出已交付」'),'warn');
+  return false;
+}
 /** 行渲染器与列定义在 io-fields.js（字段描述表唯一源）；此包装保留既有签名 */
 function objectRows(objs=state.objects,floorName){
   const fname=floorName===undefined?currentFloorName():floorName;
@@ -198,6 +213,7 @@ async function exportQuote(kind){
 }
 /** 分隔文本导出（CSV/TSV） */
 function exportDelimited(delim,ext,mime){
+  if(!deliveryGuard()) return;
   downloadBlob(new Blob([delimitedText(delim)],{type:mime}),safeName()+'.'+ext);
 }
 /* 保留旧单格转义入口（自测与插件可能调用），实现委托公共 DSV */
@@ -205,6 +221,7 @@ function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[
 /** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返）。
  * 所有单元格写 `t="inlineStr"`（文本），即使值以 =/@ 开头也不会成为公式，与 CSV 防护互补。 */
 function exportXlsx(){
+  if(!deliveryGuard()) return;
   const table=xlsxExportTable();
   const buf=ensureVendor('Xlsx').build(table, '图纸标注');
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
@@ -368,7 +385,7 @@ function renderToDataURL(scale=2){
   const c=document.createElement('canvas'); c.width=Math.round(cw*scale); c.height=Math.round(ch*scale);
   markSurfaceSize(c,cw,ch);
   const cc=c.getContext('2d'); cc.scale(scale,scale);
-  drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6});
+  drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6,objectFilter:o=>exportScope(o,'draw')});
   /* PNG 补齐与 SVG/PDF 相同的页脚（IO-P2-14）；只画有效可见内容由 drawScene 统一走 isVisible */
   const footer=exportFooterText();
   if(footer){
@@ -700,6 +717,15 @@ function canvasToJpegBase64(canvas,quality=.92){
 }
 /* 清单页版式常量：分页数与渲染共用一份（避免两处各写一套导致页码/总页数不一致） */
 const PDF_LIST_PAGE={W:1240,H:1748,margin:48,rowH:30,headH:40};
+/** 图纸页像素尺寸（纯函数）：A4 横向按 297×210mm 与 dpi 计算，最长边封顶 BG_MAX_EDGE。
+ *  版式仍按 1748×1240 逻辑坐标绘制，导出时整体等比放大，故纸张观感与旧版一致。 */
+function pdfPagePixels(dpi){
+  const d=PDF_DPI_OPTIONS.includes(Number(dpi))?Number(dpi):PDF_DPI_DEFAULT;
+  let W=Math.round(297/25.4*d), H=Math.round(210/25.4*d);
+  const k=BG_MAX_EDGE/Math.max(W,H);
+  if(k<1){ W=Math.round(W*k); H=Math.round(H*k); }
+  return {width:W,height:H,dpi:d};
+}
 function pdfListRowsPerPage(){ return Math.max(1,Math.floor((PDF_LIST_PAGE.H-PDF_LIST_PAGE.margin*2-150)/PDF_LIST_PAGE.rowH)); }
 /** PDF 图纸口径对象（N-05）：图纸页与清单页共用，只看有效可见对象，避免清单含隐藏项而图纸不画 */
 function pdfDrawObjectsFor(row){
@@ -727,16 +753,18 @@ function pdfPagePlan(){
   return out;
 }
 async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
-  const W=1748,H=1240;   /* A4 横向 150dpi 像素 */
+  const W0=1748,H0=1240;   /* 逻辑版式：A4 横向（150dpi 基准），字号/边距沿用旧版 */
+  const px=pdfPagePixels((state.settings||{}).pdfDpi), W=px.width, H=px.height;
   const c=document.createElement('canvas'); c.width=W; c.height=H; markSurfaceSize(c,W,H);
   const cc=c.getContext('2d'); cc.fillStyle='#fff'; cc.fillRect(0,0,W,H);
+  cc.setTransform(W/W0,0,0,H/H0,0,0);   /* 只放大位图，不放大版式：打印纸张尺寸不变 */
   const d=worldDims(), margin=36;
-  const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
-  drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
-  drawTitleBlockOnCanvas(cc,W,H,titleBlockSpec(W,H,z,'pdf'));
+  const z=Math.min((W0-margin*2)/d.w,(H0-margin*2)/d.h);
+  drawScene(cc,{zoom:z,panX:(W0-d.w*z)/2,panY:(H0-d.h*z)/2},W0,H0,{interactive:false,markerScale:1.6,objectFilter:o=>exportScope(o,'draw')});
+  drawTitleBlockOnCanvas(cc,W0,H0,titleBlockSpec(W0,H0,z,'pdf'));
   cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
   const pageTag=pageNo?L(' · 第 {n} / {total} 页',{n:pageNo,total:pageTotal}):'';
-  cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()+pageTag,margin,H-14);
+  cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()+pageTag,margin,H0-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
 async function renderPdfListPages(floorName,pageNos,pageTotal){
@@ -777,6 +805,7 @@ async function renderPdfListPages(floorName,pageNos,pageTotal){
   return pages;
 }
 async function exportPDF(){
+  if(!deliveryGuard()) return;
   try{
     const fs=floorSummaries();
     const plan=pdfPagePlan();
@@ -829,6 +858,8 @@ function reportFloorSummaryTableHtml(fs){
         <tr style="font-weight:700;background:#f3f4f6">${cell(esc(L('全楼合计')))}${cell(fs.total.count,1)}${cell(fs.total.counts.point,1)}${cell(fs.total.counts.rect,1)}${cell(fs.total.counts.line,1)}${cell(fmt(fs.total.len)+' m',1)}${cell(fmt(fs.total.area)+' ㎡',1)}</tr>
       </tbody></table>`;
 }
+/** 打印报告清单口径：关闭过滤时与旧行为一致（全部对象），开启时只含已交付 */
+function reportObjects(){ return state.objects.filter(o=>exportScope(o,'table')); }
 /** 单层图纸页（标题含楼层名） */
 function reportFloorPageHtml(name,img){
   const counts={point:0,rect:0,line:0,text:0,dimension:0};
@@ -853,7 +884,7 @@ $('printBtn').onclick=async()=>{
   try{
     const fs=floorSummaries();
     if(fs.rows.length<=1){
-      const rows=objectRows(), issues=findIssues(), img=renderToDataURL(1.5);
+      const rows=objectRows(reportObjects()), issues=findIssues(), img=renderToDataURL(1.5);
       $('report').innerHTML=`
         <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
           <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
@@ -881,7 +912,7 @@ $('printBtn').onclick=async()=>{
         await withFloor(row.id, ()=>{
           const img=renderToDataURL(1.2);
           pages.push(reportFloorPageHtml(row.name,img));
-          pages.push(reportListPageHtml(objectRows(),row.name+' — '+L('对象清单')));
+          pages.push(reportListPageHtml(objectRows(reportObjects()),row.name+' — '+L('对象清单')));
         });
       }
       $('report').innerHTML=pages.join('');

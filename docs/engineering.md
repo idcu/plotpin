@@ -50,8 +50,12 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 | 源码直开 | `index.html` | 双击即可用；脚本逐文件加载，便于调试 |
 | 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成，内联全部 CSS/JS，可离线分发 |
 
-`scripts/pack-core.mjs` 负责内联，`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；
-字符串 / 模板字面量 / 正则逐字节保留；**源文件不压缩**，`index.html` 仍引用可读源码。
+`scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；
+字符串 / 模板字面量 / 正则逐字节保留；标点相邻的空格、自终止词法单位后的换行可省（连续正负号之间例外），
+`}` 前的语句分号可省（`{a();}`→`{a()}`，`}` 前由 ASI 补分号；删除后若变成语法错误由构建期解析拦下），
+`return`/`throw`/`typeof` 等关键字与紧随的 `(`/`[`/`{`/字面量引号之间无空格，
+`0.5`→`.5`，`}` 后换行接标识符时可省（块结束或同表达式的 `in`/`instanceof`；接 `(`/`[` 等仍保留换行）；
+**源文件不压缩**，`index.html` 仍引用可读源码。
 每个内联脚本压缩后立刻用 `vm.Script` 解析，解析失败直接构建失败。
 
 ### 2.2 `build.mjs --check` 的真实判据
@@ -63,7 +67,7 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 | CSP 存在 | 发行包缺少 `Content-Security-Policy` |
 | CSP 脚本策略 | `script-src` 含 `'unsafe-inline'` |
 | CSP 哈希数 | 内联脚本数（剔除 HTML 注释）≠ `sha256-…` 白名单条数 |
-| 登记哈希 | 构建结果的 SHA256 / 字节数与 `scripts/dist-manifest.json` 不一致 |
+| 登记哈希 | 构建结果的 SHA256 / 字节数 / gzip 字节数与 `scripts/dist-manifest.json` 不一致 |
 | 登记缺失 | `scripts/dist-manifest.json` 不存在或不是合法 JSON |
 | 本地产物 | `dist/` 存在时，其字节或哈希与源重建不一致 |
 | gzip 体积 | gzip > **280 KiB（286,720 B）**；> 260 KiB（266,240 B）只预警 |
@@ -79,7 +83,8 @@ classic `<script>` 共享全局作用域，**目录边界是唯一还能被机�
 - gzip 硬上限：**286,720 B（280 KiB）**；`GZIP_WARN_BYTES = 266,240` 只预警（同上，`lib/budget.mjs` 单一来源）。
 - 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
-  2026-11-10 实测：`bytes = 831,034`、gzip `259,030`、余量 `8,646 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-12 实测：`bytes = 813,273`、gzip `258,004`、余量 `26,407 B`（`node scripts/build.mjs --check` 复算一致）。
+- 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；余量 **< 8,000 B 冻结改功能**，只能做无损回收后重新评估。
 - 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量」。逼近上限时只能做无损回收，**不得调高上限**。
 
 ---
@@ -108,7 +113,7 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
 | `node scripts/e2e.mjs` | Chromium 功能 e2e | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`）；**CI 实际执行未验证** |
-| `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | **不跑**（SwiftShader 读数不能当真实 GPU 结论） |
+| `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI（SwiftShader 读数不能当真实 GPU 结论）；由 `.github/workflows/perf-nightly.yml` 夜间定时 + 手动触发，读数上传为 artifact |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 
 > **vendor 摘要口径（2026-11-10 更新）**：`check-ngm.mjs` 现在会对 `ngm.vendor/**` 的**实际字节**逐文件计算 sha256，并与仓库内清单 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会在本地红并指出文件名（`node scripts/check-ngm.mjs`）。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。清单同时记录 `ngm.lock` 的 `moduleDigest`，lock 重新锁定而清单未刷新也会红。
@@ -193,7 +198,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |
 | `i18n-scan.mjs` | 只按静态字面量扫描，不证明译文语义正确；JSON/HTML 内的动态拼接可能漏扫 |
-| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 124 用例（123 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
+| `e2e` | 已接入 `.github/workflows/ci.yml` 的 `e2e` job（`npm ci` + `npx playwright install --with-deps chromium` + `node scripts/e2e.mjs`）。**CI 实际执行未验证**：本机只能验证同样的命令在本地 Chromium 下 145 用例（144 通过 + 1 条件跳过）通过，无法复现 GitHub runner 的网络、系统库与浏览器下载；首次接入后的实际耗时、稳定性与是否存在 runner 专属失败，必须以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源，`ubuntu-latest` 可执行 `apt` 安装系统依赖。缺 Playwright 或缺 Chromium 时本地脚本打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
 | `perf:browser` | **不在任何 CI job 中**；本机为 SwiftShader，数据不能当真实 GPU 结论 |
 | `.github/workflows/ci.yml` | `discipline` job 的步骤名仍写着「十问看板」，实际为 **13 问**；为文案滞后，不影响执行 |
 | `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用「本地 ci 绿」代替全部门禁 |
@@ -244,6 +249,11 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
   `addObjects` 单次 ≤ 500；`getState` / `addObjects` / `addAnnotation` 按固定 60s 窗口限流（60 / 30 / 60 次），超限只回本次调用错误而不禁用插件；清单原文超过 192 KB 在 `JSON.parse` 前按 UTF-8 字节拒绝；Worker 是**隔离边界而非完整语言级沙箱**，仍可访问 `console`/`Blob`/`crypto` 等
   无主工程权限的 Worker 全局，且不设 CPU/内存配额（只靠 2 s 超时 terminate）。
 - 受信任兼容入口：同源 `<script>` 直接调用 `PlotPin.register*` 保留，不套版本与能力门；不可信插件必须走 `loadPlugin`。
+- **弃用策略（D-05）**：`contracts/plugin-api.json` 是唯一键清单，**不得为临时需求改键**。旧键退出统一走三步：
+  1. 标记：在契约描述里写 `deprecated since <minor>，替代键 <key>`，代码实现保留；
+  2. 保留期：至少跨越 **2 个次版本**（minor）的 `PLUGIN_API_VERSION`，期间新旧键并存且行为一致；
+  3. 移除：先在 `check-plugin-api.mjs` 增加「旧键不再被示例/文档引用」的断言，再在 `docs/deletions.md` 登记删除，并在同一次变更内 bump minor。
+  参考实现：受信任同源 `plugins/sample-exporter.js`；隔离沙箱 `plugins/sample-sandboxed.js`、`plugins/sample-delivered.js`（后者只读 `props.publishState` 生成已交付清单，只声明 `state:read`/`export`）。
 - 图标与符号仍走 A-02 白名单：`icon` 经 `normalizeIcon`（只认内置名，其余回落 `custom`）；`symbol` 只保存几何数据，
   类型名/颜色/id 在渲染处转义。
 
@@ -275,8 +285,11 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `COVERAGE_CELL_MIN_M` / `COVERAGE_CELL_MAX_M` | 0.03 / 10 | 格边夹取区间（m） |
 | `SNAPSHOT_MAX_PER_PROJECT` | 20 | 每工程版本快照条数 |
 | `SNAPSHOT_MAX_BYTES_PER_PROJECT` | 16 MB | 每工程快照数据总量 |
+| `DORI_LEVELS`（独立常量，不在 `APP_LIMITS`） | 25 / 62.5 / 125 / 250 px/m | 侦测/观察/识别/辨认的最远判读距离阈值；出处 IEC 62676-4 表 1（Johnson 判据），改值即改报告口径 |
 
 导入侧统一由 `importLimitErrors(spec)` 判定（`js/core/config.js`）；业务代码不得另写魔法数字。
+
+覆盖率报告的 DORI 列由 `js/core/geometry-coverage.js` 的 `doriMaxDistance()` 计算：`d = resPx / (2·T·tan(fov/2))`，`T` 取 `DORI_LEVELS`。水平像素与张角存可选字段 `props.camResPx` / `props.camFov`（缺失时该行显示「未填」，不进 schema 必填项）。
 
 ### 5.2 产物体积预算
 

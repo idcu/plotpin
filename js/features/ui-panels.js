@@ -58,7 +58,11 @@ $('coverageBtn').addEventListener('click',runCoverageAnalysis);
 $('zoomInBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.2));
 $('zoomOutBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1/1.2));
 $('zoomFitBtn').addEventListener('click',fitView);
+let markerScaleHist=false;
+$('markerScaleInput')?.addEventListener('focus',()=>{ markerScaleHist=false; });
 $('markerScaleInput')?.addEventListener('input',e=>{
+  /* M-12：一次编辑会话只压一条历史（首次 input 时压栈，此时 settings 仍是旧值） */
+  if(!markerScaleHist){ pushHistory(); markerScaleHist=true; }
   state.settings.markerScale=Math.min(2.5,Math.max(.5,Number(e.target.value)||1));
   $('markerScaleLabel').textContent=Number(state.settings.markerScale).toFixed(1)+'×';
   scheduleSave(); requestRender();
@@ -134,7 +138,7 @@ function renderList(){
       o.kind==='text'?esc(o.text):(o.kind==='dimension'&&o.subtype==='ruler'?`${o.points.length} ${L('点')} / Σ ${fmt(objectLength(o))}m`:o.subtype||'');
     return `<tr data-id="${esc(o.id)}" class="${selectedIds.has(o.id)?'selected':''} ${o.locked?'locked':''} ${!o.visible?'hidden-row':''}">
       <td><input type="checkbox" data-row-select="${esc(o.id)}" ${selectedIds.has(o.id)?'checked':''}></td>
-      <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${dotColor}"></span>${esc(typeDisplayName(t))}</td>
+      <td>${esc(o.name)}${isDelivered(o)?' <span class="pill">'+esc(L('已交付'))+'</span>':''}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${dotColor}"></span>${esc(typeDisplayName(t))}</td>
       <td>${esc(l.name)}</td><td>${fmt(o.x)}</td><td>${fmt(o.y)}</td><td>${param}</td>
       <td><button class="icon-btn" data-toggle-visible="${o.id}" aria-label="${esc(I18N.t('ariaObjVisible')+'：'+o.name)}">${o.visible?'👁':'–'}</button></td>
       <td><button class="icon-btn" data-toggle-lock="${o.id}" aria-label="${esc(I18N.t('ariaObjLock')+'：'+o.name)}">${o.locked?'🔒':'○'}</button></td>
@@ -537,12 +541,20 @@ function runCoverageAnalysis(){
   const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">
     <span style="font-weight:600">${esc(r.name)}</span>
     <span>${esc(L('覆盖'))} <b>${pct(r.ratio)}</b> ｜ ${fmt(r.coveredArea)}/${fmt(r.area)} m² ｜ ${esc(L('盲区'))} ${fmt(r.blindArea)} m²</span></div>`).join('');
+  /* DORI 最远判读距离：与 selftest 同一函数（doriRows → doriMaxDistance），不另立公式 */
+  const dori=state.objects.filter(o=>effectiveVisible(o)).map(doriRows).filter(Boolean);
+  const doriBlock=dori.length?`<div style="margin-top:12px"><b>${esc(L('DORI 最远判读距离'))}</b>
+    <div class="hint-text">${esc(L('按水平像素与张角估算；阈值见 IEC 62676-4（25/62.5/125/250 px/m）。'))}</div>
+    <div class="scroll"><table><thead><tr><th>${esc(L('名称'))}</th><th>${esc(L('水平像素'))}</th><th>${esc(L('水平张角'))}</th>${DORI_LEVELS.map(l=>`<th>${esc(L(l.name))}</th>`).join('')}</tr></thead><tbody>${
+      dori.map(d=>{const ok=d.resPx&&d.fov;return `<tr><td>${esc(d.name)}</td><td>${d.resPx||esc(L('未填'))}</td><td>${d.fov?d.fov+'°':esc(L('未填'))}</td>${
+        d.levels.map(m=>`<td>${ok?fmt(m)+' m':esc(L('未填'))}</td>`).join('')}</tr>`}).join('')
+    }</tbody></table></div></div>`:'';
   const legend=`<div style="display:flex;gap:16px;font-size:12px;color:#475569;margin-top:12px">
     <span><i style="display:inline-block;width:11px;height:11px;background:rgba(34,197,94,.5);border:1px solid #16a34a;border-radius:2px;vertical-align:-1px"></i> ${esc(L('已覆盖'))}</span>
     <span><i style="display:inline-block;width:11px;height:11px;background:rgba(239,68,68,.5);border:1px solid #dc2626;border-radius:2px;vertical-align:-1px"></i> ${esc(L('盲区'))}</span>
     <span style="color:#94a3b8">${esc(L('栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比'))}</span></div>`;
-  const body=res.regions.length? head+rows+legend
-    : head+`<div class="hint-text" style="padding:8px 0">${esc(L('当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。'))}</div>`;
+  const body=res.regions.length? head+rows+doriBlock+legend
+    : head+doriBlock+`<div class="hint-text" style="padding:8px 0">${esc(L('当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。'))}</div>`;
   openModal(L('视场覆盖率分析'), body, [
     {text:L('布点优化…'),class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
     {text:L('导出盲区 GeoJSON'),class:'',click:exportBlindSpotsGeoJson},

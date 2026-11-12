@@ -589,7 +589,7 @@ function ruleExportName(){
 async function locateRuleViolation(v){
   if(!v) return false;
   if(v.floorId&&v.floorId!==state.activeFloorId){
-    const ok=await switchFloor(v.floorId);
+    const ok=await switchFloor(v.floorId, true);   /* 只读定位：不推进工程更新时间（M-14） */
     if(!ok){ toast(L('定位失败：无法切换到目标楼层'),'error'); return false; }
   }
   const obj=state.objects.find(o=>o.id===v.objectId);

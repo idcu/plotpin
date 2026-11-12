@@ -1,6 +1,8 @@
 /* io.js —— 新建工程、多工程库、楼层管理、底图与文件导入 */
 /* -------------------- 文件：新建 / 底图 / 导入 -------------------- */
 $('newBtn').onclick=async()=>{
+  /* P0-04：救援模式下先让用户确认（或导出救援 JSON），避免未落盘编辑被静默丢弃 */
+  if(!await guardRescueSwitch()) return;
   const ok=await showConfirm(L('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？'));
   if(!ok) return;
   /* 替换现场前强制落盘：租约被占用或保存失败时中止新建，避免静默丢最后一次编辑（P2-A3） */
@@ -150,6 +152,7 @@ async function openProjectLibrary(){
       const id=row.dataset.id, op=btn.dataset.op;
       try{
         if(op==='open'){
+          if(!await guardRescueSwitch()) return;
           closeModal(); await openProjectById(id); toast(L('已打开工程：{name}',{name:(state.meta.name||'')}),'success');
         }else if(op==='snap'){
           const cur=projects.find(p=>p.id===id);

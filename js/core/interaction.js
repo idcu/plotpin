@@ -314,6 +314,7 @@ canvas.addEventListener('pointerdown',e=>{
     rubber={a:sp,b:sp}; refreshSelectionUI(); requestRender(); return;
   }
   if(currentTool==='point'){
+    if(!ensureObjectCapacity(1)) return;
     pushHistory();
     const typeId=$('pointType').value || 'point.marker';
     const ptType=getType(typeId);
@@ -349,6 +350,7 @@ canvas.addEventListener('pointerdown',e=>{
   if(currentTool==='text'){
     showPrompt({title:L('添加文字'),label:L('文字内容'),value:L('标注文字')}).then(text=>{
       if(text===null) return;
+      if(!ensureObjectCapacity(1)) return;
       pushHistory();
       const o=baseObject('text',null,{x:wp[0],y:wp[1],text,height:2.2,style:{color:'#111827'}});
       o.typeId='text.builtin'; if(!state.objectTypes.some(t=>t.id===o.typeId)) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
@@ -496,7 +498,7 @@ canvas.addEventListener('pointerup',e=>{
     const rb={minX:min[0],maxX:max[0],minY:min[1],maxY:max[1]};
     if(Math.abs(rubber.b[0]-rubber.a[0])>4||Math.abs(rubber.b[1]-rubber.a[1])>4){
       if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
-      state.objects.forEach(o=>{ if(isVisible(o)&&boundsIntersect(objectBounds(o),rb)) selectedIds.add(o.id); });
+      state.objects.forEach(o=>{ if(isVisible(o)&&isEditable(o)&&boundsIntersect(objectBounds(o),rb)) selectedIds.add(o.id); });
     }
     rubber=null; refreshSelectionUI(); requestRender();
   }
@@ -755,6 +757,8 @@ function finishDraft(){
   if(currentTool==='calibrate'){ finishCalibration(); return; }
   if(!draft) return;
   if(draft.kind==='sitePolygon') return finishSiteDraft();
+  /* M-13：变更前校验容量，超限不产生半成品/历史条目 */
+  if(!ensureObjectCapacity(1)){ draft=null; requestRender(); return; }
   if(draft.kind==='rect'){
     const a=draft.start,b=draft.current;
     const x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),h=Math.abs(a[1]-b[1]);
@@ -948,7 +952,15 @@ function refreshCalibStatus(){
   let text=reasons.join('；');
   if(!text&&isCalibTool(currentTool)){
     const p=calibPrecheck(currentTool);
-    if(p.ok&&p.step) text=p.step.label;
+    if(p.ok&&p.step){
+      text=p.step.label;
+      /* G-01：标定中同时显示当前 m/px（本会话应用过比例预设时附来源） */
+      const mpp=isImageBackground(state.background)?Number(state.background.metersPerPixel):0;
+      if(mpp>0){
+        text+=' · '+L('1 px = {mpp} m',{mpp:mppText(mpp)});
+        if(scalePreset) text+=L('（1:{s} @ {d}dpi）',{s:scalePreset.scale,d:scalePreset.dpi});
+      }
+    }
   }
   status.textContent=text;
   status.hidden=!text;
@@ -1049,6 +1061,7 @@ function deleteSelected(){
 }
 function duplicateSelected(){
   const olds=state.objects.filter(o=>selectedIds.has(o.id)); if(!olds.length) return;
+  if(!ensureObjectCapacity(olds.length)) return;   /* M-13：批量一次校验 */
   pushHistory();
   const fresh=[];
   /* 批量复制：编号作用域一次建立，避免每个副本都全量扫描 state.objects */
@@ -1063,6 +1076,7 @@ function copySelected(){
 }
 function pasteClipboard(){
   if(!clipboard.length) return;
+  if(!ensureObjectCapacity(clipboard.length)) return;   /* M-13：按粘贴数量一次校验 */
   pushHistory();
   const fresh=[];
   withObjectNameScope(allObjectNames(), () => clipboard.forEach(o=>{
@@ -1110,7 +1124,7 @@ function helpExportRows(){
     [L('JSON 工程'), L('全部楼层、底图与照片，可回导。')],
     [L('PNG 高清图'), L('当前楼层位图快照，放大不保真。')],
     [L('SVG 矢量图'), L('当前楼层矢量图，底图嵌入，可无损缩放。')],
-    [L('PDF 矢量（图纸+清单）'), L('图纸页为位图页；清单独立分页。')],
+    [L('PDF（图纸位图+清单）'), L('图纸页为位图页；清单独立分页。')],
     [L('DXF（CAD 互通）'), L('场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。')],
     [L('CSV 表格'), L('全楼层台账；= + - @ 开头加单引号防公式注入。')],
     [L('TSV 表格'), L('同 CSV，制表符分隔；同一公式防护。')],
@@ -1273,7 +1287,8 @@ function flushBeforeUnload(){
        本地兜底草稿，加载择优（R-04）会让它压过工程库里更旧但完整的工程记录。 */
     if(!pending) return false;
     writeLocalDraft(snapshot);
-    idbPut(snapshot).catch(()=>{});
+    /* H-02：卸载同样写 current + proj:<pid>，否则同会话再从工程库打开会读到旧副本 */
+    idbPutCurrentAndProject(snapshot,snapshot.meta&&snapshot.meta.projectId||'').catch(()=>{});
     return true;
   }catch(e){ return false; }
 }

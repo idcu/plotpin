@@ -375,6 +375,11 @@ function renderProps(){
     const psh=t.scaleShape||'none';
     const isSymbol=Array.isArray(t.symbol)&&t.symbol.length>0;
     const canScale=psh!=='none'||isSymbol;
+    /* DORI 输入：仅扇形/圆（有水平张角语义）显示；缺省不影响旧工程 */
+    const doriInputs=(psh===SEC||psh===CIR)
+      ?row('水平像素',`<input type="number" min="0" step="1" data-field="propCamResPx" value="${Number(o.props.camResPx)||''}">`)
+        +row('水平张角 (°)',`<input type="number" min="1" max="179" step="1" data-field="propCamFov" value="${Number(o.props.camFov)||''}" placeholder="${psh===SEC?String(t.fov||90):'90'}">`)
+      :'';
     const physHint=isSymbol
       ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('符号图元：填 0 为屏幕固定图标；填图元外接宽度（米）后按真实比例随底图缩放，朝向随朝向角旋转。'))}</div>`
       : canScale
@@ -392,7 +397,8 @@ function renderProps(){
       ${row('照片',`<input type="file" accept="image/*" data-photo-input><button type="button" class="icon-btn danger" data-photo-clear title="${esc(L('移除照片'))}" ${o.props.photoId?'':'disabled'}>×</button>`)}
       ${o.props.photoId?`<div class="span2" style="grid-column:1/-1"><img data-photo-img="${esc(o.props.photoId)}" alt="${esc(L('设备照片'))}" style="max-width:100%;max-height:160px;border-radius:4px;border:1px solid #334155"></div>`:''}
       ${row('图标大小',`<input type="range" min=".5" max="3" step=".05" data-field="iconSize" value="${Number(o.iconSize)||1}"><span class="hint-text">${(Number(o.iconSize)||1).toFixed(2)}×（${esc(L('顶栏还有全局点大小'))}）</span>`)}
-      ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}${physHint}
+      ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}
+      ${doriInputs}${physHint}
       ${renderAnnotToggles(o)}`;
   }else if(o.kind==='text'){
     specific=`${row('文字',`<input type="text" data-field="text" value="${esc(o.text||'')}">`)}
@@ -412,6 +418,7 @@ function renderProps(){
         <button class="mini" data-action="lower">${esc(L('下移一层'))}</button>
         <button class="mini" data-action="visibility">${esc(L(o.visible?'隐藏':'显示'))}</button>
         <button class="mini" data-action="lock">${esc(L(o.locked?'解锁':'锁定'))}</button>
+        <button class="mini" data-action="publish">${esc(L(isDelivered(o)?'取消交付':'标记交付'))}</button>
         <button class="mini danger" data-action="delete">${esc(L('删除'))}</button>
       </div>
     </div>
@@ -432,6 +439,7 @@ function renderMultiProps(box,objs){
       <button class="mini" id="multiRotateBtn">${esc(L('批量旋转'))}</button>
       <button class="mini" id="multiHideBtn">${esc(L('隐藏'))}</button>
       <button class="mini" id="multiLockBtn">${esc(L('锁定'))}</button>
+      <button class="mini" id="multiPublishBtn">${esc(L('交付'))}</button>
       <button class="mini danger" id="multiDeleteBtn">${esc(L('全部删除'))}</button>
     </div></div>
     <div class="section"><h3>${esc(L('对齐 / 分布'))}</h3>
@@ -464,6 +472,12 @@ function renderMultiProps(box,objs){
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
   $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
   $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
+  /* 批量交付：全选都已交付时整体取消，否则整体标记（一键切换，不额外增加按钮） */
+  $('multiPublishBtn').onclick=()=>{
+    const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn');
+    const all=items.every(isDelivered); pushHistory(); setDelivered(items,!all);
+    commitChange(all?'已取消交付':'已标记交付', items.map(o=>o.id));
+  };
   $('multiDeleteBtn').onclick=deleteSelected;
   box.querySelectorAll('[data-align]').forEach(b=>{
     b.onclick=()=>{
@@ -539,7 +553,13 @@ function bindPropEvents(box,o){
       if(o.points.length<=lineMinNodes(o)) return toast(L('至少保留 {n} 个节点',{n:lineMinNodes(o)}),'warn');
       pushHistory(); removeLineNode(o,i); commitChange('已删除节点',[o.id]);
     },
-    move:(i,dir)=>{ if(moveNodeStep(o,i,dir)){ pushHistory(); commitChange(dir<0?'节点已上移':'节点已下移',[o.id]); } },
+    move:(i,dir)=>{
+      /* M-12：先判可移动再压栈，失败不产生历史 */
+      if(!isPolylineEditable(o)||!Array.isArray(o.points)) return;
+      const to=i+(dir<0?-1:1);
+      if(to<0||to>=o.points.length) return;
+      pushHistory(); moveNodeStep(o,i,dir); commitChange(dir<0?'节点已上移':'节点已下移',[o.id]);
+    },
     changed,
     focusNode:i=>setFocusNode(i===null?null:{id:o.id,index:i})
   });
@@ -550,12 +570,14 @@ function bindPropEvents(box,o){
   box.querySelector('[data-action="lower"]').onclick=()=>reorderSelected(-1);
   box.querySelector('[data-action="visibility"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); };
   box.querySelector('[data-action="lock"]').onclick=()=>{ if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); };
+  box.querySelector('[data-action="publish"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); setDelivered([o],!isDelivered(o)); commitChange(isDelivered(o)?'已标记交付':'已取消交付',[o.id]); };
   $('propAdd')?.addEventListener('click',()=>{
     const k=$('propKey').value.trim(),v=$('propValue').value.trim(); if(!k) return;
-    o.props[k]=v; commitChange(undefined,[o.id]);
+    pushHistory(); o.props[k]=v; commitChange(undefined,[o.id]);
   });
   box.querySelectorAll('[data-prop-del]').forEach(btn=>btn.onclick=()=>{
-    const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; delete o.props[k]; commitChange(undefined,[o.id]);
+    const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; if(k===undefined) return;
+    pushHistory(); delete o.props[k]; commitChange(undefined,[o.id]);
   });
   /* 设备照片：复用内容寻址资产库（与底图同一 storage），照片随撤销栈可达集合保留 */
   box.querySelectorAll('[data-photo-input]').forEach(inp=>inp.addEventListener('change',async()=>{
@@ -646,6 +668,12 @@ function applyField(el,o,changed){
     o.props=o.props||{};
     const n=Number(el.value);
     if(el.value!==''&&Number.isFinite(n)) o.props.mountHeight=Math.max(0,n); else delete o.props.mountHeight;
+  }
+  else if(k==='propCamResPx'||k==='propCamFov'){
+    o.props=o.props||{};
+    const n=Number(el.value);
+    if(el.value!==''&&Number.isFinite(n)&&n>0) o.props[k==='propCamResPx'?'camResPx':'camFov']=k==='propCamResPx'?Math.round(n):Math.min(179,n);
+    else delete o.props[k==='propCamResPx'?'camResPx':'camFov'];
   }
   else o[k]=el.value;
   if(k==='typeId'){ const t=getType(o.typeId); if(!o.style.color) o.style.color=t.color; }

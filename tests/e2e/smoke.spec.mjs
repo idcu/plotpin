@@ -95,6 +95,7 @@ test('导出入口可用：JSON 导出真实下载并可解析', async ({ page }
   await drawPointAtCanvasCenter(page);
 
   const downloadPromise = page.waitForEvent('download');
+  await expect(page.locator('#exportKind option[value="pdf"]')).toHaveText('PDF（图纸位图+清单）');
   await page.selectOption('#exportKind', 'json');
   await page.click('#exportBtn');
   const download = await downloadPromise;
