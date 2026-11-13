@@ -1,9 +1,11 @@
 /* app.js —— 启动：恢复工程、首屏适配、能力探测与离线缓存注册 */
 /* -------------------- 启动 -------------------- */
 (async function init(){
+  /* 片C：必需钩子缺注册是装配错误，先断言再启动（门禁 9.3 静态配对 + 此处运行期兜底） */
+  assertHooksReady();
   const caps=detectRuntimeCapabilities();
   const loaded=await loadSavedProject();
-  if(loaded&&loaded.state) state=loaded.state;
+  /* 载入路径已在 persistence 内通过 replaceState 换现场（quiet）；此处只消费返回值 */
   showLoadAuditBanner(loaded);
   /* D-09 同工程多标签租约：先注册横幅回调，再开始心跳；不阻塞编辑 */
   onLeaseConflict(info=>{ if(info&&info.active) showLeaseConflictBanner(info); else hideLeaseConflictBanner(); });

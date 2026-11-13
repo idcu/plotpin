@@ -111,6 +111,37 @@ function ensureVendor(name){
   return v;
 }
 
+/* 层间依赖钩子（片C）：core 不直接引用 features 的符号，需要的行为在此登记、由 features 在自身文件顶层提供。
+ * 必需依赖写进 REQUIRED_HOOKS（缺注册=bug：门禁 9.3 静态配对 + app 启动断言双重拦截）；
+ * 可选特性不进 REQUIRED_HOOKS，调用方用 hookReady() 判断"未启用"，而不是用 typeof 猜"是不是忘了"。
+ * 注册表刻意放在 core 第一个脚本里——不新增文件、不改加载顺序。 */
+const HOOKS=new Map();
+const REQUIRED_HOOKS=Object.freeze([
+  'collab.onLocalChange','collab.broadcastFloor','collab.pendingCandidates','collab.pendingStorageKeys',
+  'ui.staleWriteBanner','ui.toast'
+]);
+/** 注册提供方；重复注册直接抛错（静默覆盖会让"谁提供了什么"失去意义） */
+function registerHook(id,fn){
+  if(typeof fn!=='function') throw new Error('钩子 '+id+' 的提供方不是函数');
+  if(HOOKS.has(id)) throw new Error('钩子重复注册：'+id);
+  HOOKS.set(id,fn);
+}
+/** 取提供方；未注册返回 null（可选特性由调用方显式判断） */
+function hookOf(id){ return HOOKS.get(id)||null; }
+/** 调用提供方；未注册返回 undefined（可选特性的"未启用"语义），不抛错 */
+function callHook(id,...args){ const fn=HOOKS.get(id); return fn?fn(...args):undefined; }
+function hookReady(id){ return HOOKS.has(id); }
+/** 必需钩子缺失清单；启动时调用一次，不阻断启动但必须可见 */
+function missingRequiredHooks(){ return REQUIRED_HOOKS.filter(id=>!HOOKS.has(id)); }
+/** 启动断言：装配不完整是 bug，直接抛错而不是让 callHook 静默变成 no-op */
+function assertHooksReady(){
+  const missing=missingRequiredHooks();
+  if(!missing.length) return true;
+  const msg='必需钩子未注册：'+missing.join('、')+'（features 层装配不完整）';
+  try{ console.error(msg); }catch(_){}
+  throw new Error(msg);
+}
+
 /* 点类型的 scaleShape：设置对象“物理尺寸(m)”后按世界坐标渲染（随底图缩放），
  * none=始终屏幕固定图标（纯位置标识）；circle 圆 / square 方 / sector 扇形视场（fov 张角）/ bar 杆 */
 const POINT_SCALE_SHAPES = {none:'仅位置图标', circle:'圆形覆盖', square:'方形区域', sector:'扇形视场', bar:'杆/线段'};

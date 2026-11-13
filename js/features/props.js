@@ -271,7 +271,7 @@ function bindSiteNodeEvents(box){
     setCoord:(i,axis,v)=>{
       const pts=state.site?.shape?.points, n=Number(v);
       if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return false;
-      pts[i][axis==='y'?1:0]=n; return true;
+      pts[i][axis==='y'?1:0]=n; state.site.updatedAt=nowISO(); return true;
     },
     insert:i=>siteInsertNode(i),
     remove:i=>siteRemoveNode(i),
@@ -587,14 +587,14 @@ function bindPropEvents(box,o){
       const bytes=new Uint8Array(await f.arrayBuffer());
       const id=assetIdFor(bytes);
       await assetPut(id,{bytes,mime:f.type||'image/jpeg'});
-      pushHistory(); o.props=o.props||{}; o.props.photoId=id; commitObjectEdit(); renderProps();
+      pushHistory(); o.props=o.props||{}; o.props.photoId=id; commitObjectEdit([o.id]); renderProps();
       toast('照片已附加','success');
     }catch(e){ toast(L('照片保存失败：{msg}',{msg:e.message}),'error'); }
   }));
   box.querySelectorAll('[data-photo-clear]').forEach(btn=>btn.onclick=()=>{
     if(!isEditable(o)) return toast('对象或图层已锁定','warn');
     if(!o.props.photoId) return;
-    pushHistory(); delete o.props.photoId; commitObjectEdit(); renderProps();
+    pushHistory(); delete o.props.photoId; commitObjectEdit([o.id]); renderProps();
   });
   box.querySelectorAll('[data-photo-img]').forEach(async img=>{
     try{

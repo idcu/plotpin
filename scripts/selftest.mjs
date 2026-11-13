@@ -100,6 +100,7 @@ code += `\n;globalThis.__api = {
   get state(){ return state; },
   get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
+  replaceState,
   importJsonFile, openProjectById,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, ensureObjectCapacity, assertProjectWithinLimits, baseObject,
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
@@ -154,6 +155,7 @@ code += `\n;globalThis.__api = {
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
+  HOOKS,
   collabPendingCandidates, collabTokenOfProject, collabPendingKeyFor,
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan, prepareBackgroundBytes,
   createTitleBlock, normalizeTitleBlock, TITLE_BLOCK_FIELDS, TITLE_BLOCK_TEXT_MAX,
@@ -195,6 +197,10 @@ code += `\n;globalThis.__api = {
   collabSweepPeers, COLLAB_PEER_TTL_MS,
   COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY, COLLAB_PENDING_PREFIX, COLLAB_PENDING_NOPID, COLLAB_PENDING_BAK_KEY,
   get collabMode(){ return collabMode; }, set collabMode(v){ collabMode=v; },
+  collabQueueApply,
+  get collabRemoteHistoryUsed(){ return collabRemoteHistoryUsed; },
+  resetCollabSecurity(){ clearTimeout(collabApplyTimer); collabApplyTimer=null; collabApplyPending=null; collabRtcPending=null;
+    collabRtcTrusted=false; collabRtcAskOpen=false; collabRightsShown=false; collabRemoteHistoryUsed=false; collabLastApplyAt=0; },
   get collabReconnectAttempt(){ return collabReconnectAttempt; },
   get collabForeignDropped(){ return collabForeignDropped; },
   get collabPeerCount(){ return collabPeers.size; },
@@ -225,6 +231,7 @@ code += `\n;globalThis.__api = {
   sitePropsHTML, imagePropsHTML,
   drawObject, drawLabel, drawAreaTag, drawScreenTag, surfaceCssSize, markSurfaceSize,
   invalidateStatic, visibleWorldRect, sceneStaticKey, sceneStaticContentKey, panScrollDelta, dragDrawObjects,
+  patchUnionRect, applyPatchRect,
   detectCapabilities, detectRuntimeCapabilities,
   syncActiveFloor, switchFloorData, currentFloorName, currentFloor, floorObjectCount, floorSummaries, persistableState,
   touchProjectUpdated,
@@ -902,6 +909,28 @@ await section("14. 区域参数形状：面积/命中/采样/标签中心", asyn
   eq('标签中心-圆取锚点', api.shapeLabelCenter(circle), [0,0]);
   ok('参数文案-圆形含半径', api.areaParamText(circle).includes('圆形'));
   ok('参数文案-扇形含张角', api.areaParamText(sector).includes('90'));
+
+  /* A1 回归：polygon 形状在面积/周长/命中/包围盒/标签中心上必须是确定值。
+     修复前 areaShapeType 回落 'rect'，对 undefined 的 width/height 取 Math.max → NaN。
+     既有断言保持原样，此处只新增。 */
+  const poly={kind:'rect',x:0,y:0,angle:0,shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}};
+  eq('polygon 轮廓取 shape.points 顶点', api.shapeWorldPoints(poly).length, 4);
+  approx('polygon 面积 100（修复前 NaN）', api.shapeArea(poly), 100, 1e-9);
+  approx('polygon 周长 40（修复前 NaN）', api.shapePerimeter(poly), 40, 1e-9);
+  eq('polygon 命中-内点', api.shapeHit(poly,[5,5]), true);
+  eq('polygon 命中-外点', api.shapeHit(poly,[15,5]), false);
+  eq('polygon 包围盒', api.objectBounds(poly), {minX:0,minY:0,maxX:10,maxY:10});
+  eq('polygon 捕捉包围盒', api.objectSnapBounds(poly), {minX:0,minY:0,maxX:10,maxY:10});
+  eq('polygon 标签中心=顶点质心', api.shapeLabelCenter(poly), [5,5]);
+  const polyDeg={kind:'rect',x:3,y:4,shape:{type:'polygon',points:[[0,0],[1,1]]}};
+  eq('polygon 退化(<3点)面积 0', api.shapeArea(polyDeg), 0);
+  eq('polygon 退化(<3点)周长 0', api.shapePerimeter(polyDeg), 0);
+  eq('polygon 退化(<3点)不命中', api.shapeHit(polyDeg,[0,0]), false);
+  eq('polygon 退化包围盒仍取有效点', api.objectSnapBounds(polyDeg), {minX:0,minY:0,maxX:1,maxY:1});
+  eq('polygon 无有效点包围盒退回锚点', api.objectSnapBounds({kind:'rect',x:3,y:4,shape:{type:'polygon',points:[['x','y']]}}), {minX:3,minY:4,maxX:3,maxY:4});
+  eq('polygon 无有效点标签中心退回锚点', api.shapeLabelCenter({kind:'rect',x:3,y:4,shape:{type:'polygon',points:[]}}), [3,4]);
+  api.rotateShapeByHandle(poly,[10,5],true);
+  eq('polygon 旋转手柄不写锚点/角度', [poly.angle,poly.x,poly.y], [0,0,0]);
 }
 
 });
@@ -4041,6 +4070,48 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     api.resetState();
   }
 
+  /* 39.13b 片2：协作安全默认（权限告知 / 跨设备首快照确认 / 接收端节流 / 撤销栈隔离） */
+  {
+    api.resetState(); api.state.meta.projectId='P-A';
+    const calls=[], proj={schema:api.SCHEMA,objects:[]};
+    const origMerge=sandbox.mergeProjectJSON, origConfirm=sandbox.showConfirm;
+    sandbox.mergeProjectJSON=async (raw,opts)=>{ calls.push(opts||{}); return {updated:1}; };
+    try{
+      /* 同机多标签：不弹确认、自动应用；密集推送只保留最新一份 */
+      api.collabMode='local'; api.resetCollabSecurity();
+      api.collabQueueApply(proj,'P1');
+      api.collabQueueApply(proj,'P1');
+      await new Promise(r=>setTimeout(r,0));
+      eq('S2-同机首份立即应用', calls.length, 1);
+      eq('S2-首次覆盖进撤销栈', calls[0].history, 'overwrite');
+      await new Promise(r=>setTimeout(r,260));
+      eq('S2-节流只应用最新一份', calls.length, 2);
+      eq('S2-后续远端不写历史', calls[1].history, false);
+      eq('S2-撤销栈隔离生效', api.collabRemoteHistoryUsed, true);
+      /* 跨设备直连：首次快照先确认，拒绝则不应用并断开 */
+      calls.length=0; let asked=0;
+      api.collabMode='webrtc'; api.resetCollabSecurity();
+      sandbox.showConfirm=async()=>{ asked++; return false; };
+      api.collabQueueApply(proj,'P2');
+      await new Promise(r=>setTimeout(r,0));
+      eq('S2-跨设备首快照先确认', asked, 1);
+      eq('S2-拒绝后不合并', calls.length, 0);
+      eq('S2-拒绝后断开连接', api.collabMode, null);
+      /* 确认后才应用，同连接内不再重复确认 */
+      api.collabMode='webrtc'; api.resetCollabSecurity();
+      sandbox.showConfirm=async()=>{ asked++; return true; };
+      api.collabQueueApply(proj,'P3');
+      await new Promise(r=>setTimeout(r,0));
+      api.collabQueueApply(proj,'P3');
+      await new Promise(r=>setTimeout(r,0));
+      eq('S2-确认后应用', calls.length, 1);
+      eq('S2-同连接只确认一次', asked, 2);
+    } finally {
+      sandbox.mergeProjectJSON=origMerge; sandbox.showConfirm=origConfirm;
+      api.collabMode=null; api.resetCollabSecurity(); api.resetState();
+    }
+  }
+
   /* 39.14 N-17：冲突统计口径与跨工程消息隔离 */
   {
     api.resetState();
@@ -4994,6 +5065,51 @@ await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", a
   shapeCases.forEach(([name,o])=>{
     ok('裁剪预筛-'+name+'保守盒覆盖真实包围盒', covers(api.objectSnapBounds(o), api.objectBounds(o)));
   });
+
+  /* P1：局部补绘矩形（纯函数，先不接线）——旧∪新并集 / pad / 画布夹取 / 60% 阈值 / 退化输入 */
+  const sameToS=p=>p;
+  const pu=(boxes,opt)=>api.patchUnionRect(boxes,sameToS,800,600,opt);
+  eq('补绘-单盒并集', pu([{old:[100,100,150,150],now:[100,100,150,150]}],{pad:0}).rect, [100,100,50,50]);
+  eq('补绘-跨对象旧∪新并集', pu([
+    {old:[100,100,150,150],now:[200,200,260,240]},
+    {old:[50,50,80,90],now:[50,50,80,90]}
+  ],{pad:0}).rect, [50,50,210,190]);
+  const zoomToS=p=>[p[0]*2+10,100-p[1]*2];
+  eq('补绘-屏幕映射参与', api.patchUnionRect([{old:[0,0,10,10],now:[0,0,10,10]}],zoomToS,800,600,{pad:0}).rect, [10,80,20,20]);
+  const uPad=pu([{old:[100,120,140,160],now:[100,120,140,160]}],{pad:10});
+  eq('补绘-pad 外扩生效', uPad.rect, [90,110,60,60]);
+  eq('补绘-左上夹取到画布内', pu([{old:[-20,-30,40,50],now:[-20,-30,40,50]}],{pad:0}).rect, [0,0,40,50]);
+  eq('补绘-右下夹取到画布内', pu([{old:[760,560,900,700],now:[760,560,900,700]}],{pad:0}).rect, [760,560,40,40]);
+  const uLarge=pu([{old:[0,0,600,600],now:[0,0,600,600]}],{pad:0});
+  eq('补绘-超 60% 放弃局部补绘', uLarge.ok, false);
+  eq('补绘-超阈值原因 large', uLarge.reason, 'large');
+  eq('补绘-空输入拒绝', pu([]).reason, 'empty');
+  eq('补绘-缺旧包围盒拒绝', pu([{now:[0,0,1,1]}]).reason, 'bounds');
+  eq('补绘-缺新包围盒拒绝', pu([{old:[0,0,1,1]}]).reason, 'bounds');
+  eq('补绘-NaN 分量拒绝', pu([{old:[0,0,NaN,1],now:[0,0,1,1]}]).reason, 'bounds');
+  eq('补绘-映射返回非有限拒绝', api.patchUnionRect([{old:[0,0,1,1],now:[0,0,1,1]}],()=>[NaN,0],800,600,{pad:0}).reason, 'bounds');
+  eq('补绘-零画布拒绝', api.patchUnionRect([{old:[0,0,1,1],now:[0,0,1,1]}],sameToS,0,600).reason, 'canvas');
+  eq('补绘-完全在画布外拒绝', pu([{old:[1000,700,1100,800],now:[1000,700,1100,800]}]).reason, 'offscreen');
+
+  /* P1：Canvas 桩——clip / clearRect 的实际矩形必须等于补绘矩形（P3 只扩大重绘 view，不动裁剪） */
+  const calls=[];
+  const stub={
+    save:()=>calls.push(['save']), beginPath:()=>calls.push(['beginPath']),
+    rect:(...a)=>calls.push(['rect',...a]), clip:()=>calls.push(['clip']),
+    clearRect:(...a)=>calls.push(['clearRect',...a]), restore:()=>calls.push(['restore'])
+  };
+  const rp=[12,34,56,78];
+  api.applyPatchRect(stub,rp,()=>calls.push(['paint']));
+  const seq=calls.map(c=>c[0]).join(',');
+  eq('补绘桩-调用顺序 save→rect→clip→clearRect→paint→restore', seq, 'save,beginPath,rect,clip,clearRect,paint,restore');
+  eq('补绘桩-rect 实参=补绘矩形', calls.find(c=>c[0]==='rect').slice(1), rp);
+  eq('补绘桩-clearRect 实参=补绘矩形', calls.find(c=>c[0]==='clearRect').slice(1), rp);
+  ok('补绘桩-clip 紧跟 rect（裁剪区=补绘矩形）', seq.indexOf('rect,clip')>=0);
+  const rc=[];
+  api.applyPatchRect({save(){},beginPath(){},rect:(...a)=>rc.push(a),clip(){},clearRect:(...a)=>rc.push(a),restore(){}},uPad.rect);
+  eq('补绘桩-裁剪与清理同源', rc[0], rc[1]);
+  eq('补绘桩-两次矩形等于 patchUnionRect 返回值', rc[0], uPad.rect);
+
   api.resetState();
 }
 
@@ -5575,6 +5691,25 @@ await section("53. 多楼层 / 多底图：数据切换、持久化裁剪、迁�
   api.state.site.visible=false;
   eq('双槽-隐藏场地不导出 DXF', api.siteDxfEntities().length, 0);
   ok('双槽-隐藏场地不渲染 SVG', !api.buildSceneSvg().includes('<polygon points='));
+
+  /* 片B：状态唯一写入口的两条硬约束。用抛错守卫而不是计数断言，
+     避免新增断言数导致 README/docs 计数漂移（文档由另一路维护）。 */
+  const origASL=sandbox.afterStateLoaded;
+  let aslCalls=0;
+  sandbox.afterStateLoaded=async()=>{ aslCalls++; return true; };
+  try{
+    const adopted=api.createInitialState();
+    await api.replaceState(adopted,{fit:false});
+    const adoptedFloor=adopted.floors.find(f=>f.id===adopted.activeFloorId);
+    if(!adoptedFloor||adoptedFloor.objects!==adopted.objects) throw new Error('replaceState 后活动楼层 objects 未与顶层同一引用');
+    if(aslCalls!==1) throw new Error('replaceState 非 quiet 未触发 afterStateLoaded');
+    const quietState=api.createInitialState();
+    await api.replaceState(quietState,{quiet:true});
+    if(aslCalls!==1) throw new Error('replaceState quiet 触发了 afterStateLoaded');
+    if(api.state!==quietState) throw new Error('replaceState quiet 未完成状态替换');
+  }finally{
+    sandbox.afterStateLoaded=origASL;
+  }
   api.resetState();
 }
 
@@ -6893,6 +7028,42 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   const floorMetaM=M(floorMetaA,floorMetaB);
   eq('合并-楼层元数据覆盖统计', floorMetaM.stats.floorMetaUpdated, 1);
   eq('合并-楼层名较新胜出', floorMetaM.project.floors[0].name, '2F');
+
+  /* A3：远端配置类字段仍「本地优先、远端仅补缺」（数据结果不变），但必须逐字段报告，不允许静默。
+     报告在 stats 之外（config 为 mergeProjectData 的第三个返回值），stats 形状保持不变。 */
+  const cfgA=P([], {
+    meta:{name:'本地工程',projectId:'PRJ_LOCAL',createdAt:T1,updatedAt:T2,
+      titleBlock:{enabled:true,frame:true,scaleBar:true,legend:true,fields:{projectName:'本地工程',drawingNo:'A-1',scale:'',date:'',version:'V1.0',designer:'',checker:'',unitName:''}}},
+    settings:{unit:'m',snap:true,pdfDpi:150},
+    rules:{version:1,scope:'all',overlap:{enabled:true,tolerance:0.05},spacing:{enabled:true,types:{'point.marker':1.5}},bounds:{enabled:true,tolerance:0.05}}
+  });
+  const cfgB=P([], {
+    meta:{name:'远端工程',projectId:'PRJ_LOCAL',createdAt:T1,updatedAt:T2,
+      titleBlock:{enabled:true,frame:true,scaleBar:true,legend:true,fields:{projectName:'本地工程',drawingNo:'A-1',scale:'',date:'',version:'V1.0',designer:'张三',checker:'',unitName:''}}},
+    settings:{unit:'m',snap:false,pdfDpi:300,lang:'en'},
+    rules:{version:1,scope:'all',overlap:{enabled:true,tolerance:0.1},spacing:{enabled:true,types:{'point.marker':2.5,'line.polyline':1}},bounds:{enabled:true,tolerance:0.1}},
+    layers:[{id:'layer.default',name:'远端图层',visible:false}],
+    objectTypes:[{id:'custom.type',kind:'point',name:'远端类型',color:'#654321',icon:'custom'}]
+  });
+  const mc=M(cfgA,cfgB);
+  eq('A3 配置-本地 meta.name 保持', mc.project.meta.name, '本地工程');
+  eq('A3 配置-本地图框字段保持', mc.project.meta.titleBlock.fields.designer, '');
+  eq('A3 配置-本地设置保持', mc.project.settings.snap, true);
+  eq('A3 配置-本地规则保持', mc.project.rules.spacing.types['point.marker'], 1.5);
+  eq('A3 配置-本地图层定义保持', mc.project.layers.find(l=>l.id==='layer.default').name, '默认图层');
+  eq('A3 配置-本地类型定义保持', mc.project.objectTypes.find(t=>t.id==='custom.type').color, '#123456');
+  eq('A3 配置-远端独有设置补缺', mc.project.settings.lang, 'en');
+  ok('A3 报告-记录未采纳', mc.config.kept>=8);
+  eq('A3 报告-设置明细', mc.config.items.some(i=>i.scope==='settings'&&i.field==='snap'), true);
+  eq('A3 报告-图框字段明细', mc.config.items.some(i=>i.scope==='titleBlock'&&i.field==='designer'), true);
+  eq('A3 报告-规则类型明细', mc.config.items.some(i=>i.scope==='rules.types'&&i.field==='point.marker'), true);
+  eq('A3 报告-图层字段明细', mc.config.items.some(i=>i.scope==='layer'&&i.id==='layer.default'&&i.field==='name'), true);
+  eq('A3 报告-类型字段明细', mc.config.items.some(i=>i.scope==='type'&&i.id==='custom.type'&&i.field==='color'), true);
+  ok('A3 报告-远端独有键计补缺', mc.config.adopted>=2);
+  eq('A3 报告-不改变 stats 形状', Object.keys(mc.stats).sort().join(','), Object.keys(zero).sort().join(','));
+  const mcSame=M(cfgA, JSON.parse(JSON.stringify(cfgA)));
+  eq('A3 无差异-报告为空', mcSame.config, {kept:0,adopted:0,items:[]});
+  eq('A3 无差异-统计仍为零', mcSame.stats, zero);
   eq('合并-楼层元数据无覆盖为零', M(floorMetaA,floorMetaA).stats.floorMetaUpdated, 0);
 
   const m6 = M(P([O('A', T1, 1)]), P([O('A', T1, 2)]));
@@ -7183,6 +7354,11 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   eq('合并入口-历史栈增加', api.history.past.length, histBefore + 1);
   eq('合并入口-不接管他人工程绑定', api.state.meta.projectId, 'PRJ_LOCAL');
   eq('合并入口-工程名保持本地', api.state.meta.name, '未命名图纸工程');
+  /* A3：报告是可枚举字段，spread / structuredClone / JSON 序列化都不得静默丢失；无差异时不新增键 */
+  eq('A3 入口-报告随 spread 保留', ({...yesStats}).config.kept, yesStats.config.kept);
+  eq('A3 入口-报告随 structuredClone 保留', structuredClone(yesStats).config.kept, yesStats.config.kept);
+  eq('A3 入口-报告随 JSON 序列化保留', JSON.parse(JSON.stringify(yesStats)).config.kept, yesStats.config.kept);
+  eq('A3 入口-无差异不带 config 键', 'config' in noStats, false);
 
   /* MERGE-10：图层/类型墓碑经入口删除后，悬空引用由 migrateProject 统一迁移 */
   api.resetState();
@@ -7973,10 +8149,10 @@ await section("67. 变更提交协议 markDirty：清覆盖率/落盘/广播按 
 {
   api.resetState();
   const realSave=api.scheduleSave;
-  const realBroadcast=api.collabOnLocalChange;
+  const realBroadcast=api.HOOKS.get('collab.onLocalChange');
   let saves=0, broadcasts=0;
   api.scheduleSave=()=>{saves++;};
-  api.collabOnLocalChange=()=>{broadcasts++;};
+  api.HOOKS.set('collab.onLocalChange',()=>{broadcasts++;});
 
   api.coverageResult={stale:true};
   api.markDirty('object');
@@ -8018,7 +8194,7 @@ await section("67. 变更提交协议 markDirty：清覆盖率/落盘/广播按 
   ok('commitObjectEdit 清覆盖率', api.coverageResult===null);
 
   api.scheduleSave=realSave;
-  api.collabOnLocalChange=realBroadcast;
+  api.HOOKS.set('collab.onLocalChange',realBroadcast);
   api.coverageResult=null;
   api.resetState();
 }
@@ -9507,14 +9683,14 @@ await section("P2-CORE 批次 4：核心瞬态边界", async () => {
   const badDim={minX:0,minY:0,maxX:10,maxY:10,w:10,h:10};
   const badCtx={save(){},restore(){},transform(){},drawImage(){throw new Error('boom');},
     beginPath(){},moveTo(){},lineTo(){},closePath(){},stroke(){}};
-  let toastCount=0; const prevToast=sandbox.toast; sandbox.toast=()=>{ toastCount++; };
+  let toastCount=0; const prevToast=api.HOOKS.get('ui.toast'); api.HOOKS.set('ui.toast',()=>{ toastCount++; });
   api.setBgImage({width:10,height:10}); api.setBgDataUrl('data:image/png;base64,AA==');
   api.drawImageBackground(badCtx,{zoom:1,panX:0,panY:0},badDim,badBg);
   eq('CORE-P2-18 绘制失败置 error', api.bgImageState, 'error');
   eq('CORE-P2-18 首次失败提示一次', toastCount, 1);
   api.drawImageBackground(badCtx,{zoom:1,panX:0,panY:0},badDim,badBg);
   eq('CORE-P2-18 连续失败不刷屏', toastCount, 1);
-  sandbox.toast=prevToast; api.setBgImage(null); api.setBgDataUrl(''); api.resetState();
+  api.HOOKS.set('ui.toast',prevToast); api.setBgImage(null); api.setBgDataUrl(''); api.resetState();
 
   /* CORE-P2-19：清空覆盖率结果必须同步释放离屏图层缓存 */
   const covRes={regions:[{nx:2,ny:1,grid:[1,0]}]};
@@ -9866,6 +10042,13 @@ await section("V-3a 图片 XObject + SMask / 文字 DPI 分级 / 图片落位命
   eq('V-3a 资源字典登记', s.indexOf('/XObject << /Im0 5 0 R >>') >= 0, true);
   eq('V-3a RGB 流长度=3', s.indexOf('/Length 3 ') >= 0, true);
   eq('V-3a 掩码流长度=1', s.indexOf('/Length 1 ') >= 0, true);
+  /* A8：JPEG 与 alpha 同时存在时不得分配未写出的掩码号；无 alpha 时不得引用 /SMask 0 0 R */
+  const imgJ = { w: 1, h: 1, jpeg: new Uint8Array([1, 2, 3]), alpha: new Uint8Array([128]) };
+  const sJ = String.fromCharCode.apply(null, Array.from(P.docPages(10, 10, [{ body: P.image('Im0', 0, 0, 10, 10), images: [imgJ] }])));
+  ok('A8-alpha+jpeg 不引用未写掩码', sJ.indexOf('/SMask') < 0 && (sJ.match(/ 0 obj/g) || []).length === 5);
+  const imgR = { w: 1, h: 1, rgb: new Uint8Array([1, 2, 3]) };
+  const sR = String.fromCharCode.apply(null, Array.from(P.docPages(10, 10, [{ body: P.image('Im0', 0, 0, 10, 10), images: [imgR] }])));
+  ok('A8-无 alpha 不写非法 SMask', sR.indexOf('/SMask') < 0 && (sR.match(/ 0 obj/g) || []).length === 5);
   const xref = Number(/startxref\n(\d+)/.exec(s)[1]);
   eq('V-3a startxref 指向 xref', s.slice(xref, xref + 4), 'xref');
   eq('V-3a xref 条目数=对象数', (s.slice(xref).match(/ 00000 n /g) || []).length, 6);

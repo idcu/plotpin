@@ -16,6 +16,63 @@ function mergeRuleSide(local, incoming){
   if(b&&Object.keys(b).length) return b;
   return {};
 }
+/* -------------------- 配置差异报告（A3） --------------------
+ * 合并结果不变：配置类字段仍「本地优先、远端仅补缺」。本报告只回答「远端哪些配置没有被采纳」，
+ * 供界面显示（此前 stats 没有配置类计数，只剩对象/楼层统计 → 配置被丢时界面显示「无变化」）。
+ * 报告是 mergeProjectData 的第三个返回值，刻意不塞进 stats：§59 对 stats 做整对象深比较。
+ * items 最多保留 MERGE_CONFIG_ITEM_LIMIT 条用于明细，kept/adopted 始终是精确总数。 */
+const MERGE_CONFIG_ITEM_LIMIT=40;
+/** 逐键比较：双侧都有且不同 → kept（本地胜）；仅远端有 → adopted；仅本地有或相同 → 不记。
+ *  keys 省略时取两侧键并集；报告里的 items 只留前 N 条明细，kept/adopted 始终精确。 */
+function mergeConfigKeys(a,b,scope,id,report,keys,skip){
+  a=a&&typeof a==='object'?a:{}; b=b&&typeof b==='object'?b:{};
+  for(const k of keys||new Set([...Object.keys(a),...Object.keys(b)])){
+    if(skip&&skip.has(k)) continue;   /* 系统标记/落盘归一字段不是用户配置 */
+    const inA=k in a, inB=k in b;
+    if(!(inA&&inB?JSON.stringify(a[k])!==JSON.stringify(b[k]):inB)) continue;
+    if(inA) report.kept++; else report.adopted++;
+    if(report.items.length<MERGE_CONFIG_ITEM_LIMIT)
+      report.items.push(id?{scope,id,field:k}:{scope,field:k});
+  }
+}
+function mergeConfigReport(A,B){
+  const r={kept:0,adopted:0,items:[]};
+  /* 身份/时间字段不参与配置差异：createdAt 天然不同，updatedAt 已按较新者收敛 */
+  mergeConfigKeys(A.meta,B.meta,'meta',null,r,
+    Object.keys(Object.assign({},A.meta,B.meta)).filter(k=>!['id','projectId','createdAt','updatedAt','titleBlock'].includes(k)));
+  const ta=A.meta&&A.meta.titleBlock, tb=B.meta&&B.meta.titleBlock;
+  if(ta&&typeof ta==='object'&&tb&&typeof tb==='object'){
+    mergeConfigKeys(ta,tb,'titleBlock',null,r,['enabled','frame','scaleBar','legend']);
+    mergeConfigKeys(ta.fields,tb.fields,'titleBlock',null,r,TITLE_BLOCK_FIELDS.map(d=>d.key));
+  }
+  mergeConfigKeys(A.settings,B.settings,'settings',null,r,SETTINGS_KEYS);
+  const ra=A.rules, rb=B.rules;
+  mergeConfigKeys(ra,rb,'rules',null,r,['version','scope']);
+  ['overlap','bounds'].forEach(k=>mergeConfigKeys(ra&&ra[k],rb&&rb[k],'rules',null,r,['enabled','tolerance']));
+  mergeConfigKeys(ra&&ra.spacing,rb&&rb.spacing,'rules',null,r,['enabled']);
+  mergeConfigKeys(ra&&ra.spacing&&ra.spacing.types,rb&&rb.spacing&&rb.spacing.types,'rules.types',null,r);
+  const list=(la0,lb0,scope,skip)=>{
+    const byId=arr=>new Map((Array.isArray(arr)?arr:[]).filter(x=>x&&x.id!=null).map(x=>[String(x.id),x]));
+    const la=byId(la0), lb=byId(lb0);
+    lb.forEach((item,id)=>{
+      if(la.has(id)){ mergeConfigKeys(la.get(id),item,scope,id,r,null,skip); return; }
+      r.adopted++;
+      if(r.items.length<MERGE_CONFIG_ITEM_LIMIT) r.items.push({scope,id,field:'*'});
+    });
+  };
+  list(A.layers,B.layers,'layer');
+  /* builtin 是系统标记；defaultStyle 每次落盘都被持久化归一（补缺省键），不是用户可编辑配置 */
+  list(A.objectTypes,B.objectTypes,'type',new Set(['builtin','defaultStyle']));
+  return r;
+}
+/** 配置差异报告 → 界面附注（含前导「 · 」）；无差异返回空串。协作状态栏与合并提示共用同一拼装。 */
+function mergeConfigText(stats){
+  const c=stats&&stats.config;
+  if(!c) return '';
+  if(c.error) return ` · ${L('配置差异检查失败：{msg}',{msg:c.error})}`;
+  return (c.kept?` · ${L('配置未采纳 {n} 项（本地优先）',{n:c.kept})}`:'')
+    +(c.adopted?` · ${L('配置已补缺 {n} 项',{n:c.adopted})}`:'');
+}
 function mergeProjectData(currentRaw, incomingRaw){
   const A = mergeNormalizeSide(currentRaw);
   const B = mergeNormalizeSide(incomingRaw);
@@ -103,7 +160,11 @@ function mergeProjectData(currentRaw, incomingRaw){
     activeFloorId,
     tombstones
   };
-  return { project, stats };
+  /* 配置差异报告：只统计「远端未生效/已补缺」，不改变 project；异常时不阻断合并 */
+  let config;
+  try{ config=mergeConfigReport(A,B); }
+  catch(e){ config={kept:0,adopted:0,items:[],error:String(e&&e.message||e)}; }
+  return { project, stats, config };
 }
 
 /** 某一侧工程 → 统一的楼层视图；当前楼层数据取顶层 background/objects（与持久化格式一致） */

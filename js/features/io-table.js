@@ -533,7 +533,8 @@ function applyTableImport(plan){
     commitChange(L('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
       {updated,replaced,created}));
   }catch(err){
-    state=materializeHistoryState(backup);
+    /* 导入异常回滚：走统一入口补上叠放缓存/静态层/取景基准与 UI 刷新 */
+    replaceState(materializeHistoryState(backup),{fit:false});
     if(history.past.length) history.past.pop();
     history.future=prevFuture;
     selectedIds.clear();

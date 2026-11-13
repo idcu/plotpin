@@ -433,18 +433,6 @@ function areaParamText(o){
   if(tt===PARA) return `${L('平行四边形')} ${fmt(o.width)}×${fmt(o.height)}m / ${L('倾角')} ${Math.round(parallelogramSkew(sh))}°`;
   return `${fmt(o.width)}×${fmt(o.height)} / ${Math.round(o.angle)}°`;
 }
-function objectArea(o){
-  if(o.kind==='rect') return shapeArea(o);
-  if(o.closed&&o.points.length>=3) return polygonArea(o.points);
-  if(o.kind==='dimension'&&o.subtype==='area') return polygonArea(o.points);
-  return 0;
-}
-function objectLength(o){
-  if(!o.points||o.points.length<2) return 0;
-  let l=polylineLength(o.points);
-  if(o.closed) l+=dist(o.points.at(-1),o.points[0]);
-  return l;
-}
 /** RT-P2-14：统计页越界与规则页共用场地包围盒和容差；无可见场地时退回图片/世界取景框 */
 function issueBoundsFrame(){
   const site=state.site;

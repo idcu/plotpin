@@ -677,6 +677,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}':
       'Merge complete: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{extra}{conflict}',
     '；冲突 {n} 项按较新版本保留': '; {n} conflicts kept by the newer version',
+    '配置未采纳 {n} 项（本地优先）': '{n} config changes not applied (local wins)',
+    '配置已补缺 {n} 项': '{n} config items filled from peer',
+    '配置差异检查失败：{msg}': 'Config diff check failed: {msg}',
     '已对齐 {n} 个对象': 'Aligned {n} objects',
     '已分布 {n} 个对象': 'Distributed {n} objects',
     '已重新编号 {n} 个对象': 'Renumbered {n} objects',
@@ -719,7 +722,13 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已导入 {n} 个符号（仅写入当前工程）': 'Imported {n} symbols (this project only)',
     '符号 JSON 导入失败：{msg}': 'Symbol JSON import failed: {msg}',
     /* V-5 参照版（含占位） */
-    '参照版加载失败：{msg}': 'reference load failed: {msg}'
+    '参照版加载失败：{msg}': 'reference load failed: {msg}',
+    /* 片2 协作安全默认 / 导入与图层类型的整句缺口 */
+    '已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表': 'Skipped {n} sheets with more than 50,000 rows; only usable worksheets were imported',
+    '图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？':
+      'Layer "{layer}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
+    '类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？':
+      'Type "{type}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?'
   };
   /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
   function fillTemplate(text, params) {
@@ -871,13 +880,15 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     /* N-16：断线待发队列与自动重连 */
     '离线待发快照超过 {n} KB，未写入本地队列（仍在内存，重连后补发）':
       'Offline pending snapshot exceeds {n} KB and was not written to the local queue (kept in memory; will be sent after reconnect)',
-    '离线待发队列写入失败：':'Failed to write the offline pending queue: ',
+    '离线待发队列写入失败：{msg}':'Failed to write the offline pending queue: {msg}',
     '{s} 秒后自动重连（第 {n} 次）':'Reconnecting automatically in {s}s (attempt {n})',
     '跨设备连接已断开：请重新交换邀请串（WebRTC 无信令通道，无法自动重连）':
       'Cross-device connection lost: exchange invite strings again (WebRTC has no signaling channel, so auto-reconnect is unavailable)',
     /* N-17：冲突可见性与跨工程隔离 */
     '冲突 {n} 条（保留较新值）':'{n} conflict(s) (newer value kept)',
     '已保留较新值':'newer value kept',
+    '已标记交付':'Marked as delivered', '已取消交付':'Delivery mark removed',
+    '楼层名称「{name}」已存在，请换一个名称':'Floor name "{name}" already exists; choose another name',
     '已丢弃跨工程消息 {n} 条':'Dropped {n} cross-project message(s)',
     '已丢弃跨工程协作消息（{got} ≠ {want}）':'Dropped cross-project collaboration message ({got} ≠ {want})',
     '邀请串':'Invite string',
@@ -997,7 +1008,15 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '完全越出场地边界':'Completely outside the site boundary',
     '未设置矢量场地':'No vector site set', '场地边界无效':'Invalid site boundary',
     '规则异常：{msg}':'Rule error: {msg}',
-    '仅导出前 {n} 条（共 {full} 条）':'Exporting first {n} of {full}'
+    '仅导出前 {n} 条（共 {full} 条）':'Exporting first {n} of {full}',
+    /* 片2 协作安全默认 + 其余整句缺口 */
+    '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list is rebuilt from records in real time',
+    '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
+    '对端已连接并推送工程快照。确认后对方拥有本工程完整编辑权：可覆盖、删除、清空对象与楼层、修改配置。是否应用并继续同步？':'The peer connected and sent a project snapshot. After confirming, it has full edit rights to this project: it can overwrite, delete or clear objects and floors, and change settings. Apply and continue syncing?',
+    '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
+    'PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）':'No usable graphics found on PDF page 1 (only page 1 is imported; pages are not merged; a scanned image may lack embedded graphics or use unsupported compression)',
+    '浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存':'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
+    '该类型仍被对象使用，且没有可迁移的同类内置类型':'This type is still used by objects, and there is no migratable built-in type of the same kind'
   };
   Object.assign(PHRASES, MORE);
 

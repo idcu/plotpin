@@ -8,10 +8,10 @@ $('newBtn').onclick=async()=>{
   /* 替换现场前强制落盘：租约被占用或保存失败时中止新建，避免静默丢最后一次编辑（P2-A3） */
   try{ await flushPendingSave(); }
   catch(e){ toast(L('操作失败：{msg}',{msg:e.message}),'error'); return; }
-  state=createInitialState(); selectedIds.clear(); history={past:[],future:[]};
+  replaceState(createInitialState()); selectedIds.clear(); history={past:[],future:[]};
   /* 只回收「任何命名空间都不再引用」的资产：其他工程库记录仍可达，绝不清空整库 */
   pruneBgAssets().catch(()=>{});
-  afterStateLoaded(); scheduleSave(); toast('已新建工程','success');
+  scheduleSave(); toast('已新建工程','success');
 };
 /* 清空当前楼层：图片底图 / 矢量场地 / 业务对象与标注 / 校准草稿 / 选中态 / 取景框，
    先二次确认并 pushHistory，清空可用 Ctrl+Z 整体撤销 */
@@ -139,10 +139,13 @@ async function openProjectLibrary(){
         closeModal();
         const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded||stats.layersDeleted||stats.typesDeleted;
         const conflict=stats.conflicts?L('；冲突 {n} 项按较新版本保留',{n:stats.conflicts}):'';
+        const cfg=stats.config||{};
+        /* A3：配置差异必须可见；报告异常也不阻断合并，只提示 */
+        const configNote=mergeConfigText(stats);
         const extra=(stats.layersDeleted||stats.typesDeleted)?' · '+L('图层')+' -'+stats.layersDeleted+' · '+L('类型')+' -'+stats.typesDeleted:'';
         toast(L('合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}',
-          {added:stats.added,updated:stats.updated,deleted:stats.deleted,floorsAdded:stats.floorsAdded,extra,conflict}),
-          changed?'success':'warn');
+          {added:stats.added,updated:stats.updated,deleted:stats.deleted,floorsAdded:stats.floorsAdded,extra:extra+configNote,conflict}),
+          (changed||configNote)?(cfg.kept||cfg.error?'warn':'success'):'warn');
       }catch(e){ toast(L('合并失败：{msg}',{msg:e.message}),'error'); }
     };
     input.click();

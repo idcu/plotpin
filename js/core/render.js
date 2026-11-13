@@ -212,6 +212,55 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
       staticBounds.set(o.id,[bnd.minX,bnd.minY,bnd.maxX,bnd.maxY]);
     });
 }
+/**
+ * P1：局部补绘矩形（纯函数）——旧包围盒 ∪ 新包围盒 → 屏幕矩形 → 外扩 pad → 画布夹取 → 面积阈值。
+ * 每个条目必须同时给出旧、新世界包围盒：新对象没有旧盒（位图里可能残留创建前的像素）、
+ * 已删除/不可见对象没有新盒，都无法推出「需要清理并重画」的完整区域，直接拒绝，由调用方整层重建。
+ * @param {Array<{old:number[],now:number[]}>} boxes 世界包围盒 [minX,minY,maxX,maxY]
+ * @param {function(number[]):number[]} toS 世界→屏幕
+ * @param {number} cssW 画布 CSS 宽
+ * @param {number} cssH 画布 CSS 高
+ * @param {{pad?:number,ratio?:number}} [opt] pad 默认 96px；ratio 默认 0.6（超过即放弃局部补绘）
+ * @returns {{ok:true,rect:number[]}|{ok:false,reason:string}}
+ */
+function patchUnionRect(boxes,toS,cssW,cssH,opt){
+  const pad=opt&&Number.isFinite(opt.pad)?opt.pad:96;
+  const ratio=opt&&Number.isFinite(opt.ratio)?opt.ratio:.6;
+  if(!Array.isArray(boxes)||!boxes.length) return {ok:false,reason:'empty'};
+  if(!(cssW>0)||!(cssH>0)) return {ok:false,reason:'canvas'};
+  const boxOk=b=>Array.isArray(b)&&b.length>=4
+    &&Number.isFinite(b[0])&&Number.isFinite(b[1])&&Number.isFinite(b[2])&&Number.isFinite(b[3]);
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const b of boxes){
+    if(!b||!boxOk(b.old)||!boxOk(b.now)) return {ok:false,reason:'bounds'};
+    for(const w of [b.old,b.now]){
+      const a=toS([w[0],w[1]]), c=toS([w[2],w[3]]);
+      if(!a||!c||!Number.isFinite(a[0])||!Number.isFinite(a[1])
+        ||!Number.isFinite(c[0])||!Number.isFinite(c[1])) return {ok:false,reason:'bounds'};
+      x0=Math.min(x0,a[0],c[0]); x1=Math.max(x1,a[0],c[0]);
+      y0=Math.min(y0,a[1],c[1]); y1=Math.max(y1,a[1],c[1]);
+    }
+  }
+  const px=Math.max(0,Math.floor(x0-pad)), py=Math.max(0,Math.floor(y0-pad));
+  const pw=Math.min(cssW,Math.ceil(x1+pad))-px, ph=Math.min(cssH,Math.ceil(y1+pad))-py;
+  if(!(pw>0)||!(ph>0)) return {ok:false,reason:'offscreen'};
+  if(pw*ph>cssW*cssH*ratio) return {ok:false,reason:'large'};
+  return {ok:true,rect:[px,py,pw,ph]};
+}
+/**
+ * P1：局部补绘的画布操作——裁剪区与清理区**恒等于**同一个矩形。
+ * P3 允许扩大重绘 view（把溢出到矩形内的邻居标签重画），但不得扩大裁剪/清理，
+ * 否则矩形外的旧内容会被带进可见区。
+ * @param {CanvasRenderingContext2D} sc
+ * @param {number[]} rect [x,y,w,h]
+ * @param {function():void} [paint]
+ */
+function applyPatchRect(sc,rect,paint){
+  sc.save(); sc.beginPath(); sc.rect(rect[0],rect[1],rect[2],rect[3]); sc.clip();
+  sc.clearRect(rect[0],rect[1],rect[2],rect[3]);
+  if(paint) paint();
+  sc.restore();
+}
 /** R-09：局部重绘——属性面板逐键编辑时只按受影响对象的屏幕矩形修补静态位图，
  *  把每次击键的静态层成本从 O(全部对象) 降到 O(矩形内对象)。
  *  任一前提不成立（位图缺失/视口已变/对象从未绘制过/区域过大/正在拖拽/有覆盖率叠加）
@@ -223,26 +272,27 @@ function patchStaticObjects(ids){
   if(staticCanvas.width!==Math.max(1,Math.round(cssW*k))||staticCanvas.height!==Math.max(1,Math.round(cssH*k))) return false;
   const list=ids instanceof Map?Array.from(ids.keys()):Array.from(ids||[]);
   if(!list.length||list.length>32) return false;
-  const d=worldDims(), toS=p=>w2s(p,v,d), pad=96;   /* 预留标签/图标溢出，避免旧字残影 */
-  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  const d=worldDims(), toS=p=>w2s(p,v,d), pad=96;
+  const idx=objectIndexById(), boxes=[];
   for(const id of list){
-    const b=staticBounds.get(id);
-    if(!b) return false;                            /* 未记录包围盒：无法确定清理范围 */
-    const a=toS([b[0],b[1]]), c=toS([b[2],b[3]]);
-    x0=Math.min(x0,a[0],c[0]); x1=Math.max(x1,a[0],c[0]);
-    y0=Math.min(y0,a[1],c[1]); y1=Math.max(y1,a[1],c[1]);
+    const old=staticBounds.get(id);
+    /* 新对象没有旧包围盒（位图里可能残留创建前的像素）：无法推出需要清理的区域 → 整层重建 */
+    if(!old) return false;
+    const o=idx.get(id);
+    if(!o) return false;
+    const nb=objectSnapBounds(o);
+    boxes.push({old,now:[nb.minX,nb.minY,nb.maxX,nb.maxY]});
   }
-  const px=Math.max(0,Math.floor(x0-pad)), py=Math.max(0,Math.floor(y0-pad));
-  const pw=Math.min(cssW,Math.ceil(x1+pad))-px, ph=Math.min(cssH,Math.ceil(y1+pad))-py;
-  if(pw<=0||ph<=0||pw*ph>cssW*cssH*0.6) return false;
-  const sc=ensureStaticLayer(cssW,cssH);
-  const ia=s2w([px,py],v,d), ib=s2w([px+pw,py+ph],v,d);
+  /* 旧 ∪ 新：对象移动/放大超出旧盒+pad 时，新位置也必须落在清理并重画的矩形内 */
+  const p=patchUnionRect(boxes,toS,cssW,cssH,{pad});
+  if(!p.ok) return false;
+  const r=p.rect, sc=ensureStaticLayer(cssW,cssH);
+  /* P3：重绘 view 在补绘矩形外再扩 pad，让锚点落在矩形外、标签却溢入矩形的邻居对象一起重画；
+     clip/clearRect 仍严格等于 r（applyPatchRect），矩形外的旧内容不会被带进来。 */
+  const ia=s2w([r[0]-pad,r[1]-pad],v,d), ib=s2w([r[0]+r[2]+pad,r[1]+r[3]+pad],v,d);
   const view={minX:Math.min(ia[0],ib[0]),maxX:Math.max(ia[0],ib[0]),minY:Math.min(ia[1],ib[1]),maxY:Math.max(ia[1],ib[1])};
   const iconBoost=Number(state.settings.markerScale)||1;
-  sc.save(); sc.beginPath(); sc.rect(px,py,pw,ph); sc.clip();
-  sc.clearRect(px,py,pw,ph);
-  drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,1,null,view,null);
-  sc.restore();
+  applyPatchRect(sc,r,()=>drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,1,null,view,null));
   return true;
 }
 /** 动态层待绘对象：按 id 直取、过滤失效引用并按 z 升序（P2-4，取代全量 filter 扫描） */
@@ -601,7 +651,7 @@ function drawSite(c,v,toS){
 function noteBgImageError(){
   if(bgImageState==='error'&&bgImageErrorNotified) return false;
   bgImageState='error'; bgImageErrorNotified=true;
-  if(typeof toast==='function') toast('底图绘制失败：图片可能已损坏，请重新导入','warn');
+  callHook('ui.toast','底图绘制失败：图片可能已损坏，请重新导入','warn');
   return true;
 }
 function drawImageBackground(c,v,d,bg){

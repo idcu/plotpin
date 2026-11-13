@@ -261,6 +261,10 @@ function objectSnapBounds(o,out){
     out.minX=out.maxX=o.x; out.minY=out.maxY=o.y; return out;
   }
   if(o.kind==='rect'){
+    if(isPolygonShape(o)){
+      if(pointBounds(polygonShapePoints(o),out)) return out;
+      out.minX=out.maxX=Number(o.x)||0; out.minY=out.maxY=Number(o.y)||0; return out;
+    }
     const tt=areaShapeType(o);
     if(tt==='rect'||tt===PARA){
       if(tt==='rect'&&!(o.angle||0)){
@@ -345,6 +349,23 @@ function areaShapeType(o){
   const t=o&&o.shape&&o.shape.type;
   return (t===CIR||t===ELL||t===SEC||t===PARA)?t:'rect';
 }
+/** 是否为多边形形状。areaShapeType 有意不返回 'polygon'：该返回值被渲染/属性/导入导出等
+ *  按 rect 参数（width/height/r/rx/ry）分派的调用点共用，改成 'polygon' 会把缺参扩散到各处；
+ *  因此 polygon 只在明确需要顶点的几何函数内前置分流。 */
+function isPolygonShape(o){ return !!(o&&o.shape&&o.shape.type==='polygon'); }
+/** 多边形形状顶点（世界坐标米）：优先 shape.points，兼容对象级 points。
+ *  逐点数值化并丢弃非有限坐标；是否构成多边形（>=3 点）由调用方按语义判定——
+ *  面积/周长/命中/质心要求 >=3，包围盒对 1–2 个有效点同样成立。 */
+function polygonShapePoints(o){
+  const src=Array.isArray(o&&o.shape&&o.shape.points)?o.shape.points
+    :(Array.isArray(o&&o.points)?o.points:[]);
+  const pts=[];
+  for(const p of src){
+    const x=Number(p&&p[0]), y=Number(p&&p[1]);
+    if(Number.isFinite(x)&&Number.isFinite(y)) pts.push([x,y]);
+  }
+  return pts;
+}
 /** 扇形有效张角（0–360°）；a0/a1 为世界系绝对角度（Y 向上），相等时视为整圆 */
 function sectorSweep(sh){ return __geo.sectorSweep(sh&&sh.a0,sh&&sh.a1); }
 /** 扇形绘制区间（画布/SVG/控制点共用）：起角 a0 与归一后的终点角 a1=a0+sweep，跨 0° 不会反向 */
@@ -356,6 +377,7 @@ function sectorArcRange(sh){
 function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){ return __geo.sectorArcPoints(cx,cy,r,a0,sweep,seg); }
 /** 区域形状 → 闭合世界多边形顶点（扇形首点为圆心）；渲染/包围盒/框选/SVG 共用 */
 function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
+  if(isPolygonShape(o)) return polygonShapePoints(o);   /* 顶点即世界坐标，无需 width/height */
   const tt=areaShapeType(o);
   if(tt==='rect'||tt===PARA) return rectPoints(o);
   const sh=o.shape;
@@ -389,6 +411,10 @@ function outlineOf(o){
 }
 /** 世界坐标命中（米） */
 function shapeHit(o,p){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3&&pointInPolygon(p,ps);   /* 退化多边形不命中，不产生 NaN 判定 */
+  }
   const tt=areaShapeType(o);
   if(tt==='rect'||tt===PARA) return pointInPolygon(p,rectPoints(o));
   const sh=o.shape, dx=p[0]-o.x, dy=p[1]-o.y;
@@ -408,6 +434,10 @@ function shapeHit(o,p){
 }
 /** 面积（㎡），各形状精确公式 */
 function shapeArea(o){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3?Math.abs(polygonArea(ps)):0;   /* 面积取绝对值，与顶点绕向无关 */
+  }
   const tt=areaShapeType(o);
   if(tt==='rect'||tt===PARA) return Math.max(0,o.width)*Math.max(0,o.height);
   const sh=o.shape;
@@ -418,6 +448,10 @@ function shapeArea(o){
 }
 /** 周长（米）：矩形 2(w+h)；圆 2πr；椭圆 Ramanujan 近似；扇形 2r+弧长（整圆扇=圆） */
 function shapePerimeter(o){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3?polylineLength(ps.concat([ps[0]])):0;
+  }
   const tt=areaShapeType(o);
   if(tt==='rect') return Math.max(0,o.width)*2+Math.max(0,o.height)*2;
   if(tt===PARA){
@@ -434,9 +468,28 @@ function shapePerimeter(o){
   /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
   return __geo.sectorPerimeter(r,sweep);
 }
+/** 对象面积（㎡）：区域按 shapeArea，闭合折线与面积标注按多边形；其余为 0。
+ *  统计/报表/属性面板共用，因此落在几何层（core），不再由 features 提供。 */
+function objectArea(o){
+  if(o.kind==='rect') return shapeArea(o);
+  if(o.closed&&o.points.length>=3) return polygonArea(o.points);
+  if(o.kind==='dimension'&&o.subtype==='area') return polygonArea(o.points);
+  return 0;
+}
+/** 对象长度（米）：折线逐段求和，闭合折线补首尾边；不足两点为 0。 */
+function objectLength(o){
+  if(!o.points||o.points.length<2) return 0;
+  let l=polylineLength(o.points);
+  if(o.closed) l+=dist(o.points.at(-1),o.points[0]);
+  return l;
+}
 /** 标签/变换中心（旋转基准唯一实现）：矩形/平行四边形取四角中心；圆/椭圆/扇形/点/文字锚点即中心 (x,y)。
  *  手柄定位（render.js）与旋转角度换算（interaction.js）必须共用本函数，否则图形绕锚点甩动而手柄画在中心。 */
 function shapeLabelCenter(o){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3?objectCenter(o):[Number(o.x)||0,Number(o.y)||0];
+  }
   const tt=areaShapeType(o);
   if(tt==='rect'||tt===PARA) return objectCenter(o);
   return [o.x,o.y];
@@ -445,6 +498,7 @@ function shapeLabelCenter(o){
  *  pointRotate 手柄沿 angle 方向摆放，方位角即角度；其余手柄位于 angle+90° 方向，需减 90°。
  *  矩形/平行四边形写回后会反解基点，使视觉中心保持在拖拽开始时的位置（不再绕左下角甩动）。 */
 function rotateShapeByHandle(o,wp,pointRotate){
+  if(isPolygonShape(o)) return;   /* 顶点为世界坐标，旋转手柄对 polygon 无定义，不写锚点/角度 */
   const c=shapeLabelCenter(o);
   let deg=Math.atan2(wp[1]-c[1],wp[0]-c[0])*180/Math.PI;
   if(!pointRotate) deg-=90;

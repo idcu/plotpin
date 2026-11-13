@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "note": "分层耦合基线（片C）。口径见 scripts/check.mjs 9.2/9.3/9.4：按 文件+符号+次数 记，不含行号（行号会漂）。计数必须与实测相等：减少时同步下调，新增必须先登记再改，不允许借用旧配额。class 取值：optional(缺失应降级) / required(缺失即 bug) / host(浏览器能力) / param(入参校验)。",
+  "softCalls": [
+    { "file": "js/core/model.js", "symbol": "L", "count": 1, "class": "required" },
+    { "file": "js/core/model.js", "symbol": "clearGuides", "count": 1, "class": "required" },
+    { "file": "js/core/model.js", "symbol": "releaseCoverageLayers", "count": 1, "class": "required" },
+    { "file": "js/core/persistence.js", "symbol": "Blob", "count": 1, "class": "host" },
+    { "file": "js/core/persistence.js", "symbol": "patchStaticObjects", "count": 1, "class": "optional" },
+    { "file": "js/core/persistence.js", "symbol": "scheduleListsRefresh", "count": 1, "class": "optional" },
+    { "file": "js/core/render.js", "symbol": "ghostPaint", "count": 1, "class": "optional" },
+    { "file": "js/core/tab-lease.js", "symbol": "BroadcastChannel", "count": 1, "class": "host" },
+    { "file": "js/core/tab-lease.js", "symbol": "fn", "count": 1, "class": "param" },
+    { "file": "js/features/io-export.js", "symbol": "exportViaPlugin", "count": 1, "class": "optional" },
+    { "file": "js/features/plugins.js", "symbol": "pushHistory", "count": 1, "class": "required" },
+    { "file": "js/features/plugins.js", "symbol": "sanitizeObjects", "count": 1, "class": "required" }
+  ],
+  "coreToFeatures": [
+    { "file": "js/core/ghost.js", "symbol": "revInfoText", "count": 1 },
+    { "file": "js/core/ghost.js", "symbol": "toast", "count": 4 },
+    { "file": "js/core/interaction.js", "symbol": "closeModal", "count": 1 },
+    { "file": "js/core/interaction.js", "symbol": "esc", "count": 3 },
+    { "file": "js/core/interaction.js", "symbol": "handleImportFile", "count": 1 },
+    { "file": "js/core/interaction.js", "symbol": "modalKeydown", "count": 1 },
+    { "file": "js/core/interaction.js", "symbol": "openModal", "count": 1 },
+    { "file": "js/core/interaction.js", "symbol": "refreshSelectionUI", "count": 5 },
+    { "file": "js/core/interaction.js", "symbol": "showConfirm", "count": 1 },
+    { "file": "js/core/interaction.js", "symbol": "showPrompt", "count": 4 },
+    { "file": "js/core/interaction.js", "symbol": "switchTab", "count": 9 },
+    { "file": "js/core/interaction.js", "symbol": "toast", "count": 35 },
+    { "file": "js/core/persistence.js", "symbol": "hideSaveFailureBanner", "count": 1 },
+    { "file": "js/core/persistence.js", "symbol": "renderLayers", "count": 1 },
+    { "file": "js/core/persistence.js", "symbol": "renderList", "count": 1 },
+    { "file": "js/core/persistence.js", "symbol": "renderStats", "count": 1 },
+    { "file": "js/core/persistence.js", "symbol": "scheduleListsRefresh", "count": 2 },
+    { "file": "js/core/persistence.js", "symbol": "showSaveFailureBanner", "count": 3 },
+    { "file": "js/core/persistence.js", "symbol": "toast", "count": 8 },
+    { "file": "js/core/snapshot.js", "symbol": "toast", "count": 2 },
+    { "file": "js/core/tab-lease.js", "symbol": "toast", "count": 1 }
+  ],
+  "commonToCore": [
+    { "file": "js/common/merge.js", "symbol": "SETTINGS_KEYS", "count": 1 },
+    { "file": "js/common/merge.js", "symbol": "TITLE_BLOCK_FIELDS", "count": 1 },
+    { "file": "js/common/qr.js", "symbol": "ensureVendor", "count": 1 }
+  ]
+}

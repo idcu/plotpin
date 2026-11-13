@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* check-gates.mjs —— 门禁的牙齿：正面基线 + 13 种人为破坏，断言对应门禁会红
+/* check-gates.mjs —— 门禁的牙齿：正面基线 + 14 种人为破坏，断言对应门禁会红
  *
  * 为什么需要它：门禁脚本本身也会假绿（只打印不比对、缺文件退 0、模板缺失空操作、把 --selftest 透传给
  * 只跑解析器自检的分支）。一条从未红过的判据，与没有判据的区别只在于它更贵。这里把「会红」这件事本身
@@ -20,6 +20,10 @@
  *  11. 契约规则被清空                 → node scripts/check-contracts.mjs 必须非 0
  *  12. 输入变更未 bump 就执行 --update → node scripts/check-sw.mjs --update 必须非 0
  *  13. 样式引入远程资源（离线承诺破坏）→ node scripts/check.mjs --selftest 必须非 0
+ *  14. state 绕过 replaceState 直接赋值  → node scripts/check.mjs           必须非 0
+ *  15. core 新增未登记的 features 反向引用 → node scripts/check.mjs          必须非 0
+ *  16. 新增未分类的 typeof 软调用           → node scripts/check.mjs          必须非 0
+ *  17. 必需钩子缺少提供方（删 registerHook）→ node scripts/check.mjs          必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
@@ -236,6 +240,61 @@ const scenarios = [
     sabotage(dir) {
       /* 内联进单文件后仍会发起网络请求：只扫 index.html 的 src/href 看不出来 */
       appendFileSync(join(dir, 'css', 'style.css'), '\n.remote-probe{background:url(https://cdn.example.com/a.png)}\n');
+    }
+  },
+  {
+    name: 'state 绕过 replaceState 直接赋值',
+    expected: 'node scripts/check.mjs 退出码非 0',
+    args: ['scripts/check.mjs'],
+    expect: /state 直接赋值只允许出现在 replaceState 内/,
+    sabotage(dir) {
+      /* 只改一行就能绕开统一入口的楼层别名/缓存失效/静态层重建，语法完全合法。
+         旧门禁没有任何规则能看见它，只有新增的写入口扫描会红。 */
+      appendFileSync(join(dir, 'js', 'features', 'io.js'),
+        '\n/* 门禁牙齿：绕过统一入口直接替换 state */\nstate = state;\n');
+    }
+  },
+  {
+    name: 'core 新增未登记的 features 反向引用',
+    expected: 'node scripts/check.mjs 退出码非 0',
+    args: ['scripts/check.mjs'],
+    expect: /跨层引用增加|未登记的跨层依赖/,
+    sabotage(dir) {
+      /* 语法完全合法、运行期也照常工作（features 先于事件加载完），只有计数门禁能看见它。
+         已登记的同一符号也受次数约束，防止借用旧配额新增调用点。 */
+      appendFileSync(join(dir, 'js', 'core', 'render.js'),
+        '\n/* 门禁牙齿：core 直接调用 features */\nfunction __gateLayerProbe(){ toast("probe"); }\n');
+    }
+  },
+  {
+    name: '新增未分类的 typeof 软调用',
+    expected: 'node scripts/check.mjs 退出码非 0',
+    args: ['scripts/check.mjs'],
+    expect: /未分类的软调用/,
+    sabotage(dir) {
+      /* 软调用缺失时静默跳过，是所有"功能在但没生效"类问题的源头；
+         新增一处未登记探测必须红。 */
+      appendFileSync(join(dir, 'js', 'core', 'snapshot.js'),
+        '\n/* 门禁牙齿：未登记的软调用 */\nfunction __gateSoftProbe(){ if(typeof __gateUnregistered==="function") __gateUnregistered(); }\n');
+    }
+  },
+  {
+    name: '必需钩子缺少提供方',
+    expected: 'node scripts/check.mjs 退出码非 0',
+    args: ['scripts/check.mjs'],
+    expect: /必需钩子未注册/,
+    sabotage(dir) {
+      /* 删掉协作提供方后，core 的 callHook 会静默变成 no-op——正是软调用时代的老毛病。
+         注册表 + REQUIRED_HOOKS 必须让这种情况在门禁里红，而不是等到用户发现不同步。 */
+      const p = join(dir, 'js', 'features', 'collab.js');
+      writeFileSync(p, readFileSync(p, 'utf8')
+        .replace("registerHook('collab.onLocalChange',collabOnLocalChange);", ''));
+      /* 改 js 输入会连带触发 SW 指纹门禁；同步 bump 版本并刷新副本指纹清单，
+         让唯一变红的原因就是钩子缺失，而不是 SW 门禁顺带失败。 */
+      const sw = join(dir, 'sw.js');
+      writeFileSync(sw, readFileSync(sw, 'utf8').replace(/const VERSION = '(\d+)'/, (m, v) => `const VERSION = '${Number(v) + 1}'`));
+      const refresh = run(dir, ['scripts/check-sw.mjs', '--update']);
+      if (refresh.status !== 0) throw new Error('副本 SW 指纹清单刷新失败：' + tail(refresh));
     }
   }
 ];

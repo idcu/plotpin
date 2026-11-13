@@ -54,14 +54,16 @@ function assetRefsFromLocalStorage(ns){
   };
   read(LS_KEY,'ls:draft',r=>r);
   read(RESCUE_KEY,'rescue:draft',r=>r&&r.snapshot);
-  if(typeof COLLAB_PENDING_KEY==='string') read(COLLAB_PENDING_KEY,'collab:legacy',r=>r&&r.project);
-  if(typeof COLLAB_PENDING_BAK_KEY==='string') read(COLLAB_PENDING_BAK_KEY,'collab:backup',r=>r&&r.project);
-  if(typeof COLLAB_PENDING_PREFIX==='string'){
+  /* 片C：协作待发队列的存储键属于 features 的数据契约，经钩子取；未注册等同"协作未启用" */
+  const ck=callHook('collab.pendingStorageKeys');
+  if(ck){
+    read(ck.key,'collab:legacy',r=>r&&r.project);
+    read(ck.bak,'collab:backup',r=>r&&r.project);
     let keys=[];
     try{
-      for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith(COLLAB_PENDING_PREFIX)) keys.push(k); }
+      for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith(ck.prefix)) keys.push(k); }
     }catch(e){ throw new Error('枚举协作待发队列失败，已取消资产回收'); }
-    keys.forEach(k=>read(k,'collab:'+k.slice(COLLAB_PENDING_PREFIX.length),r=>r&&r.project));
+    keys.forEach(k=>read(k,'collab:'+k.slice(ck.prefix.length),r=>r&&r.project));
   }
 }
 /**
@@ -106,9 +108,9 @@ async function pruneBgAssets(){
   }catch(e){
     /* M-01：扫描不完整就整体放弃回收，并让用户知道"为什么没清理" */
     assetGcLastSkip=String(e&&e.message||e||'资产引用扫描失败');
-    if(!assetGcSkipNotified&&typeof toast==='function'){
+    if(!assetGcSkipNotified){
       assetGcSkipNotified=true;
-      toast(L('资产回收已跳过：{msg}，未删除任何文件',{msg:assetGcLastSkip}),'warn');
+      callHook('ui.toast',L('资产回收已跳过：{msg}，未删除任何文件',{msg:assetGcLastSkip}),'warn');
     }
     return [];
   }
@@ -138,9 +140,9 @@ function undo(){
   const prevFuture=history.future.length?history.future[history.future.length-1]:null;
   history.future.push(snapshotHistoryState(state,prevFuture));
   /* 快照不可变：弹出后物化一份可编辑副本，避免 live 编辑污染共享子树（普通条目原样返回） */
-  state=materializeHistoryState(history.past.pop());
+  replaceState(materializeHistoryState(history.past.pop()),{fit:false});
   selectedIds.clear();
-  afterStateLoaded(false); pruneBgAssets();
+  pruneBgAssets();
   markDirty('restore');            /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
   toast(L('已撤销'));
 }
@@ -148,9 +150,9 @@ function redo(){
   if(!history.future.length) return;
   const prevPast=history.past.length?history.past[history.past.length-1]:null;
   history.past.push(snapshotHistoryState(state,prevPast));
-  state=materializeHistoryState(history.future.pop());
+  replaceState(materializeHistoryState(history.future.pop()),{fit:false});
   selectedIds.clear();
-  afterStateLoaded(false); pruneBgAssets();
+  pruneBgAssets();
   markDirty('restore');            /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
   toast(L('已重做'));
 }
@@ -202,7 +204,7 @@ function markDirty(kind, ids){
     if(kind==='objectEdit'&&typeof scheduleListsRefresh==='function') scheduleListsRefresh();
     else { renderList(); renderLayers(); renderStats(); }
   }
-  if(p.broadcast&&typeof collabOnLocalChange==='function') collabOnLocalChange();
+  if(p.broadcast) callHook('collab.onLocalChange');
 }
 /** 单个对象单调打点：新时间必须严格大于旧值（同一毫秒连续提交也递增）。 */
 function stampObject(o){
@@ -271,7 +273,7 @@ function clearCurrentFloor(){
   syncActiveFloor();
   resetFrameRef(); fitView();
   markDirty('clear');               /* 覆盖率/静态层/落盘/UI 统一走提交协议 */
-  if(typeof collabBroadcastFloor==='function') collabBroadcastFloor('clear');
+  callHook('collab.broadcastFloor','clear');
   return summary;
 }
 let dbPromise=null;
@@ -463,17 +465,16 @@ async function openProjectById(id){
   const next=buildProject(raw);
   await ensureBackgroundAsset(next);          /* 在候选状态上转存资产，不动当前 state */
   const prevState=state, prevHistory=history, prevSelected=new Set(selectedIds), prevDraft=draft;
-  state=next;
   history={past:[],future:[]};
   selectedIds.clear(); draft=null;
   try{
-    await afterStateLoaded();           /* 先等全楼层照片 dataUrl→资产转换完成，打开才算提交 */
+    await replaceState(next);           /* 先等全楼层照片 dataUrl→资产转换完成，打开才算提交 */
     await pruneBgAssets();              /* IO-P1-6：提交成功后才回收；失败回滚不误删旧工程资产 */
     scheduleSave();
   }catch(e){
-    state=prevState; history=prevHistory;           /* 提交阶段失败：回滚到打开前 */
+    history=prevHistory;                            /* 提交阶段失败：回滚到打开前 */
     selectedIds.clear(); prevSelected.forEach(x=>selectedIds.add(x)); draft=prevDraft;
-    afterStateLoaded(false); requestRender();
+    replaceState(prevState,{fit:false}); requestRender();
     throw e;
   }
   return state;
@@ -500,7 +501,7 @@ async function duplicateProjectById(id){
 async function deleteProjectById(id){
   await idbDeleteKey(projectKey(id));
   /* 工程删除后其快照链不再有归属：一并清理（snapshot.js 定义，独立命名空间，不影响其它工程） */
-  if(typeof deleteSnapshotsForProject==='function') await deleteSnapshotsForProject(id);
+  await deleteSnapshotsForProject(id);
   if(state.meta?.projectId===id){ state.meta.projectId=''; refreshUI(); scheduleSave(); }
   await pruneBgAssets();
 }
@@ -665,6 +666,22 @@ function syncActiveFloor(){
   f.objects=state.objects;
   f.viewport=state.viewport;
 }
+/**
+ * 状态整体替换的唯一提交入口。除本函数外全仓不再出现 `state = ...`；
+ * 调用点不必再逐个记得 syncActiveFloor / afterStateLoaded。
+ * 同步：换现场 → 活动层条目重新别名；异步（瞬态清理/叠放缓存失效/静态层重建/
+ * 取景基准复位/UI 刷新/底图加载）统一由 afterStateLoaded 完成。
+ * @param {ProjectState} next 完整状态（调用方负责构建/清洗）
+ * @param {{fit?:boolean,keepCalib?:boolean,quiet?:boolean}} [opts]
+ *   fit=false 不重置取景；quiet=true 只换现场（启动/构建/迁移），调用方稍后自行触发 UI。
+ * @returns {Promise|ProjectState} afterStateLoaded 完成信号；quiet 直接返回新状态
+ */
+function replaceState(next,opts={}){
+  state=next;
+  if(opts.quiet) return next;
+  syncActiveFloor();
+  return afterStateLoaded(opts.fit,opts);
+}
 /** M-14：工程内容实质变化（用户切层/设置提交）时推进 meta.updatedAt，供工程库排序与协作新鲜度。
  *  只读路径（导出临时切层、定位违规对象）必须传 silent，不得污染更新时间。 */
 function touchProjectUpdated(){ state.meta.updatedAt=nowISO(); }
@@ -732,7 +749,7 @@ async function addFloor(name){
   state.floors.push({id,name:nm,updatedAt:nowISO(),background:init.background,site:init.site,objects:[],viewport:init.viewport});
   const ok=await switchFloor(id);
   if(ok) scheduleSave();           /* 新增楼层必须立刻落盘，刷新后不能消失（审计 P0-4） */
-  if(ok&&typeof collabBroadcastFloor==='function') collabBroadcastFloor('add');
+  if(ok) callHook('collab.broadcastFloor','add');
   return ok?id:null;
 }
 /** 删除楼层：至少保留一层；删除当前楼层时自动切到第一层 */
@@ -756,7 +773,7 @@ async function deleteFloor(id){
     await afterStateLoaded(false); fitView();
     markDirty('floor');            /* 删除当前楼层后落盘，刷新不能复活（审计 P0-4） */
   }else commitChange('已删除楼层');
-  if(typeof collabBroadcastFloor==='function') collabBroadcastFloor('delete');
+  callHook('collab.broadcastFloor','delete');
   return true;
 }
 /** 重命名楼层：空名/同名不生效，与既有楼层重名时拒绝（N-08） */
@@ -859,7 +876,7 @@ async function saveOnce(seq){
       writeLocalDraft(snapshot);
       staleWrite=true;
       saveStatus(L('另一标签页正在编辑，已暂停自动保存'));
-      if(typeof showStaleWriteBanner==='function') showStaleWriteBanner();
+      callHook('ui.staleWriteBanner');
       return false;
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(snapshot.settings)));
@@ -942,7 +959,8 @@ async function loadSavedProject(){
   const rescueRec=readRescueDraft();
   if(rescueRec) candidates.push({source:'rescue',raw:rescueRec.snapshot});
   /* P0-05：离线协作待发快照作为第四候选；只读采用，绝不删除待发记录 */
-  if(typeof collabPendingCandidates==='function') collabPendingCandidates().forEach(c=>candidates.push(c));
+  const pending=callHook('collab.pendingCandidates');
+  if(Array.isArray(pending)) pending.forEach(c=>candidates.push(c));
   if(!candidates.length) return {state:null,audit:emptyAudit,rescue:null,fallback:false,source:'',newerThanIdb:false};
   const audited=candidates.map(c=>{
     let p=c.raw;
@@ -976,9 +994,9 @@ async function loadSavedProject(){
   }
   const idbCand=usable.find(c=>c.source==='IndexedDB');
   const newerThanIdb=chosen.source!=='IndexedDB'&&(!idbCand||projectFreshness(chosen.p)>projectFreshness(idbCand.p));
-  const st=migrateProject(chosen.p);
+  /* quiet：启动装载阶段 UI 未就绪，由 app.js 首屏统一触发 afterStateLoaded */
+  const st=replaceState(buildProject(chosen.p),{quiet:true});
   noteDroppedObjects(chosen.audit);
-  state=st;
   await ensureBackgroundAsset(st);
   return {state:st,audit:chosen.audit,rescue,fallback:chosen.source!=='IndexedDB',source:chosen.source,newerThanIdb};
 }
@@ -1174,8 +1192,8 @@ function buildProject(p){
 }
 /** 迁移并立即替换当前状态（旧调用方语义）；需要失败回滚的路径请用 buildProject */
 function migrateProject(p){
-  state=buildProject(p);
-  return state;
+  /* quiet：迁移是纯数据操作，被自测与「先构建后校验」路径反复调用，不能触发 UI/底图加载 */
+  return replaceState(buildProject(p),{quiet:true});
 }
 /** 首次引导示例工程：空图片槽 + 100×70 矢量场地 + 6 个业务对象。
  *  不引用任何图片/照片资产，因此不会向资产库写入数据，也不会产生孤儿资产。 */
@@ -1252,15 +1270,16 @@ async function mergeProjectJSON(raw,opts={}){
   assertProjectWithinLimits(raw,'合并工程');          /* CORE-P2-20：协作/离线合并复用导入限额 */
   syncActiveFloor();
   const currentRaw=persistableState();
-  const cur=state;
   const incomingRaw=mergeBlankMissingTimestamps(deepClone(raw));
   /* B8：入站时间戳校验/钳制，未来时间戳不得永久压制本地编辑 */
   const clockClamped=mergeClampTimestamps(incomingRaw);
-  let incoming;
-  try{ incoming=migrateProject(incomingRaw); }
-  finally{ state=cur; }
-  const {project,stats}=mergeProjectData(currentRaw,deepClone(incoming));
+  /* buildProject 自带清洗/迁移；不临时替换现场，合并结果确定后一次性提交 */
+  const incoming=buildProject(incomingRaw);
+  const {project,stats,config}=mergeProjectData(currentRaw,deepClone(incoming));
   if(clockClamped) stats.clockClamped=clockClamped;
+  /* A3：配置差异报告。仅在非空时作为可枚举 config 字段随 stats 返回：spread / structuredClone /
+     JSON 序列化都能带走；空报告不新增键，既有 stats 深比较（§59）不变。 */
+  if(config&&(config.kept||config.adopted||config.error)) stats.config=config;
   if(clockClamped) console.warn(`合并：${clockClamped} 个时间戳非法或超前，已置空`);
   assertProjectWithinLimits(project,'合并结果');      /* 两侧各自未超限、并集仍可能超限 */
   /* 对象/楼层之外（图层、类型、墓碑）也可能有变化：用规范化序列化判断是否需要落盘 */
@@ -1268,11 +1287,10 @@ async function mergeProjectJSON(raw,opts={}){
   /* history:'overwrite' 供实时协作：只有远端覆盖本地内容时才入撤销栈，
    * 纯新增/纯同步不挤占 20 条历史上限；默认行为仍是「有变化就写历史」。 */
   if(opts.history==='overwrite' ? mergeHistoryNeeded(stats) : opts.history!==false) pushHistory();
-  state=migrateProject(project);
   /* 合并不接管对方的工程库绑定：只有本地已绑定才继续绑定 */
-  state.meta.projectId=(currentRaw.meta&&currentRaw.meta.projectId)||'';
+  project.meta.projectId=(currentRaw.meta&&currentRaw.meta.projectId)||'';
   selectedIds.clear(); draft=null;
-  await afterStateLoaded(false);
+  await replaceState(buildProject(project),{fit:false});
   scheduleSave();
   refreshUI(); requestRender();
   return stats;

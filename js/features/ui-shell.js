@@ -264,8 +264,8 @@ function openDemoProject(){
   let next;
   try{ next=buildDemoProject(); }
   catch(e){ toast(L('示例工程生成失败')+'：'+((e&&e.message)||e),'error'); return false; }
-  state=next; selectedIds=new Set(); history={past:[],future:[]};
-  afterStateLoaded(); fitView(); scheduleSave();
+  selectedIds=new Set(); history={past:[],future:[]};
+  replaceState(next); fitView(); scheduleSave();
   toast(L('已打开示例工程'),'success');
   return true;
 }
@@ -303,6 +303,8 @@ async function guardRescueSwitch(){
   return true;
 }
 function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }function hideLeaseConflictBanner(){ const bar=$('leaseBanner'); if(bar) bar.remove(); }
+/** 片C：core 通过钩子请求"写冲突横幅"，不再直接引用本文件符号 */
+registerHook('ui.staleWriteBanner',showStaleWriteBanner);
 /** H-01 写冲突横幅：库内副本更新，本页已拒绝覆盖；可导出本页版本或重载最新 */
 function showStaleWriteBanner(){
   let bar=$('staleWriteBanner');
@@ -370,6 +372,8 @@ function toast(msg,type=''){
   const el=document.createElement('div'); el.className='toast '+type; el.textContent=L(msg);
   $('toastWrap').appendChild(el); setTimeout(()=>el.remove(),2600);
 }
+/* 片C：core 的提示走钩子；toast 的 DOM 细节留在 features，core 不再 typeof 探测 */
+registerHook('ui.toast',toast);
 function esc(s){
   return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }

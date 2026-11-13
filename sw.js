@@ -3,7 +3,7 @@
  * 缓存清单从 index.html 动态解析，新增脚本无需手工维护。
  * 版本策略：CACHE 名带版本号；activate 删除所有非当前版本缓存。
  * 更新失败不阻断：单个资源 404/失败不影响安装（Promise.allSettled），注册失败也不影响界面。 */
-const VERSION = '184';
+const VERSION = '200';
 const CACHE = 'plotpin-v' + VERSION;
 const OFFLINE_HTML = '<!doctype html><html lang="zh-CN"><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1"><title>PlotPin 离线</title>' +
@@ -16,11 +16,13 @@ let lastPrecache = { ok: 0, failed: 0, total: 0 };
 async function precache() {
   const cache = await caches.open(CACHE);
   const html = await (await fetch('./index.html', { cache: 'no-store' })).text();
-  const scripts = [...html.matchAll(/<script\s+src="([^"]+)"><\/script>/g)].map(m => './' + m[1]);
-  const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(m => m[1])
+  /* 属性引号写法与 scripts/check-sw.mjs 的指纹口径一致：双引号 / 单引号 / 无引号都认。
+     只认双引号时，把 <script src='x.js'> 改成单引号会让运行时漏缓存，而校验脚本仍认为一致。 */
+  const ATTR = /(?:\bsrc|\bhref)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'`=<>]+))/g;
+  const refs = [...html.matchAll(ATTR)].map(m => m[1] ?? m[2] ?? m[3])
     .filter(u => u && !u.startsWith('#') && !u.startsWith('data:') && !/^[a-z]+:/i.test(u))
     .map(u => './' + u.replace(/^\.\//, ''));
-  const urls = [...new Set(['./', './index.html', './manifest.webmanifest', './icon.svg', './css/style.css', ...scripts, ...assets])];
+  const urls = [...new Set(['./', './index.html', './manifest.webmanifest', './icon.svg', './css/style.css', ...refs])];
   /* 单个资源失败不阻断整体安装，否则一次 404 会让新版本永远装不上；
      失败只计数并告警（不清空缓存），可通过 STATUS 消息查询本次预缓存结果 */
   const results = await Promise.allSettled(urls.map(u => cache.add(u)));

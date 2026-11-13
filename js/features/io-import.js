@@ -41,19 +41,19 @@ async function importJsonFile(f){
     const objErrs=importLimitErrors({objects:countProjectObjects(next)});
     if(objErrs.length) throw new Error('超限：'+importLimitMessage(objErrs));
     await ensureBackgroundAsset(next);      /* 候选状态上准备资产；失败不影响当前现场 */
-    state=next; swapped=true;
+    swapped=true;
     /* 导入即新基线：清空撤销栈，避免 Ctrl+Z 把导入前的工程撤回来；
        资产回收必须走全库可达集（其他工程库记录仍可达），不能只保留当前底图 */
     history={past:[],future:[]};
     selectedIds.clear(); draft=null;
-    await afterStateLoaded();           /* 先等全楼层照片 dataUrl→资产转换完成，导入才算提交 */
+    await replaceState(next);           /* 先等全楼层照片 dataUrl→资产转换完成，导入才算提交 */
     await pruneBgAssets();              /* N-11：提交成功后才回收；失败回滚不误删旧工程资产 */
     scheduleSave(); toast('工程已导入','success');
   }catch(err){
     if(swapped){
-      state=prevState; history=prevHistory;              /* 提交阶段失败：完整回滚 */
+      history=prevHistory;                              /* 提交阶段失败：完整回滚 */
       selectedIds.clear(); prevSelected.forEach(x=>selectedIds.add(x)); draft=prevDraft;
-      afterStateLoaded(false); requestRender();
+      replaceState(prevState,{fit:false}); requestRender();
     }
     const msg=String(err&&err.message||'');
     if(msg==='SCHEMA') toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error');
@@ -284,7 +284,8 @@ function applyDxfImport(fileName,text,meta,opts){
     if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
     fitView();
   }catch(e){
-    state=materializeHistoryState(backup);
+    /* 导入异常回滚：走统一入口补上叠放缓存/静态层/取景基准与 UI 刷新 */
+    replaceState(materializeHistoryState(backup),{fit:false});
     if(history.past.length) history.past.pop();
     history.future=prevFuture;
     selectedIds.clear();

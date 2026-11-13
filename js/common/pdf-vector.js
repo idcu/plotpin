@@ -30,7 +30,7 @@
     let next = 3;
     for (const p of list) {
       const m = { page: next++, contents: next++, imgs: [], masks: [] };
-      for (const im of p.images || []) { m.imgs.push(next++); m.masks.push(im.alpha ? next++ : 0); }
+      for (const im of p.images || []) { m.imgs.push(next++); m.masks.push(im.alpha && !im.jpeg ? next++ : 0); }
       metas.push(m);
     }
     const objs = new Array(next), set = (i, head, data) => { objs[i] = { head: head, data: data }; };
@@ -49,9 +49,11 @@
           set(m.imgs[i], '<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h
             + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + im.jpeg.length + ' >>', im.jpeg);
         } else {
+          /* SMask 只在确有 alpha 时引用：无 alpha 时写 `/SMask 0 0 R` 是非法对象引用 */
+          const sm = m.masks[i] ? ' /SMask ' + m.masks[i] + ' 0 R' : '';
           set(m.imgs[i], '<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h
-            + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /SMask ' + m.masks[i] + ' 0 R /Length ' + im.rgb.length + ' >>', im.rgb);
-          set(m.masks[i], '<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h
+            + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode' + sm + ' /Length ' + im.rgb.length + ' >>', im.rgb);
+          if (m.masks[i]) set(m.masks[i], '<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h
             + ' /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ' + im.alpha.length + ' >>', im.alpha);
         }
       });
