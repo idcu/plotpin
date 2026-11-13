@@ -25,7 +25,7 @@
  *
  * 用法：node scripts/check-gates.mjs
  */
-import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -56,6 +56,10 @@ function copyRepo() {
   if (init.status !== 0) throw new Error('临时仓库 git init 失败：' + tail(init));
   const add = git(['add', '-A']);
   if (add.status !== 0) throw new Error('临时仓库 git add 失败：' + tail(add));
+  /* B-01：构建链需要构建期 devDependency（terser）。副本不复制 node_modules（会拖慢一个数量级），
+     改用目录联接指回仓库；放在 git add 之后，避免把依赖树写进临时索引。 */
+  const nm = join(root, 'node_modules');
+  if (existsSync(nm)) symlinkSync(nm, join(dir, 'node_modules'), 'junction');
   return dir;
 }
 

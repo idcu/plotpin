@@ -27,7 +27,7 @@ const manifestPath = join(root, 'scripts', 'dist-manifest.json');
 
 const html = readFileSync(join(root, 'index.html'), 'utf8');
 const readSource = p => readFileSync(join(root, p), 'utf8');
-const bundled = buildStandalone(html, readSource);
+const bundled = await buildStandalone(html, readSource);
 const sha = createHash('sha256').update(bundled).digest('hex');
 const bytes = Buffer.byteLength(bundled, 'utf8');
 const kb = (bytes / 1024).toFixed(1);
@@ -60,7 +60,7 @@ if (!checkOnly) {
   budget.warnings.forEach(w => console.log(`  ! ${w}`));
 
   /* 确定性：同一份源两次构建必须得到同一字节串，否则「可从源复现」不成立 */
-  const again = buildStandalone(html, readSource);
+  const again = await buildStandalone(html, readSource);
   const shaAgain = createHash('sha256').update(again).digest('hex');
   if (shaAgain !== sha || Buffer.byteLength(again, 'utf8') !== bytes) {
     errors.push(`构建不确定：连续两次构建哈希不同（${sha.slice(0, 12)}… / ${shaAgain.slice(0, 12)}…）`);

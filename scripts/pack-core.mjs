@@ -9,10 +9,11 @@
  */
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
+import { minify } from 'terser';
 import { minifyCss, minifyJs } from './minify-core.mjs';
 import { findRemoteRefs } from './lib/offline-scan.mjs';
 
-export function buildStandalone(html, readFile) {
+export async function buildStandalone(html, readFile) {
   /* 结构缩进在 HTML 渲染里等价于一个空白：去掉「换行 + 空白 + 紧跟标签」的行首缩进与空白行，
      渲染结果不变（仍保留一个换行），省下约 1.7 KB。文本内容与属性值不受影响。
      HTML 注释先行删除：注释不参与渲染，且必须在脚本内联**之前**删（内联后 JS 里的
@@ -40,7 +41,12 @@ export function buildStandalone(html, readFile) {
     return SLOT;
   });
   if (codes.length) {
-    const body = codes.join(';\n');
+    let body = codes.join(';\n');
+    /* B-01：terser C（compress + 局部 mangle）。toplevel:false 保留全部顶层全局名，
+       避免 plugins.js 按名探测的产品路径失效；不做属性改名、不生成 sourcemap。 */
+    const mini = await minify(body, { compress: true, mangle: { toplevel: false } });
+    if (typeof mini.code !== 'string') throw new Error('terser 未返回压缩结果');
+    body = mini.code.replace(/<\/script/gi, '<\\/script');
     try { new vm.Script(body, { filename: 'bundle' }); }
     catch (e) { throw new Error(`合并后脚本无法解析：${e.message}`); }
     const text = inner(body);

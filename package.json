@@ -32,6 +32,7 @@
   ],
   "license": "MIT",
   "devDependencies": {
-    "@playwright/test": "^1.65.0"
+    "@playwright/test": "^1.65.0",
+    "terser": "5.51.2"
   }
 }
