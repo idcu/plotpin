@@ -117,9 +117,11 @@
   .batch-row select{min-width:0;max-width:100%}
   .batch-row input[type="number"]{width:92px;min-width:92px}
   .annot-batch-row .hint-text{white-space:nowrap}
+  .annot-batch-row #batchAnnotChks{flex:1 1 100%;padding-top:0}
   /* 触控视口：批次控件至少 44px 高，数值框仍保留 92px 可读宽度 */
   @media(pointer:coarse){
-    .batch-row input,.batch-row select,.batch-row button{min-height:44px}
+    .batch-row input:not([type="checkbox"]),.batch-row select,.batch-row button{min-height:44px}
+    .annot-batch-row .annot-chk{min-height:44px}
   }
   .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 260px)}
   table{border-collapse:collapse;width:100%;font-size:12px}

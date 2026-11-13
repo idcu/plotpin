@@ -106,6 +106,7 @@ function syncListSelection(){
     if(!on) all=false;
   });
   const head=$('headSelectChk'); if(head) head.checked=all;
+  renderBatchAnnot();
 }
 /** 选中集变化的最小 UI 刷新：属性面板 + 列表高亮（不重建 10k 行、不刷图层/统计） */
 function refreshSelectionUI(){ renderProps(); syncListSelection(); }
@@ -164,6 +165,7 @@ function renderList(){
   }));
   $('objectTbody').querySelectorAll('[data-toggle-visible]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleVisible); if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); });
   $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); });
+  renderBatchAnnot();
 }
 $('headSelectChk').addEventListener('change',e=>{
   filteredObjects().forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
@@ -181,19 +183,63 @@ $('batchMoveBtn').onclick=()=>{
 };
 $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0);
 $('batchDeleteBtn').onclick=deleteSelected;
-/* 批量标注显隐：复用 annotToggleKeys / annotOn / setAnnot，与属性面板单对象语义一致 */
-function setSelectedAnnot(on){
-  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+/* -------------------- 批量标注显隐（按标识类型勾选） --------------------
+   只列出当前选中可编辑对象**适用**的类型（kind/shape 由 annotToggleKeys 判定），不适用的不渲染；
+   状态仍写 o.annot（与属性面板、画布与导出共用 annotOn/setAnnot），不新增字段；
+   一次勾选只压一条历史，与属性面板单对象语义一致。 */
+const BATCH_ANNOT_ORDER=['name','coord','base','radius','edge','vertex','node','perimeter','area'];
+/** 选中对象并集支持的标注键（固定顺序；空集返回 []） */
+function batchAnnotKeys(items){
+  const has=new Set();
+  (items||[]).forEach(o=>annotToggleKeys(o).forEach(k=>has.add(k)));
+  return BATCH_ANNOT_ORDER.filter(k=>has.has(k));
+}
+/** 键的显示名：折线选中时 edge 叫「段长」，全闭合时 node 叫「顶点坐标」 */
+function batchAnnotLabel(key,items){
+  if(key==='edge') return items.every(o=>o.kind==='line')?'段长':'边长';
+  if(key==='node') return items.every(o=>o.closed)?'顶点坐标':'节点坐标';
+  return annotLabel(null,key);
+}
+/** 批量标注的唯一作用范围：选中且可编辑 */
+function batchAnnotItems(){
+  return state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+}
+/** 键的聚合态：'on' 全开 / 'off' 全关 / 'mixed' 混合（无适用对象时 null） */
+function batchAnnotState(items,key){
+  const sup=items.filter(o=>annotToggleKeys(o).includes(key));
+  if(!sup.length) return null;
+  const on=sup.filter(o=>annotOn(o,key)).length;
+  return on===sup.length?'on':(on?'mixed':'off');
+}
+/** 主复选框（三态）+ 逐项勾选框：选中或状态变化后调用 */
+function renderBatchAnnot(){
+  const box=$('batchAnnotChks'), master=$('batchAnnotAll');
+  if(!box||!master) return;
+  const items=batchAnnotItems(), keys=batchAnnotKeys(items);
+  const states=keys.map(k=>batchAnnotState(items,k));
+  master.disabled=!keys.length;
+  master.checked=!!keys.length&&states.every(s=>s==='on');
+  master.indeterminate=!master.checked&&states.some(s=>s!=='off');
+  if(!keys.length){ box.innerHTML=`<span class="hint-text">${esc(L('先勾选对象'))}</span>`; return; }
+  box.innerHTML=keys.map((k,i)=>
+    `<label class="annot-chk"><input type="checkbox" data-batch-annot="${k}" ${states[i]==='on'?'checked':''}> ${esc(L(batchAnnotLabel(k,items)))}</label>`).join('');
+  box.querySelectorAll('[data-batch-annot]').forEach(el=>{
+    el.indeterminate=states[keys.indexOf(el.dataset.batchAnnot)]==='mixed';
+    el.addEventListener('change',()=>setSelectedAnnot(el.checked,el.dataset.batchAnnot));
+  });
+}
+/** 写入选中的适用对象；key 缺省表示所有适用键（主复选框） */
+function setSelectedAnnot(on,key){
+  const items=batchAnnotItems();
   if(!items.length) return toast('没有可修改标注的选中对象','warn');
   const plan=[];
-  items.forEach(o=>annotToggleKeys(o).forEach(k=>{ if(annotOn(o,k)!==on) plan.push([o,k]); }));
+  items.forEach(o=>annotToggleKeys(o).forEach(k=>{ if((!key||k===key)&&annotOn(o,k)!==on) plan.push([o,k]); }));
   if(!plan.length) return toast('选中对象标注状态未变化','warn');
   pushHistory();
   plan.forEach(([o,k])=>setAnnot(o,k,on));
-  commitChange(on?'已批量显示标注':'已批量隐藏标注', Array.from(new Set(plan.map(([o])=>o.id))));
+  commitChange(key?'已更新图上标注':(on?'已批量显示标注':'已批量隐藏标注'), Array.from(new Set(plan.map(([o])=>o.id))));
 }
-$('batchShowAnnotBtn').onclick=()=>setSelectedAnnot(true);
-$('batchHideAnnotBtn').onclick=()=>setSelectedAnnot(false);
+$('batchAnnotAll').addEventListener('change',()=>{ const on=$('batchAnnotAll').checked; setSelectedAnnot(on); renderBatchAnnot(); });
 
 /* -------------------- 图层 / 类型管理 -------------------- */
 function renderLayers(){

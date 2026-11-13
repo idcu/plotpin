@@ -28,10 +28,9 @@ async function measure(page) {
       return { id, w: r.width, h: r.height, left: r.left, right: r.right, scroll: el.scrollWidth, client: el.clientWidth };
     });
     const rr = row.getBoundingClientRect();
-    const btns = ['batchShowAnnotBtn', 'batchHideAnnotBtn'].map(id => {
-      const el = document.getElementById(id);
+    const btns = [...document.querySelectorAll('.annot-batch-row .annot-chk')].map((el, i) => {
       const r = el.getBoundingClientRect();
-      return { id, w: r.width, h: r.height, left: r.left, right: r.right, scroll: el.scrollWidth, client: el.clientWidth, text: el.textContent.trim() };
+      return { id: 'annot-chk-' + i, w: r.width, h: r.height, left: r.left, right: r.right, scroll: el.scrollWidth, client: el.clientWidth, text: el.textContent.trim() };
     });
     return { inputs, btns, row: { scroll: row.scrollWidth, client: row.clientWidth, left: rr.left, right: rr.right }, sidebar: { left: sb.left, right: sb.right } };
   });
@@ -54,11 +53,11 @@ test.describe('1280×800 桌面', () => {
     }
     expect(await page.locator('#batchAngle').inputValue()).toBe('-359.9');
     expect(zh.row.scroll).toBeLessThanOrEqual(zh.row.client + 1);
-    expect(zh.btns.map(b => b.text)).toEqual(['显示标注', '隐藏标注']);
+    expect(zh.btns.map(b => b.text)).toEqual(['全选/全不选']);
 
     await switchLang(page, 'en');
     const en = await measure(page);
-    expect(en.btns.map(b => b.text)).toEqual(['Show labels', 'Hide labels']);
+    expect(en.btns.map(b => b.text)).toEqual(['All / none']);
     for (const b of en.btns) {
       expect(b.scroll).toBeLessThanOrEqual(b.client + 1);
       expect(b.right).toBeLessThanOrEqual(en.sidebar.right + 1);
