@@ -1,68 +1,57 @@
-﻿# 事实源（FACTS）
+# 事实源（FACTS）
 
-> 本文件是仓库内**数量类指标的唯一事实源**。其他文档只引用本文件，不复制具体数字；历史文档中的旧值一律标注「历史值」。
-> 采集日期：2026-11-08；代码基线：`8a9314b`（C 类 IO-P2-20 多页 PDF 单页化、RT-P2-12 未配置阈值计数的代码 HEAD）；N-25～N-27 收口段与 P2 批次 1~11（B 类文档、表格往返、DXF/PNG 一致性、核心瞬态边界、核心 schema/安全、快照/协作、插件沙箱、规则/统计、目录/停车/UI、代码卫生/i18n、性能打点）、批次 11 修复（CORE-P2-3 历史内存、IO-P2-11 导出去重）在其上增量修订，数值以最近一次门禁实测为准。
-> 采集环境：本机 Windows + Node（selftest/门禁）+ Playwright Chromium（e2e）。
-> 边界：性能读数（P95 / heapUsed）以 [performance.md](performance.md) 为准；`CHANGELOG.internal.md` 与本地未跟踪的 `audit-out/` 是历史/过程材料，其中数字不代表当前状态。
+> **用途**：易变数字的唯一集中快照。正文只写“以命令输出为准”，不复制本表的旧值。
+> **取数时间**：2026-11-13；代码基线：`2123a46`（工作区含 M1 polygon NaN、M2 合并配置差异、状态写入口/依赖钩子/耦合契约/门禁加固、协作安全默认，以及 M6 静态层局部补绘等改动，均未提交）。
+> **规则**：本表每一行必须能在当前仓库复跑；数字变化后同批更新本表，禁止估算。
 
 ## 1. 构建产物
 
-| 指标 | 当前值 | 采集命令 | 说明 |
+| 指标 | 2026-11-13 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 745,081 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致；V-4a 起 47 段脚本合并为 1 段，B-01 起经 terser C 压缩 |
-| gzip 字节 | 242,155 B | 同上（`gzipBytes`） | 硬上限 286,720 B，>266,240 B 预警 |
-| 体积上限 | 839,680 B（820 KiB） | `scripts/lib/budget.mjs` 的 `MAX_BYTES` / `scripts/dist-manifest.json` 的 `maxBytes` | 不得放宽；两处必须一致 |
-| 体积余量 | 94,599 B | 上限 − 当前值（<8,000 警告、<6,000 强警告） | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=183` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 52 个预缓存输入（含 `sw.js` 自身）与 `scripts/sw-inputs.sha256` 一致 |
+| 单文件产物字节 | 756,594 B（738.9 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 47 段脚本内联为 1 个 HTML；terser C 模式压缩 |
+| gzip 字节 | 245,937 B（240.2 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
+| 体积余量 | 83,086 B（gzip 余量 40,783 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| Service Worker 版本 | `VERSION=200` | `node scripts/check-sw.mjs` | 52 个预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
-| 指标 | 当前值 | 采集命令 | 说明 |
+| 指标 | 2026-11-13 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3979 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 断言 | 4,048 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；新增 21 条挂在既有第 47 分区（分层渲染 / 局部补绘） |
 | selftest 分区 | 158 个 | `node scripts/selftest.mjs --list` | 输出 159 行（含 1 行标题） |
-| 加载脚本 | 47 个（37 项目 + 10 vendor） | `check.mjs` 输出「加载 47 个脚本」 | `js/` 下 37 个 `.js` |
-| e2e 用例 | 151 个（150 通过 + 1 条件跳过），45 个 spec | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak；dist 入口为 149 通过 + 2 跳过（另 1 条为 `sw.spec` 单文件版豁免）；`file-dist.spec` 额外覆盖 dist 的 `file://` 路径 |
-| e2e spec 文件 | 45 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 下共 46 个 `.mjs`（45 个 spec + 1 个 helper） |
-| 契约判据 | 11 项核对 / 0 违约 | `node scripts/check.mjs --selftest` | `contracts/`；含 4 项结构校验（规则删空即红） |
-| 插件 API 面 | 24 键 / 清单 24 条 / 0 泄漏 / 0 落空 | `node scripts/check.mjs --selftest` | API 1.1.0 / 8 项能力 |
-| i18n 覆盖率 | 46.58% / 缺口 10 / UI 硬编码 20 / 模板内 0 | `node scripts/i18n-scan.mjs --check` | 阈值 ≥40%、缺口 ≤10、UI ≤20、模板内 =0 |
-| i18n 字典规模 | PHRASES 992 / TEMPLATES 114 / DICT.zh 199 | 同上 | |
-| 门禁牙齿 | 正面基线 6/6 + 人为破坏 13/13 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10/11 场景为契约清空 / 未 bump 就 `--update` |
-| 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
-| CI 运行状态 | **Actions 在跑但全红**：CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**不作发布门禁** | `gh api repos/idcu/plotpin/actions/workflows`；`gh api repos/idcu/plotpin/actions/runs`；`gh api repos/idcu/plotpin/actions/workflows/<id>/runs` | 本地 remote 为 `origin`(Gitee) + `github`；发布以本地门禁为准（决策 D2），GitHub 只承担 Pages 发布 |
-| Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **历史采集值（2026-11-08，本轮未复跑）**；Node 桩数据，不能作为浏览器性能结论 |
+| 加载脚本 | 47 个（37 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 47 个脚本」 | `js/` 下 37 个 `.js` |
+| e2e spec 文件 | 45 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 46 个 `.mjs`（45 spec + 1 helper） |
+| e2e 用例 | 155 个（154 通过 + 1 条件跳过） | `node scripts/e2e.mjs` | 2026-11-13 源码入口实跑记录；跳过项需 `COLLAB_SOAK=1`。dist 入口 perf-render 4 passed。本次文档同步未复跑。Chromium 是默认且唯一校验的浏览器入口 |
+| 契约判据 | 11 项核对 / 0 违约 | `node scripts/check-contracts.mjs` | 规则删空即红 |
+| 插件 API 面 | 24 键 / 24 条清单 / 0 泄漏 / 0 落空 | `node scripts/check-plugin-api.mjs` | 词法器 + fail-closed；API 1.1.0 / 8 项能力 |
+| 耦合基线 | `core→features` 21 条 / `common→core` 3 条 / 软调用 12 条（5+2+4+1） | `node -e "const c=require('./contracts/coupling.json');…"`；以文件为准 | 按文件+符号+次数严格相等，只减不增 |
+| 必需钩子 | 6 个提供方 / 6 个调用点 / 6 个必需 | `node scripts/check.mjs`（9.3） | 缺注册时 `assertHooksReady()` 启动即抛错 |
+| 门禁牙齿 | 正面基线 6/6 + 人为破坏 17/17 | `node scripts/check-gates.mjs` | 只断言非 0 且命中目标关键字 |
+| 方法论纪律 | 13/13（L4） | `node scripts/check-discipline.mjs --strict` | 含文档命令可解析、单文件 ≤60KB/600 行 |
+| i18n 扫描 | 覆盖率 44.09% = 731 / 1,658 / 缺口 0 / UI 硬编码 18（全仓未走入口 927，UI 已字典待接入 81） | `node scripts/i18n-scan.mjs --check` 或 `--json` | 口径见 [engineering](engineering.md)§4.6：分母是含 CJK 的出现次数，18 只是 927 的 UI 子集；阈值 ≥40%、缺口 ≤10、UI 硬编码 ≤20、已字典待接入 ≤81、模板内 =0；旧去重口径 46.7% 已废弃 |
+| Node bench（桩） | 以命令为准 | `node scripts/bench.mjs` | Node 桩数据，不能替代浏览器性能结论 |
 
-## 3. Golden 基线
+## 3. 文档规模
 
-| 文件 | 字节 | 采集命令 |
-|---|---|---|
-| `tests/golden/fixed-pages.pdf` | 1,128 | `Get-ChildItem tests/golden`；selftest 逐字节比对 |
-| `tests/golden/plain-scene.csv` | 631 | 同上（N-26 新增；P2 批次 2 改为 CRLF 行尾） |
-| `tests/golden/plain-scene.tsv` | 629 | 同上（N-26 新增；P2 批次 2 改为 CRLF 行尾） |
-| `tests/golden/plain-scene.xlsx` | 9,804 | 同上（N-26 新增，ZIP 容器；P2 批次 2 角度列按精度格式化） |
-| `tests/golden/blindspots.geojson` | 769 | 同上（N-26 新增） |
-| `tests/golden/plain-scene.png.meta.json` | 36 | e2e 语义 golden（PNG 签名 + 宽 2631 / 高 1860；不锁编码字节） |
-| `tests/golden/legacy-symbols.svg` | 56,839 | 同上 |
-| `tests/golden/plain-scene.dxf` | 900 | 同上 |
-| `tests/golden/plain-scene.svg` | 4,730 | 同上 |
-| `tests/golden/symbol-scene.dxf` | 4,753 | 同上 |
-| `tests/golden/symbol-scene.svg` | 5,012 | 同上 |
-
-## 4. 文档规模
-
-| 指标 | 当前值 | 采集命令 | 说明 |
+| 指标 | 2026-11-13 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| `docs/` 根目录 Markdown | 14 篇（含本文件与 `release-checklist.md`） | `Get-ChildItem docs -Filter *.md` | 递归含 `docs/plans/` 共 16 篇 |
+| `docs/` 根目录 Markdown | 15 篇 | `Get-ChildItem docs -Filter *.md` | 含本文件、`release-checklist.md`、`control-plane.md`、`known-issues-archive.md` |
+| 递归 Markdown | 17 篇 | `Get-ChildItem docs -Recurse -Filter *.md` | 含 `docs/plans/` 2 篇；上限 18 |
+
+## 4. Golden 基线
+
+文件清单与字节以命令输出为准，不在此表复制：
+
+```powershell
+Get-ChildItem tests/golden | Select-Object Name, Length
+```
+
+selftest 对固定 golden 做逐字节或语义比对；PNG 使用 `.meta.json` 记录签名与宽高，不锁编码字节。
 
 ## 5. 维护约定
 
-- 新增/修改数量类指标时，只改本文件，并把其他文档里的具体数字替换为指向本文件的链接。
-- 本表每一行必须能在当前仓库复跑；无法复跑的历史值不写入本文件。
-- 数字变化必须由同一次提交内的命令输出支撑；禁止估算或沿用旧值。
-
-
-
-
-
-
+1. 新增/修改数量类指标时，只改本文件，并把其他文档里的具体数字替换为命令或指向本文件的链接。
+2. 每行都必须有可复跑命令；无法复跑的历史值不写入本表。
+3. 数字变化必须由同一次运行输出支撑；不同批次的数据不得拼在一张表里。
+4. 断言数、分区数、加载脚本数、e2e spec 数、`check.mjs` 步数由 `badge.mjs` 自动校验，改文档时保持锚点句式。

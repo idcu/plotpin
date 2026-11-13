@@ -1,11 +1,10 @@
-# 性能与基线（Performance）
+# 性能与基线（performance）
 
-> 本文只记录**可核对来源**的性能数据，并严格区分「实测」「代理实测」「估算」「未验证」。
-> 阈值与门禁清单的唯一事实来源是 [engineering.md](engineering.md) §3.3；测试组织见 [testing.md](testing.md)。
->
-> 核对时间 2026-11-08。引用任何数字时都必须带设备、视口/DRP、采集命令与日期；缺一项即视为不可引用。
-
----
+> **读者**：做渲染/数据重构、判断“这次改动有没有变慢”的开发者。
+> **回答**：性能怎么测、阈值在哪、历史读数是多少、哪些结论不能外推。
+> **不回答**：门禁整体结构见 [engineering](engineering.md)§4，测试分层见 [testing](testing.md)。
+> **口径**：本文读数是**带日期的快照**，不是当前承诺；复跑命令见 §2。阈值唯一来源是 `scripts/bench.mjs`、`tests/perf/browser-baseline.perf.mjs` 的常量，本文只摘录。
+> **铁律**：Node 数据不得冒充浏览器数据；SwiftShader 数据不得冒充真实 GPU；同机双标签不得冒充双设备。
 
 ## 1. 三种口径，互不替代
 
@@ -13,65 +12,43 @@
 |---|---|---|---|
 | Node 基准 | `scripts/bench.mjs` | 纯算法/逻辑耗时、相对退化、绝对阈值 | 真实 Canvas2D 光栅、真实 GPU、真机帧率 |
 | 真实浏览器代理 | `scripts/perf-browser.mjs` | Chromium 中真实 Canvas2D 帧耗时、静态层重建、heap、导入 | 真实 GPU（本机为 SwiftShader）、真机温控/功耗 |
-| 人工/真机 | 见 [manual-acceptance.md](manual-acceptance.md) | 目标设备 10 s 连续平移、低端机插件体验 | 可回归性（不可自动重跑） |
-
-**Node 数据不得冒充浏览器数据；SwiftShader 数据不得冒充真实 GPU 数据。** 违反即视为伪造验证。
-
----
+| 人工/真机 | 见 [manual-acceptance](manual-acceptance.md) | 目标设备连续平移、低端机插件体验 | 可回归性（不可自动重跑） |
 
 ## 2. 采集方法与产物
 
-### 2.1 Node 基准
-
 ```text
-node scripts/bench.mjs           # 人类可读 + 阈值结论
-node scripts/bench.mjs --json    # 机器可读，便于贴入 commit / 报告
+node scripts/bench.mjs              # 人类可读 + 阈值结论
+node scripts/bench.mjs --json       # 机器可读
+node scripts/perf-browser.mjs       # 浏览器采数 + 门禁
+node scripts/perf-browser.mjs --no-gate
+node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs
 ```
 
-- 运行在 Node，Canvas 为桩；同一台机器连续多轮取中位数。
-- 阈值是绝对值（不是「上次 ±10%」），因此跨机器绝对值不可直接比较，只能判断是否越线。
-
-### 2.2 真实浏览器
-
-```text
-node scripts/perf-browser.mjs              # 采数 + 门禁
-node scripts/perf-browser.mjs --no-gate    # 只采数（PERF_NO_GATE=1）
-node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs   # P2 打点专项（§4.1.6~§4.1.8）
-```
-
-- 配置：`playwright.perf.config.mjs`，**1920×1080 CSS 视口**、DPR1 与 DPR2 两组；世界域 2000×1500 m；
-  对象构成 1/3 `point.marker` + 1/3 `rect.area` + 1/3 三节点 `line.custom`，全部在视野内（静态层重建最坏情况）。
-- 指标：逐帧主线程耗时 P50/P95/P99（含强制光栅同步）、静态层重建 P50/P95、导入耗时、`performance.memory.usedJSHeapSize` 峰值、
-  画布/静态层字节、WebGL renderer 字符串。
-- 数据文件：`test-results/perf-browser-baseline.json`（`test-results/` 被 `.gitignore` 忽略，**不作为长期证据**；
-  需要留档时复制到 `acceptance-evidence/`）。
-- 缺 Playwright 或 Chromium 时退 2（`[SKIP]`），不得当通过。
-- 报告中的「画布可视区 1472×1028」是页面内 canvasWrap 的实际尺寸，不是视口尺寸，两者不要混用。
-
----
+- **Node**：Canvas 为桩，同一机器连续多轮取中位数；阈值是绝对值，跨机器不可直接比较，只看是否越线。
+- **浏览器**：配置在 `playwright.perf.config.mjs`，CSS 视口 1920×1080、DPR1/DPR2；世界域 2000×1500 m；对象构成为 1/3 `point.marker` + 1/3 `rect.area` + 1/3 三节点 `line.custom`，全在视野内（静态层重建最坏情况）。
+- **指标**：逐帧主线程耗时 P50/P95/P99（含强制光栅）、静态层重建 P50/P95、导入耗时、`performance.memory.usedJSHeapSize` 峰值、画布/静态层字节、WebGL renderer 字符串。
+- **产物**：`test-results/perf-browser-baseline.json` 等；`test-results/` 被 `.gitignore` 忽略且会被 Playwright 清空，**不作为长期证据**，需要留档复制到 `acceptance-evidence/`。
+- 缺 Playwright/Chromium 时 `[SKIP]` 并退 2，不得当通过。
+- 报告中的「画布可视区 1472×1028」是页面内 `canvasWrap` 实际尺寸，不是视口尺寸。
 
 ## 3. 阈值
 
-### 3.1 Node 基准阻断阈值
-
-完整表格见 [engineering.md](engineering.md) §3.3。关键项：
+### 3.1 Node 基准（摘录，完整表以 `bench.mjs` 输出为准）
 
 | 指标 | 阈值 |
 |---|---|
-| 缓存帧 avg / P95 | ≤ 8 ms / ≤ 3 ms（P99 ≤ 10 ms 仅告警） |
-| 静态层重建（2000 对象） | ≤ 60 ms |
-| 直接全量帧 | ≤ 60 ms |
-| `heapUsed` | ≤ 64 MB |
-| 覆盖率 1000×1000 m / 5000×5000 m | ≤ 300 ms / ≤ 300 ms |
-| 规则检查（2000 对象 / 30 类型） | ≤ 500 ms |
-| 覆盖率缩放差异 | ≤ 1 个百分点 |
-| 视口裁剪率 | ≥ 60% |
-| 符号渲染 500 图元 / 索引加载 | ≤ 60 ms / ≤ 10 ms |
-| SVG 导入（可达最坏组合 62 KB） | ≤ 50 ms |
+| 缓存帧 avg / P95 | ≤8 ms / ≤3 ms（P99 ≤10 ms 仅告警） |
+| 静态层重建（2000 对象） | ≤60 ms |
+| 直接全量帧 | ≤60 ms |
+| `heapUsed` | ≤64 MB |
+| 覆盖率 1000×1000 m / 5000×5000 m | ≤300 ms / ≤300 ms |
+| 规则检查（2000 对象 / 30 类型） | ≤500 ms |
+| 覆盖率缩放差异 | ≤1 个百分点 |
+| 视口裁剪率 | ≥60% |
+| 符号渲染 500 图元 / 索引加载 | ≤60 ms / ≤10 ms |
+| SVG 导入（可达最坏组合 62 KB） | ≤50 ms |
 
-### 3.2 真实浏览器门禁（`tests/perf/browser-baseline.perf.mjs`）
-
-阈值来源：2026-11-06 本机实测留约 2 倍余量，写在测试文件常量 `GATES` 中。
+### 3.2 浏览器门禁（`tests/perf/browser-baseline.perf.mjs` 的 `GATES`）
 
 | 场景 | 帧 P95 | 重建 P95 | heap 峰值 | 空工程导入 | 已有工程导入 | 静态层字节 |
 |---|---|---|---|---|---|---|
@@ -80,178 +57,38 @@ node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs   # P2 打�
 | 10000 @ DPR1 | 16.7 ms | 450 ms | 200 MB | 900 ms | 900 ms | 8 MB |
 | 5000 @ DPR2 | 33.3 ms | 500 ms | 128 MB | 600 ms | 600 ms | 32 MB |
 
-DPR2 组帧 P99 > 16.7 ms 只打印告警，不阻断。门禁仅在显式 `npm run perf:browser` 时生效，**不在 `npm run ci`、不在 CI**。
+DPR2 组帧 P99 >16.7 ms 只告警不阻断。门禁仅在显式 `npm run perf:browser` 时生效，**不在 `npm run ci`、不在 CI**。
 
----
+## 4. 历史读数（引用时必须带日期与命令）
 
-## 4. 当前可核对数据
+### 4.1 Node 基准
 
-### 4.1 Node 基准（2026-11-08 本机实测）
-
-机器：Windows 10 10.0.19045 / Intel i5-13400 / 15.8 GB / Node v24.14.0。
-命令：`node scripts/bench.mjs --json`（同一机器独立进程复跑两次，下表取后一次；两次主要读数抖动约 ±5%，绝对值不作为长期承诺）：
+**2026-11-08 本机**：Windows 10 19045 / i5-13400 / 15.8 GB / Node v24.14.0；`node scripts/bench.mjs --json`，独立进程复跑两次取后一次，主要读数抖动约 ±5%。
 
 | 指标 | 实测 | 阈值 | 结论 |
 |---|---|---|---|
 | 缓存帧 avg / P50 / P95 / P99 | 0.38 / 0.36 / 0.46 / 0.63 ms | 8 / 3 / — / 10 | 通过 |
 | 静态层重建（2000 对象） | 23.46 ms | 60 ms | 通过 |
 | 直接全量帧 | 21.41 ms | 60 ms | 通过 |
-| 视口裁剪率 | 99.4%（绘制 13 / 2000） | ≥ 60% | 通过 |
+| 视口裁剪率 | 99.4%（绘制 13 / 2000） | ≥60% | 通过 |
 | `heapUsed` | 30.19 MB | 64 MB | 通过 |
-| 覆盖率 1000×1000 m（30 摄像头） | 7.7 ms（覆盖率 44.3%） | 300 ms | 通过 |
+| 覆盖率 1000×1000 m（30 摄像头） | 7.7 ms（44.3%） | 300 ms | 通过 |
 | 大场地覆盖率 5000×5000 m | 14.7 ms / 173,889 格 / 44.3% | 300 ms | 通过 |
-| 覆盖率缩放差异 | 0 pp（4 级均为 44.42%） | ≤ 1 pp | 通过 |
-| 规则检查（2000 对象 / 30 类型） | 13.3 ms（overlap 9 / spacing 1 / bounds 1） | 500 ms | 通过 |
-| 规则候选对 / 理论对 | 7 / 2,221,111 | — | 仅记录 |
+| 覆盖率缩放差异 | 0 pp（4 级均 44.42%） | ≤1 pp | 通过 |
+| 规则检查（2000 对象 / 30 类型） | 13.3 ms | 500 ms | 通过 |
 | 符号渲染（500 图元） | 重建 3.51 / 缓存帧 0.09 / 直接 2.88 ms | 60 ms | 通过 |
 | 符号库索引加载（36 图元） | 0.018 ms | 10 ms | 通过 |
 | SVG 导入（199 path / 62,154 B） | 1.124 ms | 50 ms | 通过 |
-| SVG 超限拒绝（1,002,466 B） | 0.026 ms（含 64 KB 上限快速拒绝） | 无耗时门禁 | 仅记录 |
 
-#### 4.1.1 覆盖率口径 v3（2026-11-08，N-20 采集）
+**覆盖率口径 v3（2026-11-08，N-20）**：`node scripts/selftest.mjs --filter="覆盖率口径"`；5000×5000 m 单次 `analyzeCoverage` 6 ms（Node 桩），优化器搜索 427 ms（仅记录），统计/面板/导出面积严格相等。v3 与 v2 数值不可直接比较。
 
-命令：`node scripts/selftest.mjs --filter="覆盖率口径"`（Node 18，Windows，本机）。上表 100–102 行为历史 v2 口径值，保留不改写；v3 起区域面积改用解析公式，与统计/图表/面板/导出同源，数值与 v2 不可直接对比。
+**快照列表/淘汰（2026-11-08，N-21）**：20 条 × 1000 对象，`listSnapshots` 0.6 ms vs 全量 `snapshotRecords` 41.4 ms；单条快照生成 16.8 ms；20 条 170.8 ms（仅记录）。
 
-| 指标 | 实测 | 阈值 | 结论 |
-|---|---|---|---|
-| 5000×5000 m 单次 `analyzeCoverage` | 6 ms（Node 桩） | 300 ms | 通过 |
-| 优化器搜索（100×100 m 区域，grid=10，targetCells=2500） | 427 ms（Node 桩） | 仅记录 | 仅记录 |
-| 统计/面板/导出区域面积一致性 | 解析面积严格相等（selftest 1e-9） | 0 偏差 | 通过 |
-| 优化器基准覆盖率与面板覆盖率 | 严格相等（selftest 1e-12，同 targetCells） | 0 偏差 | 通过 |
+### 4.2 真实浏览器代理（Chromium + SwiftShader）
 
-#### 4.1.2 快照列表与淘汰（2026-11-08，N-21 采集）
+**采集环境（2026-11-07/08 两轮）**：CSS 视口 1920×1080（`canvasWrap` 1472×1028），DPR1 三组 + DPR2 一组，headless，SwiftShader（ANGLE Vulkan 1.3.0），世界域 2000×1500 m。命令 `node scripts/perf-browser.mjs --repeat-each=2`（2026-11-08 为 20 passed / 1.2 min）。**这是代理值，不能判断 M5 真机通过。**
 
-命令：`node node_modules/@playwright/test/cli.js test tests/e2e/snapshot.spec.mjs`（Chromium，本机）。20 条快照 × 1000 对象/条。
-
-| 指标 | 实测 | 对照 | 结论 |
-|---|---|---|---|
-| `listSnapshots`（元数据索引） | 0.6 ms | 全量 `snapshotRecords` 41.4 ms | 列表不再解析快照 data |
-| 单条快照生成（1000 对象） | 16.8 ms | — | 阈值 2000 ms |
-| 20 条快照生成（1000 对象/条） | 170.8 ms（除首条） | — | 仅记录 |
-| 快照淘汰（21 条 → 20 条，selftest） | 计数与最旧删除断言通过 | — | 至少保留 1 条 |
-
-#### 4.1.3 10k 对象拖动捕捉热路径（2026-11-08，N-22 采集）
-
-命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-22"`（真实 Chromium，1920×1080@DPR1，10k 对象，真实 `page.mouse` 事件）。改造前基线用同一 harness、把 `js/core/geometry.js` + `js/core/interaction.js` `git stash` 回退后采集两次。
-
-| 指标 | 改造前 | 改造后 | 变化 | 结论 |
-|---|---|---|---|---|
-| 捕捉解析 P95 | 18.5 / 14.1 ms | 3.1~4.0 ms | −71%~−83% | 通过（阈值 8 ms） |
-| 拖动帧 P95（事件 → 应用渲染完成） | 34.3 / 34.4 ms | 22.5 / 22.6 / 21.9 ms | −34%~−36% | 通过（计划要求 ≥30%） |
-| 拖动整帧 P95（含强制光栅） | 37.0 / 38.3 ms | 25.1~26.5 ms | −28%~−34% | 仅记录 |
-| 拖动期 heapUsed 增量 | +0.32% | +0.62% / +0.63% | — | 通过（≤5%） |
-
-口径：帧耗时用 `PointerEvent.timeStamp` 到应用 rAF 回调完成的差值；每轮 96 个真实 `pointermove` 样本，拖动前预热 6 步并清空探针，测量区间内历史快照数必须为 1（`hist0` 断言）。
-
-#### 4.1.4 10k 对象连续点选与静态层重建（2026-11-08，N-23 采集）
-
-命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-23"`（真实 Chromium 1920×1080@DPR1，10k 对象，真实 `page.mouse.click`）。改造前基线 = N-22 提交态（`556c205`）把 `render.js`/`ui-panels.js`/`interaction.js` `git stash` 回退后实测。
-
-| 指标 | 改造前 | 改造后 | 变化 | 结论 |
-|---|---|---|---|---|
-| 点选整帧 P95（按下 → 渲染完成） | 661.1 / 710.2 ms | 20.0 / 20.9 / 22.1 ms | −97% | 通过（计划要求 ≥30%） |
-| 30 次点选期间静态层重建 | 30 | **0** | — | 通过 |
-| 10 次悬停期间静态层重建 | — | **0** | — | 通过 |
-| 静态层单次重建稳态 P95（拖拽起止各一次） | 246.2 ms | 213.1 / 226.0 ms | 未回退 | 通过（容差 1.1×，见下） |
-| 选中→取消后画布像素 | 一致 | 一致（哈希逐字节相同） | — | 通过 |
-
-口径：点选帧耗时用 `PointerEvent.timeStamp` 到 rAF 完成；30 个样本，前 6 次预热。静态层重建耗时为 `invalidateStatic()` + `drawScene()` + `getImageData()` 强制光栅，2 次预热后取 3 个稳态样本的 P95；10% 容差只吸收 GPU 光栅抖动，不是阈值放宽。基线 246.2 ms 是该指标两次采样（172.9 / 246.2）中较差的一次。
-
-基准代价：**对象拖拽**在开始/结束各触发一次静态层重建（选中/悬停为零次）；**场地手柄与底图缩放手柄拖拽不再重建静态层**（P2-01，见 4.1.5）。10k 对象时单次全量重建约 0.2 s，与改造前「选中即重建」的总次数相同，只是把成本从点选移到了真正开始改形时。
-
-#### 4.1.5 场地手柄拖拽：静态层重建次数与整帧耗时（2026-11-11，R-07 采集）
-
-命令：`node scripts/perf-browser.mjs tests/perf/p2-perf.perf.mjs -g "R-07"`（真实 Chromium 1920×1080@DPR1，10,000 对象 + 默认矩形场地；同一 harness 内把 `staticDragScene()` 替换为空实现作为基线）。
-
-| 指标 | 基线（每帧重建） | 改造后 | 变化 | 结论 |
-|---|---|---|---|---|
-| 40 次拖动期间静态层重建数 | 40 | **0** | −100% | 通过 |
-| 整个拖拽过程静态层重建总数（含首帧） | 41 | **1** | −97.6% | 通过 |
-| 整帧耗时 P50 | 17.4 ms | **16.8 ms** | −3.4% | 通过 |
-| 整帧耗时 P95 | 224.8 ms | **18.2 ms** | **−91.9%** | 通过 |
-| 整帧耗时 max | 240.6 ms | **18.9 ms** | −92.1% | 通过 |
-
-口径：每轮先 `installScene(10000)` 重置并重新渲染静态层，再抓取 `siteHandleList()[1]`，向左下拖动 40 次（保持手柄在画布内）；用 rAF 采样整帧耗时，`duringRebuilds` 只统计拖拽开始后的重建次数。基线通过把 `window.staticDragScene` 换成 `() => ''` 构造，业务代码不含该分支的开关。
-
-#### 4.1.6 历史快照活动楼层别名归一化（2026-11-08，CORE-P2-3 修复）
-
-命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-3" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，headless/SwiftShader，10,000 对象，20 次 `pushHistory`；堆读数经 CDP `HeapProfiler.collectGarbage` 强制 GC 两次后取 `Runtime.getHeapUsage`）。
-
-| 指标 | 改造前（`6bf2bf5` 实测） | 改造后（本次） | 变化 | 结论 |
-|---|---|---|---|---|
-| 20 条历史堆增量 | 19.657 MB（20,611,612 B） | **8.912 MB（9,344,656 B）** | **−54.7%** | 达到约 9.8 MB 量级目标 |
-| 20 次 `pushHistory` 同步耗时 | 826.1 / 840.5 ms | **505.2 / 488.3 ms** | **−39% / −42%** | 与对照布局 484.2 / 479.8 ms 持平 |
-| 每条快照对象实例数 | 400,000 | **200,000** | −50% | 两条路径共用同一数组 |
-| 每条快照独立数组数（活动楼层） | 20/20 快照为两个不同数组 | **0/20** | — | `objects === floors[active].objects` |
-| 单条快照堆占用 | 1,006.43 KB | **456.28 KB** | −54.7% | 仅记录 |
-
-对照布局（同一 harness 内临时去掉活动楼层别名）：8.885 MB / 484.2 / 479.8 ms；改造后与对照比值 1.00。
-
-根因与修法：`state.objects` 与 `state.floors[activeFloorId].objects` 指向同一数组（`syncActiveFloor()` 建立），
-`snapshotHistoryState` 原先按两条路径分别遍历，未按引用去重。现在快照与物化都带 `WeakMap` 记忆：
-同一 live 容器只生成一份快照容器（`sharedHistoryValue`），物化时同一快照容器只复制一份（`copySnapshotContainers`），
-因此快照与恢复后的 live state 都保持 `objects === floors[active].objects`，别名结构不变、对象实例不翻倍。
-
-语义保持：20 条上限、`past/future` 消费方式、切层后撤销/重做、资产保活、`markDirty('restore')` 落盘时机均未改动；
-selftest 74b 覆盖「双楼层 + F1 编辑 → 切 F2 编辑 → 两次撤销 → 重做」与资产可达集（21 项断言）。
-
-
-#### 4.1.7 快照列表/淘汰的 IDB 读取次数（2026-11-08，CORE-P2-4 打点）
-
-命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-4" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，20 条快照 × 10,000 对象，`idbGetKey` 计数包装）。两次独立复跑。
-
-| 路径 | P50 / P95 (ms) | 每次 `idbGetKey` 次数 | 结论 |
-|---|---|---|---|
-| `listSnapshots()`（元数据索引） | 0.2 / 0.9；0.2 / 0.6 | 1 | 只读 `snapidx:`，不解析快照 data |
-| `pruneSnapshots()`（元数据索引） | 0.2 / 0.3；0.1 / 0.3 | 1 | 淘汰判定不读 data（本次 20 条未触发删除） |
-| `snapshotRecords()`（全量读） | 355.1 / 360.1；345.9 / 349.8 | 20 | 逐条读 20 份快照 data |
-
-结论：CORE-P2-4 指出的「列表/淘汰全量读」已由 N-21 的 `snapidx:<pid>` 索引消除；本次只补读取次数与耗时打点，生产代码未改。全量读仍保留为索引缺失时的回退路径。
-
-#### 4.1.8 导出字段「长度/面积」去重（2026-11-08，IO-P2-11 修复）
-
-命令：`node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "IO-P2-11" --repeat-each=2`（真实 Chromium 1920×1080@DPR1，10,000 行 = 3,334 point + 3,333 rect + 3,333 line，`buildExportRow` 3 次取中位；探针包装 `objectLength`/`objectArea` 计数）。
-
-| 指标 | 改造前（`987f594` 实测） | 改造后（本次） | 变化 |
-|---|---|---|---|
-| `objectLength` 调用 | 13,333 次（1.33 次/行） | **10,000 次（1.00 次/行）** | −25% |
-| `objectArea` 调用 | 13,333 次（1.33 次/行） | **10,000 次（1.00 次/行）** | −25% |
-| 10k 行构建 P50 | 18.9 / 17.4 ms | 15.6 / 18.4 ms | 差异在机器抖动内，不判定为提速 |
-| 8 种 golden | — | 逐字节不变 | e2e 全绿（117 通过 +1 条件跳过） |
-
-修法：`buildExportRow` 在行上下文里各算一次 `objectLength` / `objectArea`，字段 getter 只读取；导出字段集合、列顺序与数值格式未动。
-结论：重复计算已消除，调用数确定下降 25%；10k 行规模的墙钟收益小于本机抖动（改造前实测可回收 1.2~1.6 ms），不宣称提速。
-
-#### 4.1.5 历史栈含照片内存与 10k 快照列表（2026-11-08，N-24 复测）
-
-命令：`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-24"`（真实 Chromium，CDP `HeapProfiler.collectGarbage` + `Runtime.getHeapUsage` 测堆）。夹具：1000 对象 + 10 张 100 KB 内嵌 base64 照片；参考组用 `JSON.parse(JSON.stringify(state))` 复刻改造前的整份深拷贝 20 条。
-
-| 指标 | 改造前（整份深拷贝） | 当前（结构共享） | 变化 | 结论 |
-|---|---|---|---|---|
-| 20 条含照片历史 heapUsed 增量 | 28.01 MB（29,365,720 B） | **1.00 MB（1,049,336 B）** | **−96.43%** | 通过（≥50%） |
-| 20 次 pushHistory 同步耗时 | 122.5 ms | 41.9 ms | −65.8% | 记录 |
-| 单次 undo 同步耗时（5 次采样） | — | 7.6 / 11.3 / 9.0 / 10.6 / 10.1 ms，max **11.3 ms** | — | 通过（<100 ms） |
-
-10k 对象 × 20 条快照的列表打开（N-21 元数据索引 vs 逐条全量读）：
-
-| 路径 | P50 | P95 | 加速 |
-|---|---|---|---|
-| `listSnapshots()`（`snapidx:` 索引） | 0.2 ms | 0.8 ms | — |
-| `snapshotRecords()`（逐条读 + 反序列化） | 371.1 ms | 384.2 ms | **1855×** |
-
-说明：N-24 的内存问题由 B-10（结构共享快照）修复、列表耗时由 N-21（元数据索引）修复，本次仅补真机复测与门禁，未改业务代码。e2e `history-increment.spec.mjs` 已固化「heapUsed 下降 ≥50%」与「undo <100ms」两条断言；本文件 §4.1.5 的 perf 用例额外覆盖 10k 快照列表。
-
-### 4.2 真实浏览器代理数据（Chromium + SwiftShader）
-
-采集环境（2026-11-07 与 2026-11-08 两轮一致）：CSS 视口 **1920×1080**（页面内 `canvasWrap` 实际 1472×1028，**不是视口尺寸**），
-DPR1 三组 + DPR2 一组，**headless=true**，渲染后端 **SwiftShader 软件光栅**（ANGLE Vulkan 1.3.0 / SwiftShader driver，不是真实 GPU），
-世界域 2000×1500 m，对象构成 1/3 `point.marker` + 1/3 `rect.area` + 1/3 三节点 `line.custom`，全部在视野内。
-命令 `node scripts/perf-browser.mjs --repeat-each=2`（门禁开启；2026-11-08 为 **20 passed / 1.2 min**，四组基线各复跑 2 次）。
-该数据是**代理值**：不能据此判断 M5「真实 GPU / 低端设备」通过。
-
-#### 4.2.1 历史对照（2026-11-07）
-
-来源：[manual-acceptance-report-2026-11-07.md](manual-acceptance-report-2026-11-07.md) §M5；当日命令 `npm run perf:browser`（4 passed / 19.1 s）。
+**2026-11-07 历史对照**（当日 `npm run perf:browser`，4 passed / 19.1 s；原报告已并入 [manual-acceptance](manual-acceptance.md)，git 历史可查）：
 
 | 场景 | 帧 P50 / P95 / P99 / max (ms) | 静态层重建 P50 / P95 (ms) | heap 峰值 |
 |---|---|---|---|
@@ -260,72 +97,74 @@ DPR1 三组 + DPR2 一组，**headless=true**，渲染后端 **SwiftShader 软�
 | 10000 对象 DPR1 | 2.9 / 6.9 / 11.7 / 13.4 | 219.4 / 235.7 | 68.88 MB |
 | 5000 对象 DPR2 | 11.0 / 17.1 / 19.5 / 23.1 | 210.8 / 224.4 | 37.18 MB |
 
-#### 4.2.2 2026-11-08 复跑（两轮并列）
+**2026-11-08 复跑（两轮并列）**：
 
-| 场景 | 帧 P50 / P95 / P99 / max (ms)〔轮1；轮2〕 | 静态层重建 P50 / P95 (ms)〔轮1；轮2〕 | heap 峰值〔轮1；轮2〕 |
+| 场景 | 帧 P50 / P95 / P99 / max (ms) | 静态层重建 P50 / P95 (ms) | heap 峰值 |
 |---|---|---|---|
-| 2000 对象 DPR1 | 0.6 / 2.0 / 2.4 / 2.5；0.6 / 2.4 / 4.0 / 4.9 | 37.6 / 42.4；38.1 / 40.1 | 23.55 MB；23.64 MB |
-| 5000 对象 DPR1 | 0.7 / 2.1 / 3.4 / 4.6；0.7 / 2.3 / 3.6 / 4.5 | 86.6 / 90.9；87.5 / 100.9 | 26.57 MB；33.92 MB |
-| 10000 对象 DPR1 | 0.9 / 3.1 / 4.9 / 5.2；1.0 / 3.7 / 4.6 / 4.7 | 175.6 / 182.3；181.8 / 199.4 | 65.92 MB；62.10 MB |
-| 5000 对象 DPR2 | 7.9 / 11.6 / 14.5 / 15.1；8.2 / 12.3 / 16.2 / 16.3 | 167.6 / 175.1；190.6 / 301.6 | 56.32 MB；26.57 MB |
+| 2000 对象 DPR1 | 0.6 / 2.0 / 2.4 / 2.5；0.6 / 2.4 / 4.0 / 4.9 | 37.6 / 42.4；38.1 / 40.1 | 23.55；23.64 MB |
+| 5000 对象 DPR1 | 0.7 / 2.1 / 3.4 / 4.6；0.7 / 2.3 / 3.6 / 4.5 | 86.6 / 90.9；87.5 / 100.9 | 26.57；33.92 MB |
+| 10000 对象 DPR1 | 0.9 / 3.1 / 4.9 / 5.2；1.0 / 3.7 / 4.6 / 4.7 | 175.6 / 182.3；181.8 / 199.4 | 65.92；62.10 MB |
+| 5000 对象 DPR2 | 7.9 / 11.6 / 14.5 / 15.1；8.2 / 12.3 / 16.2 / 16.3 | 167.6 / 175.1；190.6 / 301.6 | 56.32；26.57 MB |
 
-#### 4.2.3 与 11-07 对照的结论
+**结论**：四组均通过门禁，未出现超阈值回退；DPR2 重建 P95 轮2 301.6 ms（阈值 500），同用例两轮相差 72%，属 SwiftShader 抖动；heap 峰值受导入路径与 GC 时机影响，两轮可相差一倍，均远低于阈值，未做逐版本归因。
 
-| 场景 | 帧 P95 变化 | 重建 P95 变化 | heap 峰值变化 | 门禁 |
-|---|---|---|---|---|
-| 2000 对象 DPR1 | 3.0 → 2.0/2.4 ms（−33%/−20%） | 51.6 → 42.4/40.1 ms（−18%/−22%） | 16.85 → 23.55/23.64 MB（+40%） | 通过（阈值 64 MB） |
-| 5000 对象 DPR1 | 6.3 → 2.1/2.3 ms（−67%/−63%） | 126.2 → 90.9/100.9 ms（−28%/−20%） | 36.98 → 26.57/33.92 MB（−28%/−8%） | 通过（阈值 128 MB） |
-| 10000 对象 DPR1 | 6.9 → 3.1/3.7 ms（−55%/−46%） | 235.7 → 182.3/199.4 ms（−23%/−15%） | 68.88 → 65.92/62.10 MB（−4%/−10%） | 通过（阈值 200 MB） |
-| 5000 对象 DPR2 | 17.1 → 11.6/12.3 ms（−32%/−28%） | 224.4 → 175.1/301.6 ms（−22%/+34%） | 37.18 → 56.32/26.57 MB（+51%/−29%） | 通过（阈值 500 ms / 128 MB） |
+### 4.3 专项打点（都有可复跑命令）
 
-结论：**四组均通过门禁，未出现超阈值回退**；帧 P95 与 DPR1 静态层重建 P95 全面低于 11-07。
-两处相对历史值上升但均在阈值内，且两轮之间本身抖动大，无法归因于代码退化：
+| 主题 | 命令 | 关键结果 |
+|---|---|---|
+| 10k 拖动捕捉（N-22） | `node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-22"` | 捕捉解析 P95 18.5/14.1 → 3.1~4.0 ms；拖动帧 P95 −34%~−36%；heap 增量 ≤0.63% |
+| 10k 连续点选（N-23） | `node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-23"` | 点选帧 P95 661.1/710.2 → 20.0/20.9/22.1 ms；30 次点选静态重建 30 → 0；静态层单次重建未回退 |
+| 场地手柄拖拽（R-07） | `node scripts/perf-browser.mjs tests/perf/p2-perf.perf.mjs -g "R-07"` | 40 次拖动重建 40 → 0；整帧 P95 224.8 → 18.2 ms |
+| 历史快照别名（CORE-P2-3） | `node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-3" --repeat-each=2` | 20 条历史堆增量 19.657 → 8.912 MB（−54.7%）；`pushHistory` 826/840 → 505/488 ms |
+| 快照列表 IDB 读取（CORE-P2-4） | 同上 `-g "CORE-P2-4"` | 列表/淘汰各 1 次 `idbGetKey`（P95 0.9/0.6、0.3/0.3 ms）；全量读 20 次（P95 360/350 ms） |
+| 导出字段去重（IO-P2-11） | 同上 `-g "IO-P2-11"` | `objectLength`/`objectArea` 13,333 → 10,000 次（−25%）；墙钟差异在抖动内，不宣称提速 |
+| 历史含照片内存（N-24） | `node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-24"` | 20 条含照片历史堆增量 28.01 → 1.00 MB（−96.43%）；undo max 11.3 ms |
+| 10k 快照列表（N-21/N-24） | 同上 | `listSnapshots` P95 0.8 ms vs 逐条读 384.2 ms（约 1855×） |
 
-- DPR2 重建 P95 轮2 301.6 ms（阈值 500），轮1 仅 175.1 ms；同一用例两轮相差 72%，属 SwiftShader 光栅抖动。
-- heap 峰值受导入路径与 GC 时机影响：2000 组两轮稳定在 23.5 MB 附近但高于 11-07 的 16.85 MB；
-  DPR2 两轮 56.32 / 26.57 MB 相差 112%。均远低于对应阈值，未做因果归因（无逐版本内存打点）。
+口径：拖动/点选帧耗时用 `PointerEvent.timeStamp` 到 rAF 完成；拖动每轮 96 个真实 `pointermove`，点选 30 个样本、前 6 次预热；重建耗时用 `invalidateStatic()` + `drawScene()` + `getImageData()` 强制光栅，2 次预热后取 3 个稳态样本 P95；堆读数经 CDP `HeapProfiler.collectGarbage` 强制 GC 两次后取 `Runtime.getHeapUsage`。
 
-解读边界：
+### 4.4 静态层局部补绘（M6，2026-11-13）
 
-- DPR2 的帧 P99 16.2 ms 仍接近 16.7 ms 告警线（不阻断），高 DPR 下光栅成本仍是主要风险。
-- 2000 对象的浏览器重建（42.4/40.1 ms）仍远高于 Node 桩（23.46 ms），这是真实 Canvas2D 绘制成本，不能拿 Node 数据替代。
+**改了什么**：`patchStaticObjects` 不再只用旧 `staticBounds` 推导补绘矩形，而是对每个受影响 id 取**旧包围盒 ∪ 新 `objectSnapBounds`**（`patchUnionRect`，96 px pad、60% 面积阈值）；`clip`/`clearRect` 恒等于并集矩形，重绘 `view` 再按 pad 外扩（`applyPatchRect`），把矩形外 96 px 内的邻居一起重画。旧盒缺失或对象已删除时回退整层重建。
 
----
+**证据**：`tests/e2e/perf-render.spec.mjs` 新增 3 条像素采样用例——对象位移、放大、编辑 A 后 B 的标签仍在。改前分别红在 `atNew`、`inside1`、`after=0`，且 `patched=true`（`staticRev` 未变，证明缺陷在局部补绘路径而非被整层重建掩盖）；改后 4 passed。selftest 第 47 分区同步新增 21 条纯函数/Canvas 桩断言。源码入口全量 e2e 2026-11-13 记录 154 passed / 1 skipped / 0 failed。
+
+**未验证 / 残留**（不得写成“已解决”）：
+
+- 标签溢出超出 96 px pad（宽度约 >192 px）仍可能被擦；`objectSnapBounds` 对 point 只返回锚点，未做 `measureText` 精确外扩。
+- 只在 **dpr=1 的 headless Chromium** 下测过；采样换算按 dpr 归一，但 dpr=2 的设备像素对齐未实测，真实 GPU/真机也未验证。
+- 只覆盖属性面板 `commitObjectEdit` 路径；鼠标拖拽期间 `drag` 非空，走整层重建，未在同一用例覆盖。
+- 这是渲染路径优化，不改变落盘数据、图层顺序或绘制内容；最坏情况回退整层重建，同一画面、仅成本退化。
 
 ## 5. 已知瓶颈与风险
 
 | 风险 | 证据 | 影响 |
 |---|---|---|
-| 静态层重建随对象数近似线性增长 | 浏览器 P50：45.5 → 104.9 → 219.4 ms（2000/5000/10000，2026-11-07）；2026-11-08 轮1 为 37.6 → 86.6 → 175.6 ms | 10000 对象每次全量重绘约 0.2 s；平移/缩放依赖缓存帧而非每帧重建 |
-| 高 DPR 光栅成本 | DPR2 帧 P95 17.1 ms、P99 19.5 ms（2026-11-07）；2026-11-08 为 P95 11.6/12.3、P99 14.5/16.2（5000 对象） | 高分屏低端设备可能掉到 50 fps 附近 |
-| 浏览器 heap 随对象数增长 | 2026-11-07：16.85 → 36.98 → 68.88 MB；2026-11-08 轮1：23.55 → 26.57 → 65.92 MB（2000/5000/10000） | 仍在门禁内，但长时编辑的内存斜率未测 |
-| SwiftShader 与真实 GPU 差异 | 报告 §M5 | 当前浏览器数据只能作相对对照，绝对值不可外推 |
-| Node 桩与真实 Canvas 差异 | 2000 对象重建 23.46 ms vs 浏览器 51.6 ms(P95) | 两套阈值必须分别维护；Node 绿不代表浏览器绿 |
-| `getImageData` / 大底图解码 | `APP_LIMITS.BG_MAX_DECODE_PIXELS = 40 MP`，无专项耗时断言 | 超大底图首次解码可能造成一次性卡顿，未能量化 |
-| 长跑内存未验证 | 无 soak 内存曲线 | 不能声称「无泄漏」，只能说门禁内单次读数正常 |
-| 性能门禁不在主 CI | `.github/workflows/ci.yml` 只跑 Node bench；浏览器读数由 `perf-nightly.yml` 夜间定时/手动执行 | 合并前不拦截浏览器回归，只能靠夜间读数与人工/本地执行 |
-| 机器差异 | 绝对阈值 | 共享机器负载高时可能误报；记录数据必须带机器信息 |
-
----
+| 静态层重建随对象数近似线性 | 2026-11-07 P50：45.5 → 104.9 → 219.4 ms（2000/5000/10000）；2026-11-08 轮1 37.6 → 86.6 → 175.6 ms | 10k 每次全量重绘约 0.2 s；平移/缩放依赖缓存帧 |
+| 高 DPR 光栅成本 | DPR2 帧 P95 17.1（11-07）、11.6/12.3（11-08） | 高分屏低端设备可能掉到 50 fps 附近 |
+| heap 随对象数增长 | 11-07 16.85 → 36.98 → 68.88 MB；11-08 轮1 23.55 → 26.57 → 65.92 MB | 仍在门禁内，长时编辑斜率未测 |
+| Node 桩与真实 Canvas 差异 | 2000 对象重建 23.46 ms（Node）vs 51.6 ms（浏览器 P95） | 两套阈值必须分别维护；Node 绿不代表浏览器绿 |
+| SwiftShader 与真实 GPU 差异 | 本机无独立 GPU | 绝对值不可外推 |
+| 大底图首次解码 | `APP_LIMITS.BG_MAX_DECODE_PIXELS = 40 MP` | 可能一次性卡顿，未量化 |
+| 性能门禁不在主 CI | `.github/workflows/ci.yml` 只跑 Node bench；`perf-nightly.yml` 已挂载但 0 次运行 | 合并前不拦截浏览器回归 |
+| 机器差异 | 绝对阈值 | 共享机器负载高时可能误报；记录必须带机器信息 |
 
 ## 6. 未实测 / 未验证（不得当作通过）
 
-| 项 | 状态与原因 |
+| 项 | 状态 |
 |---|---|
-| 真实 GPU 帧率与长跑 | **未验证**：本机无独立 GPU，Chromium 走 SwiftShader |
-| 低端 Android/iOS 真机 | **未验证**：无真机、无 HTTPS 站点；`adb` 不存在 |
-| 真实双设备 WebRTC 性能 | **未验证**：仅同机双标签；代码固定 `iceServers: []` |
-| 2026-11-08 浏览器基线复跑 | **已执行（不再是未验证项）**：`node scripts/perf-browser.mjs --repeat-each=2` 四组基线 × 2 轮（20 passed / 1.2 min），数据见 §4.2.2；11-07 值保留为历史对照。仍不代表真实 GPU / 真机 |
-| 10000 对象以上 | **未实测**：导入上限 100000 对象，但性能只测到 10000 |
-| 长事务/soak 内存曲线 | **未实测**：只有单次 `heapUsed` 峰值 |
-| 5000×5000 m 覆盖率在真实浏览器 | **未实测**：Node v3 实测 6 ms（2026-11-08，N-20）；浏览器端未单独采集 |
-
----
+| 真实 GPU 帧率与长跑 | 未验证：本机 Chromium 走 SwiftShader |
+| 低端 Android/iOS 真机 | 未验证：无真机、无 HTTPS 站点 |
+| 真实双设备 WebRTC 性能 | 未验证：仅同机双标签；`iceServers: []` |
+| 10000 对象以上 | 未实测：导入上限 100000，性能只测到 10000 |
+| 长事务/soak 内存曲线 | 未实测：只有单次 heap 峰值 |
+| 5000×5000 m 覆盖率在真实浏览器 | 未实测：只有 Node v3 的 6 ms |
+| 真实 5 万行 XLSX 解析 | 未实测：只有构造样本断言 |
 
 ## 7. 采数与提交规范
 
 1. 先跑 `node scripts/bench.mjs --json`；涉及渲染改动再加 `node scripts/perf-browser.mjs`。
 2. commit body 写「机器、日期、命令、关键读数、阈值、结论」；不达标不提交，禁止改阈值或删断言。
-3. 只引用本文格式的数据（带日期+命令）；旧文档中无法核对来源的数字不再引用。
-4. 浏览器数据留档复制到 `acceptance-evidence/`，不要依赖 `test-results/`（会被 Playwright 清空）。
-5. 若必须调整阈值：写「旧值 → 新值、理由、连续 N 轮实测」；新阈值不得放宽到无法再拦住已知退化。
+3. 只引用本文格式的数据（日期 + 命令 + 环境）；无法核对来源的旧数字不再引用。
+4. 浏览器数据留档复制到 `acceptance-evidence/`，不要依赖 `test-results/`。
+5. 调整阈值必须写「旧值 → 新值、理由、连续 N 轮实测」，且不得放宽到无法拦住已知退化。

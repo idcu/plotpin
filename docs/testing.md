@@ -1,34 +1,30 @@
-﻿# 测试体系（Testing）
+# 测试体系（testing）
 
-> 本文描述**当前真实存在**的测试结构、判据与空白；不把「计划要加」写成「已有」。
-> 工程门禁与阈值的唯一事实来源是 [engineering.md](engineering.md)，性能数据见 [performance.md](performance.md)。
->
-> 本轮核对：2026-11-10，`node scripts/selftest.mjs`、`node scripts/selftest.mjs --list`、
-> `node node_modules/@playwright/test/cli.js test --list`。数量类指标汇总于 [facts.md](facts.md)，本文只描述结构与覆盖，不写「大约」。
-> §1/§3.2 的计数锚点由 `node scripts/badge.mjs --check` 校验（断言 / 分区 / 加载脚本 / e2e spec / 门禁步数），与实际不一致即红。
-
----
+> **读者**：要加测试、判断“绿了保证什么”、准备发布验收的开发者。
+> **回答**：测试分几层、selftest 与 e2e 各覆盖什么、golden 锁什么、哪些空白明确未覆盖。
+> **不回答**：门禁命令与阈值见 [engineering](engineering.md)，性能读数见 [performance](performance.md)，人工验收见 [manual-acceptance](manual-acceptance.md)。
+> **原则**：不把“计划要加”写成“已有”；不把“跳过”写成“通过”；不把未跑过的浏览器写成“已支持”。
+> **数量口径**：本文只保留结构锚点，当前计数以 [facts](facts.md) 与命令输出为准。最后核对：2026-11-13。
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-12） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
+| 层 | 入口 | 运行环境 | 规模（2026-11-13 记录） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 3,979 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 已运行且失败（`e2e` job 双入口 matrix 均红，2026-11-13）；以本地 `node scripts/e2e.mjs` 为准，见 §3.1 |
-| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 4,048 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 155 个用例**（源码入口 154 跑 + 1 条件跳过） | 已运行且失败（`e2e` job 双入口 matrix 均红，2026-11-13）；以本地命令为准，见 §3 |
+| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 17 种人为破坏 | 是 |
 
-> **Actions 现状（2026-11-13 核查）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI **60 次全部失败**（`test` 与两个 `e2e` job 为红）、`Perf Nightly` **0 次**、`pages-build-deployment` **87 次**；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单与期望值见 [release-checklist.md](release-checklist.md)。
+> **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。
 
-三层职责不同，**数据不可互换**：
+四层职责不同，**数据不可互换**：
 
-- selftest 证明「函数/数据/导出字节」正确，但 DOM/Canvas 是桩，不能证明真实渲染；
-- e2e 证明「用户路径能走通」，但不能替代逐字节 golden 与大对象性能；
-- perf-browser 只采真实浏览器读数，不证明业务正确性；SwiftShader 数据不能当真实 GPU 结论。
+- selftest 证明“函数/数据/导出字节”正确，但 DOM/Canvas 是桩，不能证明真实渲染；
+- e2e 证明“用户路径能走通”，但不能替代逐字节 golden 与大对象性能；
+- perf-browser 只采真实浏览器读数，不证明业务正确性；SwiftShader 数据不能当真实 GPU 结论；
+- check-gates 证明“判据本身会红”，不证明产品功能。
 
-缺依赖时的退出码约定：`e2e.mjs` / `perf-browser.mjs` 打印 `[SKIP]` 并 **退 2**（不是 0），因此「跳过」不会伪装成「通过」。
-
----
+缺依赖时的退出码约定：`e2e.mjs` / `perf-browser.mjs` 打印 `[SKIP]` 并**退 2**（不是 0），因此“跳过”不会伪装成“通过”。
 
 ## 2. 逻辑自测（selftest）
 
@@ -38,10 +34,8 @@
 - 两种断言原语：`eq(说明, 实际, 期望)`（严格相等/深比较）与 `ok(说明, 条件)`；失败信息包含实际值与期望值。
 - 每个分区直接对真实模块调用，不启动浏览器；DOM/Canvas 用最小桩替换，**桩不得改写业务分支**。
 - `--list` 只列分区名；`--filter "正则"` 只跑匹配分区；两者都不改变断言语义。
-- 分区编号存在复用（实测重复：8、28、32、36、48、53、56、57、63、64、65、66、67、75；其中 57 有 10 个子分区），
-  另有未编号的 D-01/D-02 等；**以 `--list` 的输出顺序为准，不要按编号排序**。
-
-新增分区时：先确认没有可复用的既有分区；同一场景的正反例放在同一分区；跨用例公共样本抽到独立辅助模块，避免多份样本漂移。
+- 分区编号存在复用（历史实测重复：8、28、32、36、48、53、56、57、63、64、65、66、67、75；其中 57 有 10 个子分区），另有未编号的 D-01/D-02 等；**以 `--list` 的输出顺序为准，不要按编号排序**。
+- 新增分区时：先确认没有可复用的既有分区；同一场景的正反例放在同一分区；跨用例公共样本抽到独立辅助模块，避免多份样本漂移。
 
 ### 2.2 分区地图（按功能域归组）
 
@@ -51,71 +45,50 @@
 | 资产与导入 | 7 内容寻址、8/8.1 表格批量、28/28.3/29/30/31 台账往返、50 解析器加固、70 导入限值 |
 | 场地/几何模型 | 9 场地、11 旧工程迁移、12/17 场地形状、14/15/46 区域形状、19 基点 |
 | 编辑与交互 | 20/21 节点、23 精确约束、24/25/33 OSNAP、26 测距、54 方向约束、65 对齐分布、66 编号层级、68 提交判定 |
-| 校准与取景 | 39 仿射校准、D-02 校准前置状态机、41 场地节点编辑、47 分层渲染/裁剪 |
+| 校准与取景 | 39 仿射校准、D-02 校准前置状态机、41 场地节点编辑、47 分层渲染/裁剪/局部补绘（`patchUnionRect`、`applyPatchRect`） |
 | 标注与统计 | 27 面积长度、40/43/44/45 标注开关、63 多楼层汇总 |
 | 导出/导入产物 | JSON 往返、导出回导核对、SVG、DXF（含版本审计与高级实体）、PDF（含多页）、单文件发行包、XLSX inlineStr |
 | 覆盖率/规则 | 38/48/48.1 覆盖率、57.2–57.9 规则框架与三条规则、57.7 违规 CSV |
 | 插件 | 57/57.1 注册点、API 版本化与能力白名单 |
-| 协作/存储 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰、存储 v2 + 楼层 updatedAt、`markDirty`/`dragChanged` 提交协议、版本快照、历史栈共享 |
+| 协作/存储 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰、存储 v2 + 楼层 updatedAt、`markDirty`/`dragChanged` 提交协议、版本快照、历史栈共享、M2 配置差异统计、协作安全默认（39.13b：权限告知 / 跨设备首快照确认 / 200ms 接收节流 / 撤销栈隔离） |
 | 运行环境/安全 | 49 能力探测、56.1 注入路径、69 转义白名单、70 导入事务 |
 | UI 语义 | 58 中英切换与无障碍标记、60 焦点管理、D-01 引导、D-03 帮助中心、D-07 加载审计、D-08 保存失败、D-09 标签租约 |
-| 领域功能 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划、75/BOM、75.10 图框标题栏、75.11 i18n 模板、V-5 参照版（标定判定/三类差异/清除无痕） |
+| 领域功能 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划、75/BOM、75.10 图框标题栏、75.11 i18n 模板、V-5 参照版（标定判定/三类差异/清除无痕）、M1 polygon 面积/命中/边界 |
 
 > 完整分区名单以 `node scripts/selftest.mjs --list` 为准；本表只做导航，不作为清单。
 
----
-
 ## 3. 浏览器 e2e
 
-### 3.1 运行形态
+### 3.1 运行形态与浏览器边界
 
-- `playwright.config.mjs`：仅 **Chromium**、`workers: 1`、`fullyParallel: false`、`timeout: 30s`、`expect: 5s`、`retries: 0`、
-  headless、`screenshot: only-on-failure`；`webServer` 用 `node scripts/serve.mjs` 起 `http://127.0.0.1:4173`。
+- `playwright.config.mjs`：仅 **Chromium**、`workers: 1`、`fullyParallel: false`、`timeout: 30s`、`expect: 5s`、`retries: 0`、headless、`screenshot: only-on-failure`；`webServer` 用 `node scripts/serve.mjs` 起 `http://127.0.0.1:4173`。
+- `scripts/e2e.mjs` 只校验 Chromium 二进制；`--browser=firefox|webkit` 只是历史脚本参数，**当前仓库没有可复跑的 Firefox/WebKit 证据**。
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
-- 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
-  非 Chromium 下另有 B-10（CDP 堆测量）1 条 skip；dist 入口另有 `sw.spec` 1 条 skip。
+- 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入“1 skipped”，不算失败）。dist 入口另有 `sw.spec` 1 条 skip（单文件发行版无 SW）。
 - **三条跑法，全量 45 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
-  - **`file://` 入口**：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
-  - dist 入口的跳过项：既有协作 soak 1 条 + `sw.spec` 1 条（单文件发行版不含 `js/`、`css/`、`sw.js`，SW 预缓存计数只对源码入口有判定意义；显式 `test.skip` 带原因，不测 harness）。
-  - 实测（2026-11-13）：源码 **150 passed / 0 failed / 1 skipped**，exit 0；dist **149 passed / 0 failed / 2 skipped**，exit 0。
-  - 跨浏览器（2026-11-13 复测）：Firefox 源码 **149 / 0 / 2**、dist **148 / 0 / 3**，均 exit 0（dist 首轮 1 项偶发失败，单 spec 与全量复跑均通过，见 [engineering.md](engineering.md) §2.5）。WebKit on Windows 不稳定，不作支持目标。支持矩阵与差异清单见 [engineering.md](engineering.md) §2.5。
-- `file://` 与 http 的实测差异（Chromium，2026-11-12）：
+  - `file://` 入口：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
+- 2026-11-13 实跑记录（**本次文档同步未复跑**）：源码入口 **154 passed / 0 failed / 1 skipped**，exit 0；跳过项为需 `COLLAB_SOAK=1` 的协作 soak。dist 入口本次只跑渲染专项：`perf-render` **4 passed**。发布前必须按 [release-checklist](release-checklist.md) 重跑全量并保留日志。
+- **M6 局部补绘的 3 条像素采样用例**（`tests/e2e/perf-render.spec.mjs`）：对象位移、放大、编辑 A 后 B 的标签仍在。改前分别红在 `atNew`、`inside1`、`after=0`（且 `patched=true`，证明缺陷发生在局部补绘路径而非被整层重建掩盖），改后绿。覆盖只到属性面板 `commitObjectEdit` 路径；拖拽期走整层重建，未覆盖。
+- `file://` 与 http 的历史实测差异（Chromium）：
   - **IndexedDB 可用**（`readwrite-ok`），`localStorage` 可用，自动保存与工程恢复与 http 一致；
-  - **下载可触发**：PDF 与 CSV 都能拿到 `download` 事件与完整文件（PDF > 280 KB、CSV 含表头与数据行）；
-  - **CSP 内联哈希生效**：dist 只有 1 条 `sha256`，注入的第二段内联脚本被拦（控制台只有这一条预期违规）；
-  - **Service Worker 不注册**：`navigator.serviceWorker` 在 Chromium 的 file:// 下存在，但产品按协议显式关闭（`detectCapabilities` 的 `sw=false`），不尝试注册、无报错；PWA 安装与预缓存只对源码多入口成立，这是设计边界而非缺陷。
-  - 唯一环境差异是 SW/PWA，其余能力与 http 相同；未发现 file:// 专属产品缺陷。
-- 仅本机双标签页验证协作链路；**真实双设备 WebRTC 没有自动化覆盖**。
-- **跨浏览器实测（2026-11-12）**：同一套用例支持 `--browser=firefox` / `--browser=webkit`；结论见 [engineering.md](engineering.md) §2.5（Chromium 全量通过；Firefox 全量通过；WebKit on Windows 不作支持目标）。为跑通 Firefox 只改测试侧判定，**没有产品改动**，逐条如下：
+  - **下载可触发**：PDF 与 CSV 都能拿到 `download` 事件与完整文件；
+  - **CSP 内联哈希生效**：dist 只有 1 条 `sha256`，注入的第二段内联脚本被拦；
+  - **Service Worker 不注册**：产品按协议显式关闭（`detectCapabilities` 的 `sw=false`），不尝试注册、无报错；PWA 安装与预缓存只对源码多入口成立，这是设计边界而非缺陷。
+  - 唯一环境差异是 SW/PWA，其余能力与 http 相同；未发现 `file://` 专属产品缺陷。
+- e2e 只用同机双标签页验证协作链路；**真实双设备/跨网络 WebRTC 仍无 e2e**。协作安全默认（连接时告知完整编辑权、跨设备首快照确认、200ms 接收节流、撤销栈隔离）由 selftest 39.13b 常驻断言覆盖，但它是 Node 桩，不等于真实 DataChannel 行为。
+- **跨浏览器口径**：当前只有 Chromium 入口与证据。旧文档曾记录 Firefox 全量通过及一组测试侧判定调整（CSP 文案、`backgroundImage` 的 `initial|none`、CDP 堆测量 skip 等），这些记录**未在本次重写中复跑，仓库内也没有留存运行产物**，因此按“历史记录、未验证”处理；WebKit on Windows 旧记录为进程级崩溃，不作支持目标；Safari 未验证。
 
-| 文件 | 改的是 | 具体改动 |
-|---|---|---|
-| `csp.spec.mjs` | 判定 | 违规日志正则同时认 Chromium（`Content Security Policy`/`Refused to`）与 Firefox（`Content-Security-Policy…`）；拦截断言未放宽 |
-| `file-dist.spec.mjs` | 判定 | 预期 CSP 噪音白名单补 Firefox 文案；其余断言不变 |
-| `ui-hardening.spec.mjs` | 判定（放宽） | `backgroundImage` 由单值 `initial` 放宽为 `initial|none`；本组唯一放宽断言处 |
-| `history-increment.spec.mjs` | 判定（跳过范围） | B-10 真实堆测量依赖 CDP，非 Chromium 显式 skip；Chromium 仍执行 |
-| `i18n-template.spec.mjs` | 判定 | 「切语言 → 渲染 → 读取」放进同一同步块并等启动落定；期望文案不变 |
-| `publish-state.spec.mjs` | 判定 | 加启动落定等待；产品未改 |
-| `history.spec.mjs` | 判定 | 刷新后先等 `state.floors[0].objects` 就绪；产品未改 |
-| `rev-compare.spec.mjs` | 判定 | 先等启动末尾 `fitView()` 落定（`zoom !== 1`）再按可视范围取景；产品未改 |
-| `undo-coverage.spec.mjs` | 判定 | 属性面板用例先等启动落定再建对象、填面板（dist 下偶发面板被启动重绘重置）；产品未改 |
-
-> 启动落定的原因与写法见 [known-issues.md](known-issues.md) K14：`applyLocalSettings()` 会整体替换 `state.settings`，「载入优先」是有意行为；测试必须等启动落定，不得为此加产品守卫。
-- **Actions 在跑但红，不作门禁**（决策 D2 仍以本地门禁为准）：`ci.yml` 的 `e2e` job 在 GitHub 上**已执行且失败**——**matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`），源码与 dist 两个 job 均为红，不能作为回归依据。
-  当前门禁靠本地两条命令：`node scripts/e2e.mjs`（150 通过 + 1 条件跳过）与 `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（149 通过 + 2 跳过），两套均须 exit 0。
-- `npm run ci` 是离线 Node 门禁，**不安装也不依赖 Playwright/Chromium**，因此 `file://` 用例不在 `npm run ci` 里跑；它随本地 `node scripts/e2e.mjs` 执行（原因已写在 workflow 注释与本节）。
-
-### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
+### 3.2 用例矩阵（功能域 → spec，数字为历史 `--list` 记录）
 
 | 功能域 | spec（用例数） |
 |---|---|
 | 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(5)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(6)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
 | 协作 | collab(13)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(6)、pdf-dpi(1)、pdf-vector-option(1)、title-block(1)、export-scope(4)、perf-render(1)、coverage(2)、publish-state(2) |
+| 导出与图面 | pdf-multipage(6)、pdf-dpi(1)、pdf-vector-option(1)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(2)、publish-state(2) |
 | 符号与目录 | symbols(3)、catalog(1) |
 | 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(4) |
 | 插件 | plugin-sandbox(22)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
@@ -125,11 +98,10 @@
 | i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
-| 界面加固 | ui-hardening(2)（触控尺寸/溢出等界面回归）、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
+| 界面加固 | ui-hardening(2)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **151** 个用例、**45** 个 spec（默认 150 跑 + 1 条件跳过；逐 spec 计数来自 `playwright test --list`，总计见 [facts.md](facts.md)）。
-口径校正（2026-11-12）：本节旧表停留在 124/35，已按 `--list` 实测重排；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **151** 个用例、**45** 个 spec（默认 150 跑 + 1 条件跳过）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 
@@ -140,71 +112,54 @@ node scripts/e2e.mjs --grep "导出"
 $env:COLLAB_SOAK='1'; node scripts/e2e.mjs tests/e2e/collab.spec.mjs
 ```
 
-e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人工验收证据不要放这里**，见 [manual-acceptance.md](manual-acceptance.md)。
-
----
+e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人工验收证据不要放这里**，见 [manual-acceptance](manual-acceptance.md)。
 
 ## 4. Golden 基线
 
 逐字节基线位于 `tests/golden/`，由 selftest 读取比较：
 
-| 文件 | 字节（2026-11-08） | 锁定的内容 |
-|---|---|---|
-| `fixed-pages.pdf` | 1,128 | PDF 容器/页对象结构（画布 JPEG 由浏览器编码，不在此判据内） |
-| `plain-scene.svg` | 4,730 | 无符号工程的 SVG 全量字节 |
-| `plain-scene.dxf` | 900 | 无符号工程的 DXF 全量字节 |
-| `symbol-scene.svg` | 5,012 | 含符号工程的 SVG 全量字节 |
-| `symbol-scene.dxf` | 4,753 | 含符号工程的 DXF 全量字节（折线近似） |
-| `legacy-symbols.svg` | 56,839 | 旧符号逐图标 path 几何哈希的汇总输出 |
-| `plain-scene.csv` | 619 | 台账 CSV 全量字节（N-26；含 BOM 与表头） |
-| `plain-scene.tsv` | 617 | 台账 TSV 全量字节（N-26；含 BOM 与表头） |
-| `plain-scene.xlsx` | 9,795 | XLSX 容器字节（N-26；stored ZIP，同输入两次构建一致后才比 golden） |
-| `blindspots.geojson` | 769 | 盲区 GeoJSON 全量文本（N-26；含 coverageSpec.version） |
-| `plain-scene.png.meta.json` | 36 | PNG 语义基线：签名与 2631×1860 尺寸（N-26；编码字节随浏览器变化，不锁字节） |
+| 文件 | 锁定的内容 |
+|---|---|
+| `fixed-pages.pdf` | PDF 容器/页对象结构（画布 JPEG 由浏览器编码，不在此判据内） |
+| `plain-scene.svg` | 无符号工程的 SVG 全量字节 |
+| `plain-scene.dxf` | 无符号工程的 DXF 全量字节 |
+| `symbol-scene.svg` | 含符号工程的 SVG 全量字节 |
+| `symbol-scene.dxf` | 含符号工程的 DXF 全量字节（折线近似） |
+| `legacy-symbols.svg` | 旧符号逐图标 path 几何哈希的汇总输出 |
+| `plain-scene.csv` | 台账 CSV 全量字节（含 BOM 与表头） |
+| `plain-scene.tsv` | 台账 TSV 全量字节（含 BOM 与表头） |
+| `plain-scene.xlsx` | XLSX 容器字节（stored ZIP，同输入两次构建一致后才比 golden） |
+| `blindspots.geojson` | 盲区 GeoJSON 全量文本（含 `coverageSpec.version`） |
+| `plain-scene.png.meta.json` | PNG 语义基线：签名与尺寸（编码字节随浏览器变化，不锁字节） |
 
-- `UPDATE_GOLDEN=1` 可重建 PDF/SVG/DXF/CSV/TSV/XLSX/GeoJSON golden；PNG 语义基线（`plain-scene.png.meta.json`）在 e2e 下用同一环境变量重建。
-- **重建 golden 只能用于「确认改动是有意的」**：提交必须说明为什么输出变了、影响哪些导出格式；禁止为了让测试变绿而盲目重建。
-- 字节 golden 覆盖 SVG/DXF/PDF/CSV/TSV/XLSX/GeoJSON；PNG 只锁签名与尺寸（浏览器编码字节不稳定），JSON 由 selftest 结构断言覆盖，见 §2.2 的「导出/导入产物」组。
-- 无符号工程「导出字节不变」是硬回归项：不新增符号功能时不得改动既有 golden。
+字节数不在此复制，用命令查看：
 
----
+```powershell
+Get-ChildItem tests/golden | Select-Object Name, Length
+```
+
+- `UPDATE_GOLDEN=1` 可重建 PDF/SVG/DXF/CSV/TSV/XLSX/GeoJSON golden；PNG 语义基线在 e2e 下用同一环境变量重建。
+- **重建 golden 只能用于“确认改动是有意的”**：提交必须说明为什么输出变了、影响哪些导出格式；禁止为了让测试变绿而盲目重建。
+- 字节 golden 覆盖 SVG/DXF/PDF/CSV/TSV/XLSX/GeoJSON；PNG 只锁签名与尺寸（浏览器编码字节不稳定），JSON 由 selftest 结构断言覆盖。
+- 无符号工程“导出字节不变”是硬回归项：不新增符号功能时不得改动既有 golden。
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 13 种「应当失败」的改动，
-断言对应门禁非 0 退出且输出命中目标错误关键字：
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 17 种“应当失败”的改动，断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
 
-| # | 破坏 | 期望变红 |
-|---|---|---|
-| 0 | （正面基线）未破坏副本 | `check.mjs --selftest` / `check-sw.mjs` / `check-plugin-api.mjs` / `check-ngm.mjs` / `badge.mjs --check` / `i18n-scan.mjs --check` 全 0 |
-| 1 | 渲染入口注入 4 ms 忙等（平均帧仍达标） | `bench.mjs` P95 |
-| 2 | 向 `dist` 产物追加一行 | `build.mjs --check` |
-| 3 | 删除 `ngm.json` | `check-ngm.mjs` |
-| 4 | 删除 README 断言数锚点 | `badge.mjs --check` |
-| 5 | selftest 注入必然失败断言 | `check.mjs --selftest` |
-| 6 | 预缓存输入变更但不递增 `sw.js` VERSION | `check-sw.mjs` |
-| 7 | UI 模板新增硬编码中文 | `i18n-scan.mjs --check` |
-| 8 | `PlotPin` 新增未登记私有键 | `check.mjs --selftest`（API 面真实判据） |
-| 9 | `sw.js` VERSION 回退 | `check-sw.mjs` |
-| 10 | `contracts/conventions.json` 规则数组清空 | `check-contracts.mjs`（契约结构校验：规则删空即红） |
-| 11 | 预缓存输入变更但未 bump `VERSION` 就执行 `--update` | `check-sw.mjs --update`（拒绝生成，需先 bump） |
-| 12 | `css/*.css` 追加未闭合的 `@media`（花括号不配平） | `check.mjs --selftest`（CSS 结构判据） |
-| 13 | `css/style.css` 注入远程 `url(https://…)` | `check.mjs --selftest`（离线承诺判据） |
-
-场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，
-干净检出同样生效；bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单（未 bump 时 `--update` 会拒绝写入）
-（详见 [engineering.md](engineering.md) §3.4 / §3.5）。
-
----
+- 场景 14～17 专测新增结构判据：`replaceState` 外直赋值、未登记跨层调用、未分类软调用、缺失必需钩子；任何一条“破坏后仍绿”都说明判据失效。
+- 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，干净检出同样生效；
+- bump `VERSION` 后必须运行 `node scripts/check-sw.mjs --update` 刷新清单（未 bump 时 `--update` 会拒绝写入）；
+- 一条从未红过的判据不算成立；新增判据必须配可构造的负例。
 
 ## 6. 怎么新增一个用例
 
 ### 6.1 逻辑自测
 
 1. 在 `scripts/selftest.mjs` 找到对应功能域的分区；没有合适分区时新建 `section('编号. 主题', …)`，编号接在末尾。
-2. 用 `eq` / `ok` 写断言；失败信息要能直接看出「实际 vs 期望」。
+2. 用 `eq` / `ok` 写断言；失败信息要能直接看出“实际 vs 期望”。
 3. 同时写反例（非法输入、越界、缺字段），只写正例的判据不算完成。
-4. `node scripts/selftest.mjs` 全绿后，断言数会变化 → 跑 `node scripts/badge.mjs --check`，按提示同步 README 三处计数锚点。
+4. `node scripts/selftest.mjs` 全绿后，断言数会变化 → 跑 `node scripts/badge.mjs` 同步 README 三处计数锚点，并核对 facts/testing/engineering/modules 锚点。
 5. 若改了业务输出，先建/更新 golden，并在 commit body 说明输出差异。
 
 ### 6.2 浏览器 e2e
@@ -212,16 +167,14 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 1. 在 `tests/e2e/` 新建或追加 `*.spec.mjs`，场景状态放 `helpers/scenes.mjs`。
 2. 只断言用户可见结果（DOM 文本、下载字节、弹窗、错误提示），不要断言内部变量名。
 3. 需要固定数据的用例用 `page.route` 拦截外部请求，禁止真实联网。
-4. `node scripts/e2e.mjs <spec>` 本地全绿；**没有 CI 兜底**（runner 未接入），所以必须本地双入口各跑一遍，不能只跑单 spec。
-5. 更新本文 §3.2 矩阵。
+4. `node scripts/e2e.mjs <spec>` 本地全绿；**没有可依赖的 CI 兜底**，所以必须本地双入口各跑一遍，不能只跑单 spec。
+5. 更新本文 §3.2 矩阵与 [facts](facts.md) 的 spec 计数。
 
 ### 6.3 新增判据
 
-见 [engineering.md](engineering.md) §8：必须能单独跑、有读数、配负例、进总闸、写明守什么。
+见 [engineering](engineering.md)§9：必须能单独跑、有读数、配负例、进总闸、写明守什么。
 
----
-
-## 7. 当前明确空白（已核对，未覆盖不等于已通过）
+## 7. 当前明确空白（未覆盖不等于已通过）
 
 以下条目在本轮逐项检索 `tests/` 与 `scripts/`，确认**没有对应 e2e 覆盖**；有的由 selftest 部分覆盖，已在括号中标明：
 
@@ -232,30 +185,29 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 无障碍 | 无 axe/可访问性扫描；只有 selftest 58 的 `aria-*` 标记断言与 e2e 零散 `toHaveAttribute('aria-…')` |
 | 多工程库 | `persistence.spec` 覆盖单工程保存/载入；**工程列表的批量管理、跨工程资产隔离无 e2e**（隔离由 selftest 32.1 覆盖） |
 | 图片变换手柄 | `calibration-precheck.spec` 只验入口禁用/提示；**拖拽平移/旋转/缩放/切变手柄没有 e2e** |
-| TSV / DXF 导入 | 导出链路已由 `export-scope.spec` 的 N-26 用例覆盖（下载内容、隐藏层不进图纸类导出）；**导入**仍只覆盖 DXF（`dxf-version.spec`），TSV 导入无 e2e |
-| Firefox / WebKit / Safari | Firefox **2026-11-13 已双入口全量实测通过**（源码 149/0/2、dist 148/0/3，见 §3.1 与 [engineering.md](engineering.md) §2.5），但**不在 `npm run ci` 与任何自动流程里**，需手动 `--browser=firefox` 才算回归；WebKit on Windows 不稳定、Safari 原生未验证 |
+| TSV / DXF 导入 | 导出链路已由 `export-scope.spec` 覆盖；**TSV 导入无 e2e**，DXF 导入只有 `dxf-version.spec` |
+| Firefox / WebKit / Safari | **未验证**。Firefox 旧记录 2026-11-13 全量跑通，但本次未复跑、仓库无留存产物；WebKit on Windows 旧记录为进程级崩溃，不作支持目标；Safari 原生需 macOS |
 | 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证（代码固定 `iceServers: []`） |
 | 真实 GPU / 低端真机 | perf-browser 在本机为 SwiftShader；真机帧率、长跑内存未验证 |
 | 真实图纸语料 | 无 50 组真实工程 A/B 样本，快照差异误报率未完成人工验证 |
-| 英文语义质量 | 只有 i18n 覆盖率与「无中文残留」自动扫描，语义正确性需人工审校 |
+| 英文语义质量 | 只有 i18n 覆盖率（按出现次数，2026-11-13 为 44.09% = 731 / 1,658，缺口 0）与“无中文残留”自动扫描；`UI 硬编码 18` 只是全仓未走入口 927 的 UI 子集，语义正确性需人工审校 |
+| 静态层局部补绘的边界 | 3 条像素采样只覆盖 **dpr=1 的 headless Chromium** 与**属性面板提交**路径；标签溢出超出 96 px pad 仍可能被擦，dpr=2、拖拽（走整层重建）与真实设备未实测 |
+| 状态写入口 / 耦合 / 钩子 | 由 `check.mjs` 9.1～9.4 静态判据与 `check-gates` 场景 14～17 反向验证；**无运行时 e2e**，动态别名、`globalThis[…]` 访问仍可能漏 |
+| 插件沙箱导出器权限 | 导出器未声明 `state:read` 时只收到空 `input`，目前是静态核对；无运行期 e2e |
 
-上表任一空白被补上时，必须同时更新本节、§3.2 矩阵与 [performance.md](performance.md)（如涉及性能读数）。
-
----
+上表任一空白被补上时，必须同时更新本节、§3.2 矩阵与 [performance](performance.md)（如涉及性能读数）。
 
 ## 8. 测试纪律
 
-- 失败就报失败：禁止放宽断言、删用例、改阈值来变绿；确需调整阈值时按 [engineering.md](engineering.md) §3.3 写旧值/新值/理由/实测。
-- 禁止用 mock / 构造数据冒充真实浏览器或真实语料结果；无法执行的项写「未验证」并说明所需条件。
+- 失败就报失败：禁止放宽断言、删用例、改阈值来变绿；确需调整阈值时按 [engineering](engineering.md)§4.3 写旧值/新值/理由/实测。
+- 禁止用 mock / 构造数据冒充真实浏览器或真实语料结果；无法执行的项写“未验证”并说明所需条件。
 - 新功能必须同时有 selftest 与 e2e 覆盖；只有一处覆盖时在本文 §7 明确登记。
 - 测试样本跨用例共享，禁止每个 spec 各造一份不一致的工程状态。
-- 断言数量变化必须同步 README 计数锚点与 `scripts/dist-manifest.json`（若产物受影响）。
+- 断言数量变化必须同步 README 计数锚点与相关文档计数锚点。
 
----
+## 9. 功能域 × 层覆盖矩阵
 
-## 9. 功能域 × 层覆盖矩阵（N-26）
-
-> 每一行回答「这个功能域在四层里分别有没有覆盖」。`无覆盖`是明确结论，不等于已通过；分区名以 `selftest.mjs --list` 为准，spec 名以 `tests/e2e/` 文件名为准。
+> 每一行回答“这个功能域在四层里分别有没有覆盖”。`无覆盖`是明确结论，不等于已通过；分区名以 `selftest.mjs --list` 为准，spec 名以 `tests/e2e/` 文件名为准。
 
 | 功能域 | selftest 分区 | e2e spec | golden |
 |---|---|---|---|
@@ -263,19 +215,16 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 资产与导入限值 | 7 内容寻址、8/8.1 表格批量、28/28.3/29/30/31 台账往返、50 解析器加固、70 导入限值 | table-batch、load-audit | 无覆盖 |
 | 场地 / 几何模型 | 9 场地、11 旧工程迁移、12/17 场地形状、14/15/46 区域形状、19 基点 | interaction、world-transform | 无覆盖 |
 | 编辑 / 捕捉 / 撤销 | 20/21 节点、23 精确约束、24/25/33 OSNAP、26 测距、54 方向约束、65 对齐分布、66 编号层级、68 提交判定 | history、history-increment、smoke | 无覆盖 |
-| 校准 / 底图 / 取景 | 39 仿射校准、D-02 校准前置状态机、41 场地节点编辑、47 分层渲染/裁剪 | calibration-precheck、world-transform、perf-render | 无覆盖 |
+| 校准 / 底图 / 取景 | 39 仿射校准、D-02 校准前置状态机、41 场地节点编辑、47 分层渲染/裁剪/局部补绘（M6） | calibration-precheck、world-transform、perf-render（M6 像素采样） | 无覆盖 |
 | 标注 / 统计 / 覆盖率 | 27 面积长度、38/48 覆盖率、40/43/44/45 标注开关、63 多楼层汇总 | coverage | GeoJSON |
 | 台账 / 批量表格 | 32.1 台账往返、55 导出 | table-batch、batch-annot、batch-layout、catalog | CSV / TSV / XLSX |
 | 图纸导出（SVG/DXF/PDF/PNG） | 55 导出、57.7 违规 CSV | export-scope、pdf-multipage、title-block | SVG / DXF / PDF / CSV / TSV / XLSX / GeoJSON / PNG（语义） |
 | 持久化 / 历史 / 快照 / 多标签 | 32 存储 v2、57.x 版本快照、历史栈共享 | persistence、snapshot、save-failure、tab-lease | 无覆盖 |
-| 协作 / 合并 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰 | collab（含 1 个 soak 条件跳过） | 无覆盖 |
+| 协作 / 合并 | 离线 LWW/墓碑、长消息分块、墓碑增量淘汰、M2 配置差异、39.13b 协作安全默认（权限告知 / 首快照确认 / 接收节流 / 撤销栈隔离） | collab（含 1 个 soak 条件跳过） | 无覆盖（协作行为由 selftest 39.13b 断言） |
 | 插件 / 规则 | 57/57.1 注册点、57.2–57.9 规则框架、API 版本化 | plugin-sandbox、plugin-compat、plugin-manifest、rule-plugin、rules | 无覆盖 |
 | 安全 / 离线 / 移动端 | 49 能力探测、56.1 注入路径、69 转义白名单、70 导入事务 | csp、sw、mobile | 无覆盖 |
 | i18n / 帮助 / 引导 | 58 中英切换与无障碍标记、60 焦点管理、D-01 引导、D-03 帮助中心 | i18n-template、help-center、onboarding | 无覆盖 |
 | 符号库 | 符号库分区（见 `--list`） | symbols | legacy-symbols.svg |
 | 停车 / 布点 / 二维码 | 51 布点优化、52 台账 + 二维码编码器、61 停车规划 | 无覆盖 | 无覆盖 |
 
-新增功能时必须在本表对应行补上覆盖层；新增一行为空时，必须写明「无覆盖」而不是留白。
-
-
-
+新增功能时必须在本表对应行补上覆盖层；新增一行为空时，必须写明“无覆盖”而不是留白。

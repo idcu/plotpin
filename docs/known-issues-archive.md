@@ -1,48 +1,110 @@
-# 图钉 PlotPin 已知问题 · 历史修复归档
+# 历史修复归档（known-issues-archive）
 
-> 本文件收录从 [known-issues.md](known-issues.md) §1.2 迁移的历史修复条目（2026-11-13），保留 46 条编号与原有修复依据、复核结论，便于检索与追溯；内容未改写。
-> 新问题、仍存在项与限制仍登记在 [known-issues.md](known-issues.md)。
+> **读者**：要追溯“某条历史问题当时怎么修的、有没有证据”的维护者。
+> **用法**：按编号或主题检索；每条只保留**一句话结论 + 可核对依据**，不复述完整修复过程。
+> **边界**：本文件是历史记录，不构成现状依据；当前未解决问题与限制见 [known-issues](known-issues.md)，行为口径见 [features](features.md)。
+> **维护**：新关闭项追加到对应主题，编号沿用原序列；不删旧行、不改旧结论；正文受 60 KB / 600 行约束。
 
-## 1.2 历史修复（37 条）
+## 1. 按主题索引
 
-> 条数按表内实际行数标注：原 `known-issues.md` 小节标题写「46 条」，但表内实际为 37 条（历史合并后标题未回填）。本次迁移只搬移与更正条数，未改写任何条目结论。
+| 主题 | 编号 | 结论（一句话） |
+|---|---|---|
+| 符号与导出基线 | A1 | 旧工程 64 图标到新 36 符号的视觉回归由 `legacy-symbols.svg` golden 与逐图标 path SHA-256 锁定；旧工程靠自身类型表保留图标 |
+| 符号与导出基线 | A2 | PDF 只有容器层字节 golden（`fixed-pages.pdf`），图纸页仍为位图，Canvas JPEG 编码不在判据内 |
+| 符号与导出基线 | A3 | SVG 导入最坏组合（199 path）由 `bench.mjs` 的 ≤50 ms 门禁守住，历史实测约 1 ms |
+| 符号与导出基线 | A5 | 规则检查的圆/椭圆/凹多边形采样误差已有固定期望与容差断言 |
+| 符号与导出基线 | A6 | 符号 DXF 折线顶点数/闭合与 SVG 同轮廓源一致，由 selftest 断言 |
+| 插件沙箱 | P0-4 | Worker 内 `BroadcastChannel`/`MessageChannel`/`MessagePort`/`onmessage`/`onerror` 逃逸面全部封堵（N-02） |
+| 插件写入 | RT-P1-05 | 插件添加的对象/标注进入同一撤销栈，可 undo/redo（N-18） |
+| 插件超时 | RT-P1-06 | 载入后置 `frozen` 并清空定时器，初始化后无法长期占用时间片（N-18） |
+| 插件端口 | RT-P2-20 | 沙箱 `onmessage`/`onerror` 已封堵；端口通道不在契约内 |
+| PDF 导入 | P0-1 | PDF 内嵌底图改为内容寻址资产入库，自动保存/刷新后仍可取回（N-03） |
+| PDF 导入 | IO-P1-5 | 含 `/cm` 的曲线与文字坐标已乘 CTM；字号仍未随缩放放大，属已披露限制（N-09） |
+| 离线缓存 | K1 | SW 预缓存输入以提交入库的 `sw-inputs.sha256` 为基线，干净检出同样可校验（N-01） |
+| 文档体量 | K11 | 工程文档已拆分，`check-discipline` 13/13；余量偏小，新增内容需控量 |
+| 协作场地 | P0-2 | 远端清空场地会计入变更、进撤销栈、状态栏提示，可 Ctrl+Z 恢复（N-04） |
+| 协作场地 | P0-3 | 场地拖点/属性输入实时同步并打点，较旧场地不会在合并时复活（N-04） |
+| 协作时间戳 | CORE-P1-1 | 批量/属性/显隐/节点增删按变化 id 打点，未变化提交不产生新时间戳（N-06） |
+| 协作断线 | RT-P1-01 | 断线改动写本地待发队列并在重连后补发；本机频道指数退避重连；WebRTC 仍需手动重连（N-16） |
+| 协作楼层 | RT-P1-02 | 楼层新增/删除/清空显式广播并走 LWW；活动楼层切换仍是客户端独立状态（N-16） |
+| 协作冲突 | RT-P1-03 | 纯覆盖也计入 `conflicts` 并显示冲突条数；只有真正覆盖才提供 Ctrl+Z（N-17） |
+| 协作隔离 | RT-P1-04 | 消息携带 `pid`，业务消息要求双方 `pid` 一致；草稿/空 projectId 不放行（N-17 + B6 收紧） |
+| 协作场地时间 | RT-P1-10 | 楼层写入更新场地时间戳，场地合并读取 `site.updatedAt`，避免旧场地复活（N-04） |
+| 协作分片 | RT-P2-19 | 入站分片 TTL 只由新消息驱动淘汰，无空闲定时器，最长残留 30 s（限制） |
+| 协作调试 | RT-P2-18 | 5 个 `__collab*` 观测全局仅在 `?debug=1` 暴露（N-18 后续） |
+| 导出口径 | IO-P1-1 | 台账全量 +「显示」列按有效可见；SVG/DXF/PDF/PNG 只输出有效可见对象（N-05） |
+| 导出口径 | CORE-P1-2 | 草稿与校准默认不进 PNG/PDF/SVG/DXF；导出默认 `includeDraft/includeCalibration=false`（N-05） |
+| 导出安全 | IO-P1-3 | 对象颜色走 `normalizeExportColor` 白名单，非法值不能逃逸 SVG 属性（N-10） |
+| 导入事务 | IO-P1-4 | JSON 导入先完成资产转换再回收旧资产；失败回滚且不删旧资产（N-11） |
+| 导入事务 | IO-P1-6 | 工程库打开同一事务语义：先加载后回收，失败保留现场（N-11） |
+| 导入去重 | CORE-P1-3 | 重复 id 追加稳定后缀、特殊字符归并后仍唯一、重名走编号作用域（N-07） |
+| 楼层匹配 | IO-P1-2 | 重名楼层导入整批拒绝，不再静默落到最后一层（N-08） |
+| 图层引用 | RT-P1-08 | 删除图层/类型检查全部楼层引用，有引用时确认后迁移（N-08） |
+| 仿射形状 | CORE-P1-6 | 一般仿射下圆/椭圆按 SVD 主轴精确成像，平行四边形重算边向量；扇形非相似变换按面积保真并标记降级（N-12） |
+| 扇形跨角 | CORE-P1-7 | `sectorArcRange` 统一画布/PNG/PDF/SVG/DXF，`350°→20°` 到处都是 30°（N-13） |
+| 顶点上限 | CORE-P1-9 | 单对象顶点上限 10000；包围盒改逐点计算，12 万点列不爆栈（N-14） |
+| 快照差异 | RT-P1-09 | 快照差异覆盖图层名与类型表结构，场景项后置；旧快照缺表时保守跳过（`f9a5843`） |
+| 属性历史 | RT-P1-07 | 属性面板只在字段首次输入时压一次历史，切换字段不占撤销栈（N-19） |
+| 打印 CSS | CSS-P1-1 | `@media print` 花括号配平，后续规则不再被吞进打印块（`6cdb093`） |
+| 仿射切变 | CORE-P1-8 | 切变改用图片自身底边/法向，89°/90°/91° 行为一致，退化时确定性降级（`d58af8b`） |
+| 核心 i18n | CORE-P2-16 | 核心默认名、撤销提示、面积/周长前缀、快照标签与差异字段统一走 `L()`（`48fcaf4`） |
+| 合并语义 | MERGE-11 | 较新一侧楼层名为空时回退旧名，空名不再视为有效覆盖（2026-11-10） |
+| 合并墓碑 | MERGE-10 | 图层/类型删除写墓碑，合并裁剪并集；悬空引用由 `migrateProject()` 兜底（2026-11-10） |
+| vendor 摘要 | NGM-01 | 三处 vendor 补丁的 `moduleDigest` 未重算；已用 62 文件字节清单缓解，`ngm verify --deep` 前需重锁 |
 
-| 编号 | 原问题 | 修复依据（仓库内可复跑 / 可核对） | 复核结论 |
-|---|---|---|---|
-| A1 | 旧工程 64 图标到新内置 36 符号的逐图标视觉回归未比对 | `tests/fixtures/legacy-symbols.json` 逐图标路径 SHA-256 + 可折线化断言；`tests/golden/legacy-symbols.svg` 逐字节；`scripts/selftest.mjs` | 已关闭；旧工程靠自身类型表保留图标 |
-| A2 | PDF 输出没有字节级 golden，回归只能靠人看 | `tests/golden/fixed-pages.pdf` 逐字节 + 同输入两次 SHA-256 一致；仅覆盖 PDF 容器层，Canvas JPEG 编码不在判据内 | 已关闭；图纸页仍为位图（见 K3） |
-| A3 | SVG 导入“200 路径 × 单条 5000 字符”最坏组合未做耗时打点 | `scripts/bench.mjs` 最坏可达组合耗时门禁 ≤50 ms；历史上限内实测约 1.058 ms；“200×5000”约 1 MB，被 64 KB 上限快速拒绝 | 已关闭；199 路径是有效上限（元素上限含根节点） |
-| A5 | 规则检查的圆/椭圆/凹多边形采样误差没有 golden 对照 | `scripts/selftest.mjs` 固定期望与容差：圆面积 <2%（40 段）、旋转方形 =100（1e-6）、扇形 <1%、净距 0.01、凹多边形三角化 2500（1e-6） | 已关闭（仅规则页判定；统计页口径另见 RT-P2-14） |
-| A6 | DXF 折线近似与 SVG 图形缺少几何一致性断言 | `symbol-scene` 三符号 DXF 折线逐点/顶点数/闭合与同一轮廓源一致；`scripts/selftest.mjs` | 已关闭；DXF 近似限制见 K4 |
-| P0-4 | 插件沙箱可绕过：Worker 内 `BroadcastChannel` 可加入协作频道、`MessageChannel`/`MessagePort` 可自建端口、`onmessage`/`onerror` 可旁路 token 校验 | `tests/e2e/plugin-sandbox.spec.mjs`：插件内 `BroadcastChannel`/`MessageChannel`/`MessagePort`/`onmessage`/`onerror` 均为 `undefined`，向 `plotpin-collab-*` 发送 0 条，覆写 `onerror` 后异常仍走禁用路径 | 已关闭（N-02）；合法插件契约未承诺端口通道，一律封堵 |
-| P0-1 | PDF 导入的内嵌底图在自动保存后刷新/重开即丢失 | `tests/e2e/pdf-multipage.spec.mjs`「PDF 内嵌底图走资产入库，自动保存 + 刷新后仍在」：导入当场 `assetId=bg…`、无 dataUrl，重开后 `bgImageState=ready`；`scripts/selftest.mjs` 7.1 覆盖 dataUrl 兜底与非当前楼层；解压炸弹用例断言累计阶段即取消 | 已关闭（N-03） |
-| K1 | 离线缓存版本无门禁，旧缓存可能残留 | `scripts/check-sw.mjs` 以提交入库的 `scripts/sw-inputs.sha256`（预缓存输入指纹 + 清单 version）为基线，`scripts/check.mjs` 第 12 步纳入；`check-gates` 场景 6/9 证明会红（场景 10 为 CSS 结构） | 已关闭（N-01）；不再依赖 `git diff HEAD`，干净检出同样有效 |
-| K11 | 文档超出团队自设篇幅 | `scripts/check-discipline.mjs` 13/13 通过；工程文档已拆分 | 已关闭；余量偏小，新增内容需控制 |
-| P0-2 | 协作方“清空场地”被静默应用：不计入变更、不进撤销栈、无提示 | `tests/e2e/collab.spec.mjs`「N-04」：对端清空后 `__collabLastMerge.siteCleared≥1`、撤销栈 +1、状态栏含“对端清空了场地/Ctrl+Z”，Ctrl+Z 恢复场地 | 已关闭（N-04）；双标签真实通道复现 |
-| P0-3 | 场地编辑不进提交/不广播，较旧场地会在合并时复活 | `tests/e2e/collab.spec.mjs`「N-04」：拖点与属性面板输入均实时同步到对端；本地较新清空不被旧快照复活；`scripts/selftest.mjs` 覆盖 null 胜出与同时间戳保留 | 已关闭（N-04） |
-| IO-P1-1 | 导出口径分裂：CSV/XLSX/PDF 含隐藏对象且“显示”列失真；PNG/PDF 烘入草稿/校准 | `tests/e2e/export-scope.spec.mjs`：台账全量 +「显示」列=有效可见，SVG/DXF/PDF 只含可见对象；草稿/校准下 PNG 与 PDF 图纸页字节不变；`scripts/selftest.mjs` 28.4 节 | 已关闭（N-05）；台账表头与字段集不变 |
-| CORE-P1-1 | 批量/属性/显隐/节点增删不更新对象 `updatedAt`，协作合并可能丢弃新修改 | `scripts/selftest.mjs` 28.5 节：指定 id 严格递增、未列出对象不变、无变化幂等；`tests/e2e/collab.spec.mjs`「N-06」拖动+对端属性编辑合并后都保留 | 已关闭（N-06）；几何拖拽原先已直接打点，本轮补齐其余路径 |
-| CORE-P1-2 | PNG/PDF 导出把未完成的绘制草稿、测距/校准线烘入成品图 | `tests/e2e/export-scope.spec.mjs`：设置矩形草稿与两点校准后，PNG dataURL 与 PDF 图纸页 base64 与无瞬态时逐字节一致 | 已关闭（N-05）；导出默认 `includeDraft/includeCalibration=false` |
-| CORE-P1-3 | DXF/PDF/JSON 导入产生重复对象标识或重复编号 | `scripts/selftest.mjs` 28.6 节：同批次重复 id 追加稳定后缀、`a:b`/`a?b` 归并后仍唯一、重名走编号作用域、字段与数量不变；`sanitizeObjects` 跨楼层共享去重集合 | 已关闭（N-07）；审计计数见 `sanitizeReport()` |
-| IO-P1-2 | 表格导入按楼层名匹配，重名时后者覆盖前者，所有行静默落到最后一层，造成错层 | `scripts/selftest.mjs` 28.7 节：重名楼层导入返回 errors 且更新/新增均为空；`tests/e2e/table-batch.spec.mjs`「N-08」弹窗整批拒绝且现有对象与楼层数不变；新增/重命名重名被拒 | 已关闭（N-08）；导入按归一楼层名做唯一精确匹配 |
-| RT-P1-08 | 删除图层/类型只检查当前楼层引用，其它楼层留下悬空引用 | `scripts/selftest.mjs` 28.7 节 `floorRefs` 跨楼层统计；`js/features/ui-panels.js` 删除前检查全部楼层，有引用时确认后迁移到默认图层 / 同类内置类型 | 已关闭（N-08）；拒绝/取消时不做任何修改 |
-| IO-P1-5 | 含 `/cm` 变换的 PDF，文字坐标与贝塞尔曲线未乘变换矩阵，导入后错位/压扁 | `scripts/selftest.mjs` 37c 节：`q 2 0 0 2 0 0 cm` 下曲线中点/终点与文本坐标均为恒等 CTM 的 2 倍；不含 `/cm` 的既有坐标不变 | 已关闭（N-09）；字号未随 CTM 缩放，已在 `docs/features.md` 标注限制 |
-| IO-P1-3 | SVG 导出的对象颜色未做属性转义，非法颜色可逃逸属性 | `scripts/selftest.mjs` 28.8 节：`normalizeExportColor` 白名单与非法值回退；`buildSceneSvg` 注入 `red" onload="alert(1)` 后不含 `onload=` / `red"`；DXF 图层名同步清洗 CR/LF 并保证唯一 | 已关闭（N-10）；符号 path 限定 `M/m` 起始 |
-| IO-P1-4 | JSON 导入先回收“不可达资产”再等待资产转换，转换失败回滚后旧工程资产已被删除 | `scripts/selftest.mjs` 28.9 节：注入 `afterStateLoaded` 抛错后状态/草稿/选中集/旧 `assetId` 均保留且 `assetPrune` 调用 0 次；成功导入后回收恰好 1 次且 keep 集不含旧资产 | 已关闭（N-11）；`openProjectById` 同类路径已由 IO-P1-6 关闭 |
-| IO-P1-6 | 工程库打开 `openProjectById` 先回收再 `afterStateLoaded`，打开阶段失败会误删旧工程资产 | `scripts/selftest.mjs` 28.10 节：注入 `afterStateLoaded` 抛错后状态/草稿/选中集/旧 `assetId` 均保留且 `assetPrune` 调用 0 次；成功打开先加载后回收、回收 1 次且 keep 集不含旧资产 | 已关闭；与 N-11（`627471a`）同一事务语义 |
-| CORE-P1-6 | 一般仿射下圆/椭圆/平行四边形用两条基向量近似，形状失真 | `scripts/selftest.mjs` 39.9 节 34 项断言：SVD 主轴与朝向、剪切面积保真、平行四边形四角一致、对象/场地同参数一致 | 已关闭（N-12）；非相似扇形按面积保真近似并返回 `degraded` |
-| CORE-P1-7 | 扇形跨 0°（或 >180°）时角度归一化不一致，画布/PNG/PDF 与 SVG/DXF 画成补角 | `scripts/selftest.mjs` 39.10 节 10 项断言：350→20 为 30°、20→350 为 330°、起止相等为 360°、SVG 大弧标志为 0 | 已关闭（N-13）；画布/PNG/PDF/SVG/DXF 共用 `sectorArcRange` |
-| CORE-P1-9 | 单对象顶点数无上限；超大折线在多边形面积/包围盒计算中可能抛错，拖垮画布 | `scripts/selftest.mjs` 39.11 节：`SHAPE_POINTS_MAX=10000` 拒绝追加、12 万点列包围盒不爆栈（`pointBounds`） | 已关闭（N-14）；保守上限，极端合法超大点列会被拒绝 |
-| CORE-P1-4 | 捕捉拾取在移动事件里全量扫描对象，无空间索引；万级对象可能明显卡顿 | `scripts/selftest.mjs` 分区 `25b. 捕捉包围盒预筛等价性`（200 个随机指针点 × 4 种对象变体，预筛前后候选集 diffs=0）；`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-22"` 捕捉解析 P95 18.5/14.1 → 3.1~4.0 ms（读数见 [performance.md](performance.md) §4.1.3） | 已关闭（N-22 `556c205`）；单趟 `collectSnap` + AABB 预筛，候选集与全量扫描等价 |
-| CORE-P1-5 | 单击选中会触发静态层重建；大场景连续选择可能掉帧 | `tests/e2e/smoke.spec.mjs:80-89`：画布点选后对象清单行高亮与勾选同步；`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-23"`：30 次点选静态重建 30 → 0，点选 P95 661.1/710.2 → 20.0/20.9/22.1 ms（见 [performance.md](performance.md) §4.1.4） | 已关闭（N-23 `d44a8e1`）；选中/悬停只叠加动态层；拖拽起止各重建一次静态层（10k 约 0.2 s） |
-| RT-P1-01 | 断线期间修改不排队、不补发，断线后不自动重连 | `tests/e2e/collab.spec.mjs:308`「N-16：断线自动重连补发与楼层增删清空广播」、`:369`「N-16：断线待发队列刷新页面后仍补发」 | 已关闭（N-16 `d093071`）；待发队列落盘 + 本机频道指数退避重连；**WebRTC 无信令通道仍只能手动重连**（产品限制，见 §3 K10 语境） |
-| RT-P1-02 | 楼层新增/删除/清空不广播 | `tests/e2e/collab.spec.mjs:308` 同一 N-16 用例：`floor-add/delete/clear` 显式广播并走 LWW 合并 | 已关闭（N-16 `d093071`）；活动楼层切换仍是每个客户端独立状态（非缺陷） |
-| RT-P1-03 | 冲突提示依赖“新增数量”；无新增时即使覆盖了修改也不显示冲突条数 | `tests/e2e/collab.spec.mjs:409`「N-17：跨工程消息隔离与纯冲突可见」，冲突文案断言在 `:447-454`（`conflicts>0`、含「冲突」、不含「无变化/Ctrl+Z」） | 已关闭（N-17 `877deec`）；`changed` 计入 `conflicts`，纯冲突不会被标成可回滚 |
-| RT-P1-04 | 协作消息不带工程标识，不同工程误用同频道会串数据 | `tests/e2e/collab.spec.mjs:409` 同一 N-17 用例：跨工程消息被丢弃并计数 | 已关闭（N-17 `877deec`）；消息体携带 `pid`。B6 收紧：业务消息必须双方都有 `pid` 且一致，草稿/空 `projectId` 不再放行，仅 `hello`/`hello-ack`/`bye` 兼容旧版 |
-| RT-P1-05 | 插件添加的对象/标注不进撤销栈，用户无法撤销插件写入 | `tests/e2e/plugin-sandbox.spec.mjs:322`「插件写入进入撤销栈：undo 后对象完全移除、redo 恢复」 | 已关闭（N-18 `9cbc25c`）；与手动绘制共用撤销栈 |
-| RT-P1-06 | 插件 2 秒超时只覆盖初始化/单次调用；初始化后的定时器可长期占用 | `tests/e2e/plugin-sandbox.spec.mjs:346`「定时器逃逸：载入后 setInterval 与初始化期捕获的 setTimeout 均失效，主线程仍可用」 | 已关闭（N-18 `9cbc25c`）；loaded 后置 `frozen` 并清空定时器 |
-| RT-P1-07 | 属性面板每次 focusin 都压入历史，输入框来回切换会快速耗尽 20 步撤销栈 | `tests/e2e/history.spec.mjs:202`「N-19：属性面板切换 5 个字段不入栈，拖动后一次撤销回原位；场地面板一致」 | 已关闭（N-19 `3c4e522`）；容器级事件委托，字段首次 `input`/`change` 前压一次快照 |
-| RT-P1-10 | 楼层写入不更新场地时间戳，场地合并使用过旧时间，导致场地“复活”与覆盖顺序错误 | `tests/e2e/collab.spec.mjs:171`「N-04：对端清空场地可见可撤销；场地拖点实时同步；旧快照不复活已清空场地」；`js/features/props.js` 场地编辑走 `commitObjectEdit`（touchFloor） | 已关闭（N-04 `973c83c`）；`mergeFloorWrite` 读取 `site.updatedAt` |
-| CSS-P1-1 | `css/style.css:213` 的 `@media print{` 未闭合（`{` 比 `}` 多 1），其后所有规则被吞进打印媒体查询 | `node scripts/check.mjs --selftest` 第 13 步 CSS 结构：去注释/字符串后花括号配平（修复前差 1，修复后 0）；`node scripts/check-gates.mjs` 场景 10：追加未闭合 `@media` 后 `check.mjs` 退出 1 且命中「CSS 结构未配平」 | 已关闭（`6cdb093`）；打印块于 217 行闭合，块内规则未改；打印版式无 e2e 截图对比（与修复前相同，非本次引入） |
-| CORE-P1-8 | 图片切变手柄在旋转 90° 附近跳变/退化 | `scripts/selftest.mjs` CORE-P1-8 19 条断言：89°/90°/91° 变换有限、顶边沿自身方向位移恰 1 m、底边中点不动、四角点位移 ≤1 m；退化高度返回原变换 | 已关闭（`d58af8b`）；切变改用图片自身底边/法向，分母为图片高度；无指针级 e2e 轨迹断言 |
-| RT-P1-09 | 快照差异不含图层名称与类型表结构变化 | `scripts/selftest.mjs` RT-P1-09 13 条断言：图层/类型增删改、未变不报、场景项后置、旧快照缺表零误报；`tests/e2e/snapshot.spec.mjs` N-21 覆盖 5 类场景项 | 已关闭（`f9a5843`）；旧快照缺 `objectTypes` 时保守跳过类型表对比 |
+## 2. R 系列（R-09～R-35）
+
+> 来源：2026-11-11 只读审计；状态按 2026-11-12 工作树核对。除 R-14 外均关闭。
+
+| 编号 | 结论 |
+|---|---|
+| R-09 | 属性/样式输入只重绘受影响区域 + 400 ms 合并刷新，5k 对象击键 P95 7 ms |
+| R-10 | 平行四边形手柄锚点扣回错切位移 |
+| R-11 | 连续输入合并为 1 条历史，越界移动不产生历史，属性增删入栈 |
+| R-12 | 锁定对象与锁定图层对象不再可点选/框选 |
+| R-13 | 命中顺序按 z 升序缓存，从尾部取，不再按数组逆序 |
+| R-14 | **部分收口**：`settings` 走白名单，`meta`/`viewport` 仍 `Object.assign`，留待专门批次 |
+| R-15 | `projectId` 经 `normalizeProjectId`/`reconcileProjectId` 清洗，非法 id 拒绝打开 |
+| R-16 | 快照与 `proj:<pid>` 同事务写入；资产扫描失败跳过回收并提示 |
+| R-17 | bfcache `pageshow(persisted)` 重取租约；库内较新时拒绝整工程覆盖 |
+| R-18 | 明确关闭：逐对象 LWW + 冲突横幅已满足 3～5 人局域网，CRDT 触碰 schema 不引入 |
+| R-19 | 明确关闭：局域网临时协作不补认证；现状写入 known-issues |
+| R-20 | 明确关闭：SVG 与 canvas 两套绘制口径由 golden/结构断言对照，不统一 |
+| R-21 | 导出菜单改为「PDF（图纸位图+清单）」，不再称矢量 |
+| R-22 | 非相似仿射锚点零偏移；形状保真差异属已披露设计降级 |
+| R-23 | 覆盖率统一为「解析总面积 × 栅格覆盖比例」 |
+| R-24 | **部分收口**：`getState` 16 MB、写入参数 2 MB 上限；`props`/`points` 数量上限未做 |
+| R-25 | `proj:*` 副本与主记录同事务写入 |
+| R-26 | 图层/类型删除迁移引用、对象打点并写墓碑 |
+| R-27 | 新增 `perf-nightly.yml` 归档性能读数；主 CI 仍不跑浏览器性能 |
+| R-28 | 墓碑保留窗口 + 100000 硬上限 |
+| R-29 | `listProjects` 改 `proj:` 前缀区间扫描，不再全库物化 |
+| R-30 | 扇形负角/跨 0° 由 `sectorArcRange` 统一 |
+| R-31 | 明确关闭：PDF 单页、多文件取首个、CSV BOM 探测均为产品口径 |
+| R-32 | 明确关闭：设置不进撤销栈；清空合并为单次 `markDirty` |
+| R-33 | 切楼层更新 `meta.updatedAt`；只读切层传 `silent=true` |
+| R-34 | 导出文件名追加 `-YYYYMMDD-HHmm`，全导出路径生效 |
+| R-35 | `check.mjs` 的 `node --check` 覆盖 `scripts/**/*.mjs`，脚本数 26→37 |
+
+## 3. P2 批次关闭索引
+
+> 2026-11-08 的 A/B/C 三分类与 11 个批次已全部交付或决策；下表只留索引，正文不再复述。
+
+| 批次 | 覆盖编号 | 结论 |
+|---|---|---|
+| 1 文档口径 | B 类 13 条 | 已收敛/降级为限制，落点见各文档 |
+| 2 表格/CSV 往返 | IO-P2-1/2/4/5/7/8/9/13/21 | 表头转义、CRLF、公式可逆、三态布尔、形状校验、目标楼层拒绝、GeoJSON 规范、XLSX 分表跳过 |
+| 3 DXF/PNG 一致性 | IO-P2-14/15/16/18/19/26 | PNG 页脚、图层表色、SITE 重名、R12 凸度文案、TEXT 空格、图层名控制字符 |
+| 4 核心瞬态边界 | CORE-P2-2/7/9/10/18/19 | 缩放夹取、椭圆转矩形保角、统一 `resetTransientInteractionState`、底图错误态、覆盖率缓存释放 |
+| 5/6 schema/安全/快照/协作 | CORE-P2-1/8/11/12/17/20、RT-P2-01/03/04/05 | 设置白名单、楼层时间戳、图层去重、场地清洗、租约钳制、快照键编码、恢复校验、稳定序列化、合并上限 |
+| 7/8 插件与规则 | RT-P2-07/08/09/11/13/14 | 清单字节上限、直调上限、卸载保留引用类型、下载校验、多轮廓重叠、统计 v2 |
+| 9/10 目录/停车/UI/卫生 | IO-P2-22/23/24/25、RT-P2-15/16、CORE-P2-15/16、RT-P2-18 | 目录损坏提示、停车取景与编号作用域、导出不改实时时间戳、颜色转义、模态结算、死分支、核心 i18n、调试全局 |
+| 11 性能 | CORE-P2-3/4、IO-P2-11 | 活动楼层别名归一化（堆 −54.7%）、快照列表只读索引、导出去重 25% |
+| C 类决策 | IO-P2-20、RT-P2-12 | 多页 PDF 只导第 1 页；未配阈值类型跳过比较并显示条数 |
+| C 类未验证 | IO-P2-3、IO-P2-17 | Excel 引号/列数、CAD 中 SITE/mm 读数仍未验证，保持未验证 |
+
+## 4. 检索约定
+
+- 编号原样保留：`A*`、`P0-*`、`IO-*`、`CORE-*`、`RT-*`、`CSS-*`、`K*`、`R-*`、`MERGE-*`、`NGM-*`。
+- 一行结论只记录“修了什么/为什么保留”，完整复现步骤在对应 selftest 分区或 e2e spec 名中。
+- 需要重新判定某条是否仍成立时，先跑 [known-issues](known-issues.md)§5 的规则，再改本文件；不得只改结论不留证据。
