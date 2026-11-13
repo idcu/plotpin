@@ -34,10 +34,11 @@ const fail = (msg) => { console.error(`❌ SW 缓存版本门禁：${msg}`); pro
 
 const MANIFEST = join(root, 'scripts', 'sw-inputs.sha256');
 const html = readFileSync(join(root, 'index.html'), 'utf8');
-const refs = [
-  ...html.matchAll(/<script\s+src="([^"]+)"><\/script>/g),
-  ...html.matchAll(/(?:src|href)="([^"]+)"/g)
-].map(m => m[1])
+/* 属性值双引号、单引号、无引号浏览器都认，指纹也必须都认。
+   只认双引号时，把 <script src='x.js'> 改成单引号就能让 x.js 不进入预缓存输入，
+   之后单独修改 x.js 不会触发版本 bump。 */
+const ATTR = /(?:\bsrc|\bhref)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'`=<>]+))/g;
+const refs = [...html.matchAll(ATTR)].map(m => m[1] ?? m[2] ?? m[3])
   .filter(u => u && !u.startsWith('#') && !u.startsWith('data:') && !/^[a-z]+:/i.test(u))
   .map(u => u.replace(/^\.\//, ''));
 const inputs = [...new Set(['index.html', 'css/style.css', 'manifest.webmanifest', 'icon.svg', 'sw.js', ...refs])].sort();
