@@ -21,7 +21,7 @@
 | R-21 | PDF「矢量」表述夸大 | ✅ | P1-03：导出菜单改为「PDF（图纸位图+清单）」，`known-issues` K3 同步 |
 | R-22 | 非相似仿射的标量口径 | ✅ | 仿射视觉回归（剪切底图 + 红点锚点）确认锚点零偏移；非 PARA/SEC 类型形状保真差异属已披露的设计降级，不再改代码 |
 | R-23 | 覆盖率解析/栅格混用 | ✅ | 统一为「解析总面积 × 栅格覆盖比例」；P3-A 的 DORI 表与覆盖率同源 |
-| R-24 | 沙箱 props/points 上限 / 微任务自旋 | ✅ | R-24：`getState` 快照 16 MB 上限（超限只拒本次调用，不禁用插件）；写入类 RPC 参数 2 MB 字符上限（Worker 侧发送前拦截）；自旋仍由 2 s 超时兜底 |
+| R-24 | 沙箱 props/points 上限 / 微任务自旋 | ✅ | R-24：`getState` 快照 16 MB 上限（超限只拒本次调用，不禁用插件）；写入类 RPC 参数 2 MB 字符上限（Worker 侧发送前拦截）；自旋仍由 2 s 超时兜底。**16 MB 是防单次快照拖垮主线程的资源保护线，不是沙箱可承载载荷的设计值；大工程真实存在，故不按清单 192 KB 收紧。** props 键数 / points 顶点数上限未做，见 C-02 |
 | R-25 | `proj:*` 副本半写 | ✅ | 同事务写入（P0-01 守卫写入强化） |
 | R-26 | 图层/类型删除未打点/未写墓碑 | ✅ | 全楼层引用迁移 + 对象打点 + 墓碑 |
 | R-27 | perf 不进 CI | ✅ | P4-02：新增 `perf-nightly.yml`（夜间 + 手动）归档 `test-results/perf-*.json`；主 CI 仍不跑（读数受机器影响） |
@@ -32,7 +32,7 @@
 | R-32 | 设置变更不进撤销 / 清空双 markDirty | ✅ | 明确关闭：设置对话框直改 `state.settings` 不推撤销栈，属产品口径（设置非图纸内容）；清空操作已合并为单次 markDirty |
 | R-33 | 切楼层不更新 `meta.updatedAt` | ✅ | P2-04：`touchProjectUpdated`；导出/定位等只读切层传 `silent=true` 不推进 |
 | R-34 | 导出文件名无时间戳 | ✅ | R-34：`safeName()` 追加 `-YYYYMMDD-HHmm`（分精度），JSON/PNG/SVG/PDF/DXF/HTML/GeoJSON/XLSX/CSV 全路径生效；规则导出另用独立命名 |
-| R-35 | 门禁自检重复 / 覆盖不足 | ✅ | R-35：`check.mjs` 的 `node --check` 覆盖 `scripts/**/*.mjs`（含 `scripts/lib`），脚本数 26 → 35 |
+| R-35 | 门禁自检重复 / 覆盖不足 | ✅ | R-35：`check.mjs` 的 `node --check` 覆盖 `scripts/**/*.mjs`（含 `scripts/lib`），脚本数 26 → 37 |
 
 ## 维护规则
 

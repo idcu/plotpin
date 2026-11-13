@@ -88,6 +88,8 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
 - 分级预警：余量 < `MARGIN_WARN_BYTES = 8,000 B` 警告；< `MARGIN_CRITICAL_BYTES = 6,000 B` 强警告（不阻断构建）。
 - 当前值：以 `scripts/dist-manifest.json` 的 `bytes / gzipBytes / sha256` 为准，汇总与采集命令见 [facts.md](facts.md)。
   2026-11-12 实测（V-5 收口后）：`bytes = 831,617`、gzip `262,795`、余量 `8,063 B`（`node scripts/build.mjs --check` 复算一致）。
+  2026-11-13 实测（B-01 terser 落地后）：`bytes = 744,042`、gzip `241,842`、余量 `95,638 B`（gzip 余量 `44,878 B`）。
+  2026-11-13 实测（C-01/C-02 后）：`bytes = 745,081`、gzip `242,155`、余量 `94,599 B`（gzip 余量 `44,565 B`），本轮净增 **+1,039 raw / +313 gzip**。
 - V-5 图纸修订参照版增量拆分（入口 827,476 / 261,624 → 出口 831,617 / 262,795，总 **+4,141 raw / +1,171 gzip**，以整包实测为准）：
   1. `ghost.js` 参照版运行时 + 标定判定 + 闪烁：+2,393 raw；
   2. `ui-shell.js` 设置面板信息行与绑定：+1,378 raw；
@@ -105,14 +107,13 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
   2. **内联标记**：0 / 0（V-3R 已删来源标记，本期未新增）；
   3. **合并本身**（46 组 `<script>` 包装 → 1 组、46 处 `;`+换行分隔）：−783 raw / −79 gzip（总降幅减 CSP 项的残差）。
   gzip 三项为实测 + 残差，不严格可加；raw 三项严格可核对。
-- 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；**V-5 收口后的余量 8,063 B 即新的冻结基线**——低于基线不得开新功能，必须先用实测（raw 与 gzip 各自降幅）证明有可兑现的回收来源，或先砍口径；不得放宽上限，也不得把 `size-report` 的账面值当回收承诺。
-- 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量 + 相对 8,063 B 基线的关系」。逼近上限时只能做无损回收，**不得调高上限**。
+- 改造期红线（逐任务执行，任一触发即停并上报）：**单任务 raw ≤ 3,000 B、单阶段 ≤ 5,000 B、单任务 gzip ≤ 1,200 B**；**当前基线为 C-01/C-02 后的余量 94,599 B**（8,000 B 冻结线不变）；低于 8,000 B 不得开新功能，必须先用实测（raw 与 gzip 各自降幅）证明有可兑现的回收来源，或先砍口径；不得放宽上限，也不得把 `size-report` 的账面值当回收承诺。
+- 预算分配：任何新功能提交都必须在 commit body 写「体积增量 + 剩余余量 + 相对 94,599 B 基线的关系」。逼近上限时只能做无损回收，**不得调高上限**。
 
-#### 2.3.1 备选：terser 局部 mangle（当前不采用，2026-11-13 实测）
+#### 2.3.1 已采用：terser 局部 mangle（2026-11-13 落地）
 
-- **定位：备选方案，当前不接入构建链。** 触发条件：余量逼近停线（< 8,000 B 预警、< 6,000 B 强警告）且无损回收已榨干时，才重新评估。
-- 做法：`pack-core.mjs` 合并出单脚本后交给 terser，`compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希。
-- 测法：`buildStandalone` 真实构建一次 + `gzipSync` 量字节；基线复测 831,617 / 262,795，与现 dist 逐字节一致。探针装在仓库外临时目录，未改动 `package.json` / lock。
+- **定位：已接入构建链（阶段 B-01）。** `pack-core.mjs` 合并出单脚本后交给 terser，`compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；精确锁定 `terser@5.51.2`（devDependency，发行包仍零运行时依赖）。
+- 测法：`buildStandalone` 真实构建一次 + `gzipSync` 量字节；基线复测 831,617 / 262,795，与现 dist 逐字节一致。探针阶段装在仓库外临时目录，未改动 `package.json` / lock。
 
 | 变体 | 配置 | raw | gzip | 相对基线（raw / gzip） | `vm.Script` 解析 |
 |---|---|---|---|---|---|
@@ -126,26 +127,26 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
   2. 构建耗时 **+2.5～3 s**（792 KB 合并体的 compress + 局部 mangle）；
   3. 生产栈帧全部变短名，降低可调试性（含 `Function.prototype.name` 一类依赖）；
   4. 对未文档化全局名的隐式依赖（第三方插件、调试脚本）会静默失效。
-- **验证状态（如实）**：C **未跑全量 e2e**；A 跑了 dist 冒烟子集（smoke + interaction + file-dist）9/9 通过；F 的全量 e2e **未取得干净结论**——前 59 条通过（覆盖 18 个 spec，含 csp / file-dist / collab / history），后 91 条因端口冲突 `ERR_CONNECTION_REFUSED` 中断，**不得视为通过**。
-- 本节数字不改变任何预算常数；上限、预警阈值与 8,063 B 冻结基线仍以 `scripts/lib/budget.mjs` / `dist-manifest.json` 为准。
+- **验证状态（2026-11-13 落地实测）**：C 已接入并完成 `npm ci`、`build --check`（二次构建 SHA256 一致）与**双入口全量 e2e**——源码 **150 passed / 1 skipped**、dist **149 passed / 2 skipped**，均 exit 0；`npm run ci` exit 0。实测 726.6 KB（744,042 B）/ gzip 236.2 KB（241,842 B），相对基线 **−87,575 raw / −20,953 gzip**；构建耗时 +1～2 s（本机单次约 2.9 s）。A 的 dist 冒烟子集（9/9）与 F 的不完整结论仅作为选型历史保留，不再作为当前门禁。
+- 本节数字不改变任何预算常数；上限、预警阈值与当前余量仍以 `scripts/lib/budget.mjs` / `dist-manifest.json` 为准。
 
 ### 2.4 单文件发行版与 Service Worker 的边界
 
 - **源码多文件入口**（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 52 个（含 `sw.js` 自身）；`file://` 下不注册。
 - **单文件发行版**（`dist/plotpin-standalone.html`）：**不含 Service Worker**，也不含 `js/`、`css/`、`sw.js`；CSS/JS/图标全部内联，离线由文件自身保证。
 - PWA 安装、预缓存与版本升级**只对源码多文件入口成立**；dist 既不承诺也不需要。
-- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 44 个 spec 两个入口都全量执行（见 [testing.md](testing.md) §3.1）。
+- 因此浏览器 e2e 的 `sw.spec` 在 dist 入口下显式跳过（带原因），不改造该用例去测服务器 harness；其余 spec 两个入口都全量执行（45 个 spec：源码入口 45、dist 入口 44，见 [testing.md](testing.md) §3.1）。
 - `file://` 实测（Chromium，2026-11-12）：IndexedDB 读写、`localStorage`、Blob 下载、CSP 内联哈希都正常——导入图片/PDF 底图、比例预设、点位与区域、PDF/CSV 导出全部通过；唯一差异是 SW/PWA（`detectCapabilities` 按协议置 `sw=false`，不注册、不报错）。这是浏览器安全模型与产品设计的边界，不是缺陷。
 
-### 2.5 浏览器支持矩阵（2026-11-12 实测）
+### 2.5 浏览器支持矩阵（2026-11-12 首测，2026-11-13 Chromium/Firefox 复测）
 
 实测方式：同一套 Playwright e2e（45 spec / 151 用例）在三个内核上跑，双入口（源码 4173 / dist 4174），
 命令 `node scripts/e2e.mjs --browser=<firefox|webkit>`；Playwright 1.65.0（chromium-1254 / firefox-1572 / webkit-2388）。
 
 | 内核 | 源码入口 | dist 入口 | 定位 |
 |---|---|---|---|
-| Chromium 1254 | 149 passed / 0 failed / 1 skipped，exit 0 | 148 / 0 / 2，exit 0 | **支持目标**，全量实测通过 |
-| Firefox 1572 | 149 / 0 / 2，exit 0 | 148 / 0 / 3，exit 0 | **支持**，全量实测通过；差异见下 |
+| Chromium 1254 | 150 passed / 0 failed / 1 skipped，exit 0（2026-11-13 复测） | 149 / 0 / 2，exit 0（2026-11-13 复测） | **支持目标**，全量实测通过 |
+| Firefox 1572 | 149 / 0 / 2，exit 0（2026-11-13 复测） | 148 / 0 / 3，exit 0（2026-11-13 复测） | **支持**，全量实测通过；差异见下 |
 | WebKit 2388（Windows） | 97 / 53 / 1，exit 1 | 112 / 37 / 2，exit 1 | **不作支持目标**，仅当内核参考 |
 | Safari 17+ | 未验证 | 未验证 | 需 macOS，本机无法验证 |
 
@@ -157,7 +158,7 @@ CSP 只对合并体签 **1 条** `sha256`；合并后整体交给 `vm.Script` �
 2. **CSSOM 序列化**：清空/初始 `backgroundImage`，Chromium 返回 `initial`，Firefox 返回 `none`。实际绘制一致；该条断言放宽为 `initial|none` 二选一（本表唯一放宽断言处，原断言仍对 Chromium 生效）。
 3. **CDP 通道缺失**：真实堆测量走 `browserContext.newCDPSession`，Firefox/WebKit 无对应通道；B-10 在非 Chromium 显式 skip，Chromium 仍真实测量，不用估算值冒充。
 4. **启动落定晚一拍**：`app.js` 启动末尾对空工程 `fitView()`，同一时刻 `state.viewport.zoom` 在 Firefox 仍为 `1`、Chromium 已是适应值。产品侧两边都会 fit，差异只在测试取景时机；测试侧等启动落定，产品不加守卫（见 [known-issues.md](known-issues.md) K14）。
-5. **偶发进程崩溃**：全量跑中出现过 `Page crashed` / `Target crashed`，失败在不同轮次落到不同 spec（collab、i18n-template 等），单跑即过 → 内核/环境不稳，不是功能缺陷。最终计数以上表为准（该轮无崩溃）。
+5. **偶发进程崩溃**：全量跑中出现过 `Page crashed` / `Target crashed`，失败在不同轮次落到不同 spec（collab、i18n-template 等），单跑即过 → 内核/环境不稳，不是功能缺陷。最终计数以上表为准（该轮无崩溃）。2026-11-13 dist 首轮另见 1 项偶发失败：`plugin-manifest.spec.mjs:34`（D-05，`#pluginPanel` 5 s 内未可见），单 spec 复跑 2/2、dist 全量复跑 148 passed / 0 failed / 3 skipped 均通过，未复现；不据此改产品代码。
 6. **`file://` 四项与 Chromium 完全一致**，实测值见下表。
 
 **`file://` 实测值（Chromium / Firefox / WebKit 三内核一致）**
@@ -255,6 +256,8 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 `bench.mjs --json` 输出机器可读结果；每次提交前必须跑，不达标不得提交。当前实测见 [performance.md](performance.md)。
 
+**DORI 200 相机实测（2026-11-13，`node scripts/bench.mjs --json`，Node + canvas 桩）**：2000×2000 m 场地 + 200 个相机点，`analyzeCoverage(state, { targetCells: 36000 })`。A 组仅 `phys/angle`、B 组追加 `props.camResPx=1920`/`props.camFov=90`，交替顺序各 5 次取中位数：A **18.6 ms** / B **18.6 ms**，差异 **−0.4%**；同机连续 4 次运行的差异区间为 −6.5%～+7.4%，均在 ±10% 内。`doriRows()` 对 200 个对象单次遍历中位数 **0.38 ms**（200/200 行四级齐全）。口径说明：**DORI 不进入 `analyzeCoverage` 的栅格路径**，两组覆盖率差异只是测量噪声；面板渲染才是 DORI 的增量成本，由 `doriRows` 度量。第一轮只记录，不设阻断阈值。
+
 ### 3.4 门禁牙齿（`check-gates.mjs`）
 
 在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **13 种**破坏，断言对应门禁非 0 退出
@@ -338,6 +341,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 - 明确限制：一个插件一个 Worker；`code` 必须为字符串（`file://` 下不能 `fetch` 插件文件）；
   `addObjects` 单次 ≤ 500；`getState` / `addObjects` / `addAnnotation` 按固定 60s 窗口限流（60 / 30 / 60 次），超限只回本次调用错误而不禁用插件；清单原文超过 192 KB 在 `JSON.parse` 前按 UTF-8 字节拒绝；Worker 是**隔离边界而非完整语言级沙箱**，仍可访问 `console`/`Blob`/`crypto` 等
   无主工程权限的 Worker 全局，且不设 CPU/内存配额（只靠 2 s 超时 terminate）。
+- `getState` 快照 **16 MB** 与写入类 RPC 参数 **2 MB 字符**是**资源保护线**（防单次快照/参数拖垮主线程），不是沙箱可承载载荷的设计值；大工程真实存在，故不按插件清单 192 KB 收紧。`props` 键数与 `points` 顶点数上限未做，见 C-02。
 - 受信任兼容入口：同源 `<script>` 直接调用 `PlotPin.register*` 保留，不套版本与能力门；不可信插件必须走 `loadPlugin`。
 - **弃用策略（D-05）**：`contracts/plugin-api.json` 是唯一键清单，**不得为临时需求改键**。旧键退出统一走三步：
   1. 标记：在契约描述里写 `deprecated since <minor>，替代键 <key>`，代码实现保留；

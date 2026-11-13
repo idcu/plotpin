@@ -13,7 +13,7 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-12） | 是否在 CI |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 3,969 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 3,979 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 是（独立 `e2e` job，双入口 matrix；**CI 实际执行未验证**，见 §3.1） |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（主 CI 不跑；夜间 `perf-nightly.yml` 定时/手动采集并归档 `test-results/perf-*.json`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
@@ -73,13 +73,13 @@
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
 - 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入「1 skipped」，不算失败）。
   非 Chromium 下另有 B-10（CDP 堆测量）1 条 skip；dist 入口另有 `sw.spec` 1 条 skip。
-- **三条跑法，全量 44 个 spec**：
+- **三条跑法，全量 45 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
   - **`file://` 入口**：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
   - dist 入口的跳过项：既有协作 soak 1 条 + `sw.spec` 1 条（单文件发行版不含 `js/`、`css/`、`sw.js`，SW 预缓存计数只对源码入口有判定意义；显式 `test.skip` 带原因，不测 harness）。
-  - 实测（2026-11-12）：源码 **149 passed / 0 failed / 1 skipped**，exit 0；dist **148 passed / 0 failed / 2 skipped**，exit 0。
-  - 跨浏览器（同日）：Firefox 源码 **149 / 0 / 2**、dist **148 / 0 / 3**，均 exit 0；WebKit on Windows 不稳定，不作支持目标。支持矩阵与差异清单见 [engineering.md](engineering.md) §2.5。
+  - 实测（2026-11-13）：源码 **150 passed / 0 failed / 1 skipped**，exit 0；dist **149 passed / 0 failed / 2 skipped**，exit 0。
+  - 跨浏览器（2026-11-13 复测）：Firefox 源码 **149 / 0 / 2**、dist **148 / 0 / 3**，均 exit 0（dist 首轮 1 项偶发失败，单 spec 与全量复跑均通过，见 [engineering.md](engineering.md) §2.5）。WebKit on Windows 不稳定，不作支持目标。支持矩阵与差异清单见 [engineering.md](engineering.md) §2.5。
 - `file://` 与 http 的实测差异（Chromium，2026-11-12）：
   - **IndexedDB 可用**（`readwrite-ok`），`localStorage` 可用，自动保存与工程恢复与 http 一致；
   - **下载可触发**：PDF 与 CSV 都能拿到 `download` 事件与完整文件（PDF > 280 KB、CSV 含表头与数据行）；
@@ -104,7 +104,7 @@
 > 启动落定的原因与写法见 [known-issues.md](known-issues.md) K14：`applyLocalSettings()` 会整体替换 `state.settings`，「载入优先」是有意行为；测试必须等启动落定，不得为此加产品守卫。
 - CI 侧 `e2e` job 用 **matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`）：
   每套约 3～4 分钟，并行后墙钟接近一套；不分组、不挑子集，任何一侧失败都保留另一侧结果。
-  **CI 实际执行未验证**：本机只验证了同样的命令在本地 Chromium 下 149 用例通过 + 1 条件跳过（dist 入口另为 148 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；
+  **CI 实际执行未验证**：本机只验证了同样的命令在本地 Chromium 下 150 用例通过 + 1 条件跳过（dist 入口另为 149 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；
   首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
 - `npm run ci` 是离线 Node 门禁，**不安装也不依赖 Playwright/Chromium**，因此 `file://` 用例不在 `npm run ci` 里跑；它随 CI 的 `e2e` job 与本地 `node scripts/e2e.mjs` 执行（原因已写在 workflow 注释与本节）。
 

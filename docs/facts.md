@@ -9,17 +9,17 @@
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 831,617 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致；V-4a 起 47 段脚本合并为 1 段 |
-| gzip 字节 | 262,795 B | 同上（`gzipBytes`） | 硬上限 286,720 B，>266,240 B 预警 |
+| 单文件产物字节 | 745,081 B | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 二次构建确定性一致；V-4a 起 47 段脚本合并为 1 段，B-01 起经 terser C 压缩 |
+| gzip 字节 | 242,155 B | 同上（`gzipBytes`） | 硬上限 286,720 B，>266,240 B 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `scripts/lib/budget.mjs` 的 `MAX_BYTES` / `scripts/dist-manifest.json` 的 `maxBytes` | 不得放宽；两处必须一致 |
-| 体积余量 | 8,063 B | 上限 − 当前值（<8,000 警告、<6,000 强警告） | 任何提交后复测 |
-| Service Worker 版本 | `VERSION=182` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 52 个预缓存输入（含 `sw.js` 自身）与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 94,599 B | 上限 − 当前值（<8,000 警告、<6,000 强警告） | 任何提交后复测 |
+| Service Worker 版本 | `VERSION=183` | `node scripts/check-sw.mjs`（经 `check.mjs` 总闸） | 52 个预缓存输入（含 `sw.js` 自身）与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 当前值 | 采集命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 3969 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
+| selftest 断言 | 3979 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少 |
 | selftest 分区 | 158 个 | `node scripts/selftest.mjs --list` | 输出 159 行（含 1 行标题） |
 | 加载脚本 | 47 个（37 项目 + 10 vendor） | `check.mjs` 输出「加载 47 个脚本」 | `js/` 下 37 个 `.js` |
 | e2e 用例 | 151 个（150 通过 + 1 条件跳过），45 个 spec | `node scripts/e2e.mjs`；`node node_modules/@playwright/test/cli.js test --list` | 跳过项为 `COLLAB_SOAK=1` 才执行的协作 soak；dist 入口为 149 通过 + 2 跳过（另 1 条为 `sw.spec` 单文件版豁免）；`file-dist.spec` 额外覆盖 dist 的 `file://` 路径 |
