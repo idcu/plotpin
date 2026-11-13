@@ -104,13 +104,19 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
   `gh api repos/idcu/plotpin/pages/builds/latest` 若 `status` 非 `built` 或 `error.message` 非空，按错误信息修；
   若已是 `built` 且 `commit` 正确，则是 CDN 缓存，等 `max-age` 或强制刷新，不要因此重推/force。
 - 构建失败不回滚 git 历史：修好内容后正常提交再推（仍不 force、不 amend）。
+- **`git push github` 连不上**（`Failed to connect to github.com port 443 after ~21 s`，exit 128）：
+  先用 `gh api repos/idcu/plotpin/commits/main --jq .sha` 查远端是否**已经**有该 SHA（外部通道可能已同步，见 4.6）；
+  已有就不要再推，直接做 4.4 验证；没有才排查网络（实测 `api.github.com:443` 可达而 `github.com:443` 不可达，
+  属出口/DNS 问题，换网络或稍后重试）。不要用 force、不要改用其他协议绕过。
 
 ### 4.6 与 Gitee 的关系
 
-- 两个远端各自有自己的 `main` 指针，但**不要依赖"互不影响"**：2026-11-13 演练中只推了 Gitee（`2796aee..e614d8e`），
-  随后 `git push github main` 返回 `Everything up-to-date`，Pages 已按 `e614d8e` 开始构建——
-  说明 GitHub 端已被其他通道（外部镜像或并发推送）先行同步；GitHub 侧无 webhook（`gh api repos/idcu/plotpin/hooks` 为 0）。
-- 因此每次发布前**必须**用 `git fetch github` + `git rev-parse HEAD github/main` 实测，再决定推不推；
-  以实测 SHA 与 Pages 构建的 `commit` 为准，不假设顺序、不假设"必须推两次"。
-- Gitee 仍按原流程 `git push origin main`；需要显式更新 GitHub 时按 4.2 推送（可能 no-op，属正常）。
+- 两个远端各自有自己的 `main` 指针，但**不要依赖"互不影响"**——2026-11-13 演练实测到外部同步：
+  - 只推 Gitee（`2796aee..e614d8e`）后，`git push github main` 返回 `Everything up-to-date`，Pages 已按 `e614d8e` 构建；
+  - 再推 Gitee（`e614d8e..efcd555`）后约 **4 秒**，GitHub API 已显示 `main=efcd555` 且 Pages 开始构建（19.5 s 完成）；
+  - 同期本机 `github.com:443` TCP 不通（git push exit 128），说明同步**不是本机发起**的；
+    且 GitHub 侧 `gh api repos/idcu/plotpin/hooks` 为 0 个 webhook。
+- 因此每次发布前**必须**用 `gh api repos/idcu/plotpin/commits/main --jq .sha` 或 `git fetch github` + `git rev-parse` 实测，
+  再决定推不推；以实测 SHA 与 Pages 构建的 `commit` 为准，不假设顺序、不假设"必须推两次"。
+- Gitee 仍按原流程 `git push origin main`；需要显式更新 GitHub 时按 4.2 推送（可能 no-op 或因网络 exit 128，属正常）。
 - 只推其中一边都可能造成两边版本不一致，发布说明里要写明两边各自停在哪个 SHA。
