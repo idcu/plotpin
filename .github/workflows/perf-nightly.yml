@@ -1,7 +1,10 @@
 name: Perf Nightly
 
+# 定义存档，当前不会运行：仓库无 GitHub Actions 运行条件（唯一 remote 为 Gitee），
+# 见 `.github/workflows/ci.yml` 文件头与 `docs/release-checklist.md`。
 # 真实浏览器性能只用于「相对退化」监测：读数依赖 runner 的 GPU/CPU（本机为 SwiftShader），
 # 因此不进主 CI 卡合并，改为夜间定时 + 手动触发，只归档读数与阈值结果。
+# 本地等价命令：`node scripts/perf-browser.mjs`（结果写 `test-results/perf-*.json`）。
 on:
   schedule:
     - cron: '30 18 * * *'   # UTC 18:30 = Asia/Shanghai 02:30

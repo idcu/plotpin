@@ -11,12 +11,14 @@
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-12） | 是否在 CI |
+| 层 | 入口 | 运行环境 | 规模（2026-11-12） | `ci.yml` 定义中的归属（runner 未接入） |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 3,979 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 是（独立 `e2e` job，双入口 matrix；**CI 实际执行未验证**，见 §3.1） |
-| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（主 CI 不跑；夜间 `perf-nightly.yml` 定时/手动采集并归档 `test-results/perf-*.json`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 仅定义（`e2e` job 双入口 matrix，从未运行）；以本地 `node scripts/e2e.mjs` 为准，见 §3.1 |
+| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（`perf-nightly.yml` 仅定义存档；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
+
+> **CI 现状（2026-11-13 决策 D2）**：`ci.yml`/`perf-nightly.yml` 已就绪但**没有 GitHub 运行条件**（唯一 remote 为 Gitee），runner 未接入、无任何真实运行记录。发布以本地门禁为准，逐条清单与期望值见 [release-checklist.md](release-checklist.md)。
 
 三层职责不同，**数据不可互换**：
 
@@ -102,11 +104,9 @@
 | `undo-coverage.spec.mjs` | 判定 | 属性面板用例先等启动落定再建对象、填面板（dist 下偶发面板被启动重绘重置）；产品未改 |
 
 > 启动落定的原因与写法见 [known-issues.md](known-issues.md) K14：`applyLocalSettings()` 会整体替换 `state.settings`，「载入优先」是有意行为；测试必须等启动落定，不得为此加产品守卫。
-- CI 侧 `e2e` job 用 **matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`）：
-  每套约 3～4 分钟，并行后墙钟接近一套；不分组、不挑子集，任何一侧失败都保留另一侧结果。
-  **CI 实际执行未验证**：本机只验证了同样的命令在本地 Chromium 下 150 用例通过 + 1 条件跳过（dist 入口另为 149 通过 + 2 跳过），无法复现 runner 的网络、系统库与浏览器下载；
-  首次接入后的耗时、稳定性与 runner 专属失败以 CI 运行记录为准。所需条件：runner 可访问 npm registry 与 Playwright 浏览器下载源。
-- `npm run ci` 是离线 Node 门禁，**不安装也不依赖 Playwright/Chromium**，因此 `file://` 用例不在 `npm run ci` 里跑；它随 CI 的 `e2e` job 与本地 `node scripts/e2e.mjs` 执行（原因已写在 workflow 注释与本节）。
+- **runner 未接入**（决策 D2）：`ci.yml` 的 `e2e` job 只是等价定义——**matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`），从未真实执行过。
+  当前门禁靠本地两条命令：`node scripts/e2e.mjs`（150 通过 + 1 条件跳过）与 `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（149 通过 + 2 跳过），两套均须 exit 0。
+- `npm run ci` 是离线 Node 门禁，**不安装也不依赖 Playwright/Chromium**，因此 `file://` 用例不在 `npm run ci` 里跑；它随本地 `node scripts/e2e.mjs` 执行（原因已写在 workflow 注释与本节）。
 
 ### 3.2 用例矩阵（功能域 → spec，数字为 Playwright `--list` 实测）
 
@@ -212,7 +212,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 1. 在 `tests/e2e/` 新建或追加 `*.spec.mjs`，场景状态放 `helpers/scenes.mjs`。
 2. 只断言用户可见结果（DOM 文本、下载字节、弹窗、错误提示），不要断言内部变量名。
 3. 需要固定数据的用例用 `page.route` 拦截外部请求，禁止真实联网。
-4. `node scripts/e2e.mjs <spec>` 本地全绿；CI 的 `e2e` job 只跑默认全量，且**实际执行未验证**，所以**不能只依赖 CI 绿**。
+4. `node scripts/e2e.mjs <spec>` 本地全绿；**没有 CI 兜底**（runner 未接入），所以必须本地双入口各跑一遍，不能只跑单 spec。
 5. 更新本文 §3.2 矩阵。
 
 ### 6.3 新增判据
@@ -233,7 +233,7 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 | 多工程库 | `persistence.spec` 覆盖单工程保存/载入；**工程列表的批量管理、跨工程资产隔离无 e2e**（隔离由 selftest 32.1 覆盖） |
 | 图片变换手柄 | `calibration-precheck.spec` 只验入口禁用/提示；**拖拽平移/旋转/缩放/切变手柄没有 e2e** |
 | TSV / DXF 导入 | 导出链路已由 `export-scope.spec` 的 N-26 用例覆盖（下载内容、隐藏层不进图纸类导出）；**导入**仍只覆盖 DXF（`dxf-version.spec`），TSV 导入无 e2e |
-| Firefox / WebKit / Safari | Playwright 仅配 Chromium；Firefox 159 / WebKit 27 只做过 2026-11-07 的人工脚本验证，无回归自动化；Safari 原生未验证 |
+| Firefox / WebKit / Safari | Firefox **2026-11-13 已双入口全量实测通过**（源码 149/0/2、dist 148/0/3，见 §3.1 与 [engineering.md](engineering.md) §2.5），但**不在 `npm run ci` 与任何自动流程里**，需手动 `--browser=firefox` 才算回归；WebKit on Windows 不稳定、Safari 原生未验证 |
 | 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证（代码固定 `iceServers: []`） |
 | 真实 GPU / 低端真机 | perf-browser 在本机为 SwiftShader；真机帧率、长跑内存未验证 |
 | 真实图纸语料 | 无 50 组真实工程 A/B 样本，快照差异误报率未完成人工验证 |

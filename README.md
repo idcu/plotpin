@@ -74,7 +74,9 @@ npm run discipline    # 方法论自检看板
 # 3979 assertions, no dependencies
 ```
 
-`node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、模块分层、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。CI 另外串行执行 `bench`、`build --check`、`check-gates`、`check-ngm` 与 `check-discipline`。
+`node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、模块分层、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。
+
+> **CI 现状**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 是已就绪的定义存档（另含 `bench`、`build --check`、`check-gates`、`check-ngm`、`check-discipline` 与双入口 e2e），但仓库当前**没有 GitHub 运行条件**（唯一 remote 为 Gitee），**runner 未接入、从未真实运行**。发布以本地门禁为准，逐条命令与期望值见 [docs/release-checklist.md](docs/release-checklist.md)。
 
 - **性能门禁必须有数据**：`scripts/bench.mjs` 的 P95 / heapUsed / 静态重建阈值不达标即红；涉及渲染或历史栈的改动需同时跑对应基准。
 - **门禁不达标不提交**：不得放宽阈值、删除断言或跳过用例来"转绿"。

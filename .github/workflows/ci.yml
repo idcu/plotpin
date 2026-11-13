@@ -1,5 +1,10 @@
 name: CI
 
+# 当前状态：**CI 定义已就绪，runner 未接入**。
+# 原因（D2 决策，2026-11-13）：本仓库唯一 remote 是 `git@gitee.com:idcu/plotpin.git`，
+# 没有 GitHub 仓库与 Actions 运行条件；Gitee Go 需另写不兼容的 `.workflow/` 流水线（计划 E-01，未选）。
+# 因此本文件作为**定义存档**保留，不代表任何一次真实运行结果；
+# 发布门禁以本地命令为准，逐条清单与期望值见 `docs/release-checklist.md`。
 on:
   push:
   pull_request:
@@ -122,10 +127,11 @@ jobs:
           "$RUNNER_TEMP/ngm" verify --deep
 
   discipline:
-    # 十问看板（方法论 §8）：只回答"这个仓库几档、缺哪一条"，不改任何东西。
+    # 文档纪律 13 问（方法论 §8）：只回答"这个仓库几档、缺哪一条"，不改任何东西。
     # --strict 在低于 L3 时退 1——防止新仓库悄悄从 L0 起步。
+    # runner 未接入（见文件头），本 job 为定义存档；本地等价命令见 docs/release-checklist.md。
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 十问看板
+      - name: 文档纪律 13 问（--strict）
         run: node scripts/check-discipline.mjs --strict
