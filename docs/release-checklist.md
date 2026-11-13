@@ -68,6 +68,8 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
   这里用**命令级临时覆盖**借 gh keyring 里的 token 完成 https 认证；`-c` 只作用于这一条命令，
   **不写 `.git/config`、不动全局 git config**。
 - 不使用 `--force`、不 amend、不 push 标签。
+- 若返回 **`Everything up-to-date`**（exit 0）：说明远端 `main` 已经是该 SHA（本环境常见，见 4.6），
+  **不是失败**；以 `git rev-parse HEAD github/main` 与 4.4 的 Pages `commit` 为准，不要为了"有输出"而造空提交。
 
 ### 4.3 无新提交时（no-op）
 
@@ -83,13 +85,21 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
 | 1 | `Invoke-WebRequest https://idcu.github.io/plotpin/` | **HTTP 200**，页面为源码入口 `index.html`（26,400 B），标题「图钉 PlotPin · 离线图纸标注工具」 |
 | 2 | 线上 `sw.js` 的 `VERSION` | `183`（与本地 `sw.js` 同值；这是线上可辨认的版本号） |
 | 3 | 关键文件哈希 | 逐一下载 `index.html`、`sw.js`、`js/core/persistence.js` 与本地同名文件比 SHA256，应全部一致 |
-| 4 | `gh api repos/idcu/plotpin/pages/builds/latest` | `status: "built"`、`commit` 等于本次推送的 SHA、`error.message` 为 null |
-| 5 | `gh api repos/idcu/plotpin/pages` | `status: "built"`、`build_type: "legacy"`、`source.branch: "main"`、`source.path: "/"` |
+| 4 | 本次改动文件哈希（只改文档时必做） | 例如 `docs/release-checklist.md` 的线上哈希应等于本地；否则说明构建还是上一版 |
+| 5 | `gh api repos/idcu/plotpin/pages/builds/latest` | `status: "built"`、`commit` 等于本次推送的 SHA、`error.message` 为 null；`duration` 单位是**毫秒** |
+| 6 | `gh api repos/idcu/plotpin/pages` | `status: "built"`、`build_type: "legacy"`、`source.branch: "main"`、`source.path: "/"` |
+
+注意：`builds/latest` 在新构建排队期间仍可能返回**上一个**构建（旧 `commit`）。等 `commit` 变成目标 SHA 再看 `status`，
+不要看到旧构建就判定失败。
 
 ### 4.5 生效时间与失败处理
 
-- 推送后通常 **20～40 秒**生效（实测一次构建 22.3 s）；CDN 另有 `Cache-Control: max-age=600`，
-  刚推送时可能读到旧缓存，用 `?v=<sha>` 或 `Invoke-WebRequest -Headers @{'Cache-Control'='no-cache'}` 复读。
+- 推送后通常 **20～40 秒**生效（实测两次：22.3 s、23.6 s；`updated_at - created_at` 与 `duration` 基本一致）。
+  CDN 另有 `Cache-Control: max-age=600`，刚推送时可能读到旧缓存，
+  用 `?v=<sha>` 或 `Invoke-WebRequest -Headers @{'Cache-Control'='no-cache'}` 复读；
+  判断是否已生效优先看 `ETag`/`Last-Modified` 是否更新，再看文件哈希。
+- 只改文档时页面内容与 `sw.js` `VERSION` **本就不变**（本次演练 HTTP 200、`VERSION=183` 均保持不变），
+  用第 4 行的「本次改动文件哈希」证明新构建已上线，不要把"页面看起来没变"当成发布失败。
 - 超过 2 分钟仍是旧版本：先查构建状态再判断——
   `gh api repos/idcu/plotpin/pages/builds/latest` 若 `status` 非 `built` 或 `error.message` 非空，按错误信息修；
   若已是 `built` 且 `commit` 正确，则是 CDN 缓存，等 `max-age` 或强制刷新，不要因此重推/force。
@@ -97,6 +107,10 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
 
 ### 4.6 与 Gitee 的关系
 
-- 两个远端**独立推送、互不影响**：`origin`（Gitee）与 `github`（GitHub Pages）各自有自己的 `main` 指针。
-- Gitee 仍按原流程 `git push origin main`；GitHub 只在需要更新线上站点时按 4.2 推送。
-- 只推 GitHub 不推 Gitee（或反之）会导致两边版本不一致，发布说明里要写明各自推到哪个 SHA。
+- 两个远端各自有自己的 `main` 指针，但**不要依赖"互不影响"**：2026-11-13 演练中只推了 Gitee（`2796aee..e614d8e`），
+  随后 `git push github main` 返回 `Everything up-to-date`，Pages 已按 `e614d8e` 开始构建——
+  说明 GitHub 端已被其他通道（外部镜像或并发推送）先行同步；GitHub 侧无 webhook（`gh api repos/idcu/plotpin/hooks` 为 0）。
+- 因此每次发布前**必须**用 `git fetch github` + `git rev-parse HEAD github/main` 实测，再决定推不推；
+  以实测 SHA 与 Pages 构建的 `commit` 为准，不假设顺序、不假设"必须推两次"。
+- Gitee 仍按原流程 `git push origin main`；需要显式更新 GitHub 时按 4.2 推送（可能 no-op，属正常）。
+- 只推其中一边都可能造成两边版本不一致，发布说明里要写明两边各自停在哪个 SHA。
