@@ -83,7 +83,8 @@ code += `\n;globalThis.__bench = {
   get state(){ return state; },
   resetState(){ state=createInitialState(); resetFrameRef(); return state; },
   baseObject, drawScene, invalidateStatic, visibleWorldRect, objectBounds, boundsIntersect, selectedIds,
-  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules, buildSymbolIndex, parseSvgSymbol
+  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules, buildSymbolIndex, parseSvgSymbol,
+  doriRows
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 const api = sandbox.__bench;
@@ -303,8 +304,58 @@ out.coverageZoomRatios = zoomRatios.map(r => +(r * 100).toFixed(2));
   if (!out.svgRejectContains64KB) console.error('❌ SVG 超限样本未按 64 KB 上限拒绝：' + rejectError);
 }
 
-out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
+/* 9) P3-A DORI：200 相机场景。DORI 不进入 analyzeCoverage 的栅格路径，面板渲染（doriRows）
+ *    才是增量成本，因此覆盖率与 doriRows 分开测，不能用一个数字含糊带过。
+ *    A 组仅 phys/angle；B 组追加 props.camResPx=1920 / props.camFov=90。各 5 次取中位数。 */
+{
+  const buildDoriScene = (withDori) => {
+    api.resetState();
+    api.state.site = { id: 'site.bench.dori', name: 'DORI 基准场地', layerId: 'layer.default', visible: true, locked: false,
+      annot: {}, style: {}, updatedAt: '', kind: 'rect', shape: { type: 'rect', x: 0, y: 0, w: 2000, h: 2000 } };
+    const objs = [api.baseObject('rect', 'rect.area', { x: 0, y: 0, width: 2000, height: 2000 })];
+    for (let i = 0; i < 200; i++) {
+      const gx = ((i % 20) + 0.5) * 100, gy = (Math.floor(i / 20) + 0.5) * 100;
+      const o = api.baseObject('point', 'point.camera', { x: gx, y: gy, phys: 80, angle: (i * 37) % 360, name: 'C' + i });
+      if (withDori) o.props = Object.assign({}, o.props, { camResPx: 1920, camFov: 90 });
+      objs.push(o);
+    }
+    api.state.objects = objs;
+    return objs;
+  };
+  const median = arr => arr.slice().sort((a, b) => a - b)[Math.floor(arr.length / 2)];
+  const runCoverage = () => {
+    const t0 = now();
+    api.analyzeCoverage(api.state, { targetCells: 36000 });
+    return now() - t0;
+  };
+  /* 交替顺序采样：A/B 两组各自预热后交替测量，抵消「后测更快」的 JIT/缓存顺序偏差 */
+  buildDoriScene(false); runCoverage();
+  buildDoriScene(true); runCoverage();
+  const samplesA = [], samplesB = [];
+  for (let i = 0; i < 5; i++) {
+    if (i % 2 === 0) {
+      buildDoriScene(false); samplesA.push(runCoverage());
+      buildDoriScene(true); samplesB.push(runCoverage());
+    } else {
+      buildDoriScene(true); samplesB.push(runCoverage());
+      buildDoriScene(false); samplesA.push(runCoverage());
+    }
+  }
+  const objsWithDori = buildDoriScene(true);
+  const dori200CoverageMs = median(samplesA);
+  const dori200CoverageBMs = median(samplesB);
+  const dori200RowsMs = pctOf(timeSamples(100, () => { for (const o of objsWithDori) api.doriRows(o); }), 0.5);
+  out.dori200CoverageMs = +dori200CoverageMs.toFixed(1);
+  out.dori200CoverageBMs = +dori200CoverageBMs.toFixed(1);
+  out.dori200CoverageDeltaPct = +(dori200CoverageMs ? ((dori200CoverageBMs - dori200CoverageMs) / dori200CoverageMs) * 100 : 0).toFixed(1);
+  out.dori200RowsMs = +dori200RowsMs.toFixed(2);
+  out.dori200RowsFilled = objsWithDori.filter(o => {
+    const r = api.doriRows(o);
+    return r && r.levels.every(v => v > 0);
+  }).length;
+}
 
+out.heapUsedMB = +(process.memoryUsage().heapUsed / 1048576).toFixed(2);
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(out));
 } else {
@@ -327,6 +378,7 @@ if (process.argv.includes('--json')) {
   console.log(`  符号库加载：索引构建 ${out.symbolLoadMs} ms（${out.symbolLibraryCount} 个图元，目标 ≤ 10ms）`);
   console.log(`  SVG 导入：199 路径（元素上限 200 含根节点）/ ${out.svgImportReachableBytes} 字节 ${out.svgImportReachableMs} ms（安全上限内可达最坏组合）`);
   console.log(`  SVG 超限拒绝：200 路径 × 5000 字符 / ${out.svgRejectBytes} 字节 ${out.svgRejectMs} ms（快失败，不设耗时门禁）`);
+  console.log(`  DORI 200 相机：覆盖率 A 组 ${out.dori200CoverageMs} ms / B 组 ${out.dori200CoverageBMs} ms（差异 ${out.dori200CoverageDeltaPct}%），doriRows ${out.dori200RowsMs} ms（${out.dori200RowsFilled}/200 行四级齐全）`);
 }
 
 /* 门禁：阻断项（超出一项即红），P99 仅告警。--no-gate 供本地快速跑。 */
