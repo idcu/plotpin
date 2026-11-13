@@ -45,6 +45,8 @@ const APP_LIMITS = Object.freeze({
   IMPORT_ENTITIES_MAX: 100000,              /* DXF/PDF 实体上限 */
   OBJECTS_MAX: 100000,                      /* 单工程对象上限（含所有楼层） */
   SHAPE_POINTS_MAX: 10000,                  /* 单个折线/多边形对象的顶点上限（防病态点列） */
+  PROPS_KEYS_MAX: 64,                       /* 单对象自定义属性键上限（载入清洗截断并审计） */
+  PROPS_VALUE_MAX: 256,                     /* 自定义属性字符串值长度上限（载入清洗截断并审计） */
   SHEAR_MAX: 50,                            /* 图片切变斜率上限（约 88.9°），避免近 90° 时产生非有限变换 */
   HISTORY_MAX: 20,                          /* 撤销栈深度 */
   TOMBSTONE_MAX: 100000,                    /* 删除墓碑硬上限：与 OBJECTS_MAX 同量级，保证每个已删对象都有墓碑（否则离线合并会复活） */

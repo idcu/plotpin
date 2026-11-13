@@ -1131,7 +1131,7 @@ function buildProject(p){
      重复 id 或 safeId 归并冲突时追加稳定后缀，重名对象走编号作用域重编号。
      不把当前工程 id 灌入 seenIds——合并他人工程时同 id 代表同一对象，不能改名换姓。 */
   const seenIds=new Set(), seenNames=new Set();
-  const report={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
+  const report={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0,pointsTruncated:0,propsTruncated:0};
   lastSanitizeReport=report;
   try{
     const objects=sanitizeObjects(p.objects,layers,objectTypes,seenIds,seenNames,report);
@@ -1162,7 +1162,7 @@ function buildProject(p){
     if(!floors.length) floors.push({id:'floor.default',name:'1F',updatedAt:''});
     /* floors 非空时 activeFloorId 必然命中：匹配则保留，否则回退首层（首层由上面的补默认层保证存在） */
     const activeFloorId=floors.some(f=>f.id===p.activeFloorId)?p.activeFloorId:floors[0].id;
-    if(report.duplicateIds||report.normalizedIds||report.duplicateNames||report.dropped){
+    if(report.duplicateIds||report.normalizedIds||report.duplicateNames||report.dropped||report.pointsTruncated||report.propsTruncated){
       if(typeof console!=='undefined'&&console.warn) console.warn('[sanitize] 对象清洗修正',report);
     }
     if(dupFloorName&&typeof console!=='undefined'&&console.warn){
@@ -1375,7 +1375,7 @@ function sanitizeViewport(raw){
 function finiteNumber(v,fallback){ const n=Number(v); return Number.isFinite(n)?n:fallback; }
 function safeId(v,prefix){ const s=String(v??'').replace(/[^A-Za-z0-9_.-]/g,'_'); return s||prefix+uid('ID'); }
 function pointArray(v){
-  return Array.isArray(v) ? v.filter(Array.isArray).map(p=>[finiteNumber(p[0],NaN),finiteNumber(p[1],NaN)])
+  return Array.isArray(v) ? v.slice(0,APP_LIMITS.SHAPE_POINTS_MAX).filter(Array.isArray).map(p=>[finiteNumber(p[0],NaN),finiteNumber(p[1],NaN)])
     .filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])) : [];
 }
 /**
@@ -1500,6 +1500,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
     const hasType=typeId=>types.some(t=>t.id===typeId&&t.kind===kind);
     const typeId=hasType(String(raw.typeId))?String(raw.typeId):defaultTypeId(kind);
     const points=pointArray(raw.points);
+    if(Array.isArray(raw.points)&&raw.points.length>APP_LIMITS.SHAPE_POINTS_MAX) audit.pointsTruncated=(audit.pointsTruncated||0)+1;
     const x=finiteNumber(raw.x,0), y=finiteNumber(raw.y,0);
     const angle=normalizeAngle(finiteNumber(raw.angle,0));
     const rawId=String(raw.id??'');
@@ -1549,7 +1550,14 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
       if(raw.style.fillAlpha!==undefined) o.style.fillAlpha=Math.min(1,Math.max(0,finiteNumber(raw.style.fillAlpha,.15)));
       if(raw.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,finiteNumber(raw.style.strokeWidth,.1));
     }
-    if(raw.props&&typeof raw.props==='object') Object.entries(raw.props).forEach(([k,v])=>{ if(['string','number','boolean'].includes(typeof v)) o.props[String(k).slice(0,40)]=v; });
+    if(raw.props&&typeof raw.props==='object'){
+      const entries=Object.entries(raw.props);
+      if(entries.length>APP_LIMITS.PROPS_KEYS_MAX) audit.propsTruncated=(audit.propsTruncated||0)+1;
+      entries.slice(0,APP_LIMITS.PROPS_KEYS_MAX).forEach(([k,v])=>{
+        if(!['string','number','boolean'].includes(typeof v)) return;
+        o.props[String(k).slice(0,40)]=typeof v==='string'?v.slice(0,APP_LIMITS.PROPS_VALUE_MAX):v;
+      });
+    }
     /* 逐对象标注开关：仅保留该 kind 支持键的布尔值；非法/缺失时按类型默认（不写回） */
     if(raw.annot&&typeof raw.annot==='object'){
       const keys=annotKeys(kind), clean={};

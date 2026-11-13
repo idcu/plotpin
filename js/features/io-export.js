@@ -824,9 +824,32 @@ function pdfVectorPlan(labelCount){
   const n=Math.max(0,Number(labelCount)||0);
   return n>300?{dpi:150,reason:'labels',fallback:false}:{dpi:200,reason:'',fallback:false};
 }
-/** 跨楼层统计需要栅格化的文字对象数：活动层对象在 state.objects，其余楼层在 f.objects */
+/** 该对象在 vectorPage 中会写入位图的文字种类（与 put 调用一一对应，供降档计数共用）。
+ *  text=正文、name=对象名、area/perimeter=面积/周长注解、distance/angle=尺寸标注。 */
+function vectorTextKinds(o){
+  if(o.kind==='text') return ['text'];
+  const kinds=[];
+  if(o.kind==='rect'||o.kind==='line'){
+    const closed=o.kind==='rect'||o.closed;
+    if(o.name&&annotOn(o,'name')) kinds.push('name');
+    if(closed&&annotOn(o,'area')) kinds.push('area');
+    if(closed&&annotOn(o,'perimeter')) kinds.push('perimeter');
+  }else if(o.kind==='dimension'){
+    const n=(o.points||[]).length;
+    if(o.subtype==='distance') kinds.push('distance');
+    else if(o.subtype==='area'&&n>=3){ kinds.push('area'); kinds.push('perimeter'); }
+    else if(o.subtype==='angle'&&n>=3) kinds.push('angle');
+  }
+  return kinds;
+}
+/** 跨楼层统计需要栅格化的文字条数：只统计实际导出（exportScope）的对象，与 vectorPage 的 put 同源 */
 function pdfVectorLabelCount(){
-  return (state.floors||[]).reduce((s,f)=>s+((f.id===state.activeFloorId?state.objects:(f.objects||[]))||[]).filter(o=>o.kind==='text').length,0);
+  return (state.floors||[]).reduce((s,f)=>{
+    const objs=((f.id===state.activeFloorId?state.objects:(f.objects||[]))||[]);
+    let n=0;
+    for(const o of objs){ if(exportScope(o,'draw')) n+=vectorTextKinds(o).length; }
+    return s+n;
+  },0);
 }
 /** V-3b2b 单页图纸：底图栅格 + 对象矢量 + 点位/标题栏叠加 + 文字位图 */
 async function vectorPage(floorName,pageNo,pageTotal){
@@ -839,6 +862,7 @@ async function vectorPage(floorName,pageNo,pageTotal){
   const put=(t,x,y,pt,color)=>texts.push({t:String(t),x,y,s:Math.max(10*s,pt),color:normalizeExportColor(color,'#111827')});
   state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
     const t=getType(o.typeId), color=normalizeExportColor(o.style.color||t.color,'#111827'), sw=Math.max(.3,styleVal(o,'strokeWidth',.1)*f.k);
+    const tk=vectorTextKinds(o);
     if(o.kind==='rect'){
       fill(color,styleVal(o,'fillAlpha',.15)||.15); stroke(color,sw);
       for(const c of V.path(f,outlineOf(o),true)) vec.push(c); vec.push(['B']);
@@ -849,24 +873,23 @@ async function vectorPage(floorName,pageNo,pageTotal){
       stroke('#111827',1.8*s);
       for(const c of V.path(f,outlineOf(o),false)) vec.push(c); vec.push(['S']);
     }
-    if(o.kind==='text'){ put(o.text||'文字',o.x,o.y,o.height*f.k,color); return; }
+    if(tk.includes('text')){ put(o.text||'文字',o.x,o.y,o.height*f.k,color); return; }
     if(o.kind==='rect'||o.kind==='line'){
       const closed=o.kind==='rect'||o.closed, ce=closed?shapeLabelCenter(o):o.points[o.points.length>>1];
-      const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-      if(o.name&&annotOn(o,'name')) put(o.name,ce[0],ce[1]+(closed?30*u:8*u),(o.kind==='rect'?19.2:12)*s,color);
-      if(closed&&(sa||sp)){
+      if(tk.includes('name')) put(o.name,ce[0],ce[1]+(closed?30*u:8*u),(o.kind==='rect'?19.2:12)*s,color);
+      if(tk.includes('area')||tk.includes('perimeter')){
         const area=o.kind==='rect'?shapeArea(o):polygonArea(o.points), per=o.kind==='rect'?shapePerimeter(o):objectLength(o);
-        if(sa) put('面积 '+fmt(area)+' ㎡',ce[0],ce[1]+8*u,12*s,'#1e3a8a');
-        if(sp) put('周长 '+fmt(per)+' m',ce[0],ce[1]-8*u,12*s,'#1e3a8a');
+        if(tk.includes('area')) put('面积 '+fmt(area)+' ㎡',ce[0],ce[1]+8*u,12*s,'#1e3a8a');
+        if(tk.includes('perimeter')) put('周长 '+fmt(per)+' m',ce[0],ce[1]-8*u,12*s,'#1e3a8a');
       }
     }else if(o.kind==='dimension'){
       const dm=dimensionMeasure(o), p0=o.points[0], n=o.points.length;
-      if(o.subtype==='distance') put(fmt(dm.length)+' m',(p0[0]+o.points[1][0])/2,(p0[1]+o.points[1][1])/2+12*u,12*s,'#111827');
-      else if(o.subtype==='area'&&n>=3){
+      if(tk.includes('distance')) put(fmt(dm.length)+' m',(p0[0]+o.points[1][0])/2,(p0[1]+o.points[1][1])/2+12*u,12*s,'#111827');
+      else if(tk.includes('area')&&n>=3){
         let cx=0,cy=0; for(const p of o.points){ cx+=p[0]; cy+=p[1]; }
         put('面积 '+fmt(dm.area)+' ㎡',cx/n+10*u,cy/n+8*u,12*s,'#111827');
         put('周长 '+fmt(dm.perimeter)+' m',cx/n+10*u,cy/n-8*u,12*s,'#111827');
-      }else if(o.subtype==='angle'&&n>=3) put(fmt(dm.deg)+'°',p0[0]+30*u,p0[1]+8*u,12*s,'#111827');
+      }else if(tk.includes('angle')) put(fmt(dm.deg)+'°',p0[0]+30*u,p0[1]+8*u,12*s,'#111827');
     }
   });
   /* 辅助层：底图/场地/网格整页 JPEG；点位/标题栏/页脚整页透明位图（均按页面逻辑版式栅格化） */

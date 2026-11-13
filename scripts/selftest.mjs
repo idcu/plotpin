@@ -3917,6 +3917,22 @@ await section("39. 仿射校准：像素↔世界映射 / 相似与完整仿射�
     ok('N-14-大点列场地包围盒有限', [sb.minX,sb.minY,sb.maxX,sb.maxY].every(Number.isFinite));
     const ob=api.objectBounds(api.baseObject('line','line.line',{points:big}));
     ok('N-14-大点列对象包围盒有限', [ob.minX,ob.minY,ob.maxX,ob.maxY].every(Number.isFinite));
+    /* C-02：载入清洗限制 points 顶点数与 props 键数/值长，并写审计计数 */
+    const audit={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0,pointsTruncated:0,propsTruncated:0};
+    const manyPoints=[]; for(let i=0;i<api.APP_LIMITS.SHAPE_POINTS_MAX+50;i++) manyPoints.push([i,0]);
+    const manyProps={}; for(let i=0;i<api.APP_LIMITS.PROPS_KEYS_MAX+10;i++) manyProps['k'+i]=i===0?'x'.repeat(api.APP_LIMITS.PROPS_VALUE_MAX+20):i;
+    const cleaned=api.sanitizeObjects([{kind:'line',typeId:'line.line',id:'C02-L',name:'C02',layerId:'layer.default',points:manyPoints,props:manyProps}],
+      api.state.layers,api.BUILTIN_TYPES,new Set(),new Set(),audit);
+    eq('C-02 对象保留', cleaned.length, 1);
+    eq('C-02 顶点截断到上限', cleaned[0].points.length, api.APP_LIMITS.SHAPE_POINTS_MAX);
+    eq('C-02 props 键截断到上限', Object.keys(cleaned[0].props).length, api.APP_LIMITS.PROPS_KEYS_MAX);
+    eq('C-02 props 字符串值截断到上限', cleaned[0].props.k0.length, api.APP_LIMITS.PROPS_VALUE_MAX);
+    eq('C-02 审计 pointsTruncated', audit.pointsTruncated, 1);
+    eq('C-02 审计 propsTruncated', audit.propsTruncated, 1);
+    const atLimit=api.sanitizeObjects([{kind:'line',typeId:'line.line',id:'C02-E',name:'C02E',layerId:'layer.default',
+      points:manyPoints.slice(0,api.APP_LIMITS.SHAPE_POINTS_MAX),props:Object.fromEntries(Object.entries(manyProps).slice(0,api.APP_LIMITS.PROPS_KEYS_MAX))}],
+      api.state.layers,api.BUILTIN_TYPES,new Set(),new Set(),{duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0,pointsTruncated:0,propsTruncated:0});
+    eq('C-02 恰好等于上限不截断', atLimit[0].points.length, api.APP_LIMITS.SHAPE_POINTS_MAX);
     api.resetState();
   }
 
@@ -5854,7 +5870,7 @@ await section("56. 单文件发行包：内联、去外链、图标 data URI、C
 {
   const sample='<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; img-src \'self\' data:"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="a.css"></head><body><script src="a.js"></script><script src="b.js"></script></body></html>';
   const files={'a.css':'body{color:red}','a.js':'console.log("a")','b.js':'const x="</script>";','icon.svg':'<svg/>','manifest.webmanifest':'{}'};
-  const out=buildStandalone(sample,p=>files[p]);
+  const out=await buildStandalone(sample,p=>files[p]);
   ok('打包-样式内联', out.includes('<style>')&&out.includes('body{color:red}'));
   ok('打包-脚本顺序保留', out.indexOf('console.log')<out.indexOf('const x'));
   ok('打包-无脚本外链', !/<script\s+src=/.test(out));
@@ -5868,10 +5884,10 @@ await section("56. 单文件发行包：内联、去外链、图标 data URI、C
   ok('打包-CSP保留原策略', out.includes("default-src 'self'")&&out.includes("img-src 'self'"));
 
   let cspErr=null;
-  try{ buildStandalone('<html><head></head><body><script src="a.js"></script></body></html>',p=>files[p]||''); }catch(e){ cspErr=e; }
+  try{ await buildStandalone('<html><head></head><body><script src="a.js"></script></body></html>',p=>files[p]||''); }catch(e){ cspErr=e; }
   ok('打包-无CSP时拒绝构建', !!cspErr&&/Content-Security-Policy/.test(cspErr.message));
 
-  const real=buildStandalone(readFileSync(join(root,'index.html'),'utf8'),p=>readFileSync(join(root,p),'utf8'));
+  const real=await buildStandalone(readFileSync(join(root,'index.html'),'utf8'),p=>readFileSync(join(root,p),'utf8'));
   ok('打包-真实入口无外链脚本', !/<script\s+src=/.test(real));
   ok('打包-真实入口无外链样式', !/<link\s+rel="stylesheet"/.test(real));
   ok('打包-真实入口无manifest', !/rel="manifest"/.test(real));
@@ -9884,6 +9900,17 @@ await section("V-3b1 矢量 PDF 导出选项：档位决策与降级原因", asy
   st.floors.pop();
   st.objects.pop();
   eq('V-3b1 计数可回到基线', api.pdfVectorLabelCount(), base);
+  /* C-01：名称/面积/周长注解同样栅格化成位图文字，必须计入降档阈值；不可导出对象不计入 */
+  const rect = api.baseObject('rect', 'rect.area', { name: 'C01-矩形', x: 0, y: 0, width: 1000, height: 800 });
+  rect.annot = Object.assign({}, rect.annot, { name: true, area: true, perimeter: true });
+  st.objects.push(rect);
+  eq('C-01 名称+面积+周长计入 3 条文字', api.pdfVectorLabelCount(), base + 3);
+  const hidden = api.baseObject('text', 'text.builtin', { name: 'C01-隐藏', text: '丙' });
+  hidden.visible = false;
+  st.objects.push(hidden);
+  eq('C-01 不可导出对象不计入', api.pdfVectorLabelCount(), base + 3);
+  st.objects.pop(); st.objects.pop();
+  eq('C-01 清理后可回到基线', api.pdfVectorLabelCount(), base);
 }
 
 });
