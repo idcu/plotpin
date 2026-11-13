@@ -1,9 +1,9 @@
 name: CI
 
-# 当前状态：**CI 定义已就绪，runner 未接入**。
-# 原因（D2 决策，2026-11-13）：本仓库唯一 remote 是 `git@gitee.com:idcu/plotpin.git`，
-# 没有 GitHub 仓库与 Actions 运行条件；Gitee Go 需另写不兼容的 `.workflow/` 流水线（计划 E-01，未选）。
-# 因此本文件作为**定义存档**保留，不代表任何一次真实运行结果；
+# 当前状态：**定义已挂载并实际运行，但全红，不作发布门禁**。
+# 实测（2026-11-13 核查）：CI 运行 60 次均失败（`test` 与两个 `e2e` job 为红），`Perf Nightly` 0 次，
+# `pages-build-deployment` 87 次（`gh api repos/idcu/plotpin/actions/runs`）。
+# 决策（D2，2026-11-13）：发布门禁放在本地，Actions 仅作参考，不作为合并阻断。
 # 发布门禁以本地命令为准，逐条清单与期望值见 `docs/release-checklist.md`。
 on:
   push:

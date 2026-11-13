@@ -1,7 +1,7 @@
 # 发布门禁清单（本地为准）
 
-> **当前没有 CI 在运行。** `.github/workflows/ci.yml` 与 `perf-nightly.yml` 是已就绪的**定义存档**：
-> GitHub 仓库 `idcu/plotpin` 存在但只用于 Pages 的 branch 构建（§4），不跑 Actions（2026-11-13 决策 D2）。
+> **Actions 在跑但全红，不作发布门禁。** `.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并在 GitHub Actions 上实际运行
+> （2026-11-13 核查：CI 60 次全部失败、`Perf Nightly` 0 次、`pages-build-deployment` 87 次），**不能**当作自动校验。
 > 因此每次发布/合并前，必须在本机按本清单逐条执行并**核对数字**，不能只看退出码。
 > 期望值基线日期：**2026-11-13**；数字来自 [facts.md](facts.md)，变化时同一次提交内更新两处。
 
@@ -42,7 +42,7 @@
 ## 4. GitHub Pages 发布（线上站点 https://idcu.github.io/plotpin/）
 
 线上是 `main` 根目录的 legacy Pages 构建（`build_type: legacy`、`source: {branch: main, path: /}`、根目录有 `.nojekyll`），
-**推 `main` 即自动发布**，不需要 gh-pages 分支、不需要 Pages workflow、不需要手工上传。
+**推 `main` 即自动发布**（可能是本机推，也可能是 Gitee 推送镜像代推，见 4.6），不需要 gh-pages 分支、不需要 Pages workflow、不需要手工上传。
 
 ### 4.1 前置条件
 
@@ -68,7 +68,7 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
   这里用**命令级临时覆盖**借 gh keyring 里的 token 完成 https 认证；`-c` 只作用于这一条命令，
   **不写 `.git/config`、不动全局 git config**。
 - 不使用 `--force`、不 amend、不 push 标签。
-- 若返回 **`Everything up-to-date`**（exit 0）：说明远端 `main` 已经是该 SHA（本环境常见，见 4.6），
+- 若返回 **`Everything up-to-date`**（exit 0）：说明远端 `main` 已经是该 SHA——本环境常见原因是 **Gitee 推送镜像已先行同步**（见 4.6），
   **不是失败**；以 `git rev-parse HEAD github/main` 与 4.4 的 Pages `commit` 为准，不要为了"有输出"而造空提交。
 
 ### 4.3 无新提交时（no-op）
@@ -105,18 +105,29 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
   若已是 `built` 且 `commit` 正确，则是 CDN 缓存，等 `max-age` 或强制刷新，不要因此重推/force。
 - 构建失败不回滚 git 历史：修好内容后正常提交再推（仍不 force、不 amend）。
 - **`git push github` 连不上**（`Failed to connect to github.com port 443 after ~21 s`，exit 128）：
-  先用 `gh api repos/idcu/plotpin/commits/main --jq .sha` 查远端是否**已经**有该 SHA（外部通道可能已同步，见 4.6）；
+  先用 `gh api repos/idcu/plotpin/commits/main --jq .sha` 查远端是否**已经**有该 SHA（Gitee 推送镜像可能已同步，见 4.6）；
   已有就不要再推，直接做 4.4 验证；没有才排查网络（实测 `api.github.com:443` 可达而 `github.com:443` 不可达，
   属出口/DNS 问题，换网络或稍后重试）。不要用 force、不要改用其他协议绕过。
 
 ### 4.6 与 Gitee 的关系
 
-- 两个远端各自有自己的 `main` 指针，但**不要依赖"互不影响"**——2026-11-13 演练实测到外部同步：
-  - 只推 Gitee（`2796aee..e614d8e`）后，`git push github main` 返回 `Everything up-to-date`，Pages 已按 `e614d8e` 构建；
-  - 再推 Gitee（`e614d8e..efcd555`）后约 **4 秒**，GitHub API 已显示 `main=efcd555` 且 Pages 开始构建（19.5 s 完成）；
-  - 同期本机 `github.com:443` TCP 不通（git push exit 128），说明同步**不是本机发起**的；
-    且 GitHub 侧 `gh api repos/idcu/plotpin/hooks` 为 0 个 webhook。
+- 两个远端各自有自己的 `main` 指针，但**不要依赖"互不影响"**：2026-11-13 实测到外部同步。
+- **判定：Gitee 仓库的「推送镜像（push mirror）」使用 huyuyue 的 GitHub 凭据，在每次 push 后自动推 `github.com/idcu/plotpin`（置信度 0.9）**。依据：
+  - Gitee 推送后 GitHub 秒级出现同一 SHA：`e614d8e` ≈4 s、`efcd555` ≈5 s、`799a85d` ≈12–14 s（Actions run `created_at` / `repo.pushed_at`）；
+  - 三次 push 的 actor 全部为 `huyuyue`（`gh api repos/idcu/plotpin/actions/runs`），与镜像使用个人 token 的表现一致；
+  - GitHub 侧排除：`hooks` 0 个、`keys` 0 个、仓库非 GitHub mirror（`mirror_url` 空）、workflow 无 `git push`；本机无 `insteadOf`/`pushInsteadOf`/自定义 hooks；
+  - `2796aee` 在本次登录 gh 之前就已同步，说明通道独立于本机会话。
+- **未核实（如实标注）**：Gitee 后台「镜像管理」的具体配置与所用 token 名称/权限——需登录 Gitee，本机无凭据；`gh api repos/idcu/plotpin/commits/main` 可能滞后约 1 分钟，判断以 Actions run 的 `head_sha` 或 Pages 构建的 `commit` 交叉确认。
+- **可写 `main` 的主体（均需知情）**：
+
+  | 主体 | 依据 |
+  |---|---|
+  | `huyuyue`（admin） | `gh api repos/idcu/plotpin/collaborators`（唯一 collaborator） |
+  | 组织 owner | 仓库属于 `idcu` 组织，owner 默认可管理该仓库 |
+  | `trae-ai-cn` GitHub App | 组织安装了该 App（`repository_selection=all`，含 `contents:write`、`workflows:write`） |
+  | 镜像所用 huyuyue token | 由上述同步现象推断，权限未核实 |
+
 - 因此每次发布前**必须**用 `gh api repos/idcu/plotpin/commits/main --jq .sha` 或 `git fetch github` + `git rev-parse` 实测，
-  再决定推不推；以实测 SHA 与 Pages 构建的 `commit` 为准，不假设顺序、不假设"必须推两次"。
+  再决定推不推；不假设顺序、不假设"必须推两次"。
 - Gitee 仍按原流程 `git push origin main`；需要显式更新 GitHub 时按 4.2 推送（可能 no-op 或因网络 exit 128，属正常）。
 - 只推其中一边都可能造成两边版本不一致，发布说明里要写明两边各自停在哪个 SHA。

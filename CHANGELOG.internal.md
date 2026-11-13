@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-13 · 文档口径校正：Actions 实际在跑、GitHub Pages 发布与同步通道
+
+- **Commit Hash**：`待回填`
+- **核心问题**：多份文档仍写「runner 未接入、无 GitHub 运行条件、唯一 remote 为 Gitee」，与实测相反；release-checklist §4.6 把同步来源写成「外部镜像或并发推送」，未给结论。
+- **核心改动**：
+  - 统一为「**Actions 在跑但全红，不作发布门禁，以本地门禁为准**」：README、`docs/engineering.md`（§3.1 引言、§3.5、纪律第 2 问）、`docs/testing.md`（§1 表头与引言、§3.1）、`docs/release-checklist.md` 文首、两份 workflow 文件头、`docs/manual-acceptance-report-2026-11-07.md` 归档注。
+  - `docs/facts.md` CI 行改为实测值，来源列换成可复核命令（`gh api repos/idcu/plotpin/actions/workflows|runs`），不再引用被审对象的文件头注释。
+  - `perf-nightly.yml` 改为「条件具备但尚未触发（0 次）、`schedule` 已挂载」，不写「不会运行」。
+  - release-checklist §4.6 按调查结论改写：判定为 **Gitee 推送镜像（置信度 0.9）**，删除「或并发推送」；新增写权限主体表（`huyuyue`、组织 owner、`trae-ai-cn` App、镜像 token），未核实项如实标注。
+- **实测数据（2026-11-13 核查，`gh api`）**：Actions 总运行 147 次 = **CI 60 次（全部失败：`test` 与两个 `e2e` job 红）+ `pages-build-deployment` 87 次**；`Perf Nightly` **0 次**。推送 actor 全部为 `huyuyue`；GitHub `hooks` 0、`keys` 0、`mirror_url` 空；组织安装 `trae-ai-cn` App（`contents:write`、`workflows:write`、`repository_selection=all`）。
+- **预算**：dist **745,081 B / gzip 242,155 B 不变（0 B）**；SW `VERSION=183` 不变（本批未改预缓存输入）。
+- **验证数据**：`npm run ci` 0；`check.mjs --selftest` 3,979 通过 / 0 失败；`build --check` 二次构建一致；`check-sw` 183；`badge --check` 与 `check-discipline --strict` 均绿。本批只动文档与 workflow 注释，未复跑 e2e。
+- **遗留风险**：Gitee 后台镜像配置与镜像 token 权限仍未核实（需登录 Gitee）；GitHub Actions 仍会在每次 push 触发并失败，需在 GitHub 侧停用或修绿；「文档与 Actions 现实一致」依赖本次校正，若有人在 GitHub 上禁用 workflow 需同步更新本条目所指文档。
+
 ## 2026-11-12 · V-5 图纸修订双版对比 + size-report 误报修复
 
 - **Commit Hash**：`待回填`

@@ -191,9 +191,9 @@ npm run ci  =  node scripts/check.mjs --selftest
             && node scripts/check-gates.mjs
 ```
 
-> **CI 现状（2026-11-13 决策 D2）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 是**已就绪的定义存档**，
-> 但当前**没有 GitHub 运行条件**（唯一 remote 为 Gitee），**runner 未接入**，从未产生过真实运行记录。
-> 下表「`ci.yml` 定义中的归属」只表示该判据在定义文件里由哪个 job 承担，**不代表它已被自动执行**。
+> **Actions 现状（2026-11-13 核查）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并在 GitHub Actions 上**实际运行**——
+> CI **60 次运行全部失败**（`test` 与两个 `e2e` job 为红）、`Perf Nightly` **0 次**、`pages-build-deployment` **87 次**。
+> 因此 Actions **在跑但全红，不作发布门禁**；下表「`ci.yml` 定义中的归属」只表示该判据由哪个 job 承担，**不代表它已绿或可依赖**。
 > 发布以**本地门禁**为准，逐条命令与期望值见 [release-checklist.md](release-checklist.md)。
 
 | 命令 | 作用 | 在 `npm run ci` | `ci.yml` 定义中的归属 |
@@ -208,8 +208,8 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-gates.mjs` | 正面基线 + 13 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
-| `node scripts/e2e.mjs` | Chromium 功能 e2e（45 spec / 151 用例，含 `file://` 发行版路径） | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`），matrix 双入口并行（源码 4173 / dist 4174），各自全量；**仅定义，未运行** |
-| `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI（SwiftShader 读数不能当真实 GPU 结论）；`perf-nightly.yml` 夜间定时 + 手动触发，读数上传为 artifact；**仅定义，未运行** |
+| `node scripts/e2e.mjs` | Chromium 功能 e2e（45 spec / 151 用例，含 `file://` 发行版路径） | 否 | 独立 `e2e` job（`npm ci` + `playwright install --with-deps chromium`），matrix 双入口并行（源码 4173 / dist 4174），各自全量；**已运行且失败（2026-11-13），不作发布门禁** |
+| `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI（SwiftShader 读数不能当真实 GPU 结论）；`perf-nightly.yml` 夜间定时 + 手动触发，读数上传为 artifact；**schedule 已挂载但尚未触发（0 次）** |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
 
 > **vendor 摘要口径（2026-11-10 更新）**：`check-ngm.mjs` 现在会对 `ngm.vendor/**` 的**实际字节**逐文件计算 sha256，并与仓库内清单 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会在本地红并指出文件名（`node scripts/check-ngm.mjs`）。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。清单同时记录 `ngm.lock` 的 `moduleDigest`，lock 重新锁定而清单未刷新也会红。
@@ -287,10 +287,11 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 
-### 3.5 CI 未接入：没有自动校验的部分（必须知情）
+### 3.5 Actions 在跑但全红，不作门禁：没有可靠自动校验的部分（必须知情）
 
-> **当前没有 CI 在运行。** `ci.yml`/`perf-nightly.yml` 只是定义存档（原因见 §3.1 与文件头注释），
-> 因此下列判据**没有任何自动执行记录**；发布前的实际执行靠 [release-checklist.md](release-checklist.md) 的人工纪律。
+> **Actions 在跑，但不作发布门禁。** `ci.yml`/`perf-nightly.yml` 已挂载并实际执行（2026-11-13 核查：CI 60 次全部失败、
+> `Perf Nightly` 0 次、Pages 87 次），因此下列判据**没有可依赖的自动校验**：自动任务跑过却从未绿过，不能作为「干净检出上的回归」。
+> 发布前的实际执行靠 [release-checklist.md](release-checklist.md) 的人工纪律。
 
 | 判据 | 真实边界 |
 |---|---|
@@ -299,10 +300,10 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `build.mjs --check` | 不校验「产物可双击打开/运行正确」，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验「断言数三处一致」，不校验断言本身是否有效 |
 | `i18n-scan.mjs` | 只按静态字面量扫描，不证明译文语义正确；JSON/HTML 内的动态拼接可能漏扫 |
-| `e2e` | **runner 未接入，从未在 CI 上执行过**。本地门禁命令：源码 `node scripts/e2e.mjs`（45 spec / 151 用例：150 通过 + 1 条件跳过）、dist `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（149 通过 + 2 跳过），两套均 exit 0（2026-11-13 实测）。`ci.yml` 里的 matrix 双入口 job 只是等价定义。缺 Playwright/Chromium 时 `scripts/e2e.mjs` 打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
-| `perf:browser` | 不在 `npm run ci`，也没有夜间采集在跑；本机为 SwiftShader，数据不能当真实 GPU 结论。需要时手动执行 `node scripts/perf-browser.mjs` |
+| `e2e` | **GitHub Actions 上已执行且失败**（2026-11-13：源码与 dist 两个 job 均为红），不能作为回归依据。本地门禁命令：源码 `node scripts/e2e.mjs`（45 spec / 151 用例：150 通过 + 1 条件跳过）、dist `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（149 通过 + 2 跳过），两套均 exit 0（2026-11-13 实测）。`ci.yml` 里的 matrix 双入口 job 与本地命令等价，但当前红。缺 Playwright/Chromium 时 `scripts/e2e.mjs` 打印 `[SKIP]` 并**退 2**（不是 0），跳过不会伪装成通过 |
+| `perf:browser` | 不在 `npm run ci`；`perf-nightly.yml` 的 `schedule` 已挂载但**尚未触发（0 次）**，目前没有夜间数据在跑；本机为 SwiftShader，数据不能当真实 GPU 结论。需要时手动执行 `node scripts/perf-browser.mjs` |
 | `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用「本地 ci 绿」代替全部门禁，按发布清单逐条执行 |
-| 本地纪律的局限 | 没有 runner 就没有「干净检出上的强制回归」：漏跑、跑一半、看到红仍合并都只能靠人工约束。这是 D2 选择「不接 CI」的已知代价 |
+| 本地纪律的局限 | Actions 在跑但全红，等于没有「干净检出上的强制回归」：漏跑、跑一半、看到红仍合并都只能靠人工约束。这是 D2「以本地门禁为准」的现状代价；要在 GitHub 侧显式停用这两个 workflow 或把它们修绿 |
 
 ---
 
@@ -467,8 +468,8 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 12 | 每条判据都在总闸里（没有「写了但从不跑」） |
 | 13 | 文档里的命令必须指向真实存在的脚本：`node scripts/*.mjs` 文件必须存在，`npm run <name>` 必须是 `package.json` 中的脚本 |
 
-> 第 2 问（判据在 CI 上跑）只核对 **workflow 定义里是否调用了判据/总闸**；当前 runner 未接入（见 §3.5），
-> 该问**不代表判据曾被自动执行过**——真实执行证据只能来自本地发布清单的日志。
+> 第 2 问（判据在 CI 上跑）只核对 **workflow 定义里是否调用了判据/总闸**；Actions 虽有运行但全红且不作门禁（见 §3.5），
+> 该问**不代表判据已被可靠执行**——真实执行证据只能来自本地发布清单的日志。
 
 写文档时：不要复制易漂移数字；命令必须可执行；引用旧结论前先核对代码。
 
@@ -479,7 +480,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 1. **先问三件事**：违反了会怎样？能不能用「读文件 / 跑命令 / 比数据」回答？过去 3 个月违反过吗？
 2. **写成单项**：能单独跑，打印读数（扫了多少、比了多少）；读数为 0 视为失败（空跑比漏报更糟）。
 3. **配一颗牙齿**：构造一份「应当失败」的输入并断言它失败（`--selftest` 是现成形状）。
-4. **挂进 `check.mjs`**，确认本地与 CI 走同一条命令。
+4. **挂进 `check.mjs`**，确认本地与 CI 走同一条命令（CI 仅作参考，不作合并阻断）。
 5. **在本文档登记**：守什么、违反的后果、什么情况下可以删。
 
 > 一条判据被**阻断过一次**才算成立。加进来三个月没红过、也没人看得懂它在守什么，就应该删掉。

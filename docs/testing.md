@@ -11,14 +11,14 @@
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-12） | `ci.yml` 定义中的归属（runner 未接入） |
+| 层 | 入口 | 运行环境 | 规模（2026-11-12） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 3,979 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 仅定义（`e2e` job 双入口 matrix，从未运行）；以本地 `node scripts/e2e.mjs` 为准，见 §3.1 |
-| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（`perf-nightly.yml` 仅定义存档；需要时本地手动 `node scripts/perf-browser.mjs`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 151 个用例**（默认 150 跑 + 1 条件跳过） | 已运行且失败（`e2e` job 双入口 matrix 均红，2026-11-13）；以本地 `node scripts/e2e.mjs` 为准，见 §3.1 |
+| 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | **否**（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 13 种人为破坏 | 是 |
 
-> **CI 现状（2026-11-13 决策 D2）**：`ci.yml`/`perf-nightly.yml` 已就绪但**没有 GitHub 运行条件**（唯一 remote 为 Gitee），runner 未接入、无任何真实运行记录。发布以本地门禁为准，逐条清单与期望值见 [release-checklist.md](release-checklist.md)。
+> **Actions 现状（2026-11-13 核查）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI **60 次全部失败**（`test` 与两个 `e2e` job 为红）、`Perf Nightly` **0 次**、`pages-build-deployment` **87 次**；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单与期望值见 [release-checklist.md](release-checklist.md)。
 
 三层职责不同，**数据不可互换**：
 
@@ -104,7 +104,7 @@
 | `undo-coverage.spec.mjs` | 判定 | 属性面板用例先等启动落定再建对象、填面板（dist 下偶发面板被启动重绘重置）；产品未改 |
 
 > 启动落定的原因与写法见 [known-issues.md](known-issues.md) K14：`applyLocalSettings()` 会整体替换 `state.settings`，「载入优先」是有意行为；测试必须等启动落定，不得为此加产品守卫。
-- **runner 未接入**（决策 D2）：`ci.yml` 的 `e2e` job 只是等价定义——**matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`），从未真实执行过。
+- **Actions 在跑但红，不作门禁**（决策 D2 仍以本地门禁为准）：`ci.yml` 的 `e2e` job 在 GitHub 上**已执行且失败**——**matrix 双入口并行**（`源码入口` 4173 / `dist 入口` 4174，各自跑全量 spec，`fail-fast: false`），源码与 dist 两个 job 均为红，不能作为回归依据。
   当前门禁靠本地两条命令：`node scripts/e2e.mjs`（150 通过 + 1 条件跳过）与 `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（149 通过 + 2 跳过），两套均须 exit 0。
 - `npm run ci` 是离线 Node 门禁，**不安装也不依赖 Playwright/Chromium**，因此 `file://` 用例不在 `npm run ci` 里跑；它随本地 `node scripts/e2e.mjs` 执行（原因已写在 workflow 注释与本节）。
 

@@ -30,7 +30,7 @@
 | i18n 字典规模 | PHRASES 992 / TEMPLATES 114 / DICT.zh 199 | 同上 | |
 | 门禁牙齿 | 正面基线 6/6 + 人为破坏 13/13 | `node scripts/check-gates.mjs` | 场景只断言非 0 且命中目标关键字；第 10/11 场景为契约清空 / 未 bump 就 `--update` |
 | 方法论纪律 | 13/13（`--strict` L4） | `node scripts/check-discipline.mjs --strict` | |
-| CI 运行状态 | **runner 未接入**（`ci.yml`/`perf-nightly.yml` 仅为定义存档，无运行记录） | `docs/release-checklist.md`；workflow 文件头注释 | 唯一 remote 为 Gitee、无 GitHub Actions 运行条件（决策 D2）；发布以本地门禁为准 |
+| CI 运行状态 | **Actions 在跑但全红**：CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**不作发布门禁** | `gh api repos/idcu/plotpin/actions/workflows`；`gh api repos/idcu/plotpin/actions/runs`；`gh api repos/idcu/plotpin/actions/workflows/<id>/runs` | 本地 remote 为 `origin`(Gitee) + `github`；发布以本地门禁为准（决策 D2），GitHub 只承担 Pages 发布 |
 | Node bench（桩） | heapUsed 31.43 MB；缓存帧 P95 0.12 ms；静态重建 26.68 ms；覆盖率 9.2 ms；规则 15.5 ms | `node scripts/bench.mjs` | **历史采集值（2026-11-08，本轮未复跑）**；Node 桩数据，不能作为浏览器性能结论 |
 
 ## 3. Golden 基线
