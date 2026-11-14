@@ -17,7 +17,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      # 零依赖：无需 npm install
+      # 运行期零依赖，但构建链要 devDependency `terser`（pack-core.mjs 在 build --check 时压缩脚本），
+      # check-gates 也要 node_modules 才能跑完整副本。缺这一步会让本 job 结构性全红。
+      # --ignore-scripts：不执行任何包脚本，安装面只来自 lockfile。
+      - name: 安装构建期依赖（terser 等，不进发行包）
+        run: npm ci --ignore-scripts
       - name: 契约判据（版本三处一致 / i18n 键对齐 / 文件头 / 枚举同源）
         run: node scripts/check-contracts.mjs
       - name: 对外 API 面（PlotPin 顶层键 ↔ contracts/plugin-api.json）
@@ -30,7 +34,7 @@ jobs:
         run: node scripts/bench.mjs
       - name: 单文件发行包校验（源重建 ↔ dist-manifest 登记哈希）
         run: node scripts/build.mjs --check
-      - name: 门禁牙齿自测（正面基线 + 13 种人为破坏）
+      - name: 门禁牙齿自测（正面基线 10 条 + 19 种人为破坏）
         run: node scripts/check-gates.mjs
 
   e2e:

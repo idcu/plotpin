@@ -149,41 +149,85 @@ for (const src of layerSrcs) {
 function stripJsForScan(src, keepStrings = false) {
   const out = [];
   let i = 0, prev = '';
-  const regexOk = () => prev === '' || '([{,;:=!&|?+-*%~^<>'.includes(prev);
+  const regexOk = (p) => p === '' || '([{,;:=!&|?+-*%~^<>'.includes(p);
+  /* 跳过区段内的换行要原样补回，保证行号与顶层声明判定不被字符串/模板吞掉 */
+  const keep = (a, b) => { for (let k = a; k < b; k++) if (src[k] === '\n') out.push('\n'); };
+  function skipString(start) {
+    const q = src[start]; let k = start + 1;
+    while (k < src.length) {
+      if (src[k] === '\\') { k += 2; continue; }
+      if (src[k] === q) return k + 1;
+      k++;
+    }
+    return k;
+  }
+  function skipLine(k) { while (k < src.length && src[k] !== '\n') k++; return k; }
+  function skipBlock(k) {
+    k += 2;
+    while (k < src.length && !(src[k] === '*' && src[k + 1] === '/')) k++;
+    return Math.min(k + 2, src.length);
+  }
+  function skipRegex(k) {
+    k++; let cls = false;
+    while (k < src.length) {
+      const ch = src[k];
+      if (ch === '\\') { k += 2; continue; }
+      if (ch === '[') cls = true;
+      else if (ch === ']') cls = false;
+      else if (ch === '/' && !cls) { k++; break; }
+      else if (ch === '\n') break;
+      k++;
+    }
+    return k;
+  }
+  /* ${...}：按花括号配平跳到闭合 } 之后；内部字符串/注释/正则/嵌套模板都先跳过，
+     否则嵌套模板里的反引号会被误当成外层模板的结束符（S1 修复点）。 */
+  function skipExpr(start) {
+    let k = start, depth = 1, p = '{';
+    while (k < src.length) {
+      const ch = src[k], nx = src[k + 1];
+      if (ch === '"' || ch === "'") { k = skipString(k); p = ch; continue; }
+      if (ch === '`') { k = skipTemplate(k); p = '`'; continue; }
+      if (ch === '/' && nx === '/') { k = skipLine(k); continue; }
+      if (ch === '/' && nx === '*') { k = skipBlock(k); continue; }
+      if (ch === '/' && regexOk(p)) { k = skipRegex(k); p = 'r'; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (!depth) return k + 1; }
+      if (!/\s/.test(ch)) p = ch;
+      k++;
+    }
+    return k;
+  }
+  function skipTemplate(start) {
+    let k = start + 1;
+    while (k < src.length) {
+      const ch = src[k];
+      if (ch === '\\') { k += 2; continue; }
+      if (ch === '`') return k + 1;
+      if (ch === '$' && src[k + 1] === '{') { k = skipExpr(k + 2); continue; }
+      k++;
+    }
+    return k;
+  }
   while (i < src.length) {
     const c = src[i], d = src[i + 1];
-    if (c === '/' && d === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
-    if (c === '/' && d === '*') {
-      i += 2;
-      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
-        if (src[i] === '\n') out.push('\n');
-        i++;
-      }
-      i += 2; continue;
+    if (c === '/' && d === '/') { i = skipLine(i); continue; }
+    if (c === '/' && d === '*') { const s = i; i = skipBlock(i); keep(s, i); continue; }
+    if (c === '"' || c === "'") {
+      const s = i; i = skipString(i);
+      if (keepStrings) out.push(src.slice(s, i));
+      else { out.push(c + c); keep(s, i); }
+      prev = c; continue;
     }
-    if (c === '"' || c === "'" || c === '`') {
-      const q = c; const start = i; i++;
-      while (i < src.length) {
-        if (src[i] === '\\') { i += 2; continue; }
-        if (src[i] === q) { i++; break; }
-        if (src[i] === '\n') out.push('\n');
-        i++;
-      }
-      out.push(keepStrings ? src.slice(start, i) : q + q); prev = q; continue;
+    if (c === '`') {
+      const s = i; i = skipTemplate(i);
+      if (keepStrings) out.push(src.slice(s, i));
+      else { out.push('``'); keep(s, i); }
+      prev = '`'; continue;
     }
-    if (c === '/' && regexOk()) {
-      i++;
-      let cls = false;
-      while (i < src.length) {
-        const ch = src[i];
-        if (ch === '\\') { i += 2; continue; }
-        if (ch === '[') cls = true;
-        else if (ch === ']') cls = false;
-        else if (ch === '/' && !cls) { i++; break; }
-        else if (ch === '\n') break;
-        i++;
-      }
-      out.push('/r/'); prev = 'r'; continue;
+    if (c === '/' && regexOk(prev)) {
+      const s = i; i = skipRegex(i);
+      out.push('/r/'); keep(s, i); prev = 'r'; continue;
     }
     out.push(c);
     if (!/\s/.test(c)) prev = c;

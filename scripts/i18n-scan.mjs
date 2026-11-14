@@ -309,7 +309,7 @@ const report = {
 
 /* uiInDict：已字典化但硬编码在 UI 里的出现次数（棘轮）。旧口径按值去重 + wrapped 取或会把它藏起来，
    这里冻结当前存量；只允许下降，修一处改小一次，禁止上调。 */
-const LIMITS = { coverage: 40, missing: 10, uiCopy: 20, uiInDict: 81 };
+const LIMITS = { coverage: 40, missing: 10, uiCopy: 20, uiInDict: 76 };
 const fails = [];
 if (report.coveragePct < LIMITS.coverage) fails.push(`覆盖率 ${report.coveragePct}% < ${LIMITS.coverage}%`);
 if (report.missing > LIMITS.missing) fails.push(`缺口 ${report.missing} > ${LIMITS.missing}`);
@@ -329,15 +329,21 @@ if (process.argv.includes('--json')) {
   report.uiByFile.forEach(([f, n]) => console.log(`  - ${f}: ${n}`));
   console.log(`字典：PHRASES ${report.phrases} 条 / TEMPLATES ${report.templates} 条 / DICT.zh ${report.dictZh} 键`);
   console.log(`覆盖率：${report.coveragePct}%（口径见文件头）`);
-  if (process.argv.includes('--check')) {
-    if (fails.length) {
-      console.log(`❌ i18n 门禁未通过：${fails.join('；')}`);
-      process.exitCode = 1;
-    } else {
-      console.log(`✅ i18n 门禁通过：覆盖率 ${report.coveragePct}% ≥ ${LIMITS.coverage}%，缺口 ${report.missing} ≤ ${LIMITS.missing}，UI 文案硬编码 ${report.uiCopy} ≤ ${LIMITS.uiCopy}，已字典待接入 ${report.uiInDict} ≤ ${LIMITS.uiInDict}，模板内 UI 文案 ${report.templateCopy} = 0`);
-    }
-  } else if (report.hardcodedTop.length) {
+  if (report.hardcodedTop.length) {
     console.log('硬编码样例：');
     report.hardcodedTop.slice(0, 10).forEach(r => console.log(`  - ${r.text}  (${r.files.join(', ')})`));
+  }
+}
+
+/* 门禁判定必须放在 --json 分支之外：旧实现把它嵌在 else 里，导致
+   `i18n-scan.mjs --json --check` 即使 fails 非空也退 0（静默通过）。 */
+if (process.argv.includes('--check')) {
+  if (fails.length) {
+    /* JSON 模式下 stdout 只放报告，失败摘要走 stderr，避免污染机器可读输出 */
+    if (process.argv.includes('--json')) console.error(`❌ i18n 门禁未通过：${fails.join('；')}`);
+    else console.log(`❌ i18n 门禁未通过：${fails.join('；')}`);
+    process.exitCode = 1;
+  } else if (!process.argv.includes('--json')) {
+    console.log(`✅ i18n 门禁通过：覆盖率 ${report.coveragePct}% ≥ ${LIMITS.coverage}%，缺口 ${report.missing} ≤ ${LIMITS.missing}，UI 文案硬编码 ${report.uiCopy} ≤ ${LIMITS.uiCopy}，已字典待接入 ${report.uiInDict} ≤ ${LIMITS.uiInDict}，模板内 UI 文案 ${report.templateCopy} = 0`);
   }
 }

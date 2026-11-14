@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-/* check-gates.mjs —— 门禁的牙齿：正面基线 + 14 种人为破坏，断言对应门禁会红
+/* check-gates.mjs —— 门禁的牙齿：正面基线 + 19 种人为破坏，断言对应门禁会红
  *
  * 为什么需要它：门禁脚本本身也会假绿（只打印不比对、缺文件退 0、模板缺失空操作、把 --selftest 透传给
  * 只跑解析器自检的分支）。一条从未红过的判据，与没有判据的区别只在于它更贵。这里把「会红」这件事本身
  * 做成判据，并先要求未破坏副本上的同一批判据全绿——没有正面基线，"变红"可能只是环境坏了。
  *
  *   0. 正面基线（同一份未破坏副本）    → check.mjs --selftest / check-sw / check-plugin-api /
- *                                       check-ngm / badge --check / i18n-scan --check 必须全 0
+ *                                       check-ngm / badge --check / i18n-scan --check /
+ *                                       build.mjs --check / check-deletions / check-discipline --strict /
+ *                                       i18n-scan --json --check 必须全 0
  *   1. 渲染 P95 人为超标              → node scripts/bench.mjs          必须非 0
  *   2. dist 产物被篡改                → node scripts/build.mjs --check  必须非 0
  *   3. ngm.json 缺失                  → node scripts/check-ngm.mjs      必须非 0
@@ -24,10 +26,14 @@
  *  15. core 新增未登记的 features 反向引用 → node scripts/check.mjs          必须非 0
  *  16. 新增未分类的 typeof 软调用           → node scripts/check.mjs          必须非 0
  *  17. 必需钩子缺少提供方（删 registerHook）→ node scripts/check.mjs          必须非 0
+ *  18. CSP 内联脚本哈希与脚本体错位        → node scripts/build.mjs --check     必须非 0
+ *  19. i18n 覆盖率跌破阈值（--json --check）→ node scripts/i18n-scan.mjs --json --check 必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
- * 用法：node scripts/check-gates.mjs
+ * 用法：node scripts/check-gates.mjs [--only 1,3,18] [--skip-baseline]
+ *   全量在本机约 4–5 分钟（其中 8 个场景各跑一次 selftest），超过 3 分钟时可用 --only 拆批；
+ *   默认（不带参数）仍然是「基线 + 全部破坏样本」，拆批只影响单次跑哪些，不影响判据。
  */
 import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -296,6 +302,48 @@ const scenarios = [
       const refresh = run(dir, ['scripts/check-sw.mjs', '--update']);
       if (refresh.status !== 0) throw new Error('副本 SW 指纹清单刷新失败：' + tail(refresh));
     }
+  },
+  {
+    name: 'CSP 内联脚本哈希与脚本体错位（A1 负向）',
+    expected: 'node scripts/build.mjs --check 退出码非 0',
+    args: ['scripts/build.mjs', '--check'],
+    expect: /CSP 哈希值与脚本体不匹配/,
+    sabotage(dir) {
+      /* 只改哈希值不改脚本体：条数仍然对得上，旧实现（只数条数）会判绿。
+         这里把每个内联脚本哈希的首字符翻转，先在副本里构建出这份「错位产物」，
+         再跑 --check，唯一变红的原因必须是哈希与脚本体不匹配。 */
+      const p = join(dir, 'scripts', 'pack-core.mjs');
+      const src = readFileSync(p, 'utf8');
+      const needle = "cspHashes.push(createHash('sha256').update(text, 'utf8').digest('base64'));";
+      if (!src.includes(needle)) throw new Error('pack-core.mjs 找不到 cspHashes.push 注入点');
+      writeFileSync(p, src.replace(needle,
+        "cspHashes.push((h => (h[0] === 'A' ? 'B' : 'A') + h.slice(1))(createHash('sha256').update(text, 'utf8').digest('base64')));"
+        + ' /* 门禁牙齿：哈希首字符翻转 */'));
+      const built = run(dir, ['scripts/build.mjs']);
+      if (built.status !== 0) throw new Error('沙箱内基础构建失败：' + tail(built));
+    }
+  },
+  {
+    name: 'i18n 覆盖率跌破阈值（--json --check 不得静默通过）',
+    expected: 'node scripts/i18n-scan.mjs --json --check 退出码非 0',
+    args: ['scripts/i18n-scan.mjs', '--json', '--check'],
+    expect: /覆盖率/,
+    sabotage(dir) {
+      /* 覆盖率会随字典化推进上升（本轮收口 45.78%），固定 220 条已不足以越线：
+         先实测副本的 covered/total，再按 39% 目标动态算探针数（留 10 条余量）。
+         core/render.js 不属于 UI 文件，不会连带触发 uiCopy 判据，红的只能是覆盖率。 */
+      const probe = spawnSync(process.execPath, ['scripts/i18n-scan.mjs', '--json'], { cwd: dir, encoding: 'utf8' });
+      let m = {};
+      try { m = JSON.parse(probe.stdout); } catch (e) {}
+      const total = (m.covered || 0) + (m.hardcoded || 0) + (m.missing || 0);
+      const need = Math.max(220, Math.ceil((m.covered || 0) / 0.39 - total) + 10);
+      const p = join(dir, 'js', 'core', 'render.js');
+      let block = '\n/* 门禁牙齿：覆盖率回归探针（不属于 UI 文件，只影响覆盖率） */\n';
+      for (let i = 0; i < need; i++) block += `var __gateCovProbe${i} = '覆盖探针文案${i}';\n`;
+      appendFileSync(p, block);
+      /* --json --check 的退出码修复（H-07）：旧实现只打印不置退出码，
+         这条场景同时证明「JSON 模式下 fails 非空 → 退出码 1」。 */
+    }
   }
 ];
 
@@ -306,23 +354,48 @@ const BASELINE = [
   ['check-plugin-api.mjs', ['scripts/check-plugin-api.mjs']],
   ['check-ngm.mjs', ['scripts/check-ngm.mjs']],
   ['badge.mjs --check', ['scripts/badge.mjs', '--check']],
-  ['i18n-scan.mjs --check', ['scripts/i18n-scan.mjs', '--check']]
+  ['i18n-scan.mjs --check', ['scripts/i18n-scan.mjs', '--check']],
+  ['build.mjs --check（含 CSP 哈希双向比对）', ['scripts/build.mjs', '--check']],
+  ['check-deletions.mjs', ['scripts/check-deletions.mjs']],
+  ['check-discipline.mjs --strict', ['scripts/check-discipline.mjs', '--strict']],
+  ['i18n-scan.mjs --json --check', ['scripts/i18n-scan.mjs', '--json', '--check']]
 ];
+
+/* 分批跑：--only 1,3,18 只跑指定序号的破坏样本（基线默认仍先跑，--skip-baseline 可跳过）。
+   全量约 4–5 分钟，超时拆批只影响单次调用范围，不影响判定口径。 */
+const onlyIdx = process.argv.findIndex(a => a === '--only' || a.startsWith('--only='));
+let ONLY = null;
+if (onlyIdx >= 0) {
+  const arg = process.argv[onlyIdx];
+  const raw = arg.startsWith('--only=') ? arg.slice('--only='.length) : (process.argv[onlyIdx + 1] || '');
+  const ids = raw.split(',').map(s => Number(s.trim())).filter(n => n > 0);
+  if (!ids.length) {
+    console.error('--only 需要一个序号列表，例如：node scripts/check-gates.mjs --only 18,19');
+    process.exit(2);
+  }
+  ONLY = new Set(ids);
+}
+const SKIP_BASELINE = process.argv.includes('--skip-baseline');
 
 console.log(`门禁牙齿自测（正面基线 ${BASELINE.length} 条 + ${scenarios.length} 种人为破坏，均在临时副本中构造，不改动仓库）`);
 const failures = [];
 let tempDirs = [];
+let ran = 0;
 try {
-  const baselineDir = copyRepo();
-  tempDirs.push(baselineDir);
-  for (const [label, args] of BASELINE) {
-    const res = run(baselineDir, args);
-    const ok = res.status === 0;
-    console.log(`  [基线] ${label} → 退出码 ${res.status} ${ok ? '✓' : '✗'}`);
-    if (!ok) failures.push(`[基线] ${label}：未破坏副本必须通过，实际退出码 ${res.status}\n${tail(res)}`);
+  if (!SKIP_BASELINE) {
+    const baselineDir = copyRepo();
+    tempDirs.push(baselineDir);
+    for (const [label, args] of BASELINE) {
+      const res = run(baselineDir, args);
+      const ok = res.status === 0;
+      console.log(`  [基线] ${label} → 退出码 ${res.status} ${ok ? '✓' : '✗'}`);
+      if (!ok) failures.push(`[基线] ${label}：未破坏副本必须通过，实际退出码 ${res.status}\n${tail(res)}`);
+    }
   }
 
   for (let i = 0; i < scenarios.length; i++) {
+    if (ONLY && !ONLY.has(i + 1)) continue;
+    ran++;
     const sc = scenarios[i];
     const dir = copyRepo();
     tempDirs.push(dir);
@@ -354,5 +427,5 @@ if (failures.length) {
   failures.forEach(f => console.error('  - ' + f));
   process.exit(1);
 }
-console.log(`\n✅ 门禁牙齿自测通过：正面基线 ${BASELINE.length}/${BASELINE.length} 全绿，`
-  + `${scenarios.length}/${scenarios.length} 种人为破坏均被对应门禁以非 0 拦截且输出命中关键字`);
+console.log(`\n✅ 门禁牙齿自测通过：正面基线 ${SKIP_BASELINE ? '已跳过' : `${BASELINE.length}/${BASELINE.length} 全绿`}，`
+  + `${ran}/${scenarios.length} 种人为破坏均被对应门禁以非 0 拦截且输出命中关键字${ONLY ? '（--only 子集）' : ''}`);
