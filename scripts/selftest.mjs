@@ -175,7 +175,7 @@ code += `\n;globalThis.__api = {
   EXPORT_FIELD_DEFS, PDF_COLS, REPORT_LIST_COLS,
   formatNodeCoords, parseNodeCoords,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
-  buildSceneSvg, exportFooterText, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport,
+  buildSceneSvg, exportFooterText, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport, arcPdfSegments,
   normalizeExportColor, dxfSanitizeName, runExport,
   outlineOf, objectIndexById, dragObjectIndex, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
@@ -3763,6 +3763,79 @@ await section("36.8 ARC 导入保真：摘除/回填/退化/单位/端到端", a
   ok('S4-端到端图层指向弧层', api.state.layers.some(l=>l.id===arcObjs[0].layerId&&l.name==='弧层'));
   ok('S4-端到端成功提示含圆弧计数', msgs.some(m=>m.includes('1 圆弧')));
   ok('S4-端到端场地已扩边', api.state.site.shape.w>=160&&api.state.site.shape.h>=160);
+  api.resetState();
+}
+});
+
+/* 36.9 S5：导出保真——DXF ARC / SVG 原生 A 弧 / PDF 弦高自适应密度 ---------------- */
+await section("36.9 S5 导出保真：DXF ARC / SVG A 弧 / PDF 自适应密度", async () => {
+{
+  const onlyArc=(patch)=>{
+    api.resetState();
+    api.state.objects=[];
+    const o=api.baseObject('arc','arc.builtin',Object.assign({x:0,y:0,shape:{type:'arc',r:50,a0:0,a1:90},name:'A1'},patch||{}));
+    api.state.objects.push(o);
+    return o;
+  };
+
+  /* 默认（不开保真）：24 段折线，25 点，不含 ARC 记录 */
+  onlyArc();
+  const dx0=api.dxfEntitiesForExport();
+  const arcEnt0=dx0.entities.find(e=>e.type==='LWPOLYLINE'&&e.layer!=='SITE');
+  eq('S5-默认弧导出折线', !!arcEnt0, true);
+  eq('S5-默认折线 25 点', arcEnt0.points.length, 25);
+  eq('S5-默认折线不闭合', arcEnt0.closed, false);
+  eq('S5-默认无 ARC 实体', dx0.entities.filter(e=>e.type==='ARC').length, 0);
+  const txt0=api.Dxf.buildDxf(dx0.entities,dx0.layers);
+  eq('S5-默认 DXF 无 ARC 记录', txt0.includes('0\r\nARC\r\n'), false);
+
+  /* 开保真：ARC 实体，半径/角度原值；写出的 DXF 能按原值回读 */
+  const dx1=api.dxfEntitiesForExport({dxfFidelity:true});
+  const arcEnt=dx1.entities.find(e=>e.type==='ARC');
+  ok('S5-保真导出含 ARC', !!arcEnt);
+  approx('S5-ARC 圆心 x', arcEnt.x, 0);
+  approx('S5-ARC 半径', arcEnt.r, 50);
+  approx('S5-ARC 起始角', arcEnt.a0, 0);
+  approx('S5-ARC 终止角', arcEnt.a1, 90);
+  eq('S5-保真不再出折线', dx1.entities.filter(e=>e.type==='LWPOLYLINE'&&e.layer!=='SITE').length, 0);
+  const txt1=api.Dxf.buildDxf(dx1.entities,dx1.layers);
+  ok('S5-DXF 含 ARC 记录', txt1.includes('0\r\nARC\r\n'));
+  ok('S5-DXF 半径写毫米', txt1.includes('40\r\n50000\r\n'));
+  ok('S5-DXF 角度写度', txt1.includes('50\r\n0\r\n')&&txt1.includes('51\r\n90\r\n'));
+  const rt=api.Dxf.parseDxf(txt1,{strictUnits:true,keepArcs:true});
+  const rtArc=rt.entities.find(e=>e.type==='ARC');
+  ok('S5-DXF 往返得回 ARC', !!rtArc);
+  approx('S5-往返半径', rtArc.r, 50, 1e-9);
+  approx('S5-往返起始角', rtArc.a0, 0, 1e-9);
+  approx('S5-往返终止角', rtArc.a1, 90, 1e-9);
+
+  /* SVG：原生 A 弧，90° 用 large-arc=0，270° 用 1（世界 Y 向上 → 屏幕顺时针，sweep=1） */
+  onlyArc();
+  const svg90=api.buildSceneSvg();
+  ok('S5-SVG 用原生 A 弧', /<path d="M[-\d.,]+ A[\d.]+,[\d.]+ 0 0 1 [-\d.,]+" fill="none"/.test(svg90));
+  ok('S5-SVG 弧带对象名', svg90.includes('>A1<'));
+  onlyArc({shape:{type:'arc',r:50,a0:0,a1:270},name:''});
+  ok('S5-SVG 大弧 large-arc=1', /<path d="M[-\d.,]+ A[\d.]+,[\d.]+ 0 1 1 [-\d.,]+" fill="none"/.test(api.buildSceneSvg()));
+
+  /* PDF 密度：按弦高误差自适应（非固定 24），半径越大越密，封顶 512，最小 2 */
+  const a90={shape:{type:'arc',r:50,a0:0,a1:90}};
+  const n50=api.arcPdfSegments(a90,{k:1});
+  const n500=api.arcPdfSegments({shape:{type:'arc',r:500,a0:0,a1:90}},{k:1});
+  ok('S5-PDF 段数非固定 24', n50!==24);
+  ok('S5-PDF 段数随半径增大', n500>n50);
+  eq('S5-PDF 段数封顶 512', api.arcPdfSegments({shape:{type:'arc',r:1e9,a0:0,a1:90}},{k:1}), 512);
+  eq('S5-PDF 段数下限 2', api.arcPdfSegments({shape:{type:'arc',r:50,a0:0,a1:1}},{k:1}), 2);
+  eq('S5-PDF 90°/R50pt 段数', n50, 7);
+  eq('S5-PDF 采样点多一段', api.arcWorldPoints({x:0,y:0,shape:{type:'arc',r:50,a0:0,a1:90}},n50).length, n50+1);
+
+  /* 标签计数：圆弧的编号/半径/弧长计入 PDF 文字档位（各 1 条） */
+  onlyArc({annot:{radius:true,perimeter:true},name:'A1'});
+  const base=api.pdfVectorLabelCount();
+  onlyArc({annot:{radius:false,perimeter:false},name:'A1'});
+  const onlyName=api.pdfVectorLabelCount();
+  onlyArc({annot:{radius:true,perimeter:true},name:'A1'});
+  eq('S5-圆弧半径+弧长共 2 条标签', api.pdfVectorLabelCount(), base);
+  eq('S5-圆弧仅编号少 2 条', onlyName, base-2);
   api.resetState();
 }
 });

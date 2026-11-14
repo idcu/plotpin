@@ -12,14 +12,14 @@
 | gzip 字节 | 262,176 B（256.0 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
 | 体积余量 | 38,254 B（gzip 余量 24,544 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
-| Service Worker 版本 | `VERSION=252` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| Service Worker 版本 | `VERSION=253` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 2026-11-14 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 4,427 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条、ARC S1 新增 20 条、ARC S2 新增 22 条、ARC S3 新增 13 条、ARC S4 新增 45 条均挂在新增分区 |
-| selftest 分区 | 172 个 | `node scripts/selftest.mjs --list` | 输出 173 行（含 1 行标题） |
+| selftest 断言 | 4,456 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条、ARC S1 新增 20 条、ARC S2 新增 22 条、ARC S3 新增 13 条、ARC S4 新增 45 条、ARC S5 新增 29 条均挂在新增分区 |
+| selftest 分区 | 173 个 | `node scripts/selftest.mjs --list` | 输出 174 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
 | e2e spec 文件 | 48 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 49 个 `.mjs`（48 spec + 1 helper） |
 | e2e 用例 | 178 个（源码 177 通过 + 1 条件跳过；dist 174 通过 + 4 跳过） | `node scripts/e2e.mjs` | 2026-11-15 收口双入口全量实跑；跳过项均为显式条件（协作 soak 需 `COLLAB_SOAK=1`，SW 三条仅 dist 入口不适用）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |

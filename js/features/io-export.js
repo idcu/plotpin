@@ -588,6 +588,20 @@ function buildSceneSvg(){
       const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
       if(sa||sp){ const ce=shapeLabelCenter(o); markers.push(areaTagSvg(X(ce[0]),Y(ce[1]),shapeArea(o),shapePerimeter(o),sa,sp)); }
       markers.push(annotItemsSvg(o));
+    }else if(o.kind==='arc'){
+      /* S5：SVG 用原生 A 弧（精确，不依赖折线密度）；世界 Y 向上 → 屏幕顺时针，sweep-flag 固定 1 */
+      const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+      if(r>0&&sweep>0){
+        const R=r*ppu, large=sweep>180?1:0;
+        const at=a=>[X(o.x+r*Math.cos(a*Math.PI/180)),Y(o.y+r*Math.sin(a*Math.PI/180))];
+        const p0=at(a0), p1=at(a0+sweep);
+        shapes.push(`<path d="M${p0[0]},${p0[1]} A${R},${R} 0 ${large} 1 ${p1[0]},${p1[1]}" fill="none" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
+        if(o.name&&annotOn(o,'name')){
+          const m=at(a0+sweep/2);
+          markers.push(`<text x="${m[0]}" y="${m[1]-8}" text-anchor="middle" font-size="12" font-weight="bold" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
+        }
+      }
+      markers.push(annotItemsSvg(o));
     }else if(o.kind==='line'&&o.points.length){
       /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致） */
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`);
@@ -734,6 +748,10 @@ function dxfEntitiesForExport(opt){
       if(tt===CIR) entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
       else if(fx&&tt===ELL) entities.push({type:'ELLIPSE',layer,x:o.x,y:o.y,rx:o.shape.rx,ry:o.shape.ry,angle:o.angle||0});
       else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:true});
+    }else if(o.kind==='arc'){
+      /* S5：保真时写 ARC 实体（角度/半径原值往返）；默认仍按 24 段折线落地，与旧版观感一致 */
+      if(fx) entities.push({type:'ARC',layer,x:o.x,y:o.y,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
+      else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o,24),closed:false});
     }else if(o.kind==='dimension'&&o.points.length>=2){
       entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:outlineOf(o),closed:o.subtype==='area'});
       const ep=o.points[o.points.length-1], dm=dimensionMeasure(o);
@@ -903,8 +921,25 @@ function vectorTextKinds(o){
     if(o.subtype==='distance') kinds.push('distance');
     else if(o.subtype==='area'&&n>=3){ kinds.push('area'); kinds.push('perimeter'); }
     else if(o.subtype==='angle'&&n>=3) kinds.push('angle');
+  }else if(o.kind==='arc'){
+    if(o.name&&annotOn(o,'name')) kinds.push('name');
+    if(annotOn(o,'radius')) kinds.push('radius');
+    if(annotOn(o,'perimeter')) kinds.push('perimeter');
   }
   return kinds;
+}
+/** S5：PDF 矢量弧的折线密度——按弦高误差自适应（不固定 24 段）。
+ *  目标 0.4 pt ≈ A1 打印 0.2 mm（A1 线性放大 595→841 pt 后 1 pt≈0.5 mm）；
+ *  段数 = 单段圆心角 θ（R(1-cos(θ/2))=tol）解出的 ceil(sweep/θ)，上限 512 防单弧点过多。 */
+const ARC_PDF_SAGITTA_PT=.4, ARC_PDF_SEG_MAX=512;
+function arcPdfSegments(o,pf){
+  const sh=(o&&o.shape)||{}, R=Math.max(0,Number(sh.r)||0)*((pf&&pf.k)||1);
+  const sweep=arcSweep(sh)*Math.PI/180;
+  if(!(R>0)||!(sweep>0)) return 2;
+  const ratio=Math.min(1,ARC_PDF_SAGITTA_PT/R);
+  const step=2*Math.acos(1-ratio);
+  const n=step>0?Math.ceil(sweep/step):ARC_PDF_SEG_MAX;
+  return Math.max(2,Math.min(ARC_PDF_SEG_MAX,n));
 }
 /** 跨楼层统计需要栅格化的文字条数：只统计实际导出（exportScope）的对象，与 vectorPage 的 put 同源 */
 function pdfVectorLabelCount(){
@@ -936,6 +971,13 @@ async function vectorPage(floorName,pageNo,pageTotal){
     }else if(o.kind==='dimension'&&o.points.length>=2){
       stroke('#111827',1.8*s);
       for(const c of V.path(f,outlineOf(o),false)) vec.push(c); vec.push(['S']);
+    }else if(o.kind==='arc'){
+      /* S5：弧按弦高误差自适应加密（arcPdfSegments），不固定 24 段 */
+      const r=Math.max(0,Number((o.shape||{}).r)||0);
+      if(r>0&&arcSweep(o.shape)>0){
+        stroke(color,sw);
+        for(const c of V.path(f,arcWorldPoints(o,arcPdfSegments(o,f)),false)) vec.push(c); vec.push(['S']);
+      }
     }
     if(tk.includes('text')){ put(o.text||'文字',o.x,o.y,o.height*f.k,color); return; }
     if(o.kind==='rect'||o.kind==='line'){
@@ -954,6 +996,13 @@ async function vectorPage(floorName,pageNo,pageTotal){
         put('面积 '+fmt(dm.area)+' ㎡',cx/n+10*u,cy/n+8*u,12*s,'#111827');
         put('周长 '+fmt(dm.perimeter)+' m',cx/n+10*u,cy/n-8*u,12*s,'#111827');
       }else if(tk.includes('angle')) put(fmt(dm.deg)+'°',p0[0]+30*u,p0[1]+8*u,12*s,'#111827');
+    }else if(o.kind==='arc'){
+      const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+      const at=a=>[o.x+r*Math.cos(a*Math.PI/180),o.y+r*Math.sin(a*Math.PI/180)];
+      const mid=at(a0+sweep/2), end=at(a0+sweep);
+      if(tk.includes('name')) put(o.name,mid[0],mid[1]+8*u,12*s,color);
+      if(tk.includes('radius')) put('R '+fmt(r)+' m',mid[0]+6*u,mid[1]-6*u,12*s,'#1e3a8a');
+      if(tk.includes('perimeter')) put('Σ '+fmt(objectLength(o))+' m',end[0]+9*u,end[1]+9*u,12*s,'#1e3a8a');
     }
   });
   /* 辅助层：底图/场地/网格整页 JPEG；点位/标题栏/页脚整页透明位图（均按页面逻辑版式栅格化） */

@@ -316,12 +316,13 @@
     return parsed;
   }
 
-  /* E5：保真导出的 ELLIPSE 写出（公共模块只写 LWPOLYLINE/CIRCLE/POINT/LINE/TEXT），
+  /* E5：保真导出的 ELLIPSE / ARC 写出（公共模块只写 LWPOLYLINE/CIRCLE/POINT/LINE/TEXT），
      仅在显式选项下插入；默认路径不做任何改写，保证与旧版本逐字节一致 */
   const baseBuild=D.buildDxf;
   function buildDxfFid(ents,layers,opt){
     const ell=ents.filter(e=>e.type==='ELLIPSE');
-    if(!ell.length) return baseBuild(ents,layers,opt);
+    const arcs=ents.filter(e=>e.type==='ARC');
+    if(!ell.length&&!arcs.length) return baseBuild(ents,layers,opt);
     /* 10/20/11/21 写 mm；40(短长轴比)/41/42(参数) 无量纲，不能乘 1000 */
     const pr=(c,v)=>c+'\r\n'+v+'\r\n', n=v=>(Math.round(Number(v)*1e6)/1e6).toString();
     let add='';
@@ -332,9 +333,15 @@
       const a=(Number(e.angle)||0)*Math.PI/180+(ry>rx?Math.PI/2:0);
       add+=pr(0,'ELLIPSE')+pr(8,D.safeLayer(e.layer))+pr(10,n(e.x*1000))+pr(20,n(e.y*1000))+pr(11,n(mj*Math.cos(a)*1000))+pr(21,n(mj*Math.sin(a)*1000))+pr(40,n(mn/mj))+pr(41,0)+pr(42,6.283185);
     }
+    /* ARC：DXF 角为度、逆时针；对象已按逆时针归一，直接写 10/20/40/50/51（半径也要 ×1000） */
+    for(const e of arcs){
+      const r=Number(e.r), x=Number(e.x), y=Number(e.y), a0=Number(e.a0), a1=Number(e.a1);
+      if(!(r>0)||!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(a0)||!Number.isFinite(a1)) continue;
+      add+=pr(0,'ARC')+pr(8,D.safeLayer(e.layer))+pr(10,n(x*1000))+pr(20,n(y*1000))+pr(40,n(r*1000))+pr(50,n(a0))+pr(51,n(a1));
+    }
     /* 记录插在 ENTITIES 段末尾：前缀 \r\n 补回被替换串吃掉的分行，add 自身以 \r\n 结尾 */
     const tail='0\r\nENDSEC\r\n0\r\nEOF';
-    return baseBuild(ents.filter(e=>e.type!=='ELLIPSE'),layers,opt).replace('\r\n'+tail,'\r\n'+add+tail);
+    return baseBuild(ents.filter(e=>e.type!=='ELLIPSE'&&e.type!=='ARC'),layers,opt).replace('\r\n'+tail,'\r\n'+add+tail);
   }
   global.Dxf=Object.assign({},D,{
     buildDxf:buildDxfFid, build:buildDxfFid,
