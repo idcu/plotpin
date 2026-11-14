@@ -130,14 +130,14 @@ const px = (p, rgb, tol) => Math.abs(p[0] - rgb[0]) <= tol && Math.abs(p[1] - rg
  * 返回的 frames/ms 只用于日志，不参与断言。 */
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    window.__settleSample = async (read, ok) => {
+    window.__settleSample = async (read, ok, cssW, cssH) => {
       const t0 = performance.now();
       let v = read(), frames = 0;
       while (!ok(v) && frames < 60 && performance.now() - t0 < 3000) {
         await new Promise(res => requestAnimationFrame(() => res()));
-        if (typeof drawScene === 'function' && typeof ctx !== 'undefined' && state && wrap) {
-          drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
-        }
+        /* 必须用调用方固定的 cssW/cssH 重绘：若改用 wrap 的实时尺寸，等待期间
+           布局一旦变化就会让内容与已算好的采样坐标错位，反而制造「永远读不到」。 */
+        drawScene(ctx, state.viewport, cssW, cssH, { interactive: true, markerScale: 1 });
         v = read();
         frames++;
       }
@@ -151,7 +151,9 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
   const r = await page.evaluate(async () => {
     const settle = window.__settleSample;
-    const W = wrap.clientWidth, H = wrap.clientHeight, Z = 1;
+    resizeCanvas();
+    const rc = wrap.getBoundingClientRect();
+    const W = Math.round(rc.width), H = Math.round(rc.height), Z = 1;
     state = createInitialState();
     state.viewport = { zoom: Z, panX: 0, panY: 0 };
     resetFrameRef();
@@ -168,7 +170,7 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
       const d = ctx.getImageData(Math.round(s[0] * dpr), Math.round(s[1] * dpr), 1, 1).data;
       return [d[0], d[1], d[2], d[3]];
     };
-    const b0 = await settle(() => sample(s0), red);
+    const b0 = await settle(() => sample(s0), red, W, H);
     const before = b0.v;
     const rev0 = staticRev;
     o.x = w1[0]; o.y = w1[1];
@@ -177,7 +179,7 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
     /* 先定格「本次编辑是否走了局部补绘」：等待可能让排队的 resize/rAF 介入并作废静态层，
        那是采样之后的时序噪声，不应该反过来改变本用例对补绘路径的判定。 */
     const patchedNow = staticRev === rev0;
-    const b1 = await settle(() => ({ atNew: sample(s1), atOld: sample(s0) }), v => red(v.atNew) && !red(v.atOld));
+    const b1 = await settle(() => ({ atNew: sample(s1), atOld: sample(s0) }), v => red(v.atNew) && !red(v.atOld), W, H);
     return {
       before, atNew: b1.v.atNew, atOld: b1.v.atOld,
       patched: patchedNow, dist: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]),
@@ -197,7 +199,11 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
   const r = await page.evaluate(async () => {
     const settle = window.__settleSample;
-    const W = wrap.clientWidth, H = wrap.clientHeight;
+    /* 先把画布位图同步到当前布局再固定采样坐标：画布比 wrap 小会把右侧内容裁掉，
+       采样点落到画布外/错位，表现为「等满 60 帧也读不到」。 */
+    resizeCanvas();
+    const rc = wrap.getBoundingClientRect();
+    const W = Math.round(rc.width), H = Math.round(rc.height);
     state = createInitialState();
     state.viewport = { zoom: 1, panX: 0, panY: 0 };
     resetFrameRef();
@@ -229,7 +235,7 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
     const patchedNow = staticRev === rev0;   /* 同上：补绘路径在采样等待前定格 */
     const after = await settle(
       () => ({ inside1: sample(newRight - 1, midY), inside2: sample(newRight - 2, midY) }),
-      v => purpleish(v.inside1) && purpleish(v.inside2));
+      v => purpleish(v.inside1) && purpleish(v.inside2), W, H);
     return {
       before,
       inside1: after.v.inside1,
@@ -251,7 +257,11 @@ test('M6-P3 编辑 A 后，邻居 B 溢入补绘矩形的标签不被擦除，�
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
   const r = await page.evaluate(async () => {
     const settle = window.__settleSample;
-    const W = wrap.clientWidth, H = wrap.clientHeight;
+    /* 先把画布位图同步到当前布局再固定采样坐标：画布比 wrap 小会把右侧内容裁掉，
+       采样点落到画布外/错位，表现为「等满 60 帧也读不到」。 */
+    resizeCanvas();
+    const rc = wrap.getBoundingClientRect();
+    const W = Math.round(rc.width), H = Math.round(rc.height);
     state = createInitialState();
     state.viewport = { zoom: 1, panX: 0, panY: 0 };
     resetFrameRef();
@@ -284,13 +294,13 @@ test('M6-P3 编辑 A 后，邻居 B 溢入补绘矩形的标签不被擦除，�
       }
       return n;
     };
-    const before = await settle(greenCount, n => n > 5);
+    const before = await settle(greenCount, n => n > 5, W, H);
     const rev0 = staticRev;
     a.style.fillAlpha = 0.45;
     commitObjectEdit([a.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
     const patchedNow = staticRev === rev0;   /* 同上：补绘路径在采样等待前定格 */
-    const after = await settle(greenCount, n => n > 5);
+    const after = await settle(greenCount, n => n > 5, W, H);
     return {
       before: before.v, after: after.v, patched: patchedNow,
       settle: { before: [before.frames, before.ms], after: [after.frames, after.ms] }
