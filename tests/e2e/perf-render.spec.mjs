@@ -174,10 +174,13 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
     o.x = w1[0]; o.y = w1[1];
     commitObjectEdit([o.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
+    /* 先定格「本次编辑是否走了局部补绘」：等待可能让排队的 resize/rAF 介入并作废静态层，
+       那是采样之后的时序噪声，不应该反过来改变本用例对补绘路径的判定。 */
+    const patchedNow = staticRev === rev0;
     const b1 = await settle(() => ({ atNew: sample(s1), atOld: sample(s0) }), v => red(v.atNew) && !red(v.atOld));
     return {
       before, atNew: b1.v.atNew, atOld: b1.v.atOld,
-      patched: staticRev === rev0, dist: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]),
+      patched: patchedNow, dist: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]),
       settle: { before: [b0.frames, b0.ms], after: [b1.frames, b1.ms] }
     };
   });
@@ -215,13 +218,15 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
       return [d[0], d[1], d[2], d[3]];
     };
     const newRight = Math.round(W * 0.80), midY = Math.round((top + bottom) / 2);
-    /* 先用左边界描边像素确认首帧已可读，再取「尚未长到」的基线像素 */
-    const seeded = await settle(() => sample(left, midY), purpleish);
+    /* 基线像素必须来自「尚未长到」的区域，因此不做等待：它本来就该是背景色。
+       首帧合成是否完成由下面的 inside1/inside2 等待负责，避免为了等首帧把
+       局部补绘的前置状态（staticKey/staticBounds）拖到排队的 resize 之后再失效。 */
     const before = sample(newRight - 2, midY);        /* 尚未长到的区域：应是背景 */
     const rev0 = staticRev;
     o.width = (newRight - left) / 1;                   /* zoom=1，世界宽=屏幕宽 */
     commitObjectEdit([o.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
+    const patchedNow = staticRev === rev0;   /* 同上：补绘路径在采样等待前定格 */
     const after = await settle(
       () => ({ inside1: sample(newRight - 1, midY), inside2: sample(newRight - 2, midY) }),
       v => purpleish(v.inside1) && purpleish(v.inside2));
@@ -229,8 +234,8 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
       before,
       inside1: after.v.inside1,
       inside2: after.v.inside2,
-      patched: staticRev === rev0,
-      settle: { seed: [seeded.frames, seeded.ms], after: [after.frames, after.ms] }
+      patched: patchedNow,
+      settle: { after: [after.frames, after.ms] }
     };
   });
   console.log('[M6-P2 变大] settle ' + JSON.stringify(r.settle));
@@ -284,9 +289,10 @@ test('M6-P3 编辑 A 后，邻居 B 溢入补绘矩形的标签不被擦除，�
     a.style.fillAlpha = 0.45;
     commitObjectEdit([a.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
+    const patchedNow = staticRev === rev0;   /* 同上：补绘路径在采样等待前定格 */
     const after = await settle(greenCount, n => n > 5);
     return {
-      before: before.v, after: after.v, patched: staticRev === rev0,
+      before: before.v, after: after.v, patched: patchedNow,
       settle: { before: [before.frames, before.ms], after: [after.frames, after.ms] }
     };
   });
