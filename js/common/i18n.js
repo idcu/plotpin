@@ -30,10 +30,13 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       clearAllTitle: '清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销',
       select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', text: '文字',
       ruler: '测距', dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
-      tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabSymbols: '符号库', tabStats: '统计', tabRules: '规则',
+      tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabSymbols: '符号库', tabStats: '统计', tabRules: '规则', tabComments: '批注',
+      commentsLocalOnly: '评论仅本机可见，不随协作同步',
+      commentPlaceholder: '写评论…', addComment: '添加',
       exportJson: 'JSON 工程', exportPng: 'PNG 高清图', exportSvg: 'SVG 矢量图',
-      exportPdf: 'PDF（图纸位图+清单）', exportPdfVector: 'PDF（矢量·文字为位图）', exportDxf: 'DXF（CAD 互通）',
+      exportPdf: 'PDF（图纸位图+清单）', exportPdfVector: 'PDF（矢量·文字为位图）', exportDxf: 'DXF（CAD 互通）', exportDxfFidelity: 'DXF（保真：仅椭圆）',
       exportCsv: 'CSV 表格', exportTsv: 'TSV 表格', exportXlsx: 'Excel (.xlsx)',
+      exportLedgerTpl: '台账模板导出…',
       exportTitleBlock: '图框模板…',
       exportLabels: '设备二维码标签 (HTML)',
       baseSite: '底图/场地', scaleBtn: '比例尺', affineBtn: '仿射校准', coverageBtn: '覆盖率分析', parkingBtn: '停车规划', collabBtn: '协作',
@@ -96,13 +99,20 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       symbolCustomHint: '自定义符号保存在当前工程命名空间；导入只影响当前工程，不影响其他工程。',
       rulesHeading: '几何规则检查', rulesViolationsHeading: '违规清单',
       rulesRun: '运行检查', rulesExport: '导出 CSV', rulesClear: '清空结果',
-      pluginSessionOnly: '插件（仅本会话）',
+      pluginSessionOnly: '插件与本地插件库',
       ghostLayer: '幽灵参考层（仅本会话）', ghostPick: '选择参考图…', ghostClear: '清除参考层', ghostOpacity: '不透明度',
       siteBgHint: '可点顶部「底图/场地」上传图片或改画矩形/圆形/椭圆/扇形/平行四边形/多边形',
       pluginStatusActive: '可用', pluginStatusLoading: '加载中', pluginStatusDisabled: '已禁用', pluginStatusUnloaded: '已卸载',
       pluginNoCapabilities: '无能力', pluginUnload: '卸载', pluginNoneImported: '尚未导入插件',
+      pluginSavedDisabled: '已保存未启用', pluginEnable: '启用', pluginLibrary: '本地插件库',
       pluginImportManifest: '导入清单（.json）',
-      pluginManifestHint: '格式 plotpin.plugin/v1；code ≤64 KB、清单 ≤192 KB；刷新后需重新导入。'
+      pluginManifestHint: '格式 plotpin.plugin/v1；code ≤64 KB、清单 ≤192 KB；刷新后需手动启用。',
+      bwTitle: '带宽/存储', bwCodec: '编码', bwRes: '分辨率', bwFps: '帧率 (fps)', bwStream: '码流类型',
+      bwChannels: '路数', bwDays: '天数', bwHours: '写入小时', bwRedundancy: '冗余%',
+      wireTitle: '布线统计', wireRoute: '沿折线走线', wireChain: '设备点对点',
+      wireReserve: '端点预留 (m/端)', wireBend: '弯曲余量 (%)',
+      wireGeom: '几何', wireReserveLen: '预留', wireBendLen: '弯曲', wireTotal: '合计',
+      wireHint: '几何估算（非实测）；不含垂直段；明细最多100行；预留/弯曲为经验值，可改。'
     },
     en: {
       brand: 'PlotPin',
@@ -111,10 +121,13 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       clearAllTitle: 'Clear the image base, vector site, all objects and annotations on this floor; undo with Ctrl+Z',
       select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', text: 'Text',
       ruler: 'Measure', dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
-      tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabSymbols: 'Symbols', tabStats: 'Statistics', tabRules: 'Rules',
+      tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabSymbols: 'Symbols', tabStats: 'Statistics', tabRules: 'Rules', tabComments: 'Comments',
+      commentsLocalOnly: 'Comments are local only; not synced',
+      commentPlaceholder: 'Write a comment…', addComment: 'Add',
       exportJson: 'JSON project', exportPng: 'PNG (high-res)', exportSvg: 'SVG (vector)',
-      exportPdf: 'PDF (raster drawing + list)', exportPdfVector: 'PDF (vector · raster text)', exportDxf: 'DXF (CAD)',
+      exportPdf: 'PDF (raster drawing + list)', exportPdfVector: 'PDF (vector · raster text)', exportDxf: 'DXF (CAD)', exportDxfFidelity: 'DXF (fidelity: ellipse only)',
       exportCsv: 'CSV table', exportTsv: 'TSV table', exportXlsx: 'Excel (.xlsx)',
+      exportLedgerTpl: 'Ledger template…',
       exportTitleBlock: 'Title block…',
       exportLabels: 'Device QR labels (HTML)',
       baseSite: 'Base/Site', scaleBtn: 'Scale', affineBtn: 'Affine', coverageBtn: 'Coverage', parkingBtn: 'Parking', collabBtn: 'Collab',
@@ -172,13 +185,20 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       symbolCustomHint: 'Custom symbols apply to this project only.',
       rulesHeading: 'Geometry rules', rulesViolationsHeading: 'Violations',
       rulesRun: 'Run check', rulesExport: 'Export CSV', rulesClear: 'Clear results',
-      pluginSessionOnly: 'Plugins (this session only)',
+      pluginSessionOnly: 'Plugins & local library',
       ghostLayer: 'Ghost reference (this session only)', ghostPick: 'Choose reference…', ghostClear: 'Clear reference', ghostOpacity: 'Opacity',
       siteBgHint: 'Use Base/Site in the top bar to upload an image or redraw the site shape',
       pluginStatusActive: 'Active', pluginStatusLoading: 'Loading', pluginStatusDisabled: 'Disabled', pluginStatusUnloaded: 'Unloaded',
       pluginNoCapabilities: 'no capabilities', pluginUnload: 'Unload', pluginNoneImported: 'No plugin imported',
+      pluginSavedDisabled: 'Saved, not enabled', pluginEnable: 'Enable', pluginLibrary: 'Local plugin library',
       pluginImportManifest: 'Import manifest (.json)',
-      pluginManifestHint: 'plotpin.plugin/v1; code ≤64 KB, manifest ≤192 KB; re-import after refresh.'
+      pluginManifestHint: 'plotpin.plugin/v1; code ≤64 KB, manifest ≤192 KB; enable manually after refresh.',
+      bwTitle: 'Bandwidth/storage', bwCodec: 'Codec', bwRes: 'Res', bwFps: 'FPS', bwStream: 'Stream',
+      bwChannels: 'Cams', bwDays: 'Days', bwHours: 'Hours', bwRedundancy: 'Redundancy%',
+      wireTitle: 'Cabling', wireRoute: 'Polylines', wireChain: 'Chain',
+      wireReserve: 'End reserve (m)', wireBend: 'Bend (%)',
+      wireGeom: 'Geom.', wireReserveLen: 'Reserve', wireBendLen: 'Bend', wireTotal: 'Total',
+      wireHint: 'Geometric estimate; no vertical runs; first 100 rows; empirical values.'
     }
   };
   /* 动态业务文案以「中文原文」为键：L('宽度') 在英文模式返回 Width，未收录则原样返回中文。
@@ -196,6 +216,12 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '字高(m)':'Text height (m)', '对象属性':'Object properties', '自定义属性':'Custom properties',
     '暂无自定义属性':'No custom properties', '键':'Key', '值':'Value', '复制':'Duplicate',
     '上移一层':'Raise', '下移一层':'Lower', '隐藏':'Hide', '显示':'Show', '解锁':'Unlock', '锁定':'Lock', '删除':'Delete', '显隐':'Show/hide',
+    '只读':'Read-only', '只读中':'Read-only ON',
+    '已进入本地只读：仅锁本端，对端仍可改本工程':'Read-only on: this device only; peers can still edit',
+    '已退出本地只读':'Read-only off',
+    '本地只读：{what}已拒（仅锁本端编辑，对端仍可改本工程）':'Read-only: {what} denied (local only; peers can still edit)',
+    '编辑':'Edit', '撤销':'Undo', '重做':'Redo', '拖拽':'drag', '该工具':'this tool', '属性写入':'property edit',
+    '编辑快捷键':'edit shortcut', '复制对象':'duplicate', '粘贴':'paste', '清空楼层':'clear floor',
     '批量属性':'Batch properties', '移动到':'Move to', '应用图层':'Apply layer', '批量旋转':'Rotate all', '全部删除':'Delete all',
     '图上标注':'On-drawing labels', '场地属性':'Site properties', '场地节点':'Site nodes', '图片底图':'Image base map',
     '像素':'Pixels', '比例':'Scale', '校准':'Calibration', '实测范围':'Measured extent', '已校准':'Calibrated',
@@ -212,13 +238,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）':'Snap to endpoints, midpoints, centers, feet, intersections, etc. (Tab cycles types)',
     '逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）':'While picking points, snap to multiples of the polar angle (reference parallel/perpendicular and spacing constraints stay available)',
     '极轴追踪的角度步长':'Polar tracking angle step',
-    '上移节点':'Move node up', '下移节点':'Move node down', '删除该节点':'Delete node', '在此节点后插入一个节点':'Insert a node after this one',
     '拖拽调整节点顺序':'Drag to reorder nodes',
-    '节点 X（米，可为负）':'Node X (m, may be negative)',
-    '节点 Y（米，可为负）':'Node Y (m, may be negative)',
-    '顶点 X（米，可为负）':'Vertex X (m, may be negative)',
-    '顶点 Y（米，可为负）':'Vertex Y (m, may be negative)',
-    '上移顶点':'Move vertex up', '下移顶点':'Move vertex down', '在此顶点后插入一个顶点':'Insert a vertex after this one', '删除该顶点':'Delete vertex',
     '基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':
       'Base is the lower-left corner and rotation center; parallelogram area = base × height, skew changes only the slanted edge.',
     '圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；':
@@ -257,7 +277,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '矢量场地：':'Vector site: ', '未设置':'not set',
     '（世界坐标，无需比例尺校准）':'(world coordinates, no scale calibration needed)',
     '（已校准）':'(calibrated)', '（未校准）':'(not calibrated)',
-    '方形区域':'Square area',
+    '方形区域':'Square area', '主码流':'Main stream', '子码流':'Sub stream',
     '拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除':'Drag ⠿ or use ↑↓ to reorder; double-click a segment to insert a node, double-click a node to delete',
     '可在画布上拖节点手柄调整位置':'Drag node handles on canvas to adjust positions',
     '测距链':'Measure chain', '闭合区域':'Closed area', '开放折线':'Open polyline',
@@ -592,6 +612,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
      中文模式原样填充占位，保证中文语义与改造前一致。 */
   const TEMPLATES = {
     '已粘贴 {n} 个对象': 'Pasted {n} objects',
+    '评论上限 {max} 条': 'Comment limit {max}',
     '已复制 {n} 个对象到剪贴板': 'Copied {n} objects to clipboard',
     '至少保留 {n} 个节点': 'Keep at least {n} nodes',
     '捕捉已锁定：{label}（Tab 切换，循环回自动）': 'Snap locked: {label} (Tab to cycle back to Auto)',
@@ -605,6 +626,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     'PDF 导入失败：{msg}': 'PDF import failed: {msg}',
     '目录已导入：{n} 个型号': 'Catalog imported: {n} models',
     '目录导入失败：{msg}': 'Catalog import failed: {msg}',
+    '检测到厂商目录列（厂商/型号/单价），导入为设备目录？取消则按对象表格导入。':'Vendor catalog columns detected (vendor/model/price). Import as equipment catalog? Cancel to import as an object table.',
     '工程导入失败：{msg}': 'Project import failed: {msg}',
     '工程导入失败（已回滚）：{msg}': 'Project import failed (rolled back): {msg}',
     '导入失败：{msg}': 'Import failed: {msg}',
@@ -744,6 +766,15 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '另一标签页正在编辑，已暂停自动保存':'Another tab is editing this project; autosave paused',
     '工程标识不一致，已按工程库记录修正':'Project ID mismatch; corrected to the project library record',
     '资产回收已跳过：{msg}，未删除任何文件':'Asset cleanup skipped: {msg}; no files were deleted',
+    '已忽略旧工程同步快照':'Ignored a sync snapshot from a previous project',
+    '已忽略其他工程的同步快照':'Ignored a sync snapshot from another project',
+    '仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）':'Direct networks only (same LAN / direct reachability); across NAT it usually fails (no TURN configured)',
+    '已连接（未绑定工程，业务消息被忽略）':'Connected (no project bound; business messages are ignored)',
+    '文字 {n} 条无法解码，已跳过':'Skipped {n} text run(s) that could not be decoded',
+    '已跳过 {n} 个非法绘制操作':'Skipped {n} invalid drawing operation(s)',
+    '{n} 张内嵌图无法解码，已跳过':'Skipped {n} embedded image(s) that could not be decoded',
+    '跳过非法实体：{n} 个（缺少坐标或必需参数）':'Skipped {n} invalid entity record(s) missing coordinates or required parameters',
+    '单位 {code} 未知，已按文件单位导入（$INSUNITS={ins}）':'Unknown unit {code}; imported using the file unit ($INSUNITS={ins})',
     '当前处于救援模式，未落盘编辑将丢失。请先导出救援 JSON；确定继续？':'Rescue mode is active; unsaved edits will be lost. Export the rescue JSON first. Continue?',
     '已恢复离线协作待发的最新改动；重连后会补发':'Restored the latest offline collaboration draft; it will resend after reconnecting',
     '图纸比例':'Drawing scale', '扫描 DPI':'Scan DPI', '像素比例':'Pixel scale',
@@ -776,8 +807,6 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     'JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）':'Invalid JSON project (expected a PlotPin v1 project file)',
     'XLSX 中没有可导入的工作表':'The XLSX has no importable worksheet',
     'DXF 中未找到支持的实体（线/多段线/圆/弧/椭圆/样条/块参照/点/文字）':'No supported DXF entities found (LINE/polyline/circle/arc/ellipse/spline/block/point/text)',
-    'PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）':
-      'No usable graphics found in the PDF (scanned image without embedded raster, or unsupported compression)',
     '请选择图片文件（PNG/JPG/WebP/BMP/GIF/SVG）':'Choose an image file (PNG/JPG/WebP/BMP/GIF/SVG)',
     '底图已导入':'Base map imported',
     '浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存':'Browser storage unavailable; the base map lasts this session only—save a JSON project instead',
@@ -789,7 +818,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已删除上一条参考线':'Last guide removed', '参考线已清除':'Guides cleared',
     '端点':'endpoint', '中点':'midpoint', '圆心':'center', '象限点':'quadrant', '垂足':'perpendicular',
     '交点':'intersection', '切点':'tangent', '自动':'Auto',
-    '捕捉已锁定：':'Snap locked: ', '（Tab 切换，循环回自动）':' (Tab to cycle back to Auto)',
+    '（Tab 切换，循环回自动）':' (Tab to cycle back to Auto)',
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '◈ 捕捉：':'◈ Snap: ', '◈ 捕捉：自动':'◈ Snap: Auto',
     '设备标签':'device labels', '设备二维码标签':'Device QR labels', '台':'units', '图纸工程':'Drawing project',
     '扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。':
@@ -803,7 +832,6 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '对象清单':'Object list', '清单超过 180 行，已在打印版截断；完整数据请导出 JSON/CSV。':
       'The list exceeds 180 rows and is truncated in print; export JSON/CSV for the full data.',
     '第':'page ', '页':'', '对象类型':'Object type', '业务类型':'Business type', '参数':'Params', '长度':'Length',
-    '未发现明显的零尺寸':'No obvious zero-size',
     /* 停车规划 */
     '停车规划':'Parking planner', '当前场地：':'Current site: ', '可排布':'Layout ',
     '个/排':'per row', '排（双面）':'rows (double-loaded)', '条通道':'aisles',
@@ -831,16 +859,13 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已断开':'Disconnected', '连接已断开':'Connection closed',
     '当前环境不支持 BroadcastChannel，请使用跨设备直连或工程 JSON 合并':
       'BroadcastChannel is unavailable; use direct WebRTC or JSON project merge instead',
-    '启用本机同步失败：':'Failed to enable local sync: ',
     '当前环境不支持 WebRTC，请使用本机同步或工程 JSON 合并':
       'WebRTC is unavailable; use local tab sync or JSON project merge instead',
-    '主机生成邀请 → 客机粘贴后生成应答 → 主机把应答粘贴回来。SDP 含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。':
-      'Host creates an invite → guest pastes it to create an answer → host pastes the answer back. SDP contains local network addresses; share only with trusted collaborators. Connected peers can edit this project.',
-    '生成邀请（主机）':'Create invite (host)', '应用对方信令 / 生成应答':'Apply peer signal / create answer',
-    '生成邀请失败：':'Failed to create invite: ', '请粘贴对方信令':'Paste the peer signal first',
+    '生成邀请（主机）':'Create invite (host)',
+    '请粘贴对方信令':'Paste the peer signal first',
     '已应用应答，正在建立连接…':'Answer applied; connecting…',
     '本机已生成应答，等待主机应用':'Answer created locally; waiting for the host to apply it',
-    '应用信令失败：':'Failed to apply signal: ', '已复制':'Copied',
+    '已复制':'Copied',
     '还没有可复制的信令':'No signal to copy yet', '复制失败，请手动选择文本':'Copy failed; select the text manually',
     '底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。':
       'Base-map images and device photos are not transferred over the live channel; use project-library merge or JSON export for a full sync.',
@@ -859,9 +884,10 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '连接已断开，等待恢复…':'Connection lost; waiting to recover…', '连接已关闭':'Connection closed',
     '实时同步已就绪':'Live sync ready', '正在建立连接…':'Establishing connection…',
     '连接异常断开':'Connection dropped unexpectedly', '未知错误':'Unknown error',
-    '连接异常：':'Connection error: ', '正在生成邀请…':'Creating invite…',
+    '正在生成邀请…':'Creating invite…',
     '邀请已生成，等待对方粘贴应答':'Invite created; waiting for the peer answer',
-    '邀请串无效：':'Invalid invite string: ',
+
+
     '请粘贴对方的应答邀请串':'Paste the peer answer invite string',
     '请粘贴主机的邀请串':'Paste the host invite string', '正在应用邀请…':'Applying invite…',
     '应答已生成，请复制给主机':'Answer created; copy it back to the host',
@@ -894,7 +920,8 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '邀请串':'Invite string',
     '字节，超过内置二维码上限':'bytes, exceeding the built-in QR limit of',
     '字节：请复制邀请串文本发送，未生成无效二维码。':'bytes. Copy the invite text instead; no invalid QR was generated.',
-    '二维码生成失败：':'QR generation failed: ',
+
+
     '跨设备邀请（WebRTC）':'Cross-device invite (WebRTC)',
     '三步建连：① 主机生成邀请；② 客机粘贴邀请并生成应答；③ 主机粘贴应答完成连接。邀请串含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。':
       'Three steps: (1) host creates invite; (2) guest pastes it and creates an answer; (3) host pastes the answer to connect. The invite contains local network addresses; share only with trusted collaborators. Connected peers can edit this project.',
@@ -920,7 +947,6 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '设计':'Designer', '审核':'Reviewer', '单位':'Company', '图例':'Legend',
     '落点 只读参考层（已锁定）':'Imported to a read-only reference layer (locked)',
     /* 校准 / 场地 / 目录 / 报价等界面短句（B-14 补齐缺口） */
-    '矢量场地：未设置':'Vector site: not set',
     '已取消比例尺校准':'Scale calibration cancelled',
     '已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点':'Two control points set: drag to adjust, Enter to apply, Delete to remove the selected point',
     '图片已变换':'Image transformed',
@@ -933,6 +959,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '楼层已重命名':'Floor renamed',
     '待保存…':'Saving…', '已保存':'Saved', '已自动保存':'Auto-saved', '请手动导出':'Export manually',
     '新版本可用：刷新页面后生效':'New version available: refresh to update',
+    '预缓存失败 {n} 项，已保留旧版本':'Precache failed for {n} item(s); keeping the old version',
     '底图读取失败，请重新导入底图':'Failed to read the base map; re-import it',
     '未载入目录':'No catalog loaded',
     '报价表已导出':'Quote table exported',
@@ -943,8 +970,6 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Invalid JSON project (expected a v1 project exported by PlotPin)',
     [TXT_BINARY_DXF_HINT]:
       'This DXF is binary (AutoCAD Binary DXF) and cannot be parsed in the browser; save it as ASCII DXF in CAD first',
-    'PDF 中未提取到可用图形（可能是扫描图片但无内嵌图，或使用了不支持的压缩）':
-      'No usable graphics found in this PDF (it may be a scan without an embedded image, or use unsupported compression)',
     '目录已导出':'Catalog exported',
     '目录已删除':'Catalog deleted',
     '目录数据损坏，已忽略：{msg}':'Catalog data is corrupt and was ignored: {msg}',
@@ -993,6 +1018,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Time {ms} ms | objects {objects} | pairs {pairs}/{theoretical} theoretical',
     '未执行：':'Not run: ', '点击定位':'Click to locate',
     '仅展示前 {n} 条':'Showing first {n}',
+    '覆盖率已降级：格边放大 {n} 倍以控制在格数上限内':'Coverage degraded: cell size scaled ×{n} to stay within the grid limit',
     '已导出前 {n} 条':'Exported first {n}',
     '共 {n} 页，已导入第 1 页':'{n} page(s); imported page 1 only',
     '未配置阈值类型 {n} 个':'Unconfigured threshold types: {n}',
@@ -1016,7 +1042,20 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
     'PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）':'No usable graphics found on PDF page 1 (only page 1 is imported; pages are not merged; a scanned image may lack embedded graphics or use unsupported compression)',
     '浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存':'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
-    '该类型仍被对象使用，且没有可迁移的同类内置类型':'This type is still used by objects, and there is no migratable built-in type of the same kind'
+    '该类型仍被对象使用，且没有可迁移的同类内置类型':'This type is still used by objects, and there is no migratable built-in type of the same kind',
+    '评论':'Comment', '编辑评论':'Edit comment',
+    '评论不能为空':'Comment required', '先选中一个对象':'Select one object',
+    '评论不存在':'Comment not found', '评论保存失败':'Failed to save comment',
+    '只读：可看评论，不能写':'Read-only: comments visible, writing disabled',
+    '删除这条评论？':'Delete this comment?', '对象已删除':'Object deleted', '暂无评论':'No comments',
+    '草稿评论将一并清除。':'Draft comments will also be cleared.',
+    /* G7 台账模板 */
+    '台账模板导出':'Ledger template export',
+    '选择模板':'Template', '列（逗号分隔，字段名）':'Columns (comma-separated field names)',
+    '导出 CSV':'Export CSV', '导出 XLSX':'Export XLSX',
+    '模板列不存在：{cols}':'Template columns not found: {cols}',
+    '模板没有列':'Template has no columns',
+    '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger'
   };
   Object.assign(PHRASES, MORE);
 
