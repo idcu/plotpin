@@ -1,8 +1,14 @@
 name: CI
 
-# 当前状态：**定义已挂载并实际运行，但全红，不作发布门禁**。
-# 实测（2026-11-13 核查）：CI 运行 60 次均失败（`test` 与两个 `e2e` job 为红），`Perf Nightly` 0 次，
+# 当前状态：**定义已挂载并实际运行，暂不作发布门禁**。
+# 历史实测（2026-11-13 核查）：CI 运行 60 次均失败（`test` 与两个 `e2e` job 为红），`Perf Nightly` 0 次，
 # `pages-build-deployment` 87 次（`gh api repos/idcu/plotpin/actions/runs`）。
+# 2026-11-14 修掉 `test` job 缺 `npm ci` 的结构性根因；2026-11-15 远端 run 43625493370 中该 job 已转绿。
+# 同 run 的两个 `e2e` job 仍红，根因是 `dist/` 不入库且 job 内不构建：源码入口 3 条 `file-dist` 用例
+# `net::ERR_FILE_NOT_FOUND`，dist 入口 webServer 因 `/index.html` 映射到缺失产物而 20 s 超时。
+# 这不属于产品缺陷——两条入口依赖的都是「构建完成」这一前提，判定与常量一律不放宽；
+# 修复方式：在本文件 `e2e` job 内先构建再跑（见该 job 的构建步骤注释）。
+# 修复后的远端结论以推送后的 run 为准，未核实前不写成已绿。
 # 决策（D2，2026-11-13）：发布门禁放在本地，Actions 仅作参考，不作为合并阻断。
 # 发布门禁以本地命令为准，逐条清单与期望值见 `docs/release-checklist.md`。
 on:
@@ -34,7 +40,7 @@ jobs:
         run: node scripts/bench.mjs
       - name: 单文件发行包校验（源重建 ↔ dist-manifest 登记哈希）
         run: node scripts/build.mjs --check
-      - name: 门禁牙齿自测（正面基线 10 条 + 19 种人为破坏）
+      - name: 门禁牙齿自测（正面基线 10 条 + 20 种人为破坏）
         run: node scripts/check-gates.mjs
 
   e2e:
@@ -70,6 +76,12 @@ jobs:
           cache: npm
       - name: 安装开发期依赖（@playwright/test，不进发行包）
         run: npm ci
+      # `dist/` 被 .gitignore 排除（单文件发行版不入库），所以干净检出上必须先构建，否则：
+      #   - 源码入口的 file-dist.spec（3 条）直接 file:// 打开 dist，全部 ERR_FILE_NOT_FOUND；
+      #   - dist 入口的 serve.mjs 把 /index.html 映射到该产物，404 使 Playwright webServer 20 s 超时。
+      # 这两种红都是「构建前提缺失」，不是产品缺陷；本步骤只补前提，e2e 判定与用例一律不改。
+      - name: 构建单文件发行版（两个 e2e 入口都依赖 dist 产物）
+        run: node scripts/build.mjs
       - name: 安装 Chromium 与系统依赖
         run: npx playwright install --with-deps chromium
       # 含 file-dist.spec（直接打开 dist 的 file:// 绝对路径）与入口无关，两套都会跑。
