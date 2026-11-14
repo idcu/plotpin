@@ -27,8 +27,12 @@ function collabDebugSet(key,value){ if(!COLLAB_DEBUG) return; try{ window[key]=v
 /* 片C：core 只通过钩子引用协作能力。函数声明已提升，可在常量之后就登记。 */
 registerHook('collab.onLocalChange',collabOnLocalChange);
 registerHook('collab.broadcastFloor',collabBroadcastFloor);
+/* C2：规则配置显式通道（合并路径仍是本地优先，这条不参与合并） */
+registerHook('collab.sendRules',collabBroadcastRules);
 registerHook('collab.pendingCandidates',collabPendingCandidates);
 registerHook('collab.pendingStorageKeys',()=>({key:COLLAB_PENDING_KEY,prefix:COLLAB_PENDING_PREFIX,noPid:COLLAB_PENDING_NOPID,bak:COLLAB_PENDING_BAK_KEY}));
+/* B2：工程切换（新建/打开工程库）自增代际令牌，在途快照全部作废 */
+registerHook('collab.projectSwitched',()=>{ collabEpoch++; });
 /* N-16：楼层同步消息类型 ↔ 操作名，发送与接收共用同一张表，避免字符串两处漂移 */
 const COLLAB_FLOOR_OPS=Object.freeze({add:'floor-add',delete:'floor-delete',clear:'floor-clear'});
 const COLLAB_FLOOR_TYPES=Object.freeze({'floor-add':'add','floor-delete':'delete','floor-clear':'clear'});
@@ -40,6 +44,8 @@ let collabLastMerge=null, collabNotifyAt=0;
 /* 片2 协作安全默认：跨设备连接首次快照需确认；接收端节流；远端撤销栈隔离 */
 let collabRtcTrusted=false, collabRtcAskOpen=false, collabRtcPending=null, collabRightsShown=false;
 let collabApplyPending=null, collabApplyTimer=null, collabLastApplyAt=0, collabRemoteHistoryUsed=false;
+/* B2：合并代际令牌。入队时捕获，执行时比对；切工程/断开都自增，任何旧工程快照不得写入新工程 */
+let collabEpoch=0;
 let collabLocalChannel='', collabReconnectAttempt=0, collabReconnectTimer=null, collabWatchdog=null;
 let collabForeignDropped=0;
 const collabPeers=new Map();
@@ -502,6 +508,12 @@ function collabBroadcastFloor(op){
   if(!collabTransportReady()){ collabPendingStore(project); return false; }
   return collabSendObject({t:type,project});
 }
+/** C2：规则配置显式广播。合并的 mergeRuleSide 仍保持本地优先；本通道只在用户提交规则改动时发一次，
+ *  接收端直接应用并压历史，且应用后不再外发（避免两端来回推）。 */
+function collabBroadcastRules(rules){
+  if(!collabMode||!collabTransportReady()) return false;
+  return collabSendObject({t:'rules-apply',rules});
+}
 function collabReceiveRaw(raw){
   let m;
   try{ m=typeof raw==='string'?JSON.parse(raw):raw; }
@@ -551,7 +563,7 @@ function collabHandleMessage(msg,from){
       collabSendObject({t:'hello-ack',name:collabPeerId},from);
       collabSendObject({t:'snapshot',project:persistableState()},from);
     }
-    collabSetState('connected',L('已连接对端：{name}',{name:(msg.name||from)}),'ok');
+    collabConnected(msg.name||from,got);
     collabAnnounceRights();
     collabRefreshUI();
     return;
@@ -560,7 +572,7 @@ function collabHandleMessage(msg,from){
     const name=String(msg.name||from).slice(0,80);
     collabHelloDup('ack:'+from,name);
     collabTouchPeer(from,msg.name||from);
-    collabSetState('connected',L('已连接对端：{name}',{name:(msg.name||from)}),'ok');
+    collabConnected(name,got);
     collabAnnounceRights();
     collabRefreshUI();
     return;
@@ -570,6 +582,17 @@ function collabHandleMessage(msg,from){
     collabHelloSeen.delete(from); collabHelloSeen.delete('ack:'+from);
     collabSetState('disconnected',L('对端已断开'),'warn');
     collabRefreshUI();
+    return;
+  }
+  if(msg.t==='rules-apply'){
+    /* C2：绕开 mergeRuleSide 的本地优先；normalizeRuleConfig 白名单化来件并压一条历史，
+       markDirty('clear') = 整层刷新 + 保存、不广播 → 应用后不回发。 */
+    const next=normalizeRuleConfig(msg.rules);
+    if(JSON.stringify(next)!==JSON.stringify(state.rules)){
+      pushHistory(true);
+      state.rules=next;
+      markDirty('clear');
+    }
     return;
   }
   if(COLLAB_FLOOR_TYPES[msg.t]){
@@ -591,7 +614,7 @@ function collabQueueApply(raw,from){
     collabAskRtcTrust();
     return;
   }
-  collabApplyPending={raw,from};
+  collabApplyPending={raw,from,epoch:collabEpoch,pid:(state.meta&&state.meta.projectId)||''};
   /* 节流：距上次应用不足 COLLAB_APPLY_MIN_MS 就等待，期间只保留最新一份整工程快照 */
   if(collabApplyTimer) return;
   const wait=COLLAB_APPLY_MIN_MS-(Date.now()-collabLastApplyAt);
@@ -605,9 +628,16 @@ function collabDrainApply(){
   const from=job.from, raw=job.raw;
   collabApplyChain=collabApplyChain.then(async()=>{
     try{
+      /* B2：入队后工程已切换 → 整包作废，绝不把旧工程内容写进新工程 */
+      if(job.epoch!==collabEpoch){ collabRecordError(L('已忽略旧工程同步快照')); return; }
       /* 撤销栈隔离：一次连接最多让远端写一条历史，持续推送不会把本地 20 条撤销记录冲掉 */
       const useHistory=!collabRemoteHistoryUsed;
-      const stats=await mergeProjectJSON(raw,useHistory?{history:'overwrite'}:{history:false});
+      const stats=await mergeProjectJSON(raw,Object.assign({expectProjectId:job.pid},useHistory?{history:'overwrite'}:{history:false}));
+      if(stats&&stats.ignored){
+        collabRecordError(L('已忽略其他工程的同步快照'));
+        collabSetStatus(L('已忽略其他工程的同步快照'),'warn');
+        return;
+      }
       if(useHistory&&mergeHistoryNeeded(stats)) collabRemoteHistoryUsed=true;
       collabLastMerge=Object.assign({at:nowISO(),from},stats);
       collabDebugSet('__collabLastMerge',collabLastMerge);
@@ -652,11 +682,18 @@ function collabNotifyOverwrite(stats){
   if(stats.siteCleared) parts.push(L('场地已清空'));
   toast(`${L('协作覆盖')}：${parts.join(' ')}，${L('可按 Ctrl+Z 回滚')}`,'warn');
 }
+/** 连接成功状态：双方都未绑定工程时业务消息会被设计性丢弃，必须显式说明而不是只显示「已连接」 */
+function collabConnected(name,peerPid){
+  const unbound=!collabProjectToken()&&!String(peerPid||'').trim();
+  collabSetState('connected',unbound?'':L('已连接对端：{name}',{name}),unbound?'warn':'ok');
+  if(unbound) collabSetStatus(L('已连接（未绑定工程，业务消息被忽略）'),'warn');
+}
 /** 连接建立时明确告知：这条连接拥有本工程的完整编辑权（覆盖/删除/清空/改配置） */
 function collabAnnounceRights(){
   if(collabRightsShown) return;
   collabRightsShown=true;
-  toast(L('已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）'),'warn');
+  const scope=collabMode==='webrtc'?' · '+L('仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）'):'';
+  toast(L('已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）')+scope,'warn');
 }
 /** 跨设备首次快照前确认：拒绝即断开，不静默应用对端覆盖 */
 function collabAskRtcTrust(){
@@ -707,6 +744,7 @@ function collabStopAll(reason){
   collabPendingSnapshot=false;
   clearTimeout(collabApplyTimer); collabApplyTimer=null;
   collabApplyPending=null; collabRtcPending=null;
+  collabEpoch++;
   collabRtcTrusted=false; collabRtcAskOpen=false; collabRightsShown=false;
   collabRemoteHistoryUsed=false; collabLastApplyAt=0;
   if(reason==='peer') collabSetState('disconnected',L('对端已断开'),'warn');

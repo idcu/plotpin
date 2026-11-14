@@ -4,6 +4,8 @@ import { firstRunSeenStorage } from './tests/e2e/helpers.mjs';
 
 const PORT = Number(process.env.E2E_PORT || 4173);
 const BASE = `http://127.0.0.1:${PORT}`;
+/* D3：Firefox 只做可复跑入口，不做默认门禁。E2E_BROWSER=firefox 才切换，默认仍是 Chromium。 */
+const BROWSER = process.env.E2E_BROWSER === 'firefox' ? 'firefox' : 'chromium';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -23,6 +25,7 @@ export default defineConfig({
     /* 既有用例默认已完成首次引导；onboarding.spec 自行移除该键验证首次路径 */
     storageState: firstRunSeenStorage(BASE)
   },
+  projects: [{ name: BROWSER, use: { browserName: BROWSER } }],
   /* 浏览器 IndexedDB 仅在同源 http 下可用：先起本地静态服务器 */
   webServer: {
     command: 'node scripts/serve.mjs',
