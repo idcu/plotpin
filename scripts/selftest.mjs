@@ -10698,6 +10698,42 @@ await section("V-3a 图片 XObject + SMask / 文字 DPI 分级 / 图片落位命
 
 });
 
+/* ---------------- V-3b0 清单页逐页 MediaBox：图纸页/清单页混排不变形 ---------------- */
+await section("V-3b0 清单页逐页 MediaBox：图纸页/清单页混排不变形", async () => {
+{
+  const P = api.PdfVec;
+  const jpg = (w, h) => ({ w: w, h: h, jpeg: new Uint8Array([1, 2, 3]) });
+  /* 复现矢量导出真实形态：第 1 页图纸 842×595，第 2 页清单 1240×1748（PDF_LIST_PAGE）。
+     修复前两页 MediaBox 都是 842×595，清单图被横向 ×1.47、纵向 ×2.94 拉伸。 */
+  const mix = P.docPages(842, 595, [
+    { body: P.image('Im0', 0, 0, 842, 595), images: [jpg(842, 595)] },
+    { body: P.image('Im0', 0, 0, 1240, 1748), images: [jpg(1240, 1748)], w: 1240, h: 1748 }
+  ]);
+  const ms = String.fromCharCode.apply(null, Array.from(mix));
+  const boxes = Array.from(ms.matchAll(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/g)).map(m => [Number(m[1]), Number(m[2])]);
+  eq('V-3b0 混排页数', boxes.length, 2);
+  eq('V-3b0 图纸页 MediaBox 842×595', boxes[0].join('x'), '842x595');
+  eq('V-3b0 清单页 MediaBox 跟随图片 1240×1748', boxes[1].join('x'), '1240x1748');
+  /* 不变形判据：每页图片落位的横向缩放 = 纵向缩放（cm 矩阵 a/MediaBoxW == d/MediaBoxH） */
+  const cms = Array.from(ms.matchAll(/q ([\d.]+) 0 0 ([\d.]+) [-\d.]+ [-\d.]+ cm/g)).map(m => [Number(m[1]), Number(m[2])]);
+  eq('V-3b0 落位矩阵与页数一致', cms.length, 2);
+  approx('V-3b0 图纸页等比落位', cms[0][0] / boxes[0][0], cms[0][1] / boxes[0][1], 1e-12);
+  approx('V-3b0 清单页等比落位', cms[1][0] / boxes[1][0], cms[1][1] / boxes[1][1], 1e-12);
+  approx('V-3b0 清单页横向缩放回到 1', cms[1][0] / boxes[1][0], 1, 1e-12);
+  /* 缺省与非法页尺寸回落到调用参数：不得把 0/NaN 写进 MediaBox */
+  const fb = String.fromCharCode.apply(null, Array.from(P.docPages(842, 595, [
+    { body: P.image('Im0', 0, 0, 842, 595), images: [jpg(842, 595)], w: 0, h: NaN },
+    { body: P.image('Im0', 0, 0, 842, 595), images: [jpg(842, 595)] }
+  ])));
+  eq('V-3b0 非法页尺寸回落默认', (fb.match(/\/MediaBox \[0 0 842 595\]/g) || []).length, 2);
+  ok('V-3b0 MediaBox 无 NaN/0', !/\/MediaBox \[0 0 (0|NaN)/.test(fb));
+  /* 默认导出路径（厂商容器）清单页本来就是正确的 1240×1748；矢量导出修好后与之同几何 */
+  const def = String.fromCharCode.apply(null, Array.from(api.Pdf.buildImagePdf([{ width: 1240, height: 1748, b64: 'AAECAwQFBgcICQ==' }])));
+  ok('V-3b0 默认导出清单页 MediaBox 仍为 1240×1748', def.includes('/MediaBox [0 0 1240 1748]'));
+}
+
+});
+
 /* ---------------- V-3b1 矢量 PDF 导出选项：档位决策与降级原因 ---------------- */
 await section("V-3b1 矢量 PDF 导出选项：档位决策与降级原因", async () => {
 {

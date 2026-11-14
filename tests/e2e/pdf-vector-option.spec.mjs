@@ -49,4 +49,19 @@ test('V-3b1：矢量 PDF 选项明示文字口径与档位，默认路径字节�
   const vec = readFileSync(await (await dl1).path());
   expect(vec.subarray(0, 5).toString()).toBe('%PDF-');
   expect(sha(vec)).not.toBe(sha(base));
+
+  /* V-3b0：清单页逐页 MediaBox——图纸页 842×595、清单页 1240×1748；
+     修复前列表页也被写成 842×595，1240×1748 的整页图被非等比拉伸。 */
+  const pdfText = vec.toString('latin1');
+  const boxes = [...pdfText.matchAll(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/g)].map(m => m[1] + 'x' + m[2]);
+  expect(boxes).toEqual(['842x595', '1240x1748']);
+  /* 图片落位与 MediaBox 同尺寸 → 横纵缩放一致（清单页拉伸系数回到 1） */
+  expect(pdfText).toContain('q 1240 0 0 1748 0 0 cm');
+
+  /* 默认导出路径逐字节未变：同输入两次导出 sha 必须相同（时间戳已固定） */
+  const dl2 = page.waitForEvent('download');
+  await page.selectOption('#exportKind', 'pdf');
+  await page.click('#exportBtn');
+  const base2 = readFileSync(await (await dl2).path());
+  expect(sha(base2)).toBe(sha(base));
 });

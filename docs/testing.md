@@ -10,7 +10,7 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **166 个分区 / 4,298 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **167 个分区 / 4,308 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **47 个 spec / 176 个用例**（源码入口 175 跑 + 1 条件跳过；dist 172 跑 + 4 跳过） | 本地双入口 2026-11-14 收口全量通过；远端 2026-11-15 补构建后：源码入口全绿，dist 入口 171 passed / 4 skipped / 1 failed（像素采样），以本地命令为准，见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |

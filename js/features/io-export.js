@@ -976,7 +976,8 @@ async function exportPDFVectorNow(){
       const dr=plan.find(p=>p.kind==='drawing'&&(id===undefined||p.floorId===id));
       pages.push(await vectorPage(name,dr&&dr.pageNo,total));
       for(const p of await renderPdfListPages(name,plan.filter(x=>x.kind==='list'&&(id===undefined||x.floorId===id)).map(x=>x.pageNo),total))
-        pages.push({body:V.image('Im0',0,0,842,595),images:[{w:p.width,h:p.height,jpeg:b64b(p.b64)}]});
+        /* 清单页画布是 1240×1748（纵向），MediaBox 必须逐页跟图走，否则整页图被拉伸到 842×595 */
+        pages.push({body:V.image('Im0',0,0,p.width,p.height),images:[{w:p.width,h:p.height,jpeg:b64b(p.b64)}],w:p.width,h:p.height});
     };
     if(fs.rows.length<=1) await one(null,undefined);
     else for(const row of fs.rows) await withFloor(row.id,()=>one(row.name,row.id));

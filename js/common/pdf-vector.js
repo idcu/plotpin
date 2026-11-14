@@ -22,8 +22,10 @@
     return out.join('\n');
   }
 
-  /* 多页版：pages = [{body, images}]；images 项为 {w,h,rgb,alpha}（Flate+SMask）
-     或 {w,h,jpeg}（DCTDecode 整页图）。对象编号：1 Catalog / 2 Pages，
+  /* 多页版：pages = [{body, images, w?, h?}]；images 项为 {w,h,rgb,alpha}（Flate+SMask）
+     或 {w,h,jpeg}（DCTDecode 整页图）。页级 w/h 覆盖本次调用的默认页面尺寸
+     （图纸页 842×595 与清单页 1240×1748 混排时，MediaBox 必须逐页取真实宽高，
+     否则整页图会被非等比拉伸）。对象编号：1 Catalog / 2 Pages，
      其后每页占 Page、Contents，图片与 SMask 紧随该页（编号两遍分配）。 */
   function docPages(wPt, hPt, pages) {
     const list = pages || [], metas = [];
@@ -40,8 +42,10 @@
       const m = metas[j], body = typeof p.body === 'string' ? p.body : stream(p.body);
       if (/[^\x00-\x7f]/.test(body)) throw new Error('pdf-vector: 内容流必须为 ASCII（文字走位图）');
       const ims = p.images || [];
+      /* 逐页尺寸：缺省回落到调用参数，非法值同样回落（不允许 NaN 进 MediaBox） */
+      const pw = Number(p.w) > 0 ? Number(p.w) : wPt, ph = Number(p.h) > 0 ? Number(p.h) : hPt;
       const res = ims.length ? ' /XObject << ' + ims.map((_, i) => '/Im' + i + ' ' + m.imgs[i] + ' 0 R').join(' ') + ' >>' : '';
-      set(m.page, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + n(wPt) + ' ' + n(hPt) + ']'
+      set(m.page, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + n(pw) + ' ' + n(ph) + ']'
         + ' /Resources <<' + res + ' >> /Contents ' + m.contents + ' 0 R >>');
       set(m.contents, '<< /Length ' + body.length + ' >>', enc.encode(body));
       ims.forEach((im, i) => {
