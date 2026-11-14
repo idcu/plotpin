@@ -138,7 +138,7 @@ code += `\n;globalThis.__api = {
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
   siteDescription, siteDescriptionParts, worldDims, findIssues, STATS_ISSUE_VERSION,
   hitPhysicalPoint, siteKindName,
-  areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter, rotateShapeByHandle,
+  areaShapeType, shapeWorldPoints, shapeHit, shapeArea, shapeLabelCenter, shapePerimeter, rotateShapeByHandle, rotateArcByHandle,
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
   PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
   sectorSweep, sectorArcPoints, sectorArcRange, pointIconScale, areaParamText,
@@ -3836,6 +3836,85 @@ await section("36.9 S5 导出保真：DXF ARC / SVG A 弧 / PDF 自适应密度"
   onlyArc({annot:{radius:true,perimeter:true},name:'A1'});
   eq('S5-圆弧半径+弧长共 2 条标签', api.pdfVectorLabelCount(), base);
   eq('S5-圆弧仅编号少 2 条', onlyName, base-2);
+  api.resetState();
+}
+});
+
+/* 36.10 S6：口径收尾——校准仿射/面板与手柄旋转/规则 footprint/覆盖率排除 ---------- */
+await section("36.10 S6 口径收尾：仿射/旋转/规则 footprint/覆盖率排除", async () => {
+{
+  const mk=(patch)=>api.baseObject('arc','arc.builtin',
+    Object.assign({x:0,y:0,shape:{type:'arc',r:10,a0:0,a1:90}},patch||{}));
+
+  /* 相似仿射：圆心与半径 ×2，起始角不变，张角不变，不降级 */
+  {
+    const o=mk(), out={};
+    api.migrateObjectsByAffine([o],[2,0,10,0,2,20],out);
+    approx('S6-仿射圆心 x', o.x, 10, 1e-9);
+    approx('S6-仿射圆心 y', o.y, 20, 1e-9);
+    approx('S6-仿射半径×2', o.shape.r, 20, 1e-9);
+    approx('S6-仿射起始角不变', o.shape.a0, 0, 1e-9);
+    approx('S6-仿射张角不变', api.arcSweep(o.shape), 90, 1e-9);
+    eq('S6-相似仿射无降级', out.degraded, undefined);
+  }
+  /* 逆时针旋转 30°：起止角各加 30 */
+  {
+    const t=30*Math.PI/180, c=Math.cos(t), s=Math.sin(t), o=mk();
+    api.migrateObjectsByAffine([o],[c,-s,0,s,c,0]);
+    approx('S6-仿射起始角加 30', o.shape.a0, 30, 1e-9);
+    approx('S6-仿射终止角 120', o.shape.a1, 120, 1e-9);
+  }
+  /* 非相似仿射：半径取 sqrt|det|，并标记 arc-affine */
+  {
+    const o=mk(), out={};
+    api.migrateObjectsByAffine([o],[2,0,0,0,3,0],out);
+    approx('S6-非相似半径 sqrt|det|', o.shape.r, 10*Math.sqrt(6), 1e-9);
+    ok('S6-非相似标记 arc-affine', (out.degraded||[]).some(d=>d.code==='arc-affine'));
+  }
+  /* 跨 0° 张角：a0=350,a1=370 转 30° → 20,40，张角仍是 20（不被折成 290） */
+  {
+    const t=30*Math.PI/180, c=Math.cos(t), s=Math.sin(t);
+    const o=mk({shape:{type:'arc',r:10,a0:350,a1:370}});
+    api.migrateObjectsByAffine([o],[c,-s,0,s,c,0]);
+    approx('S6-跨0°仿射起始角 20', o.shape.a0, 20, 1e-9);
+    approx('S6-跨0°仿射张角 20', api.arcSweep(o.shape), 20, 1e-9);
+  }
+  /* 面板旋转 90°：起止角搬移，张角不变 */
+  {
+    api.resetState(); api.state.objects=[];
+    const o=mk(); api.state.objects.push(o); api.selectedIds.add(o.id);
+    api.rotateSelected(90);
+    approx('S6-面板旋转起始角 90', o.shape.a0, 90, 1e-9);
+    approx('S6-面板旋转张角 90', api.arcSweep(o.shape), 90, 1e-9);
+    api.selectedIds.clear();
+  }
+  /* 旋转手柄：+x 方位拖到 +y 方位 = +90°；重复拖同一位置不累加（基线取 drag.original） */
+  {
+    const o=mk(), orig=JSON.parse(JSON.stringify(o));
+    api.rotateArcByHandle(o,orig,[10,0],[0,10]);
+    approx('S6-手柄旋转起始角 90', o.shape.a0, 90, 1e-9);
+    api.rotateArcByHandle(o,orig,[10,0],[0,10]);
+    approx('S6-手柄重复拖动不累加', o.shape.a0, 90, 1e-9);
+    approx('S6-手柄旋转张角不变', api.arcSweep(o.shape), 90, 1e-9);
+  }
+  /* 规则 footprint：只给线段，不产多边形、不计面积 */
+  {
+    const fp=api.ruleObjectFootprint(mk());
+    eq('S6-footprint 线段 48 段', fp.segments.length, 48);
+    eq('S6-footprint 无多边形', fp.polygons.length, 0);
+    eq('S6-footprint 面积 0', fp.area, 0);
+    ok('S6-footprint 包围盒非空', !!fp.bbox&&fp.bbox.maxX>fp.bbox.minX);
+  }
+  /* 覆盖率：只有圆弧时总面积与区域数都不变（纯描边不参与覆盖率） */
+  {
+    api.resetState(); api.state.objects=[];
+    api.state.site={kind:'rect',x:0,y:0,shape:{type:'rect',w:100,h:100}};
+    const before=api.analyzeCoverage(api.state);
+    api.state.objects.push(mk({x:50,y:50,shape:{type:'arc',r:20,a0:0,a1:270}}));
+    const after=api.analyzeCoverage(api.state);
+    approx('S6-覆盖率总面积不变', after.totalArea, before.totalArea, 1e-9);
+    eq('S6-覆盖率区域数不变', after.regions.length, before.regions.length);
+  }
   api.resetState();
 }
 });

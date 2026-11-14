@@ -742,7 +742,11 @@ function rotateSelected(delta){
   pushHistory();
   objs.forEach(o=>{
     if(o.kind==='dimension') return;
-    if(o.kind==='rect'&&areaShapeType(o)===SEC&&o.shape){
+    if(o.kind==='arc'&&o.shape&&o.shape.type===ARC){
+      /* 圆弧：绕圆心转起止角，张角不变（同一对象不产生旋转后失真） */
+      const sweep=arcSweep(o.shape), a0=normalizeAngle((Number(o.shape.a0)||0)+delta);
+      o.shape.a0=a0; o.shape.a1=a0+sweep;
+    }else if(o.kind==='rect'&&areaShapeType(o)===SEC&&o.shape){
       o.shape.a0=normalizeAngle((Number(o.shape.a0)||0)+delta);
       o.shape.a1=(Number(o.shape.a1)||0)+delta;
     }else if(o.points&&o.points.length){

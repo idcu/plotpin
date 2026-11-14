@@ -4,11 +4,11 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-4456%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-4479%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 
 PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量与标注尺寸，并把图纸和台账导出为常见格式。运行时不安装、不连服务器、不依赖网络；入口是根目录的 `index.html`，托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-当前共 **4456 项断言全部通过**。
+当前共 **4479 项断言全部通过**。
 
 > 文档口径：行为以代码为准。本文只做入口索引；易漂移的数字统一放 [docs/facts.md](docs/facts.md)，正文只给命令或带日期的快照。最后核对：2026-11-13（基线 `2123a46` + 工作区 M1/M2 修复）。
 
@@ -71,7 +71,7 @@ npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实 Chromium e2e（需先装 Playwright）
 npm run perf:browser  # 真实 Chromium 性能基线（可选）
 npm run discipline    # 方法论自检看板
-# 4456 assertions, no dependencies
+# 4479 assertions, no dependencies
 ```
 
 `node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、状态写入口 / 跨层耦合计数 / 必需钩子配对 / 软调用登记（第 9 步拆为 9.1～9.4）、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。
@@ -141,7 +141,8 @@ CHANGELOG.internal.md      内部追溯：提交、改动点、实测数据、�
 ## 已知限制
 
 - **PDF 默认导出是整页位图**（图纸位图 + 清单）；另有显式矢量选项 `PDF（矢量）`：对象轮廓与尺寸线为矢量，底图/文字/点位/标题栏视觉为位图，图纸页与清单页都叠加不可见文字层，文字可选中·可搜索（视觉仍为位图，放大会发虚）；>300 标签自动降 150 DPI。纯矢量交付建议 SVG 或 DXF。
-- **DXF 中符号按折线近似**；画布/SVG/PNG/PDF 使用同一路径源，DXF 属明确的降级表达。
+- **DXF 中符号按折线近似**；画布/SVG/PNG/PDF 使用同一路径源，DXF 属明确的降级表达。圆弧默认也按 24 段折线导出；`DXF（保真：椭圆+圆弧）` 才输出原生 `ELLIPSE`/`ARC`。
+- **圆弧对象前向不兼容**：DXF 导入默认仍按折线落地；只有勾选「保留圆弧」才写入 `arc` 对象。含圆弧的工程请统一使用 ≥ 本版本打开——旧版会丢弃圆弧对象（载入审计会记录丢弃数），旧版保存一次后弧即永久消失。圆弧是纯描边几何，不参与面积与覆盖率统计。
 - **旧版兼容未实测**：当前版本可读 v1、写入 v2；旧版 App 是否拒绝 v2、忽略 `site` 后回写丢失场地，未在本次复核中验证。
 - **几何规则检查不是消防/规范审图**：不内置任何规范数值，阈值由用户填写。
 - **覆盖率是栅格法估算**：当前报告口径为 v3（解析区域面积 × 栅格覆盖比例，与视口缩放无关）；v1/v2 历史报告数值不可直接对比。

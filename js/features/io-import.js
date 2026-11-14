@@ -311,10 +311,10 @@ function applyDxfImport(fileName,text,meta,opts){
     selectedIds.clear();
     const unitCode=opts.unit==='auto'?(meta&&meta.insUnits!=null?meta.insUnits:0):Number(opts.unit);
     const lines=dxfFidelityLines(meta,parsed).filter(l=>!l.startsWith('单位：'));
-    const extra=' · '+L('单位')+' '+Dxf.unitLabel(unitCode)+(opts.reference?' · '+L('落点 只读参考层（已锁定）'):'')+
+    const extra=' · '+(counts.arc?counts.arc+' 圆弧 · ':'')+L('单位')+' '+Dxf.unitLabel(unitCode)+(opts.reference?' · '+L('落点 只读参考层（已锁定）'):'')+
       (lines.length?' · '+lines.join(' · '):'');
-    commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {arc} 圆弧 / {point} 点 / {text} 文字{extra}',
-      {line:counts.line,rect:counts.rect,arc:counts.arc,point:counts.point,text:counts.text,extra}));
+    commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
+      {line:counts.line,rect:counts.rect,point:counts.point,text:counts.text,extra}));
     if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
     if(parsed.unitFallback!=null) toast(L('单位 {code} 未知，已按文件单位导入（$INSUNITS={ins}）',{code:parsed.unitFallback,ins:meta&&meta.insUnits!=null?meta.insUnits:'无'}),'warn');
     fitView();

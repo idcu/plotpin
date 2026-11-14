@@ -322,6 +322,10 @@ function ruleObjectFootprint(o){
     const closed=o.kind==='line'?!!o.closed:(o.subtype==='area');
     if(closed&&pts.length>=3) pushPoly(pts);
     else for(let i=0;i+1<pts.length;i++) out.segments.push([pts[i],pts[i+1]]);
+  }else if(o.kind==='arc'){
+    /* 圆弧是纯描边几何：只给折线线段（参与距离/规则近似），不产生多边形、不计面积 */
+    const pts=arcWorldPoints(o,48);
+    for(let i=0;i+1<pts.length;i++) out.segments.push([pts[i],pts[i+1]]);
   }else if(o.kind==='point'){
     const phys=Number(o.phys)||0;
     const type=getType(o.typeId)||{};

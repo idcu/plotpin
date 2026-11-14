@@ -34,7 +34,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       commentsLocalOnly: '评论仅本机可见，不随协作同步',
       commentPlaceholder: '写评论…', addComment: '添加',
       exportJson: 'JSON 工程', exportPng: 'PNG 高清图', exportSvg: 'SVG 矢量图',
-      exportPdf: 'PDF（图纸位图+清单）', exportPdfVector: 'PDF（矢量）· 文字可选中·可搜索（视觉仍为位图，放大会发虚）', exportDxf: 'DXF（CAD 互通）', exportDxfFidelity: 'DXF（保真：仅椭圆）',
+      exportPdf: 'PDF（图纸位图+清单）', exportPdfVector: 'PDF（矢量）· 文字可选中·可搜索（视觉仍为位图，放大会发虚）', exportDxf: 'DXF（CAD 互通）', exportDxfFidelity: 'DXF（保真：椭圆+圆弧）',
       exportCsv: 'CSV 表格', exportTsv: 'TSV 表格', exportXlsx: 'Excel (.xlsx)',
       exportLedgerTpl: '台账模板导出…',
       exportTitleBlock: '图框模板…',
@@ -125,7 +125,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       commentsLocalOnly: 'Comments are local only; not synced',
       commentPlaceholder: 'Write a comment…', addComment: 'Add',
       exportJson: 'JSON project', exportPng: 'PNG (high-res)', exportSvg: 'SVG (vector)',
-      exportPdf: 'PDF (raster drawing + list)', exportPdfVector: 'PDF (vector) · text selectable & searchable (visuals stay raster, blurry when zoomed)', exportDxf: 'DXF (CAD)', exportDxfFidelity: 'DXF (fidelity: ellipse only)',
+      exportPdf: 'PDF (raster drawing + list)', exportPdfVector: 'PDF (vector) · text selectable & searchable (visuals stay raster, blurry when zoomed)', exportDxf: 'DXF (CAD)', exportDxfFidelity: 'DXF (fidelity: ellipse + arc)',
       exportCsv: 'CSV table', exportTsv: 'TSV table', exportXlsx: 'Excel (.xlsx)',
       exportLedgerTpl: 'Ledger template…',
       exportTitleBlock: 'Title block…',
@@ -641,6 +641,10 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '照片保存失败：{msg}': 'Photo save failed: {msg}',
     'DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}':
       'DXF imported: {line} lines / {rect} circles / {point} points / {text} texts{extra}',
+    '保留圆弧（ARC {n} 条）：写入圆弧对象；旧版 PlotPin 打开该工程会丢弃这些圆弧':
+      'Keep arcs ({n} ARC): write arc objects; older PlotPin versions will drop them when opening this project',
+    '不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。':
+      'Leave unchecked to import as 24-segment polylines (same as before, opens in any version). Arcs are stroke-only geometry and do not count toward area or coverage.',
     'PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}':
       'PDF imported: {line} lines / {area} areas / {text} texts{notes}',
     '表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项':

@@ -406,7 +406,9 @@ canvas.addEventListener('pointermove',e=>{
   if(drag?.type==='rotate'){
     drag.dirty=true;
     const o=state.objects.find(x=>x.id===drag.id); if(!o) return;
-    rotateShapeByHandle(o,wp,drag.handle.kind==='pointRotate');
+    /* 圆弧没有整体朝向，旋转手柄按指针方位增量搬移起止角 */
+    if(o.kind==='arc'&&o.shape&&o.shape.type===ARC) rotateArcByHandle(o,drag.original,drag.start,wp);
+    else rotateShapeByHandle(o,wp,drag.handle.kind==='pointRotate');
     requestRender(); return;
   }
   if(drag?.type==='rect'){
