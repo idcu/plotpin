@@ -28,10 +28,11 @@
 
 ### 2.2 协作与 `iceServers`
 
-代码固定 `new RTCPeerConnection({ iceServers: [] })`（`js/features/collab.js`），无 STUN/TURN：
+默认不配中继（`new RTCPeerConnection({ iceServers: [] })`）；可在协作面板配置 STUN/TURN，只存本机键或本次会话（`plotpin.collab.ice.v1`），凭据不进入邀请串、协作消息与工程 JSON：
 
-- 同局域网可借助 host candidate 建连；
-- 跨网络/跨 NAT 通常无法建连，M3 跨网络部分记 `BLOCKED`，写明「缺 TURN/STUN」；
+- 不配中继：同局域网可借助 host candidate 建连；
+- 配了中继：跨网络仍取决于 TURN 可达性与鉴权，**跨 NAT 与 TURN 鉴权均未验证**，M3 跨网络部分记 `BLOCKED` 并写明「TURN 未验证」，不得直接记 PASS；
+- 面板只显示候选计数（host/srflx/relay）与选中候选对类型，不显示 IP/端口/完整 SDP；
 - 同机双标签或同局域网结果不能当跨网络通过。
 
 ### 2.3 软件与语料
@@ -109,7 +110,7 @@
 - 前置：两台设备都能打开同一 HTTPS 页面；工程已建好。
 - 步骤：A 生成邀请（二维码/文本）→ B 连入 → A 增删改，观察 B → B 断网 10 s 改一个对象再联网 → 双方同时改同一对象不同字段 → 跨网络重复。
 - 判据（同局域网）：B 在 2 秒内看到 A 的增删改；断网重连后重新同步；无崩溃；冲突按 LWW 且非目标字段不丢。
-- 失败处理：同局域网失败记 `FAIL` 并保留双方控制台；跨网络因无 TURN 记 `BLOCKED`，写明「缺 TURN/STUN，非产品缺陷结论」。
+- 失败处理：同局域网失败记 `FAIL` 并保留双方控制台；跨网络即使配了 TURN 也记 `BLOCKED`，写明「跨 NAT 与 TURN 鉴权未验证，非产品缺陷结论」。
 
 ### M4 英文译文语义质量
 
@@ -188,7 +189,7 @@
 |---|---|---|
 | M1 | 未验证 | 无真机，`adb` 不存在；只有 HTTP `127.0.0.1` |
 | M2 | 历史手工记录（不构成当前通过） | Firefox 159 与 WebKit 27.2 各完成 SVG 导入→导出 SVG/DXF/PDF→沙箱插件 `.md` 流程，控制台 0 错误；Safari 原生未验证 |
-| M3 | 未验证 | 仅一台设备；未用双标签替代 |
+| M3 | 未验证 | 仅一台设备；未用双标签替代；跨 NAT 与 TURN 鉴权未验证 |
 | M4 | 自动化未翻译项已修，语义未验证 | 中文实例 193→3、去重 89→3、占位符 0；残留为默认图层名/默认工程名/运行环境摘要；语义需人工 |
 | M5 | 未验证 | 无真实 GPU；SwiftShader 代理值见 [performance](performance.md)§4.2 |
 | M6 | 未验证 | 无节流 2,006 ms 返回 `{ok:false}`；6× 节流 3,094 ms 返回 `{ok:true}`（计时偏差，标 `PROXY`） |
@@ -205,7 +206,7 @@
 |---|---|---|
 | M1（iOS） | Windows 无 iPhone；且必须 HTTPS | iPhone + iOS 16+ / Safari 17+ + HTTPS |
 | M2（Safari） | 无 macOS | Mac（macOS 13+）+ Safari 17+ |
-| M3（跨网络） | `iceServers: []` | STUN/TURN + 两台不同网络设备 |
+| M3（跨网络） | TURN 可达性与鉴权未验证 | 可用 TURN + 两台不同网络设备；证书/长期凭据都要覆盖 |
 | M5 | 只有 Chromium + SwiftShader | 目标真机 + Performance 录制 |
 | M6 | 无低端真机 | 低端 Android + 远程调试 |
 | M7 | 未安装 CAD | AutoCAD 2020+ / LibreCAD 2.2+ |

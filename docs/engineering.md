@@ -137,7 +137,7 @@ npm run ci:full  =  npm run ci && npm run test:e2e
 | `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
 | `node scripts/bench.mjs` | Node 桩渲染/覆盖率/规则/符号阈值 | 是 | `test` job |
 | `node scripts/build.mjs --check` | 单文件产物重建与登记比对 | 是 | `test` job |
-| `node scripts/check-gates.mjs` | 正面基线 10 条 + 19 种人为破坏 | 是 | `test` job |
+| `node scripts/check-gates.mjs` | 正面基线 10 条 + 20 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **是（2026-11-14 起并入 `npm run ci`）** | 独立 `vendor-check` job（Actions 侧） |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 是（2026-11-14 起） | 独立 `discipline` job（Actions 侧） |
 | `node scripts/e2e.mjs` | Chromium 功能 e2e（46 spec / 166 用例；2026-11-14 本地双入口全量已复跑） | 否（`npm run ci:full` 才含） | 独立 `e2e` job，matrix 双入口；**远端已运行且失败（2026-11-13），不作发布门禁** |
@@ -204,7 +204,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 ### 4.4 门禁牙齿（`check-gates.mjs`）
 
-在系统临时目录整仓副本里先跑**正面基线**（10 条，未破坏副本必须全绿），再构造 **19 种**破坏，断言对应门禁非 0 退出且输出命中目标错误关键字；仓库本身一个字节不改。脚本头注释与 `scenarios` 数组长度一致（19）；全量本机约 4–5 分钟，可用 `--only` 分批跑。
+在系统临时目录整仓副本里先跑**正面基线**（10 条，未破坏副本必须全绿），再构造 **20 种**破坏，断言对应门禁非 0 退出且输出命中目标错误关键字；仓库本身一个字节不改。脚本头注释与 `scenarios` 数组长度一致（20）；全量本机约 4–5 分钟，可用 `--only` 分批跑。
 
 | # | 破坏 | 期望变红的门禁 |
 |---|---|---|
@@ -227,7 +227,8 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 16 | 新增一条未分类的 `typeof … === 'function'` 软调用 | `check.mjs`（9.4 软调用登记） |
 | 17 | 删除一个必需钩子的注册 | `check.mjs`（9.3 钩子配对） |
 | 18 | CSP 内联脚本哈希与脚本体错位（条数不变） | `build.mjs --check`（`CSP 哈希值与脚本体不匹配`） |
-| 19 | i18n 覆盖率跌破阈值（追加 220 条未字典化中文） | `i18n-scan.mjs --json --check`（同时验证 JSON 模式退出码） |
+| 19 | i18n 覆盖率跌破阈值（按当前覆盖率动态追加未字典化中文） | `i18n-scan.mjs --json --check`（同时验证 JSON 模式退出码） |
+| 20 | `collabIceRedact` 把凭据拼回错误/状态出口（模拟顺手带上 credential） | `selftest.mjs --filter=ICE-1`（零泄露断言：错误信息与脱敏出口两处变红） |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 

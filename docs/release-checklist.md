@@ -10,17 +10,17 @@
 
 | # | 命令 | 期望（2026-11-14 快照） |
 |---|---|---|
-| 1 | `npm run ci` | exit 0。单条命令覆盖 11 步（2026-11-14 收口复跑 exit 0，基线 10/10 + 破坏 19/19）：`check.mjs --selftest`（**4,136 通过 / 0 失败**，加载 **47** 个脚本）→ `check-ngm` → `check-sw` → `check-contracts` → `check-plugin-api` → `i18n-scan --check` → `check-discipline --strict` → `check-deletions` → `bench.mjs`（阈值全绿）→ `build.mjs --check`（**764,936 B ≤ 839,680 B**，gzip **249,291 B ≤ 286,720 B**，SHA256 `97ea1025…` 与 `scripts/dist-manifest.json` 一致，二次构建同哈希）→ `check-gates.mjs`（正面基线 **10 条**全 ✓ + **19 种**破坏全 ✓） |
+| 1 | `npm run ci` | exit 0。单条命令覆盖 11 步（2026-11-14 ICE 收尾复跑，基线 10/10 + 破坏 20/20）：`check.mjs --selftest`（**4,298 通过 / 0 失败**，加载 **48** 个脚本）→ `check-ngm` → `check-sw` → `check-contracts` → `check-plugin-api` → `i18n-scan --check` → `check-discipline --strict` → `check-deletions` → `bench.mjs`（阈值全绿）→ `build.mjs --check`（**796,961 B ≤ 839,680 B**，gzip **260,408 B ≤ 286,720 B**，SHA256 `0d80512c…` 与 `scripts/dist-manifest.json` 一致，二次构建同哈希）→ `check-gates.mjs`（正面基线 **10 条**全 ✓ + **20 种**破坏全 ✓） |
 | 2 | `node scripts/check-contracts.mjs` | `contracts: 11 项核对，0 处违约` |
-| 3 | `node scripts/check-plugin-api.mjs` | `24 个键，清单 24 条，0 处泄漏，0 处落空`；API 1.1.0 / 8 项能力 |
-| 4 | `node scripts/check-sw.mjs` | `VERSION=241`，53 个预缓存输入与 `scripts/sw-inputs.sha256` 一致；`VERSION` 支持单/双/无引号三种写法；改预缓存输入必须先 bump `VERSION` 再 `--update` |
+| 3 | `node scripts/check-plugin-api.mjs` | `31 个键，清单 31 条，0 处泄漏，0 处落空`；API 1.1.0 / 8 项能力 |
+| 4 | `node scripts/check-sw.mjs` | `VERSION=243`，53 个预缓存输入与 `scripts/sw-inputs.sha256` 一致；`VERSION` 支持单/双/无引号三种写法；改预缓存输入必须先 bump `VERSION` 再 `--update` |
 | 5 | `node scripts/e2e.mjs`（源码入口 4173） | **2026-11-14 收口全量实跑 175 passed / 0 failed / 1 skipped，exit 0（4.4m / 266s）**。跳过 1 条为需 `COLLAB_SOAK=1` 的 5 分钟离线浸泡；已按显式开关单独执行 `COLLAB_SOAK=1 node scripts/e2e.mjs tests/e2e/collab.spec.mjs -g "离线 5 分钟真实浸泡"` → **1 passed / 0 failed（5.1m / 305s，exit 0）**，重连后本地新增对象 `OBJ_SOAK` 未丢。发布前重跑并保留日志 |
 | 6 | `$env:E2E_ENTRY='dist'; $env:E2E_PORT='4174'; node scripts/e2e.mjs`（dist 入口） | **2026-11-14 收口全量实跑 172 passed / 0 failed / 4 skipped，exit 0（3.5m / 208s）**。4 条跳过均有显式原因：`sw.spec` 1 条 + `sw-atomic.spec` 2 条（单文件发行版无 SW 预缓存输入，源码入口已通过）、协作浸泡 1 条需 `COLLAB_SOAK=1`；执行后清理两个环境变量 |
-| 7 | `node scripts/badge.mjs --check` | exit 0：README 三处断言锚点一致（当前 4254），且 facts/testing/engineering/modules 计数锚点全部等于实测 |
+| 7 | `node scripts/badge.mjs --check` | exit 0：README 三处断言锚点一致（当前 4,298），且 facts/testing/engineering/modules 计数锚点全部等于实测 |
 | 8 | `node scripts/check-discipline.mjs --strict` | **13/13 → L4**，exit 0；文档 17 篇，命令全部可解析 |
 | 9 | `node scripts/size-report.mjs` | 打印 raw / gzip / 余量；必须与第 1 条同一次构建的数字一致 |
 | 10 | `node scripts/check-deletions.mjs` | exit 0；`docs/deletions.md` 记录完整，且记录路径不在 `git ls-files` 中 |
-| 11 | `node scripts/i18n-scan.mjs --check` | 覆盖率 **44.92% = 756 / 1,683**（按出现次数）≥40%，缺口 **0** ≤10，UI 硬编码 **18** ≤20（全仓未走入口 **926**，UI 18 只是其子集；已字典待接入 **76** ≤76），模板内 =0。口径见 [engineering](engineering.md)§4.6；旧 46.7% 去重口径不再使用 |
+| 11 | `node scripts/i18n-scan.mjs --check` | 覆盖率 **46.45% = 819 / 1,763**（按出现次数）≥40%，缺口 **0** ≤10，UI 硬编码 **18** ≤20（全仓未走入口 **944**，UI 18 只是其子集；已字典待接入 **76** ≤76），模板内 =0。口径见 [engineering](engineering.md)§4.6；旧 46.7% 去重口径不再使用 |
 
 第 2/3/4/8/10/11 条**已并入 `npm run ci`**（第 1 条），单列只是失败时用来定位到具体判据；不要因为它们单独绿就跳过第 1 条。
 `npm run ci:full` = `npm run ci && npm run test:e2e`（含源码入口 e2e），发布前用它覆盖「离线门禁 + 浏览器用例」。

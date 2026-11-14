@@ -4,11 +4,11 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-4254%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-4298%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 
 PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量与标注尺寸，并把图纸和台账导出为常见格式。运行时不安装、不连服务器、不依赖网络；入口是根目录的 `index.html`，托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-当前共 **4254 项断言全部通过**。
+当前共 **4298 项断言全部通过**。
 
 > 文档口径：行为以代码为准。本文只做入口索引；易漂移的数字统一放 [docs/facts.md](docs/facts.md)，正文只给命令或带日期的快照。最后核对：2026-11-13（基线 `2123a46` + 工作区 M1/M2 修复）。
 
@@ -71,7 +71,7 @@ npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实 Chromium e2e（需先装 Playwright）
 npm run perf:browser  # 真实 Chromium 性能基线（可选）
 npm run discipline    # 方法论自检看板
-# 4254 assertions, no dependencies
+# 4298 assertions, no dependencies
 ```
 
 `node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、状态写入口 / 跨层耦合计数 / 必需钩子配对 / 软调用登记（第 9 步拆为 9.1～9.4）、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。

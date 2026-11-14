@@ -10,10 +10,10 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **164 个分区 / 4,254 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **166 个分区 / 4,298 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **47 个 spec / 176 个用例**（源码入口 175 跑 + 1 条件跳过；dist 172 跑 + 4 跳过） | 本地双入口 2026-11-14 收口全量通过；远端 `e2e` job 仍为 2026-11-13 双入口 matrix 全红，以本地命令为准，见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 19 种人为破坏 | 是 |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
 > **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。2026-11-14 已修掉 `test` job 缺 `npm ci` 的结构性全红根因（详见 `ci.yml` 注释），但修复后的 Actions 尚未复跑核对，在拿到新的运行记录前不改变「以本地为准」的结论。
 
@@ -169,7 +169,7 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（10 条，未破坏副本必须全绿），再构造 19 种“应当失败”的改动，断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（10 条，未破坏副本必须全绿），再构造 20 种“应当失败”的改动，断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
 
 - 场景 14～17 专测新增结构判据：`replaceState` 外直赋值、未登记跨层调用、未分类软调用、缺失必需钩子；任何一条“破坏后仍绿”都说明判据失效。
 - 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，干净检出同样生效；
@@ -211,7 +211,7 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 | 图片变换手柄 | `calibration-precheck.spec` 只验入口禁用/提示；**拖拽平移/旋转/缩放/切变手柄没有 e2e** |
 | TSV / DXF 导入 | 导出链路已由 `export-scope.spec` 覆盖；**TSV 导入无 e2e**，DXF 导入只有 `dxf-version.spec` |
 | Firefox / WebKit / Safari | **部分验证**。Firefox 2026-11-14 用本机 Playwright Firefox 复跑 5 条核心用例，**5 passed / 11.3s**（命令与逐条读数见 §3.4）；其余 163 条未跑，仍为未验证。WebKit on Windows 旧记录为进程级崩溃，不作支持目标；Safari 原生需 macOS，未验证。Firefox 入口不是门禁，也不是支持承诺 |
-| 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证（代码固定 `iceServers: []`） |
+| 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证。STUN/TURN 可配置，注入、候选计数与脱敏由 selftest 覆盖；**跨 NAT 与 TURN 鉴权未验证** |
 | 真实 GPU / 低端真机 | perf-browser 在本机为 SwiftShader；真机帧率、长跑内存未验证 |
 | 真实图纸语料 | 无 50 组真实工程 A/B 样本，快照差异误报率未完成人工验证 |
 | 英文语义质量 | 只有 i18n 覆盖率（按出现次数，2026-11-13 为 44.09% = 731 / 1,658，缺口 0）与“无中文残留”自动扫描；`UI 硬编码 18` 只是全仓未走入口 927 的 UI 子集，语义正确性需人工审校 |
