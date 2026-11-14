@@ -31,8 +31,8 @@ node scripts/check-discipline.mjs --strict
 - `badge.mjs --check` 同时校验 README 三处断言锚点与 facts/testing/engineering/modules 的计数锚点；不绿就是文档/测试数字漂移。
 - `build.mjs --check` 同时给产物字节、gzip、余量与 SHA256；与 `scripts/dist-manifest.json` 必须一致，二次构建必须同哈希。
 - `check-sw.mjs` 给 `VERSION` 与预缓存输入指纹；改了预缓存输入必须 bump 再 `--update`。
-- 契约 11 项 / 0 违约、插件 API 24 键 / 0 泄漏 / 0 落空是结构下限，不是“功能全对”。
-- 状态直赋值、跨层耦合、必需钩子、软调用由 `check.mjs` 第 9 步（9.1～9.4）核对，`check-gates.mjs` 用 17 种人为破坏反向验证；计数基线以 `contracts/coupling.json` 为准。
+- 契约 11 项 / 0 违约、插件 API 31 键 / 0 泄漏 / 0 落空是结构下限，不是“功能全对”。
+- 状态直赋值、跨层耦合、必需钩子、软调用由 `check.mjs` 第 9 步（9.1～9.4）核对，`check-gates.mjs` 用 19 种人为破坏反向验证；计数基线以 `contracts/coupling.json` 为准。
 - `check-discipline --strict` 13/13 才算文档侧收口；当前余量偏小，新增文档内容要算体积。
 
 **Actions 现状**：`ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行，但 CI 长期全红、Perf Nightly 0 次（2026-11-13 核查）。发布以本地门禁为准，见 [release-checklist](../release-checklist.md)。

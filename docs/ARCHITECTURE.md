@@ -22,7 +22,7 @@ vendor（10）
 启动流程在 [app.js](file:///d:/os/proj/js/plotpin/js/core/app.js)：
 
 1. 探测运行时能力（IndexedDB、Service Worker）。
-2. `loadSavedProject()` 收集三份候选——IndexedDB `current`、localStorage 草稿、`plotpin.rescue.draft` 救援副本——按 `meta.updatedAt` 择优；损坏候选保留原文供导出，不用空工程覆盖。
+2. `loadSavedProject()` 收集四类候选——IndexedDB `current`、localStorage 草稿、`plotpin.rescue.draft` 救援副本、协作待提交（同机多标签）——按 `meta.updatedAt` 择优；损坏候选保留原文供导出，不用空工程覆盖。
 3. 注册同工程多标签编辑租约（`tab-lease.js`），显示加载审计横幅。
 4. 没有已保存工程时才用本机设置兜底；加载产品目录。
 5. 设置语言 → `I18N.apply` → `afterStateLoaded()` → `resizeCanvas()` → 首次进入时 `fitView()`。
@@ -54,10 +54,10 @@ vendor（10）
 
 | 项 | 数量 | 说明 |
 |---|---|---|
-| `core → features` 引用 | 21 条（文件+符号，合计 86 次） | 历史反向调用，不能新增，只能逐条下调 |
+| `core → features` 引用 | 25 条（文件+符号，合计 106 次） | 历史反向调用，不能新增，只能逐条下调 |
 | `common → core` 引用 | 3 条 | `merge.js` 读 `SETTINGS_KEYS` / `TITLE_BLOCK_FIELDS`，`qr.js` 调 `ensureVendor`；已知违规 |
-| 软调用 | 12 条 | `required 5 / host 2 / optional 4 / param 1` |
-| 必需钩子 | 6 个提供方 / 6 个调用点 / 6 个必需 | 启动首行 `assertHooksReady()` 校验 |
+| 软调用 | 13 条 | `required 5 / host 2 / optional 5 / param 1` |
+| 必需钩子 | 11 个提供方 / 11 个调用点 / 6 个必需 | 启动首行 `assertHooksReady()` 校验 |
 
 **为什么用次数而不是行号**：行号会随注释、空行、格式化漂移，基线一改就全员重录，最后只能不断放宽；`文件+符号+次数` 只在你真的新增/删除一处跨层调用时变化，能稳定回答“这次有没有加重耦合”。**不要引用审计报告里的旧行号**，以代码和 `contracts/coupling.json` 为准。
 
@@ -181,7 +181,7 @@ s2w(p) = [(p.x - panX) / zoom + frame.minX, frame.maxY - (p.y - panY) / zoom]
 
 - 主存是 IndexedDB `offline_drawing_annotation`；localStorage 只做草稿兜底与设置。**不是** `plotpin` 数据库（审计报告中的旧键名已过时，以代码为准）。
 - 保存是 450ms 防抖 + 串行写链；失败按 `quota / idb / 瞬时` 分类，瞬时错误 1s/3s/9s 重试三次。
-- 加载按三候选择优，损坏候选转救援副本，不覆盖用户数据。
+- 加载按四类候选择优，损坏候选转救援副本，不覆盖用户数据。
 - 离线协作无服务器：同机多标签 `BroadcastChannel`（前缀 `plotpin-collab-`），跨设备 WebRTC DataChannel；邀请串 `PLOTPIN-COLLAB:1:...` 手工交换。
 - 合并是纯函数 `mergeProjectData(currentRaw, incomingRaw)`：对象按 id 并集，冲突按 `updatedAt` 较新者胜，同刻按稳定 JSON 字典序；删除用墓碑传播；楼层、场地、图层、类型各有独立规则。
 - **M2 新增配置差异报告**：`mergeProjectData` 返回 `{project, stats, config}`；`config` 统计本地优先导致“远端配置未采纳（kept）”和“远端独有已补缺（adopted）”，不改变合并结果。`mergeProjectJSON` 仅在报告非空时把它挂到 `stats.config`，空报告不加键，避免破坏既有深比较。界面通过 `mergeConfigText()` 在协作状态栏、冲突提示、手动合并 toast 显示；报告异常只降级为 `config.error`，不阻断合并。
@@ -236,7 +236,7 @@ s2w(p) = [(p.x - panX) / zoom + frame.minX, frame.maxY - (p.y - panY) / zoom]
 | 协作隔离 | 工程 `pid` 隔离 + 跨工程消息丢弃计数；不是安全边界，只是防串工程 | `collab.js` |
 | 插件沙箱 | Worker + 能力白名单 + 删除网络/存储/通信全局 + 2s 超时 | 代码可证；沙箱不是浏览器进程级隔离，受信任同源路径仍拥有页面权限 |
 | 导入 | JSON/SVG/CSV/DXF/PDF 都有清洗与上限；异常结构不覆盖当前工程 | `persistence.js`、`io-import.js`、`plugins.js` |
-| 数据持久性 | 三候选加载、救援副本、保存失败可见、租约防多标签覆盖 | `persistence.js`、`tab-lease.js` |
+| 数据持久性 | 四类候选加载、救援副本、保存失败可见、租约防多标签覆盖 | `persistence.js`、`tab-lease.js` |
 | 浏览器 | **当前可复跑的自动化证据只有 Chromium**；Firefox/WebKit/Safari 未在本次重写中复跑 | `playwright.config.mjs` 默认 `browserName:'chromium'`；`e2e.mjs` 只校验 Chromium 二进制 |
 
 **不要把“局域网临时协作”写成“安全协作”**：无认证、无授权、无审计；只适合可信网络内的临时交换。

@@ -41,7 +41,7 @@ node scripts/check-discipline.mjs --strict
 | 体积上限与预警线 | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES\|GZIP_\|MARGIN_'` | `scripts/lib/budget.mjs` 常量 | **唯一来源**；`dist-manifest.json` 的 `maxBytes` 必须与它一致（`build.mjs --check` 守这条） |
 | Service Worker 版本 | `node scripts/check-sw.mjs` | `sw.js` 的 `VERSION` + `scripts/sw-inputs.sha256` | 预缓存输入变了而版本没升，此命令必红 |
 | 契约违约数 | `node scripts/check-contracts.mjs` | `contracts/conventions.json` | 看「N 项核对」与「0 违约」，N 不能是 0（空跑曾是假绿） |
-| 耦合 / 钩子基线 | `node scripts/check.mjs`（9.2～9.4） | `contracts/coupling.json` + `REQUIRED_HOOKS` | 计数必须**严格相等**：`core→features` 21、`common→core` 3、软调用 12、必需钩子 6/6；只减不增，新增即红 |
+| 耦合 / 钩子基线 | `node scripts/check.mjs`（9.2～9.4） | `contracts/coupling.json` + `REQUIRED_HOOKS` | 计数必须**严格相等**：`core→features` 25、`common→core` 3、软调用 13、必需钩子 11 提供方 / 11 调用点 / 6 必需；只减不增，新增即红 |
 | 状态写入口 | `node scripts/check.mjs`（9.1） | `state = ...` 扫描 | 只允许 `model.js` 声明与 `persistence.js` 的 `replaceState()`；绕过入口即红 |
 | 插件 API 面 | `node scripts/check-plugin-api.mjs` | `contracts/plugin-api.json` ↔ `PlotPin` 顶层键 | 泄漏数、落空数都必须为 0 |
 | 第三方依赖锁 | `node scripts/check-ngm.mjs` | `ngm.vendor/**` 实际字节 + `ngm.lock` | 改过 vendor 或重新 lock 后必跑 |
@@ -123,7 +123,7 @@ Remove-Item Env:E2E_ENTRY; Remove-Item Env:E2E_PORT
 它做的事：
 
 1. 在系统临时目录复制整仓，先要求**未破坏副本**上的同批判据全绿（正面基线）；
-2. 再对 17 种人为破坏各复制一份副本、破坏、跑对应门禁，断言**退出码非 0 且输出命中目标关键字**；
+2. 再对 19 种人为破坏各复制一份副本、破坏、跑对应门禁，断言**退出码非 0 且输出命中目标关键字**；
 3. 仓库本身一字节不动。
 
 这正是“门禁可信”的样板：**先构造反例，再证明它会红**；没有正面基线，“变红”可能只是环境坏了。
@@ -132,7 +132,7 @@ Remove-Item Env:E2E_ENTRY; Remove-Item Env:E2E_PORT
 node scripts/check-gates.mjs
 ```
 
-读数含义：正面基线必须全部 ✓，17 种破坏必须全部 ✓（退出码非 0 + 命中关键字）；任一 ✗ 即失败。
+读数含义：正面基线（10 条）必须全部 ✓，19 种破坏必须全部 ✓（退出码非 0 + 命中关键字）；任一 ✗ 即失败。
 局限：只覆盖已登记的破坏类型；**新增判据不会自动获得牙齿**——[engineering](engineering.md)§9 要求每条新判据配一颗牙齿。
 
 ### 3.2 人自己做一次（约 10 分钟）

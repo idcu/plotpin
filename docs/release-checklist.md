@@ -2,27 +2,29 @@
 
 > **Actions 在跑但全红，不作发布门禁。** `.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行
 > （2026-11-13 核查：CI 60 次全部失败、`Perf Nightly` 0 次、`pages-build-deployment` 87 次），**不能**当作自动校验。
+> 2026-11-14 已修掉 `test` job 缺 `npm ci` 的结构性全红根因（详见 `ci.yml` 步骤注释），修复后尚未复跑 Actions 核对。
 > 每次发布/合并前必须在本机逐条执行并**核对数字**，不能只看退出码。
-> **基线与快照日期：2026-11-13**（提交 `2123a46` + 工作树 M1/M2 修复）。数字以命令现场输出为准；本文快照只用于判断“是否同一次合法变化”。
+> **基线与快照日期：2026-11-14**（A 阶段工作树：CSP 双向比对、CI 依赖安装、golden 双变量、perf 多轮取最小、门禁牙齿 19 样本）。数字以命令现场输出为准；本文快照只用于判断“是否同一次合法变化”。
 
 ## 1. 必跑（缺一不可）
 
-| # | 命令 | 期望（2026-11-13 快照） |
+| # | 命令 | 期望（2026-11-14 快照） |
 |---|---|---|
-| 1 | `npm run ci` | exit 0。内含 `check.mjs --selftest`（**4,048 通过 / 0 失败**，加载 **47** 个脚本）、`bench.mjs`（阈值全绿）、`build.mjs --check`（**756,594 B / 738.9 KB ≤ 839,680 B**，gzip **245,937 B / 240.2 KB ≤ 286,720 B**，余量 **83,086 B（gzip 40,783 B）**，SHA256 与 `scripts/dist-manifest.json` 一致，二次构建同哈希）、`check-gates.mjs`（正面基线全 ✓ + **17 种**破坏全 ✓） |
+| 1 | `npm run ci` | exit 0。单条命令覆盖 11 步（2026-11-14 收口复跑 exit 0，基线 10/10 + 破坏 19/19）：`check.mjs --selftest`（**4,136 通过 / 0 失败**，加载 **47** 个脚本）→ `check-ngm` → `check-sw` → `check-contracts` → `check-plugin-api` → `i18n-scan --check` → `check-discipline --strict` → `check-deletions` → `bench.mjs`（阈值全绿）→ `build.mjs --check`（**764,936 B ≤ 839,680 B**，gzip **249,291 B ≤ 286,720 B**，SHA256 `97ea1025…` 与 `scripts/dist-manifest.json` 一致，二次构建同哈希）→ `check-gates.mjs`（正面基线 **10 条**全 ✓ + **19 种**破坏全 ✓） |
 | 2 | `node scripts/check-contracts.mjs` | `contracts: 11 项核对，0 处违约` |
 | 3 | `node scripts/check-plugin-api.mjs` | `24 个键，清单 24 条，0 处泄漏，0 处落空`；API 1.1.0 / 8 项能力 |
-| 4 | `node scripts/check-sw.mjs` | `VERSION=200`，52 个预缓存输入与 `scripts/sw-inputs.sha256` 一致；`VERSION` 支持单/双/无引号三种写法；改预缓存输入必须先 bump `VERSION` 再 `--update` |
-| 5 | `node scripts/e2e.mjs`（源码入口 4173） | 2026-11-13 实跑 **154 passed / 0 failed / 1 skipped，exit 0**（跳过的 1 条为需 `COLLAB_SOAK=1` 的协作 soak）；本次文档同步未复跑，发布前必须重跑并保留日志 |
-| 6 | `$env:E2E_ENTRY='dist'; $env:E2E_PORT='4174'; node scripts/e2e.mjs`（dist 入口） | 2026-11-13 本次只跑渲染专项：`perf-render` **4 passed**；全量 dist 套件未复跑，发布前必须补跑（含 `sw.spec` 单文件版豁免）；执行后清理两个环境变量 |
-| 7 | `node scripts/badge.mjs --check` | exit 0：README 三处断言锚点一致（当前 4048），且 facts/testing/engineering/modules 计数锚点全部等于实测 |
+| 4 | `node scripts/check-sw.mjs` | `VERSION=241`，53 个预缓存输入与 `scripts/sw-inputs.sha256` 一致；`VERSION` 支持单/双/无引号三种写法；改预缓存输入必须先 bump `VERSION` 再 `--update` |
+| 5 | `node scripts/e2e.mjs`（源码入口 4173） | **2026-11-14 收口全量实跑 175 passed / 0 failed / 1 skipped，exit 0（4.4m / 266s）**。跳过 1 条为需 `COLLAB_SOAK=1` 的 5 分钟离线浸泡；已按显式开关单独执行 `COLLAB_SOAK=1 node scripts/e2e.mjs tests/e2e/collab.spec.mjs -g "离线 5 分钟真实浸泡"` → **1 passed / 0 failed（5.1m / 305s，exit 0）**，重连后本地新增对象 `OBJ_SOAK` 未丢。发布前重跑并保留日志 |
+| 6 | `$env:E2E_ENTRY='dist'; $env:E2E_PORT='4174'; node scripts/e2e.mjs`（dist 入口） | **2026-11-14 收口全量实跑 172 passed / 0 failed / 4 skipped，exit 0（3.5m / 208s）**。4 条跳过均有显式原因：`sw.spec` 1 条 + `sw-atomic.spec` 2 条（单文件发行版无 SW 预缓存输入，源码入口已通过）、协作浸泡 1 条需 `COLLAB_SOAK=1`；执行后清理两个环境变量 |
+| 7 | `node scripts/badge.mjs --check` | exit 0：README 三处断言锚点一致（当前 4254），且 facts/testing/engineering/modules 计数锚点全部等于实测 |
 | 8 | `node scripts/check-discipline.mjs --strict` | **13/13 → L4**，exit 0；文档 17 篇，命令全部可解析 |
 | 9 | `node scripts/size-report.mjs` | 打印 raw / gzip / 余量；必须与第 1 条同一次构建的数字一致 |
 | 10 | `node scripts/check-deletions.mjs` | exit 0；`docs/deletions.md` 记录完整，且记录路径不在 `git ls-files` 中 |
-| 11 | `node scripts/i18n-scan.mjs --check` | 覆盖率 **44.09% = 731 / 1,658**（按出现次数）≥40%，缺口 **0** ≤10，UI 硬编码 **18** ≤20（全仓未走入口 **927**，UI 18 只是其子集；已字典待接入 **81** ≤81），模板内 =0。口径见 [engineering](engineering.md)§4.6；旧 46.7% 去重口径不再使用 |
+| 11 | `node scripts/i18n-scan.mjs --check` | 覆盖率 **44.92% = 756 / 1,683**（按出现次数）≥40%，缺口 **0** ≤10，UI 硬编码 **18** ≤20（全仓未走入口 **926**，UI 18 只是其子集；已字典待接入 **76** ≤76），模板内 =0。口径见 [engineering](engineering.md)§4.6；旧 46.7% 去重口径不再使用 |
 
-`node scripts/check-ngm.mjs`（vendor ↔ `ngm.json` ↔ `ngm.lock` ↔ 实际字节）不在 `npm run ci` 内，
-但改动 `ngm.vendor/**` 或锁文件时必须单独跑，期望 `0 error(s)`。
+第 2/3/4/8/10/11 条**已并入 `npm run ci`**（第 1 条），单列只是失败时用来定位到具体判据；不要因为它们单独绿就跳过第 1 条。
+`npm run ci:full` = `npm run ci && npm run test:e2e`（含源码入口 e2e），发布前用它覆盖「离线门禁 + 浏览器用例」。
+`check-ngm` 也已在 `npm run ci` 内；只改了 `ngm.vendor/**` 或锁文件时，可单跑它快速定位，期望 `0 error(s)`。
 
 ## 2. 按改动类型追加
 
@@ -33,12 +35,12 @@
 | 渲染 / 历史栈 / 覆盖率 / 规则 | `node scripts/bench.mjs`；渲染改动再加 `node scripts/perf-browser.mjs` | Node 阈值全绿；浏览器基线四组均过门禁 |
 | 导出/打印/图框 | 人工打开产物核对（PDF 页数/页序、CSV/XLSX 可打开、DXF 在 CAD 中可读） | 见 [manual-acceptance](manual-acceptance.md) |
 | 文档 | `node scripts/check-discipline.mjs --strict` + `node scripts/badge.mjs --check` | 13/13；计数锚点一致 |
-| 跨浏览器声明 | **没有可复跑的非 Chromium 入口**：`scripts/e2e.mjs` 只校验 Chromium，`playwright.config.mjs` 固定 `chromium` | 不得用 `--browser=firefox` 宣称通过；只能按 [manual-acceptance](manual-acceptance.md) M2 记录“未验证/历史手工记录” |
+| 跨浏览器声明 | `node scripts/e2e.mjs --browser=firefox …`（5 条核心，见 [testing](testing.md)§3.4） | **非门禁证据**：只能引用实际跑过的 5 条与逐条读数；其余 163 条未验证，不得写成“Firefox 已支持”；缺二进制时脚本退 **2**，跳过 ≠ 通过 |
 
 ## 3. 失败处理
 
 - **红了不发**：不得放宽阈值、删除断言、跳过用例来“转绿”；先修因，再复跑整条清单。
-- **跳过 ≠ 通过**：`scripts/e2e.mjs` 缺 Playwright/Chromium 时退 **2**（不是 0），必须补依赖重跑。
+- **跳过 ≠ 通过**：`scripts/e2e.mjs` 缺 Playwright 或目标浏览器二进制时退 **2**（不是 0），必须补依赖重跑。
 - **数字对不上也不发**：退出码 0 但产物字节、断言数、gzip、余量与上表不符时，先确认是否同一次提交内的合法变化，并把新基线同批写进 [facts](facts.md)。
 - 记录方式：发布说明里贴每条命令的退出码与关键数字（至少第 1、5、6、8 条），不要只贴结论句。
 
@@ -83,7 +85,7 @@ git -c credential.helper= -c credential.helper="!gh auth git-credential" push gi
 | # | 检查 | 期望 |
 |---|---|---|
 | 1 | `Invoke-WebRequest https://idcu.github.io/plotpin/` | HTTP 200；页面为源码入口 `index.html`，标题「图钉 PlotPin · 离线图纸标注工具」 |
-| 2 | 线上 `sw.js` 的 `VERSION` | 以本地 `node scripts/check-sw.mjs` 输出为基准（2026-11-13 本地快照为 `193`）；线上若仍是旧值，说明本次推送尚未生效，不是本地数字错 |
+| 2 | 线上 `sw.js` 的 `VERSION` | 以本地 `node scripts/check-sw.mjs` 输出为基准（2026-11-14 本地快照为 `202`）；线上若仍是旧值，说明本次推送尚未生效，不是本地数字错 |
 | 3 | 关键文件哈希 | 逐一下载 `index.html`、`sw.js`、`js/core/persistence.js` 与本地同名文件比 SHA256，应全部一致 |
 | 4 | 本次改动文件哈希（只改文档时必做） | 例如 `docs/release-checklist.md` 的线上哈希应等于本地；否则说明构建仍是上一版 |
 | 5 | `gh api repos/idcu/plotpin/pages/builds/latest` | `status: "built"`、`commit` 等于本次推送的 SHA、`error.message` 为 null；`duration` 单位是毫秒 |

@@ -4,11 +4,11 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-4048%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-4254%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 
 PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量与标注尺寸，并把图纸和台账导出为常见格式。运行时不安装、不连服务器、不依赖网络；入口是根目录的 `index.html`，托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-当前共 **4048 项断言全部通过**。
+当前共 **4254 项断言全部通过**。
 
 > 文档口径：行为以代码为准。本文只做入口索引；易漂移的数字统一放 [docs/facts.md](docs/facts.md)，正文只给命令或带日期的快照。最后核对：2026-11-13（基线 `2123a46` + 工作区 M1/M2 修复）。
 
@@ -71,7 +71,7 @@ npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实 Chromium e2e（需先装 Playwright）
 npm run perf:browser  # 真实 Chromium 性能基线（可选）
 npm run discipline    # 方法论自检看板
-# 4048 assertions, no dependencies
+# 4254 assertions, no dependencies
 ```
 
 `node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、状态写入口 / 跨层耦合计数 / 必需钩子配对 / 软调用登记（第 9 步拆为 9.1～9.4）、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。
@@ -98,7 +98,7 @@ js/features/               特性层：UI、导入导出、规则、协作、插
 ngm.vendor/                @idcu/* 源码形式的第三方能力（10 个直接加载，另有 1 个间接依赖）
 ngm.json / ngm.lock / .ngm-version
                            第三方依赖声明、字节锁与工具链版本
-scripts/                   零依赖工程脚本（19 个 .mjs + lib/ 3 个 + dist-manifest.json）
+scripts/                   零依赖工程脚本（19 个 .mjs + lib/ 4 个 + 3 个数据文件）
 tests/                     e2e / fixtures / golden / perf（65 个文件）
 contracts/                 可机器校验的约定（插件 API、适配器、工程约定）
 docs/                      架构、数据模型、模块、特性、用户、工程、测试、性能、问题、验收、运维与计划

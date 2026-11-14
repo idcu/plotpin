@@ -91,16 +91,16 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 
 ## 3. 浏览器支持与证据口径
 
-**结论：当前可复跑的自动化入口与证据只有 Chromium。** 不要写成“Firefox 已通过”或“现代浏览器均支持”。
+**结论：默认门禁与全量证据只有 Chromium。** Firefox 只保留 5 条核心的可复跑证据（非门禁、非支持承诺），不要写成“Firefox 已通过”或“现代浏览器均支持”。
 
 | 内核 | 当前证据 | 口径 |
 |---|---|---|
-| Chromium | `playwright.config.mjs` 默认 `browserName:'chromium'`；`scripts/e2e.mjs` 只校验 Chromium 二进制；本地记录源码 154 passed / 1 skipped（2026-11-13）；dist 本次只跑 `perf-render` 4 passed，全量未复跑 | **支持目标**；发布前以本地实跑日志为准 |
-| Firefox | 旧文档曾记录 2026-11-13 全量跑通；仓库内没有留存运行产物，本次重写未复跑 | **历史记录，未验证**；不得作为“已支持”证据 |
+| Chromium | `playwright.config.mjs` 默认 `browserName:'chromium'`；`scripts/e2e.mjs` 默认校验 Chromium 二进制；2026-11-14 全量实跑源码 167 passed / 1 skipped、dist 164 passed / 4 skipped（跳过项均为显式条件） | **支持目标**；发布前以本地实跑日志为准 |
+| Firefox | 2026-11-14 用本机 Playwright Firefox 实跑 5 条核心：5 passed / 11.3s，命令与逐条读数见 [testing](testing.md)§3.4；其余 163 条未跑 | **非门禁证据，不构成支持承诺**；未跑的不得写成已支持 |
 | WebKit（Windows） | 旧文档记录过进程级崩溃（`code=134` / `0xC0000409`），失败不跟 spec 走 | **不作支持目标**；Windows WebKit 不是 Safari 等价物 |
 | Safari 17+ | 未验证 | 需 macOS 真机或真机 CI；仓库内无证据 |
 
-跳过项（历史记录）：协作 soak（需 `COLLAB_SOAK=1`）、dist 入口的 `sw.spec`（单文件发行版无 SW）、非 Chromium 下的 B-10 真实堆用例（CDP 通道）。
+跳过项（历史记录）：协作 soak（需 `COLLAB_SOAK=1`）、dist 入口的 `sw.spec` / `sw-atomic.spec`（单文件发行版无 SW）、非 Chromium 下的 B-10 真实堆用例（CDP 通道）。
 
 `file://` 历史实测值（Chromium）：IndexedDB `readwrite-ok`；PDF/CSV 下载可用；dist 仅 1 条 `sha256`，注入内联脚本被拦；`navigator.serviceWorker` 存在但产品按协议置 `sw=false`。这些是历史记录，不是本次重跑结果。
 
@@ -109,14 +109,24 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 ### 4.1 总闸与命令
 
 ```text
-npm run ci  =  node scripts/check.mjs --selftest
-            && node scripts/bench.mjs
-            && node scripts/build.mjs --check
-            && node scripts/check-gates.mjs
+npm run ci       =  node scripts/check.mjs --selftest
+                  && node scripts/check-ngm.mjs
+                  && node scripts/check-sw.mjs
+                  && node scripts/check-contracts.mjs
+                  && node scripts/check-plugin-api.mjs
+                  && node scripts/i18n-scan.mjs --check
+                  && node scripts/check-discipline.mjs --strict
+                  && node scripts/check-deletions.mjs
+                  && node scripts/bench.mjs
+                  && node scripts/build.mjs --check
+                  && node scripts/check-gates.mjs
+
+npm run ci:full  =  npm run ci && npm run test:e2e
 ```
 
 > **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行——CI 60 次运行全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次。
 > 因此 Actions **在跑但全红，不作发布门禁**；下表的“ci.yml 定义中的归属”只表示判据由哪个 job 承担，不代表已绿或可依赖。发布以本地门禁为准。
+> 2026-11-14 已定位并修掉 `test` job 的结构性全红根因（缺 `npm ci` → 无 terser / 无 node_modules，见 `ci.yml` 步骤注释）；修复后尚未复跑 Actions 核对。
 
 | 命令 | 作用 | 在 `npm run ci` | `ci.yml` 定义中的归属 |
 |---|---|---|---|
@@ -127,12 +137,12 @@ npm run ci  =  node scripts/check.mjs --selftest
 | `node scripts/check-sw.mjs` | 预缓存输入指纹 ↔ 提交入库的 `scripts/sw-inputs.sha256` | 经总闸 | `test` job（独立步骤） |
 | `node scripts/bench.mjs` | Node 桩渲染/覆盖率/规则/符号阈值 | 是 | `test` job |
 | `node scripts/build.mjs --check` | 单文件产物重建与登记比对 | 是 | `test` job |
-| `node scripts/check-gates.mjs` | 正面基线 + 17 种人为破坏 | 是 | `test` job |
-| `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **否** | 独立 `vendor-check` job |
-| `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 否 | 独立 `discipline` job |
-| `node scripts/e2e.mjs` | Chromium 功能 e2e（45 spec / 151 用例；本次未复跑） | 否 | 独立 `e2e` job，matrix 双入口；**已运行且失败（2026-11-13），不作发布门禁** |
+| `node scripts/check-gates.mjs` | 正面基线 10 条 + 19 种人为破坏 | 是 | `test` job |
+| `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **是（2026-11-14 起并入 `npm run ci`）** | 独立 `vendor-check` job（Actions 侧） |
+| `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 是（2026-11-14 起） | 独立 `discipline` job（Actions 侧） |
+| `node scripts/e2e.mjs` | Chromium 功能 e2e（46 spec / 166 用例；2026-11-14 本地双入口全量已复跑） | 否（`npm run ci:full` 才含） | 独立 `e2e` job，matrix 双入口；**远端已运行且失败（2026-11-13），不作发布门禁** |
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI；`perf-nightly.yml` 夜间定时 + 手动，读数上传 artifact；**schedule 已挂载但尚未触发（0 次）** |
-| `node scripts/i18n-scan.mjs --check` | i18n 覆盖率 44.09%（按出现次数）/缺口/硬编码 | 仅经 `--selftest` 第 11 步 | 随 `test` job |
+| `node scripts/i18n-scan.mjs --check` | i18n 覆盖率 44.12%（按出现次数）/缺口/硬编码 | 是（`npm run ci` 独立步骤；Actions 侧经 `check.mjs` 第 11 步） | 随 `test` job |
 
 vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件算 sha256，与 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会本地红。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。`moduleDigest` 由 ngm 二进制生成、算法未公开，本机无 ngm 工具链，**无法重算**；相关模块的 `moduleDigest` 仍未刷新，启用 `ngm verify --deep` 前需先重新锁定。
 
@@ -149,9 +159,9 @@ vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件�
 | 7 | 插件 API 面 | 总是 | `check-plugin-api.mjs`：`PlotPin` 顶层键 ↔ 契约双向一致 |
 | 8 | 删除账本 | 总是 | `check-deletions.mjs`：`docs/deletions.md` 字段齐全、能抓假删除 |
 | 9.1 | 状态写入口 | 总是 | `state = ...` 只允许出现在 `model.js` 的 `let state` 声明与 `persistence.js` 的 `replaceState()` 内；`scripts/**` 仅放行显式夹具 |
-| 9.2 | 跨层耦合计数 | 总是 | `contracts/coupling.json` 按“文件+符号+次数”严格相等；`core → features` 21 条、`common → core` 3 条，只减不增 |
+| 9.2 | 跨层耦合计数 | 总是 | `contracts/coupling.json` 按“文件+符号+次数”严格相等；`core → features` 25 条、`common → core` 3 条，只减不增 |
 | 9.3 | 钩子配对 | 总是 | `callHook ↔ registerHook` 一一配对；6 个 `REQUIRED_HOOKS` 必须同时有提供方与调用点；重复/非函数注册也算违约 |
-| 9.4 | 软调用登记 | 总是 | `typeof X==='function'` 形式必须按 `required / host / optional / param` 分类登记；当前 12 条（5/2/4/1），次数严格相等、只减不增 |
+| 9.4 | 软调用登记 | 总是 | `typeof X==='function'` 形式必须按 `required / host / optional / param` 分类登记；当前 13 条（5/2/5/1），次数严格相等、只减不增 |
 | 10 | 逻辑层自测 | 仅 `--selftest` | 执行 `scripts/selftest.mjs`，退出码纳入门禁 |
 | 11 | i18n | 仅 `--selftest` | 覆盖率 ≥40%（2026-11-13 实测 44.09%，按出现次数逐次判定）、缺口 ≤10（当前 0）、UI 硬编码 ≤20、已字典待接入 ≤81、模板内 UI 文案 =0 |
 | 12 | SW 缓存版本 | 总是 | 预缓存输入内容指纹必须与 `scripts/sw-inputs.sha256` 一致，清单 `version` 等于 `sw.js` 的 `VERSION` |
@@ -194,11 +204,11 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 ### 4.4 门禁牙齿（`check-gates.mjs`）
 
-在系统临时目录整仓副本里先跑**正面基线**（未破坏副本必须全绿），再构造 **17 种**破坏，断言对应门禁非 0 退出且输出命中目标错误关键字；仓库本身一个字节不改。脚本头注释仍写着旧数字 14，以 `scenarios` 数组长度（17）为准。
+在系统临时目录整仓副本里先跑**正面基线**（10 条，未破坏副本必须全绿），再构造 **19 种**破坏，断言对应门禁非 0 退出且输出命中目标错误关键字；仓库本身一个字节不改。脚本头注释与 `scenarios` 数组长度一致（19）；全量本机约 4–5 分钟，可用 `--only` 分批跑。
 
 | # | 破坏 | 期望变红的门禁 |
 |---|---|---|
-| 0 | （正面基线）未破坏副本 | `check.mjs --selftest`、`check-sw.mjs`、`check-plugin-api.mjs`、`check-ngm.mjs`、`badge.mjs --check`、`i18n-scan.mjs --check` 必须全 0 |
+| 0 | （正面基线）未破坏副本 | `check.mjs --selftest`、`check-sw.mjs`、`check-plugin-api.mjs`、`check-ngm.mjs`、`badge.mjs --check`、`i18n-scan.mjs --check`、`build.mjs --check`、`check-deletions.mjs`、`check-discipline.mjs --strict`、`i18n-scan.mjs --json --check` 必须全 0 |
 | 1 | 渲染入口注入 4 ms 忙等（平均帧仍达标） | `bench.mjs`（P95） |
 | 2 | `dist` 产物追加一行 | `build.mjs --check` |
 | 3 | 删除 `ngm.json` | `check-ngm.mjs` |
@@ -216,6 +226,8 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 15 | 新增一条未登记的 `core → features` 调用 | `check.mjs`（9.2 耦合计数严格相等） |
 | 16 | 新增一条未分类的 `typeof … === 'function'` 软调用 | `check.mjs`（9.4 软调用登记） |
 | 17 | 删除一个必需钩子的注册 | `check.mjs`（9.3 钩子配对） |
+| 18 | CSP 内联脚本哈希与脚本体错位（条数不变） | `build.mjs --check`（`CSP 哈希值与脚本体不匹配`） |
+| 19 | i18n 覆盖率跌破阈值（追加 220 条未字典化中文） | `i18n-scan.mjs --json --check`（同时验证 JSON 模式退出码） |
 
 一条从未红过的判据不算成立；新增判据必须同时准备可构造的负例（`--selftest` 或本脚本）。
 
@@ -233,7 +245,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 钩子配对（9.3） | 保证“提供方/调用点成对”，不保证钩子实现体不反向依赖其他层 |
 | `e2e` | GitHub Actions 上已执行且失败，不能作为回归依据。本地命令：`node scripts/e2e.mjs`（源码）与 `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（dist）；缺 Playwright/Chromium 时打印 `[SKIP]` 并退 2，不伪装通过 |
 | `perf:browser` | 不在 `npm run ci`；`perf-nightly.yml` 的 `schedule` 已挂载但尚未触发（0 次）；本机为 SwiftShader，数据不能当真实 GPU 结论 |
-| `npm run ci` | 不含 `check-ngm`、`check-discipline`、e2e、perf；不要用“本地 ci 绿”代替全部门禁 |
+| `npm run ci` | 11 步：selftest → check-ngm → check-sw → check-contracts → check-plugin-api → i18n-scan → check-discipline --strict → check-deletions → bench → build --check → check-gates；不含 e2e、perf-browser；`ci:full` 才加 e2e。不要用“本地 ci 绿”代替浏览器 e2e 与真机结论 |
 | 本地纪律 | Actions 在跑但全红，等于没有“干净检出上的强制回归”；漏跑、跑一半、看到红仍合并都只能靠人工约束 |
 
 ### 4.6 i18n 数字口径：三个数不是同一个分母
@@ -296,10 +308,10 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 | 字段 | 当前基线（2026-11-13） | 规则 |
 |---|---|---|
-| `coreToFeatures` | 21 条 | 实际计数必须与登记**严格相等**；只允许删除或下调次数，不允许新增/上调 |
+| `coreToFeatures` | 25 条 | 实际计数必须与登记**严格相等**；只允许删除或下调次数，不允许新增/上调 |
 | `commonToCore` | 3 条 | 已知违规（`merge.js` 读设置键、`qr.js` 取 vendor），同样只减不增 |
-| `softCalls` | 12 条 | 按 `required(5) / host(2) / optional(4) / param(1)` 分类；新增必须带理由 |
-| 必需钩子 | 6 个 | 定义在 `js/core/config.js` 的 `REQUIRED_HOOKS`；9.3 校验提供方与调用点各 6 |
+| `softCalls` | 13 条 | 按 `required(5) / host(2) / optional(5) / param(1)` 分类；新增必须带理由 |
+| 必需钩子 | 11 个提供方 / 11 个调用点 / 6 个必需 | 定义在 `js/core/config.js` 的 `REQUIRED_HOOKS`；9.3 校验提供方与调用点各 11、必需项 6 |
 
 **为什么不用行号**：行号随注释、空行、格式化漂移，会导致基线频繁失效并被“顺手放宽”；次数只在真实增删调用时变化。**审计报告里的软调用表行号已漂移，不要沿用**；要定位实现，按 `coupling.json` 的文件+符号在代码里搜。
 

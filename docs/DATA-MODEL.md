@@ -49,7 +49,7 @@ state = {
 - 尺寸标注用 `kind:'dimension'` + `points/subtype`。
 - **多边形状**：`shape.type==='polygon'`，顶点存世界坐标；面积/周长/命中/标签中心/捕捉包围盒都按点集处理（M1 修复）。旋转手柄对 polygon 无定义；`sanitizeAreaShape` 不接受 polygon，因此只能来自异常或外部写入。
 
-对象编号 `name`（如 `O-001`）由编号作用域分配；导入时重名走重编号，不覆盖现有对象。
+对象编号 `name`（如 `O0001`）由编号作用域分配；导入时重名走重编号，不覆盖现有对象。
 
 ### 1.3 双槽位：`background` 与 `site`
 
@@ -258,3 +258,37 @@ state = {
 - 多边形状的捕捉候选仍按 `rectPoints` 生成；`sanitizeAreaShape` 不接受 polygon。
 - 图片自身变换只支持 2×3 仿射，不支持四角透视。
 - 保存失败时 localStorage 容量有限；大工程/大照片可能降级失败，必须导出 JSON 备份。
+
+## 13. 带宽/存储估算（G3，无 schema 变更）
+
+- 估算输入（编码/分辨率/帧率/码流/路数/天数/写入小时/冗余）只存在于弹窗会话内，不写入 `state`、`settings`、工程记录、撤销栈、协作载荷或 JSON 导出。
+- 不改 `SCHEMA`、不改 IndexedDB 数据库版本与对象存储键布局；刷新/重开工程后估算输入不保留，属预期行为。
+- 码率与容量由 `js/features/io-fields.js` 的字段表与纯函数 `bwEst()` 推导；G3 不新增导出产物，工程导出链路零改动。
+
+## 14. 布线/线缆统计（G4，无 schema 变更）
+
+- 统计输入（模式/端点预留/弯曲余量）只存在于弹窗会话内，不写入 `state`、`settings`、工程记录、撤销栈、协作载荷或 JSON 导出。
+- 不新增对象类型、不改 `SCHEMA`、不改 IndexedDB 数据库版本与对象存储键布局；只读取当前楼层的 `line`/`point` 对象已有几何。
+- 长度由 `js/features/io-fields.js` 的纯函数 `wireStats()` 推导（复用 `objectLength()`/`dist()`）；G4 不新增导出产物，工程导出链路零改动。
+
+## 15. 本地只读（G5，无 schema 变更）
+
+- 只读是**运行时会话状态**（`js/core/persistence.js` 的模块变量 `readOnly`，经 `isReadOnly()/setReadOnly()` 读写），不是工程属性、不是权限位，也不代表访问控制。
+- 不写入 `state`、`settings`、工程 JSON、IndexedDB、撤销栈或协作载荷；不改 `SCHEMA`、数据库版本与存储键布局。若后续把开关持久化到 `localStorage` 作本机偏好，也必须与工程无关。
+- 刷新或重开页面后默认**可编辑**（`readOnly=false`）；只读只锁本端写入入口，协作对端仍可修改本工程并经远端应用落盘。
+
+## 16. 评论/批注（G6，无 schema 变更）
+
+- 独立存储：`localStorage['plotpin.comments.v1.<owner>']`，记录 `{v:1,comments:[{id,objectId,floorId,text,createdAt,updatedAt}]}`；**不写入工程 JSON、`proj:<id>`、`current` 或 IDB 资产库**，不改 `SCHEMA`、`DB_VERSION` 与键布局。
+- 归属：`owner = state.meta.projectId || state.meta.id`。`projectId` 优先，保证工程库副本隔离；草稿尚无 `projectId` 时回退 `meta.id`。`saveProjectAs()` 成功后按评论 id 去重迁移旧键并删除。
+- 锚点：`objectId + floorId`，不存坐标；对象删除后评论保留为孤儿，不做级联删除。
+- 生命周期：`deleteProjectById(id)` 删除 `comments.<projectId>`；新建工程只清未入库草稿的评论；`clearCurrentFloor()` 不动评论。
+- 同步边界：不参与 `mergeProjectData`、不进协作载荷、不导出 JSON；只读时写入被 `guardWrite()` 拒绝，读取不受限。
+- 上限：单 owner 200 条、单条 2,000 字；解析失败按空列表处理，配额失败返回失败且不修改已存内容。
+
+## 17. 台账模板（G7，无 schema 变更）
+
+- 不新增任何存储：模板是 `js/features/io-export.js` 的 `TPL_BUILTIN` 常量表；**不写入 `state`、工程 JSON、`proj:<id>`、`current`、IDB 或 localStorage**，不改 `SCHEMA`、`DB_VERSION` 与键布局，不参与协作合并。
+- `cols` 的合法值 = `EXPORT_FIELD_DEFS[].key`；数组顺序即列顺序，列标题直接取字段 key，不存第二份标题。
+- 内置模板只读、不可被用户覆盖；弹窗里临时改列只作用于本次导出。
+- 默认导出（`TABLE_COLUMNS` / `delimitedText` / `xlsxExportTable`）零改动，模板只走独立 `tplTable` / `tplExport` 分支。

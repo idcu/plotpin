@@ -3,7 +3,7 @@
 > **读者**：要定位、修改或替换某个文件的开发者。
 > **回答**：每个文件负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑。
 > **不回答**：设计取舍见 [ARCHITECTURE](ARCHITECTURE.md)，数据与持久化见 [DATA-MODEL](DATA-MODEL.md)，功能边界见 [features](features.md)。
-> **口径**：47 个浏览器脚本（`js/` 37 + `ngm.vendor/` 10 个直接加载）+ `scripts/` 19 个 `.mjs` + 2 个 `scripts/lib/*.mjs` + 1 个 `dist-manifest.json` + `tests/` 65 个文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-13。
+> **口径**：47 个浏览器脚本（`js/` 37 + `ngm.vendor/` 10 个直接加载）+ `scripts/` 19 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 65 个文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-14。
 
 ## 分层与加载顺序
 
@@ -15,7 +15,7 @@
 | 4 | 特性 | `js/features/` | 14 | UI 与业务流程 |
 | 5 | 启动 | `js/core/app.js` | 1 | 最后加载，组装并启动 |
 
-`scripts/check.mjs` 现在做三类静态核对：目录归属与入口顺序；`state = ...` 只出现在 `replaceState()` 内；按 `contracts/coupling.json` 严格相等核对 `core → features` / `common → core` 的“文件+符号+次数”，并配对 6 个必需钩子、登记 12 条软调用。它仍不做完整类型分析：局部同名、对象键、1–2 字符标识符会被跳过，软调用也仍是运行时依赖（见 ARCHITECTURE §2）。
+`scripts/check.mjs` 现在做三类静态核对：目录归属与入口顺序；`state = ...` 只出现在 `replaceState()` 内；按 `contracts/coupling.json` 严格相等核对 `core → features` / `common → core` 的“文件+符号+次数”，并配对 6 个必需钩子、登记 13 条软调用。它仍不做完整类型分析：局部同名、对象键、1–2 字符标识符会被跳过，软调用也仍是运行时依赖（见 ARCHITECTURE §2）。
 
 ## js/common（9 个）
 
@@ -25,7 +25,7 @@
 | `dxf.js` | DXF 文本解析/生成、版本与单位、补充实体、可导入性检查 | `Dxf.parseDxf / parse / inspect / supplementalEntities / scaleParsedEntities / unitLabel / unitFactor / VERSION_NAMES / CORE_TYPES / SUPPLEMENT_TYPES / UNITS` | 纯文本算法 → `io-import`、`io-export`、selftest | 解析有实体数与嵌套深度上限；AC1032 的补充实体只做“可见性保留”，不保证完整语义。未知单位返回 `unitFactor=1`，导入时必须提示而不是静默按米处理。 |
 | `i18n.js` | 中英文案、插值、运行时替换 | `I18N.t / p / fmt / setLang / apply / dict / phrases / templates / lang`；全局简写 `L` | 纯数据 → 全仓 UI | `L` 只做文本插值，**不转义 HTML**；插入 `innerHTML` 前必须过 `esc` / `xmlEscape`。缺键时回退原文，可能把中文带到英文界面；i18n 扫描门禁拦截新增硬编码。 |
 | `merge.js` | 离线工程合并：对象/楼层/场地/图层/类型的 LWW + 墓碑；M2 配置差异报告 | `mergeProjectData(currentRaw, incomingRaw) → {project, stats, config}`、`mergeConfigText(stats)`；内部 `mergeFloorMeta / mergeFloorObjects / mergeObjectSig / mergeStable / mergePrunedList / mergeClampTimestamps` | 纯函数 → `mergeProjectJSON`、协作 | `A=当前`、`B=导入/远端`；对象签名忽略 `z`；不修改入参。楼层墓碑 `deletedAt >= 两侧最后写入` 时整层删除；至少保留一层。图层/类型墓碑删除定义，内置类型与 `layer.default` 受保护；悬空引用留给 `migrateProject`。`config` 只报告“远端未采纳/已补缺”，不改变合并结果；空报告不挂 `stats.config`。 |
-| `pdf-read.js` | PDF 解析、页序恢复、逐页内嵌图映射（像素流） | `PdfRead.parsePdf / layoutPdfPages / PT_TO_METER / tokenizeContent / looksLikeCidGarbage / LIMITS` | vendor PDF 核心 + `Zip` → `io-import` | CID 字体可能解出乱码，`looksLikeCidGarbage` 只做判定与告警；导入只取第 1 页，`layoutPdfPages` 保留为通用工具但导入不再使用。 |
+| `pdf-read.js` | PDF 解析、页序恢复、逐页内嵌图映射（像素流） | `PdfRead.parsePdf / layoutPdfPages / PT_TO_METER / tokenizeContent / looksLikeCidGarbage / LIMITS` | vendor PDF 核心 + `Zip` → `io-import` | 文本按 UTF-16 BOM → GBK 严格 → ASCII 解码，解不开按 `textErrors` 计数；不解析 ToUnicode/CID 字形映射。导入只取第 1 页，`layoutPdfPages` 保留为通用工具但导入不再使用。 |
 | `pdf-vector.js` | 矢量 PDF 写入器：多页页面对象 / 内容流 / xref / 世界→pt 适配 / 图片 XObject 与文字位图 | `PdfVec.stream / docPages / fit / mapPt / path / image / flate / textBitmap` | 纯字符串与字节生成 → `io-export` 的矢量 PDF | 内容流只接受 ASCII 数字与运算符；中文必须走 `textBitmap` + `flate` 的 RGB/SMask 图片。世界与 PDF 同为 Y 向上，`fit` 只做等比缩放+平移+居中。`flate` 不可用时调用方必须回退位图，不得产出坏文件。 |
 | `pdf.js` | 将 vendor PDF 图像能力适配为 `global.Pdf` | `Pdf` | vendor `pdf-image` → `io-export` 的位图 PDF | 薄适配层，本身不含逻辑。`io-export` 经 `ensureVendor('Pdf')` 调用；PDF 默认导出是整页位图。 |
 | `qr.js` | 二维码编码与 SVG 渲染（协作邀请、导出标签复用） | `Qr`（含 `MAX_BYTES`、`byteLength`） | 纯算法 → 协作、导出 | 容量按固定 Version 3-M，`MAX_BYTES=42`；超出时必须由调用方改用可粘贴文本，禁止渲染不可扫描的假二维码。 |
@@ -54,7 +54,7 @@
 
 | 文件 | 职责 | 对外接口 | 依赖 → 被依赖 | 关键不变量 / 已知坑 |
 | --- | --- | --- | --- | --- |
-| `catalog.js` | 产品目录 schema 校验、IndexedDB 存储、版本指纹、JSON 导入导出 | `CATALOG_SCHEMA / currentCatalog / catalogValidate / catalogVersion / importCatalog / catalogLoad / deleteCatalog / exportCatalogJSON` | `idbGetKey/idbPutKey`、`toast/safeName/downloadBlob` → 报价、面板 | 导入必须**先校验后写库**，失败不得污染现有目录；厂商+型号唯一，单价 0–1e9，型号上限 2000。目录版本用 FNV-1a 指纹，供报价快照追溯。 |
+| `catalog.js` | 产品目录 schema 校验、IndexedDB 存储、版本指纹、JSON/CSV 导入导出 | `CATALOG_SCHEMA / currentCatalog / catalogValidate / catalogFromRows / catalogVersion / importCatalog / catalogLoad / deleteCatalog / exportCatalogJSON` | `idbGetKey/idbPutKey`、`toast/safeName/downloadBlob`、`formulaUnguard` → 报价、面板 | 导入必须**先校验后写库**，失败不得污染现有目录；厂商+型号唯一，单价 0–1e9，型号上限 2000。目录版本用 FNV-1a 指纹，供报价快照追溯。CSV 仅在含厂商/型号/单价三列时识别，归一化后与 JSON 共用 `catalogValidate`。 |
 | `collab.js` | 同机标签 BroadcastChannel、跨设备 WebRTC、分片/去重/TTL、邀请串与二维码、冲突提示、M2 配置差异提示 | `collabStartLocal / collabSendObject / collabHandleMessage / collabOnLocalChange / collabInviteEncode / collabInviteDecode / collabQrFit / openCollabPanel`；常量 `COLLAB_CHUNK / COLLAB_INVITE_PREFIX / COLLAB_INBOUND_*` | `mergeProjectJSON`、`Qr`、持久化、`toast` → 面板、启动 | 分片 48,000 字符，入站 TTL 30s、64 键 / 16MB；SDP 只含 ASCII 用 base64。邀请串超出 QR 容量时必须降级为文本。收到远端工程先合并再落盘；本地未同步修改不能因断线丢失。当前**没有自动重连**（已知产品缺口）。配置差异通过 `mergeConfigText()` 显示，报告异常不阻断合并。 |
 | `io.js` | 新建工程、工程库、楼层管理、底图/文件导入入口 | `openFloorManager / openProjectLibrary / BG_KIND_LABELS`；按钮绑定 `newBtn / clearFloorBtn / importBtn / projBtn / floorBtn` | `io-import`、持久化、`ui-shell` | 新建工程会重置 `state/history`，只能回收“任何命名空间都不再引用”的资产。清空楼层必须先 `pushHistory`（Ctrl+Z 可整体撤销），不得留幽灵数据。 |
 | `io-export.js` | 8 种导出、标题栏/比例尺/图例、PDF 报告分页、SVG/DXF 生成 | `downloadBlob / exportDelimited / exportXlsx / exportPNG / exportSVG / exportDXF / exportPDF / exportPDFVector / pdfVectorPlan / pdfVectorLabelCount / pdfFooter / vectorPage / exportLabelSheet / exportBlindSpotsGeoJson / titleBlockSpec / drawTitleBlockOnCanvas / exportTitleBlockSvg / buildSceneSvg / dxfEntitiesForExport / pdfPagePlan` | `io-fields`、`dxf`、`pdf`、`pdf-vector`、`qr`、`symbols`、`render`、`content-assets` → 顶栏、报价、规则 | 所有导出必须复用 `guardFormula` 与 `EXPORT_FIELD_DEFS`，不得另起表头。标题栏/图例默认关闭，关闭时产物必须与旧 golden 字节一致。默认 `pdf` 是整页位图；`pdf-vector` 为显式选项（底图/场地/网格为整页 JPEG，对象为矢量，文字/点位/标题栏为透明位图，含图纸页与清单页）。DXF 符号折线降级。新增格式必须补 golden 与“不增体积”验证。 |
@@ -62,7 +62,7 @@
 | `io-import.js` | 图片/DXF/DWG/PDF/SVG 导入、单位与保真提示、场地选择与底图缩放 | `extOfFile / dwgVersionInfo / pickConvertedFile / applyDxfImport / applyVectorSite / backgroundScalePlan / openSitePicker` | `pdf-read`、`dxf`、`geometry-transform`、`model`、`ui-shell` | DWG 需要外部转换器，缺转换器必须给明确原因而不是当作 DXF。DXF 保真度要列出“保留/降级/丢弃”；PDF 只导入第 1 页并在多页时提示页数。导入失败必须事务化回滚。 |
 | `io-table.js` | CSV/TSV/XLSX 表格预览、批量布点、条件批量替换 | `showTableImportPreview / applyTableImport / rowsToObjectsPlan / applyRowShape / applyLedgerCells / rowMatchesObject / checkRowGeom` | `io-fields`、`model`、几何、`ui-shell` | 严格模式整批事务化：任一行非法则整体失败，不允许半量写入。坐标/楼层/类型/编号解析规则必须与清单展示一致；布尔与数字解析不得用 `parseInt` 近似。 |
 | `parking.js` | 停车位规划：沿边布置、角度/间距、预览与落图 | `PARKING_LAYER / parkingLayout / parkingSite / parkingOptionsFromInputs / openParkingPlanner / ensureParkingLayer / applyParkingLayout` | `geometry-site`、`model`、`render`、`ui-shell` | 自动创建 `PARKING_LAYER` 但不得覆盖同名业务图层；落图必须一次性 `commitChange`，不能逐位保存。 |
-| `plugins.js` | 插件 API、清单校验、类型/导出器/导入器/规则注册表、Worker 沙箱、插件面板 | `PlotPin`（24 个契约键）、`exportViaPlugin / importViaPlugin / syncExportOptions`；内部 `PLUGIN_API_VERSION / PLUGIN_CAPABILITIES / loadPlugin / validatePluginManifest` | `model`（类型/对象清洗）、`rules`、`io-export`、`ui-shell` → 启动、面板 | API 1.1.0，只接受主机兼容版本；能力 8 项白名单（`rules` 仅声明意图，沙箱内无注册入口）。沙箱 Worker 删除网络/存储/Worker/self 与 `BroadcastChannel`/`MessageChannel`/`MessagePort` 等入口，单次 2000ms 超时并 `terminate`。清单 192KB、代码 64KB。注销被对象使用的类型必须拒绝。 |
+| `plugins.js` | 插件 API、清单校验、本地插件库、类型/导出器/导入器/规则注册表、Worker 沙箱、插件面板 | `PlotPin`（31 个契约键）、`exportViaPlugin / importViaPlugin / syncExportOptions`；内部 `PLUGIN_API_VERSION / PLUGIN_CAPABILITIES / PLUGIN_LIB_KEY / loadPlugin / validatePluginManifest / enableSaved / deleteSaved` | `model`（类型/对象清洗）、`rules`、`io-export`、`ui-shell` → 启动、面板 | API 1.1.0，只接受主机兼容版本；能力 8 项白名单（`rules` 仅声明意图，沙箱内无注册入口）。沙箱 Worker 删除网络/存储/Worker/self 与 `BroadcastChannel`/`MessageChannel`/`MessagePort` 等入口，单次 2000ms 超时并 `terminate`。清单 192KB、代码 64KB。本地库独立键 `plugins:library`（schema `plotpin.plugins/v1`，最多 20 条），只存清单与源码、**不存启用意图**；启用前重算 SHA-256（`[id,version,apiVersion,sortedCaps,code]`）与库内 `hash` 比对，不符即拒绝且不建 Worker。注销被对象使用的类型必须拒绝。 |
 | `props.js` | 属性面板：单对象/多选、场地与图片属性、节点编辑、标注开关 | `renderProps / renderMultiProps / renderSiteProps / imagePropsHTML / renderNodeEditor / bindNodeEditorEvents / applyField / rotateSelected / renderAnnotToggles / renderSiteAnnotToggles` | `model`、几何、`persistence`、`ui-panels` | 所有写回必须走 `commitObjectEdit` 并先 `pushHistory`；批量标注开关复用单对象字段，不得新增平行状态。旋转/位移输入要保留数值宽度与 44px 触控目标。 |
 | `rules.js` | 几何规则检查：重叠/最小间距/越界、配置 UI、违规列表/定位/CSV | `RULE_REGISTRY / registerRule / unregisterRule / listRules / runRuleCheck / ruleOverlapCheck / ruleSpacingCheck / ruleBoundsCheck / ruleViolationsCsv / renderRuleConfig / ruleRunAndRender` | `model`、几何、`io-fields`、`ui-shell` → 面板、插件 | 只做几何检查，**不是消防/规范审图**，阈值由用户填写。违规上限 5000；对象重叠要排除相邻贴合容差；越界区分完全/部分。配置存 `state.rules` 随工程保存，旧配置按 `RULE_CONFIG_VERSION` 归一。 |
 | `snapshot-ui.js` | 快照面板、差异分类文案、叠加开关、回滚确认 | `DIFF_CATEGORY_LABELS / snapSizeText / snapTimeText / snapLabel / snapDiffFieldText / snapSelectOptions / openSnapshotManager / openSnapshotCompare` | `snapshot`、持久化、`ui-shell` → 面板 | 叠加只在当前楼层绘制，不参与静态缓存、不进入导出。回滚前必须二次确认并 `pushHistory`；快照删除不得影响工程。 |
@@ -73,17 +73,17 @@
 
 - `js/common/pdf.js`、`js/core/viewport.js`、`js/features/parking.js` 在旧文档中没有独立条目，但三者都被入口加载且存在真实调用：`pdf.js` 经 `ensureVendor('Pdf')` 被 `io-export` 使用；`viewport.js` 的 `w2s/s2w/computeWorldFrame` 被渲染/交互/导出高频调用；`parking.js` 绑定 `#parkingBtn` 并有 selftest 断言。它们不是死文件。
 
-## scripts（22 个文件）
+## scripts（26 个文件）
 
-`scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 2 个 + `dist-manifest.json` 1 个。
+`scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 4 个 + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）。
 
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
 | `check.mjs` | 零依赖工程质量门禁（13 步）：9.1 状态直赋值、9.2 耦合计数、9.3 钩子配对、9.4 软调用登记 | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
-| `selftest.mjs` | 逻辑层自测（当前 4,048 断言 / 158 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
+| `selftest.mjs` | 逻辑层自测（当前 4,151 断言 / 159 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
-| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（未破坏副本必须全绿），再构造 **17 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失） | 仓库副本 → 通过/失败 | CI |
+| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（10 条，未破坏副本必须全绿），再构造 **19 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失、CSP 哈希错位、i18n 覆盖率跌破）；`--only` 可分批跑 | 仓库副本 → 通过/失败 | CI |
 | `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性、消费方导出，以及 vendor 实际字节 ↔ `scripts/ngm-vendor-digest.json` 逐文件 sha256；`--update-vendor-digest` 重写清单 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor` → 报告 | CI、`npm test` |
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致；另配 `contracts/coupling.json` 的计数基线 | 仓库 → 报告 | `check.mjs` |
 | `check-plugin-api.mjs` | 用词法器抽取 `PlotPin` 顶层键与 `contracts/plugin-api.json` 严格比对；无法静态确认时 **fail-closed**（报错退出，不猜） | 源码/契约 → 报告 | `check.mjs` |
@@ -100,18 +100,19 @@
 | `size-report.mjs` | 发行包体积组成/重复/死代码统计（基于 dist 分块实测，源文件潜在值仅作参考）；扫描器识别正则字面量与 `${}` 嵌套模板，dist 可回收应为 0 | `plotpin.html` → 报告 | 体积专项：重复字符串/重复行是压缩前账面值，不得直接当预算 |
 | `lib/budget.mjs` | 体积预算单一来源：`MAX_BYTES` / gzip 阈值 / 余量分级预警 | 字节 + gzip → `ok/warn/error` | `build.mjs`、`size-report.mjs` |
 | `lib/fs-utils.mjs` | 门禁共享工具：递归遍历（`ext / exts / skip / skipDir`）与 JSON 读取 | 目录 → 文件列表；文件 → 对象 | `check*.mjs`、`build.mjs`、`badge.mjs` |
+| `lib/golden.mjs` | golden 写入闸门：`UPDATE_GOLDEN=1` 且 `ALLOW_GOLDEN=1` 且非 `CI` 三者同时满足才可写；拒绝时给出原因，写入时输出差异摘要并追加 `test-results/golden-change.log` | 环境变量 + 文件字节 → 写/拒 | `selftest.mjs`、`export-scope.spec.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-## tests（65 个）
+## tests（70 个）
 
-### e2e 用例（45 个 spec）
+### e2e 用例（47 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
 | `batch-annot.spec.mjs` | 批次标注显隐：勾选两对象统一隐藏→撤销→统一显示，SVG 同步变化 |
 | `batch-layout.spec.mjs` | 1280×800 桌面布局：控件不挤压、数值输入可读 |
 | `calibration-precheck.spec.mjs` | D-02：无底图无场地时三个校准入口禁用且无点击路径 |
-| `catalog.spec.mjs` | 目录导入→绑定型号/数量→跨楼层 BOM→CSV/XLSX→报价快照与重名防护 |
+| `catalog.spec.mjs` | 目录 JSON/CSV 导入→绑定型号/数量→跨楼层 BOM→CSV/XLSX→报价快照与重名防护 |
 | `collab.spec.mjs` | 双标签建连、状态从等待→已连接→对端断开可见 |
 | `coverage.spec.mjs` | 覆盖率 v2：4 个缩放级别一致、隐藏图层不计入、报告标注口径 |
 | `csp.spec.mjs` | 注入路径 1/4：恶意 `type.name/icon` 不执行 |
@@ -124,6 +125,7 @@
 | `history.spec.mjs` | 撤销/重做后刷新仍保持正确状态（落盘语义） |
 | `hit-lock.spec.mjs` | P1-04：锁定对象不可选；命中按 z 序，视觉最上层优先 |
 | `i18n-template.spec.mjs` | 英文界面整句插值生效；用户输入只作文本、不注入 DOM |
+| `import-errors.spec.mjs` | E3：截断 PDF / 坏 XLSX / 超 32 MB / MIME 伪装成 JSON 均给出可读错误，且对象数与撤销栈不被污染 |
 | `interaction.spec.mjs` | 单击选中不落盘、不清覆盖率、不留空撤销快照 |
 | `load-audit.spec.mjs` | D-07：损坏 current 时横幅、救援期间不覆盖、可导出原文 |
 | `mobile.spec.mjs` | 移动视口基本操作 |

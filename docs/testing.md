@@ -4,18 +4,18 @@
 > **回答**：测试分几层、selftest 与 e2e 各覆盖什么、golden 锁什么、哪些空白明确未覆盖。
 > **不回答**：门禁命令与阈值见 [engineering](engineering.md)，性能读数见 [performance](performance.md)，人工验收见 [manual-acceptance](manual-acceptance.md)。
 > **原则**：不把“计划要加”写成“已有”；不把“跳过”写成“通过”；不把未跑过的浏览器写成“已支持”。
-> **数量口径**：本文只保留结构锚点，当前计数以 [facts](facts.md) 与命令输出为准。最后核对：2026-11-13。
+> **数量口径**：本文只保留结构锚点，当前计数以 [facts](facts.md) 与命令输出为准。最后核对：2026-11-14。
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-13 记录） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
+| 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **158 个分区 / 4,048 条断言 / 加载 47 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless） | **45 个 spec / 155 个用例**（源码入口 154 跑 + 1 条件跳过） | 已运行且失败（`e2e` job 双入口 matrix 均红，2026-11-13）；以本地命令为准，见 §3 |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **164 个分区 / 4,254 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **47 个 spec / 176 个用例**（源码入口 175 跑 + 1 条件跳过；dist 172 跑 + 4 跳过） | 本地双入口 2026-11-14 收口全量通过；远端 `e2e` job 仍为 2026-11-13 双入口 matrix 全红，以本地命令为准，见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 + 17 种人为破坏 | 是 |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 19 种人为破坏 | 是 |
 
-> **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。
+> **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。2026-11-14 已修掉 `test` job 缺 `npm ci` 的结构性全红根因（详见 `ci.yml` 注释），但修复后的 Actions 尚未复跑核对，在拿到新的运行记录前不改变「以本地为准」的结论。
 
 四层职责不同，**数据不可互换**：
 
@@ -61,16 +61,16 @@
 
 ### 3.1 运行形态与浏览器边界
 
-- `playwright.config.mjs`：仅 **Chromium**、`workers: 1`、`fullyParallel: false`、`timeout: 30s`、`expect: 5s`、`retries: 0`、headless、`screenshot: only-on-failure`；`webServer` 用 `node scripts/serve.mjs` 起 `http://127.0.0.1:4173`。
-- `scripts/e2e.mjs` 只校验 Chromium 二进制；`--browser=firefox|webkit` 只是历史脚本参数，**当前仓库没有可复跑的 Firefox/WebKit 证据**。
+- `playwright.config.mjs`：默认仅 **Chromium**、`workers: 1`、`fullyParallel: false`、`timeout: 30s`、`expect: 5s`、`retries: 0`、headless、`screenshot: only-on-failure`；`webServer` 用 `node scripts/serve.mjs` 起 `http://127.0.0.1:4173`。`projects` 由 `E2E_BROWSER` 决定（默认 `chromium`，可选 `firefox`），不会默认双跑。
+- `scripts/e2e.mjs` 校验目标浏览器二进制：`node scripts/e2e.mjs --browser=firefox …` 缺二进制时打印 `[SKIP]` 并**退 2**，不会退 0。Firefox 只是可复跑入口，**不进 `npm run ci`、不进默认 e2e、不构成支持承诺**；三态证据见 §3.4。
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
-- 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入“1 skipped”，不算失败）。dist 入口另有 `sw.spec` 1 条 skip（单文件发行版无 SW）。
-- **三条跑法，全量 45 个 spec**：
+- 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入“1 skipped”，不算失败）；已按开关单独跑过（1 passed / 5.1m）。dist 入口共 4 条 skip：协作 soak 1 条 + `sw.spec` 1 条 + `sw-atomic.spec` 2 条（单文件发行版无 SW 预缓存输入）。
+- **三条跑法，全量 47 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
   - `file://` 入口：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
-- 2026-11-13 实跑记录（**本次文档同步未复跑**）：源码入口 **154 passed / 0 failed / 1 skipped**，exit 0；跳过项为需 `COLLAB_SOAK=1` 的协作 soak。dist 入口本次只跑渲染专项：`perf-render` **4 passed**。发布前必须按 [release-checklist](release-checklist.md) 重跑全量并保留日志。
+- 2026-11-14 收口全量实跑：源码入口 **175 passed / 0 failed / 1 skipped**，exit 0（4.4m / 266s）；dist 入口 **172 passed / 0 failed / 4 skipped**，exit 0（3.5m / 208s）；`COLLAB_SOAK=1` 单独跑协作浸泡 **1 passed / 0 failed（5.1m / 305s，exit 0）**。跳过项与原因见 [release-checklist](release-checklist.md) 第 5/6 条，日志在 `2026-11-14/final-closure/work/e2e-source-full.log`、`e2e-dist-full.log`、`e2e-soak.log`。
 - **M6 局部补绘的 3 条像素采样用例**（`tests/e2e/perf-render.spec.mjs`）：对象位移、放大、编辑 A 后 B 的标签仍在。改前分别红在 `atNew`、`inside1`、`after=0`（且 `patched=true`，证明缺陷发生在局部补绘路径而非被整层重建掩盖），改后绿。覆盖只到属性面板 `commitObjectEdit` 路径；拖拽期走整层重建，未覆盖。
 - `file://` 与 http 的历史实测差异（Chromium）：
   - **IndexedDB 可用**（`readwrite-ok`），`localStorage` 可用，自动保存与工程恢复与 http 一致；
@@ -85,34 +85,57 @@
 
 | 功能域 | spec（用例数） |
 |---|---|
-| 冒烟/基础交互/加载 | smoke(4)、interaction(2)、load-audit(5)、world-transform(2) |
-| 持久化/历史/保存 | persistence(4)、history(6)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
-| 协作 | collab(13)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(6)、pdf-dpi(1)、pdf-vector-option(1)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(2)、publish-state(2) |
-| 符号与目录 | symbols(3)、catalog(1) |
-| 批量与表格 | batch-annot(2)、batch-layout(2)、table-batch(4) |
-| 插件 | plugin-sandbox(22)、plugin-compat(3)、plugin-manifest(2)、rule-plugin(1) |
-| 规则 | rules(1) |
+| 冒烟/基础交互/加载 | smoke(4)、interaction(3)、load-audit(6)、world-transform(2) |
+| 持久化/历史/保存 | persistence(4)、history(7)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
+| 协作 | collab(16)（含 1 个 soak 条件跳过） |
+| 导出与图面 | pdf-multipage(7)、pdf-dpi(1)、pdf-vector-option(1)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(3)、publish-state(2) |
+| 符号与目录 | symbols(3)、catalog(2) |
+| 批量与表格 | batch-annot(3)、batch-layout(2)、table-batch(4) |
+| 导入加固 | import-errors(4) |
+| 插件 | plugin-sandbox(23)、plugin-compat(3)、plugin-manifest(3)、rule-plugin(1) |
+| 规则 | rules(3) |
 | 校准/比例/命中 | calibration-precheck(3)、scale-preset(3)、hit-lock(2) |
-| 移动端/离线/file:// | mobile(2)、sw(1)、file-dist(3) |
+| 移动端/离线/file:// | mobile(2)、sw(1)、sw-atomic(2)、file-dist(3) |
 | i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
-| 界面加固 | ui-hardening(2)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
+| 界面加固 | ui-hardening(4)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **151** 个用例、**45** 个 spec（默认 150 跑 + 1 条件跳过）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **176** 个用例、**47** 个 spec（源码入口默认 175 跑 + 1 条件跳过；dist 入口 172 跑 + 4 跳过）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 
 ```text
-node scripts/e2e.mjs                       # 全量
+node scripts/e2e.mjs                       # 全量（默认 Chromium）
 node scripts/e2e.mjs tests/e2e/smoke.spec.mjs
 node scripts/e2e.mjs --grep "导出"
+node scripts/e2e.mjs --browser=firefox tests/e2e/smoke.spec.mjs -g "页面加载"   # 非门禁
 $env:COLLAB_SOAK='1'; node scripts/e2e.mjs tests/e2e/collab.spec.mjs
 ```
 
 e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人工验收证据不要放这里**，见 [manual-acceptance](manual-acceptance.md)。
+
+### 3.4 Firefox 三态矩阵（2026-11-14，非门禁）
+
+> 结论只覆盖本机跑过的那几条；未跑的写“未验证”，不写“应该支持”。Firefox 入口不升格为门禁，也不构成支持承诺。
+
+命令模板（5 条核心）：
+
+```text
+node scripts/e2e.mjs --browser=firefox tests/e2e/smoke.spec.mjs tests/e2e/symbols.spec.mjs tests/e2e/export-scope.spec.mjs tests/e2e/collab.spec.mjs tests/e2e/onboarding.spec.mjs -g "页面加载：无脚本错误|JSON 仅导出当前工程|PNG 导出语义 golden|双标签建连与状态|首次访问展示三步引导"
+```
+
+| 场景 | 状态 | 日期 | 证据 |
+|---|---|---|---|
+| 页面启动（无脚本错误 / CSP / 画布就绪） | 实测通过 | 2026-11-14 | firefox 997ms（`backup/D3/firefox-run.log`） |
+| 导入 JSON（符号包只写入当前工程） | 实测通过 | 2026-11-14 | firefox 1.4s |
+| 导出 PNG（签名 + 尺寸语义 golden） | 实测通过 | 2026-11-14 | firefox 1.0s |
+| 同机双标签协作（等待 → 已连接 → 对端断开） | 实测通过 | 2026-11-14 | firefox 4.4s |
+| 首次引导（三步引导 + 持久化） | 实测通过 | 2026-11-14 | firefox 1.0s |
+| 其余 163 条用例（含 WebRTC 跨 context、PDF/DXF、插件沙箱、SW） | 未验证 | 2026-11-14 | 本轮只跑 5 条核心，未跑不等于通过 |
+| 真实文件保存到磁盘、打印、Safari/WebKit | 未验证 | 2026-11-14 | 缺真机/外部软件；WebKit on Windows 旧记录为进程级崩溃 |
+| 已知不可用 | 无（本机 5 条未暴露） | 2026-11-14 | 仅说明这 5 条没踩到，不代表全量可用 |
 
 ## 4. Golden 基线
 
@@ -138,14 +161,15 @@ e2e 产物默认写入 `test-results/`（已被 `.gitignore` 忽略）；**人�
 Get-ChildItem tests/golden | Select-Object Name, Length
 ```
 
-- `UPDATE_GOLDEN=1` 可重建 PDF/SVG/DXF/CSV/TSV/XLSX/GeoJSON golden；PNG 语义基线在 e2e 下用同一环境变量重建。
+- 重建需要**两个变量同时为 1**：`UPDATE_GOLDEN=1`（明确要重建）+ `ALLOW_GOLDEN=1`（确认已审阅差异）；`CI` 环境下一律不可写。判定集中在 `scripts/lib/golden.mjs`，缺任一条件时 selftest / e2e 会以「拒绝更新基线（原因）」判红，而不是静默写盘。
+- 重建覆盖 PDF/SVG/DXF/CSV/TSV/XLSX/GeoJSON；PNG 语义基线在 e2e 下用同一组变量重建。每次写入会打印差异摘要并追加到 `test-results/golden-change.log`，便于追查基线变更。
 - **重建 golden 只能用于“确认改动是有意的”**：提交必须说明为什么输出变了、影响哪些导出格式；禁止为了让测试变绿而盲目重建。
 - 字节 golden 覆盖 SVG/DXF/PDF/CSV/TSV/XLSX/GeoJSON；PNG 只锁签名与尺寸（浏览器编码字节不稳定），JSON 由 selftest 结构断言覆盖。
 - 无符号工程“导出字节不变”是硬回归项：不新增符号功能时不得改动既有 golden。
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（未破坏副本必须全绿），再构造 17 种“应当失败”的改动，断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（10 条，未破坏副本必须全绿），再构造 19 种“应当失败”的改动，断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
 
 - 场景 14～17 专测新增结构判据：`replaceState` 外直赋值、未登记跨层调用、未分类软调用、缺失必需钩子；任何一条“破坏后仍绿”都说明判据失效。
 - 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，干净检出同样生效；
@@ -186,7 +210,7 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 | 多工程库 | `persistence.spec` 覆盖单工程保存/载入；**工程列表的批量管理、跨工程资产隔离无 e2e**（隔离由 selftest 32.1 覆盖） |
 | 图片变换手柄 | `calibration-precheck.spec` 只验入口禁用/提示；**拖拽平移/旋转/缩放/切变手柄没有 e2e** |
 | TSV / DXF 导入 | 导出链路已由 `export-scope.spec` 覆盖；**TSV 导入无 e2e**，DXF 导入只有 `dxf-version.spec` |
-| Firefox / WebKit / Safari | **未验证**。Firefox 旧记录 2026-11-13 全量跑通，但本次未复跑、仓库无留存产物；WebKit on Windows 旧记录为进程级崩溃，不作支持目标；Safari 原生需 macOS |
+| Firefox / WebKit / Safari | **部分验证**。Firefox 2026-11-14 用本机 Playwright Firefox 复跑 5 条核心用例，**5 passed / 11.3s**（命令与逐条读数见 §3.4）；其余 163 条未跑，仍为未验证。WebKit on Windows 旧记录为进程级崩溃，不作支持目标；Safari 原生需 macOS，未验证。Firefox 入口不是门禁，也不是支持承诺 |
 | 真实双设备 WebRTC | 只有同机双标签 e2e；跨设备/跨网络未验证（代码固定 `iceServers: []`） |
 | 真实 GPU / 低端真机 | perf-browser 在本机为 SwiftShader；真机帧率、长跑内存未验证 |
 | 真实图纸语料 | 无 50 组真实工程 A/B 样本，快照差异误报率未完成人工验证 |
