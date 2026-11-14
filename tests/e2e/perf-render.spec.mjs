@@ -122,10 +122,35 @@ test('B-11：真实 Chromium 渲染基线（2000 对象 / 1600×900，A 基础�
  * -------------------------------------------------------------------------- */
 const px = (p, rgb, tol) => Math.abs(p[0] - rgb[0]) <= tol && Math.abs(p[1] - rgb[1]) <= tol && Math.abs(p[2] - rgb[2]) <= tol;
 
+/* 采样时序说明（2026-11-15）：远端 runner 上 `drawScene` 之后立刻 `getImageData` 会读到
+ * 尚未完成合成的帧（实测：源码入口 M6-P3 首帧计数 0、dist 入口 M6-P2 位移首帧取色失败），
+ * 本地快机器上几乎不复现。统一改为「有界帧等待」再取样：读不到期望像素时按帧重试并重绘一次
+ * （防止排队的 resize/rAF 把画布清掉），总预算 3000 ms / 60 帧。预算耗尽就返回最后一次读数，
+ * 断言与阈值原样保留 —— 「画得慢」会被等到，「一直没画出来」仍然红。
+ * 返回的 frames/ms 只用于日志，不参与断言。 */
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__settleSample = async (read, ok) => {
+      const t0 = performance.now();
+      let v = read(), frames = 0;
+      while (!ok(v) && frames < 60 && performance.now() - t0 < 3000) {
+        await new Promise(res => requestAnimationFrame(() => res()));
+        if (typeof drawScene === 'function' && typeof ctx !== 'undefined' && state && wrap) {
+          drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
+        }
+        v = read();
+        frames++;
+      }
+      return { v, frames, ms: Math.round(performance.now() - t0) };
+    };
+  });
+});
+
 test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，且走局部补绘', async ({ page }) => {
   await page.goto('/index.html');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate(async () => {
+    const settle = window.__settleSample;
     const W = wrap.clientWidth, H = wrap.clientHeight, Z = 1;
     state = createInitialState();
     state.viewport = { zoom: Z, panX: 0, panY: 0 };
@@ -136,19 +161,27 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
     const o = baseObject('point', 'point.marker', { name: 'P1', x: w0[0], y: w0[1], style: { color: '#e11d48' } });
     state.objects = [o];
     history = { past: [], future: [] };
+    const red = p => Math.abs(p[0] - 225) <= 40 && Math.abs(p[1] - 29) <= 40 && Math.abs(p[2] - 72) <= 40;
     invalidateStatic();
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
     const sample = (s) => {
       const d = ctx.getImageData(Math.round(s[0] * dpr), Math.round(s[1] * dpr), 1, 1).data;
       return [d[0], d[1], d[2], d[3]];
     };
-    const before = sample(s0);
+    const b0 = await settle(() => sample(s0), red);
+    const before = b0.v;
     const rev0 = staticRev;
     o.x = w1[0]; o.y = w1[1];
     commitObjectEdit([o.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
-    return { before, atOld: sample(s0), atNew: sample(s1), patched: staticRev === rev0, dist: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) };
+    const b1 = await settle(() => ({ atNew: sample(s1), atOld: sample(s0) }), v => red(v.atNew) && !red(v.atOld));
+    return {
+      before, atNew: b1.v.atNew, atOld: b1.v.atOld,
+      patched: staticRev === rev0, dist: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]),
+      settle: { before: [b0.frames, b0.ms], after: [b1.frames, b1.ms] }
+    };
   });
+  console.log('[M6-P2 位移] settle ' + JSON.stringify(r.settle));
   expect(px(r.before, [225, 29, 72], 40)).toBe(true);
   expect(r.dist).toBeGreaterThan(300);
   expect(r.patched).toBe(true);
@@ -159,7 +192,8 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
 test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，且走局部补绘', async ({ page }) => {
   await page.goto('/index.html');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate(async () => {
+    const settle = window.__settleSample;
     const W = wrap.clientWidth, H = wrap.clientHeight;
     state = createInitialState();
     state.viewport = { zoom: 1, panX: 0, panY: 0 };
@@ -173,6 +207,7 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
     });
     state.objects = [o];
     history = { past: [], future: [] };
+    const purpleish = p => p[2] - p[0] > 60 && p[2] > 150;
     invalidateStatic();
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
     const sample = (x, y) => {
@@ -180,18 +215,25 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
       return [d[0], d[1], d[2], d[3]];
     };
     const newRight = Math.round(W * 0.80), midY = Math.round((top + bottom) / 2);
+    /* 先用左边界描边像素确认首帧已可读，再取「尚未长到」的基线像素 */
+    const seeded = await settle(() => sample(left, midY), purpleish);
     const before = sample(newRight - 2, midY);        /* 尚未长到的区域：应是背景 */
     const rev0 = staticRev;
     o.width = (newRight - left) / 1;                   /* zoom=1，世界宽=屏幕宽 */
     commitObjectEdit([o.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
+    const after = await settle(
+      () => ({ inside1: sample(newRight - 1, midY), inside2: sample(newRight - 2, midY) }),
+      v => purpleish(v.inside1) && purpleish(v.inside2));
     return {
       before,
-      inside1: sample(newRight - 1, midY),
-      inside2: sample(newRight - 2, midY),
-      patched: staticRev === rev0
+      inside1: after.v.inside1,
+      inside2: after.v.inside2,
+      patched: staticRev === rev0,
+      settle: { seed: [seeded.frames, seeded.ms], after: [after.frames, after.ms] }
     };
   });
+  console.log('[M6-P2 变大] settle ' + JSON.stringify(r.settle));
   const purpleish = p => p[2] - p[0] > 60 && p[2] > 150;
   expect(purpleish(r.before)).toBe(false);
   expect(r.patched).toBe(true);
@@ -202,7 +244,8 @@ test('M6-P2 对象变大超出旧包围盒+pad：新边界内侧为对象色，�
 test('M6-P3 编辑 A 后，邻居 B 溢入补绘矩形的标签不被擦除，且走局部补绘', async ({ page }) => {
   await page.goto('/index.html');
   await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate(async () => {
+    const settle = window.__settleSample;
     const W = wrap.clientWidth, H = wrap.clientHeight;
     state = createInitialState();
     state.viewport = { zoom: 1, panX: 0, panY: 0 };
@@ -236,13 +279,18 @@ test('M6-P3 编辑 A 后，邻居 B 溢入补绘矩形的标签不被擦除，�
       }
       return n;
     };
-    const before = greenCount();
+    const before = await settle(greenCount, n => n > 5);
     const rev0 = staticRev;
     a.style.fillAlpha = 0.45;
     commitObjectEdit([a.id]);
     drawScene(ctx, state.viewport, W, H, { interactive: true, markerScale: 1 });
-    return { before, after: greenCount(), patched: staticRev === rev0 };
+    const after = await settle(greenCount, n => n > 5);
+    return {
+      before: before.v, after: after.v, patched: staticRev === rev0,
+      settle: { before: [before.frames, before.ms], after: [after.frames, after.ms] }
+    };
   });
+  console.log('[M6-P3] settle ' + JSON.stringify(r.settle));
   expect(r.before).toBeGreaterThan(5);   /* 首帧确实在采样框里画出了 B 的标签 */
   expect(r.patched).toBe(true);          /* 编辑 A 走的是局部补绘 */
   expect(r.after).toBeGreaterThan(5);    /* 补绘后 B 的标签仍在（不被擦掉且不重画） */
