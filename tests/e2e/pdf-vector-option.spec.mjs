@@ -2,11 +2,12 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
-/* V-3b1/V-3b2b：矢量 PDF 是显式选项；面板必须明示「文字为位图、不可选不可搜、放大会发虚」
-   与当前 DPI 档位。默认 `pdf` 路径不动；矢量选项输出图纸页（底图位图 + 对象矢量 +
-   文字/点位/标题栏位图）与清单页。 */
+/* V-3b1/V-3b2b：矢量 PDF 是显式选项；面板必须明示「文字可选中·可搜索（视觉仍为位图，
+   放大会发虚）」与当前 DPI 档位。默认 `pdf` 路径不动；矢量选项输出图纸页（底图位图 +
+   对象矢量 + 文字/点位/标题栏位图 + 不可见文字层）与清单页。 */
 
 const sha = b => createHash('sha256').update(b).digest('hex');
+const COPY = '文字可选中·可搜索（视觉仍为位图，放大会发虚）';
 
 test('V-3b1：矢量 PDF 选项明示文字口径与档位，默认路径字节不变', async ({ page }) => {
   await page.goto('/index.html');
@@ -26,14 +27,20 @@ test('V-3b1：矢量 PDF 选项明示文字口径与档位，默认路径字节�
   await page.click('#exportBtn');
   const base = readFileSync(await (await dl0).path());
 
-  /* 选项文案：与 P1-03 口径一致，明确「文字为位图」 */
-  await expect(page.locator('#exportKind option[value="pdf-vector"]')).toHaveText(/矢量/);
+  /* 选项文案：导出下拉必须与 features/known-issues 逐字一致 */
+  await expect(page.locator('#exportKind option[value="pdf-vector"]')).toHaveText('PDF（矢量）· ' + COPY);
+  /* 长文案不得让顶栏溢出的控件盖住右侧页签（曾导致其他用例点击超时） */
+  expect(await page.evaluate(() => {
+    const t = document.getElementById('tabBtn-list'), b = t.getBoundingClientRect();
+    const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    return el === t || t.contains(el);
+  })).toBe(true);
 
-  /* 面板：强制警示 + 默认 200 DPI 档位 + 本阶段范围说明 */
+  /* 面板：口径声明 + 默认 200 DPI 档位 + 本阶段范围说明 */
   await page.selectOption('#exportKind', 'pdf-vector');
   await page.click('#exportBtn');
   const modal = page.locator('#modalBody');
-  await expect(modal).toContainText('文字为位图，不可选不可搜，放大会发虚');
+  await expect(modal).toContainText(COPY);
   await expect(modal).toContainText('200 DPI（默认）');
   await expect(modal).toContainText('底图为位图、对象为矢量');
   await expect(modal).toContainText('含图纸页与清单页');

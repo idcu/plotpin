@@ -8,20 +8,20 @@
 
 | 指标 | 2026-11-14 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 797,051 B（778.4 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser C 模式压缩 |
-| gzip 字节 | 260,438 B（254.3 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 单文件产物字节 | 801,141 B（782.4 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser C 模式压缩 |
+| gzip 字节 | 262,043 B（255.9 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
-| 体积余量 | 42,629 B（gzip 余量 26,282 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| 体积余量 | 38,539 B（gzip 余量 24,677 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
 | Service Worker 版本 | `VERSION=244` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 2026-11-14 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 4,308 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条均挂在新增分区 |
-| selftest 分区 | 167 个 | `node scripts/selftest.mjs --list` | 输出 168 行（含 1 行标题） |
+| selftest 断言 | 4,327 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条均挂在新增分区 |
+| selftest 分区 | 168 个 | `node scripts/selftest.mjs --list` | 输出 169 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
-| e2e spec 文件 | 47 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 48 个 `.mjs`（47 spec + 1 helper） |
+| e2e spec 文件 | 48 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 49 个 `.mjs`（48 spec + 1 helper） |
 | e2e 用例 | 176 个（源码 175 通过 + 1 条件跳过；dist 172 通过 + 4 跳过） | `node scripts/e2e.mjs` | 2026-11-14 收口双入口全量实跑；跳过项均为显式条件（协作 soak 需 `COLLAB_SOAK=1`，SW 三条仅 dist 入口不适用）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check-contracts.mjs` | 规则删空即红 |
 | 插件 API 面 | 31 键 / 31 条清单 / 0 泄漏 / 0 落空 | `node scripts/check-plugin-api.mjs` | 词法器 + fail-closed；API 1.1.0 / 8 项能力 |

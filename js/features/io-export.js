@@ -965,7 +965,9 @@ async function vectorPage(floorName,pageNo,pageTotal){
     imgs.push({w:bm.w,h:bm.h,rgb:await V.flate(bm.rgb),alpha:await V.flate(bm.alpha)});
   }
   body+='\n'+V.image('Im1',0,0,842,595);
-  return {body,images:imgs};
+  /* 文字层（不可见）：与位图同一 center 坐标，转成页面 pt 交给写入器；位图仍负责视觉 */
+  const pageTexts=texts.map(it=>{ const p=V.mapPt(f,it.x,it.y); return {t:it.t,x:p[0],y:p[1],s:it.s}; });
+  return {body,images:imgs,texts:pageTexts};
 }
 const b64b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function exportPDFVectorNow(){
@@ -981,22 +983,28 @@ async function exportPDFVectorNow(){
     };
     if(fs.rows.length<=1) await one(null,undefined);
     else for(const row of fs.rows) await withFloor(row.id,()=>one(row.name,row.id));
-    const buf=V.docPages(842,595,pages);
+    /* report 由写入器回填：文字层字符数/字体数与容量不足时的降级原因（不得静默） */
+    const report={};
+    const buf=V.docPages(842,595,pages,{report});
     downloadBlob(new Blob([buf],{type:'application/pdf'}),safeName()+'.pdf');
-    toast(L('PDF 已导出（{n} 页）',{n:pages.length}),'success');
+    toast(report.skipped
+      ? L('PDF 已导出（{n} 页）；文字层未写入：{why}',{n:pages.length,why:report.skipped})
+      : L('PDF 已导出（{n} 页，文字可搜 {chars} 字）',{n:pages.length,chars:report.chars||0}),
+      report.skipped?'warn':'success');
   }catch(e){ toast(L('PDF 生成失败：{msg}',{msg:e.message}),'error'); }
 }
 /** 导出 PDF（矢量）选项：先明示文字口径与当前档位，再按档位导出。
- *  V-3b2a 只交付单页对象层矢量 + 文字位图；底图/点设备/标题栏/清单留给后续分段。 */
+ *  图纸页为「位图视觉 + 不可见文字层」：可选中/搜索/复制，但放大仍发虚；
+ *  清单页保持整页位图（本阶段不写文字层）。 */
 function exportPDFVector(){
   const plan=pdfVectorPlan(pdfVectorLabelCount());
   const tier=plan.reason==='labels'?L('150 DPI（标签数 > 300，自动降档）'):L('200 DPI（默认）');
   const tail=plan.fallback
-    ?'<p><b>'+esc(L('当前环境不支持压缩流，只能退回整页位图。'))+'</b></p>'
-    :'<p class="hint-text">'+esc(L('本选项输出：底图为位图、对象为矢量、文字与点位/标题栏为位图；含图纸页与清单页。'))
-      +'<br>'+esc(L('文字层不可选不可搜，放大会发虚。'))+'</p>';
+    ?'<p><b>'+esc(L('当前环境不支持压缩流，只能退回整页位图（无文字层）。'))+'</b></p>'
+    :'<p class="hint-text">'+esc(L('本选项输出：底图为位图、对象为矢量、文字带不可见文字层；含图纸页与清单页（清单页仍为位图）。'))
+      +'<br>'+esc(L('文字层不受清晰度档位影响。'))+'</p>';
   openModal(L('导出 PDF（矢量）'),
-    '<p><b>'+esc(L('文字为位图，不可选不可搜，放大会发虚。'))+'</b></p>'
+    '<p><b>'+esc(L('文字可选中·可搜索（视觉仍为位图，放大会发虚）。'))+'</b></p>'
     +'<p>'+esc(L('文字清晰度：{v}',{v:tier}))+'</p>'+tail,
     [{text:L('取消'),click:closeModal},
      {text:L('导出'),class:'primary',click:()=>{closeModal();runExport(()=>plan.fallback?exportPDF():exportPDFVectorNow());}}]);

@@ -26,7 +26,7 @@
 | `i18n.js` | 中英文案、插值、运行时替换 | `I18N.t / p / fmt / setLang / apply / dict / phrases / templates / lang`；全局简写 `L` | 纯数据 → 全仓 UI | `L` 只做文本插值，**不转义 HTML**；插入 `innerHTML` 前必须过 `esc` / `xmlEscape`。缺键时回退原文，可能把中文带到英文界面；i18n 扫描门禁拦截新增硬编码。 |
 | `merge.js` | 离线工程合并：对象/楼层/场地/图层/类型的 LWW + 墓碑；M2 配置差异报告 | `mergeProjectData(currentRaw, incomingRaw) → {project, stats, config}`、`mergeConfigText(stats)`；内部 `mergeFloorMeta / mergeFloorObjects / mergeObjectSig / mergeStable / mergePrunedList / mergeClampTimestamps` | 纯函数 → `mergeProjectJSON`、协作 | `A=当前`、`B=导入/远端`；对象签名忽略 `z`；不修改入参。楼层墓碑 `deletedAt >= 两侧最后写入` 时整层删除；至少保留一层。图层/类型墓碑删除定义，内置类型与 `layer.default` 受保护；悬空引用留给 `migrateProject`。`config` 只报告“远端未采纳/已补缺”，不改变合并结果；空报告不挂 `stats.config`。 |
 | `pdf-read.js` | PDF 解析、页序恢复、逐页内嵌图映射（像素流） | `PdfRead.parsePdf / layoutPdfPages / PT_TO_METER / tokenizeContent / looksLikeCidGarbage / LIMITS` | vendor PDF 核心 + `Zip` → `io-import` | 文本按 UTF-16 BOM → GBK 严格 → ASCII 解码，解不开按 `textErrors` 计数；不解析 ToUnicode/CID 字形映射。导入只取第 1 页，`layoutPdfPages` 保留为通用工具但导入不再使用。 |
-| `pdf-vector.js` | 矢量 PDF 写入器：多页页面对象 / 内容流 / xref / 世界→pt 适配 / 图片 XObject 与文字位图 | `PdfVec.stream / docPages / fit / mapPt / path / image / flate / textBitmap` | 纯字符串与字节生成 → `io-export` 的矢量 PDF | 内容流只接受 ASCII 数字与运算符；中文必须走 `textBitmap` + `flate` 的 RGB/SMask 图片。世界与 PDF 同为 Y 向上，`fit` 只做等比缩放+平移+居中。`flate` 不可用时调用方必须回退位图，不得产出坏文件。 |
+| `pdf-vector.js` | 矢量 PDF 写入器：多页页面对象 / 内容流 / xref / 世界→pt 适配 / 图片 XObject / 文字位图 / Type3 不可见文字层 | `PdfVec.stream / docPages / fit / mapPt / path / image / flate / textBitmap` | 纯字符串与字节生成 → `io-export` 的矢量 PDF | 内容流只接受 ASCII 数字与运算符；文字视觉必须走 `textBitmap` + `flate` 的 RGB/SMask 图片，可选中/搜索由独立的 Type3 空字形文字流承担。世界与 PDF 同为 Y 向上，`fit` 只做等比缩放+平移+居中。`flate` 不可用时调用方必须回退位图，不得产出坏文件。 |
 | `pdf.js` | 将 vendor PDF 图像能力适配为 `global.Pdf` | `Pdf` | vendor `pdf-image` → `io-export` 的位图 PDF | 薄适配层，本身不含逻辑。`io-export` 经 `ensureVendor('Pdf')` 调用；PDF 默认导出是整页位图。 |
 | `qr.js` | 二维码编码与 SVG 渲染（协作邀请、导出标签复用） | `Qr`（含 `MAX_BYTES`、`byteLength`） | 纯算法 → 协作、导出 | 容量按固定 Version 3-M，`MAX_BYTES=42`；超出时必须由调用方改用可粘贴文本，禁止渲染不可扫描的假二维码。 |
 | `symbols.js` | 内置 36 个线性符号、分类/别名搜索、自定义 SVG 清洗、DXF 折线近似 | `SYMBOL_LIBRARY / SYMBOL_CATEGORIES / SYMBOL_LIMITS / parseSvgSymbol / buildSymbolIndex / searchSymbols / symbolPathsFor / symbolPolylinesInWorld / customSymbolsFromTypes / sanitizeSymbolBundle` | 纯函数 + SVG 解析 → 渲染、导出、类型面板 | 自有 SVG 上限 64KB / 200 元素 / 深度 16 / 200 path / 单 path 5000 字符；禁止 `script`、事件属性、外部引用。DXF 用 `symbolPolylinesInWorld` 做折线降级，必须在导出报告中说明。 |
@@ -57,7 +57,7 @@
 | `catalog.js` | 产品目录 schema 校验、IndexedDB 存储、版本指纹、JSON/CSV 导入导出 | `CATALOG_SCHEMA / currentCatalog / catalogValidate / catalogFromRows / catalogVersion / importCatalog / catalogLoad / deleteCatalog / exportCatalogJSON` | `idbGetKey/idbPutKey`、`toast/safeName/downloadBlob`、`formulaUnguard` → 报价、面板 | 导入必须**先校验后写库**，失败不得污染现有目录；厂商+型号唯一，单价 0–1e9，型号上限 2000。目录版本用 FNV-1a 指纹，供报价快照追溯。CSV 仅在含厂商/型号/单价三列时识别，归一化后与 JSON 共用 `catalogValidate`。 |
 | `collab.js` | 同机标签 BroadcastChannel、跨设备 WebRTC、分片/去重/TTL、邀请串与二维码、冲突提示、M2 配置差异提示 | `collabStartLocal / collabSendObject / collabHandleMessage / collabOnLocalChange / collabInviteEncode / collabInviteDecode / collabQrFit / openCollabPanel`；常量 `COLLAB_CHUNK / COLLAB_INVITE_PREFIX / COLLAB_INBOUND_*` | `mergeProjectJSON`、`Qr`、持久化、`toast` → 面板、启动 | 分片 48,000 字符，入站 TTL 30s、64 键 / 16MB；SDP 只含 ASCII 用 base64。邀请串超出 QR 容量时必须降级为文本。收到远端工程先合并再落盘；本地未同步修改不能因断线丢失。当前**没有自动重连**（已知产品缺口）。配置差异通过 `mergeConfigText()` 显示，报告异常不阻断合并。 |
 | `io.js` | 新建工程、工程库、楼层管理、底图/文件导入入口 | `openFloorManager / openProjectLibrary / BG_KIND_LABELS`；按钮绑定 `newBtn / clearFloorBtn / importBtn / projBtn / floorBtn` | `io-import`、持久化、`ui-shell` | 新建工程会重置 `state/history`，只能回收“任何命名空间都不再引用”的资产。清空楼层必须先 `pushHistory`（Ctrl+Z 可整体撤销），不得留幽灵数据。 |
-| `io-export.js` | 8 种导出、标题栏/比例尺/图例、PDF 报告分页、SVG/DXF 生成 | `downloadBlob / exportDelimited / exportXlsx / exportPNG / exportSVG / exportDXF / exportPDF / exportPDFVector / pdfVectorPlan / pdfVectorLabelCount / pdfFooter / vectorPage / exportLabelSheet / exportBlindSpotsGeoJson / titleBlockSpec / drawTitleBlockOnCanvas / exportTitleBlockSvg / buildSceneSvg / dxfEntitiesForExport / pdfPagePlan` | `io-fields`、`dxf`、`pdf`、`pdf-vector`、`qr`、`symbols`、`render`、`content-assets` → 顶栏、报价、规则 | 所有导出必须复用 `guardFormula` 与 `EXPORT_FIELD_DEFS`，不得另起表头。标题栏/图例默认关闭，关闭时产物必须与旧 golden 字节一致。默认 `pdf` 是整页位图；`pdf-vector` 为显式选项（底图/场地/网格为整页 JPEG，对象为矢量，文字/点位/标题栏为透明位图，含图纸页与清单页）。DXF 符号折线降级。新增格式必须补 golden 与“不增体积”验证。 |
+| `io-export.js` | 8 种导出、标题栏/比例尺/图例、PDF 报告分页、SVG/DXF 生成 | `downloadBlob / exportDelimited / exportXlsx / exportPNG / exportSVG / exportDXF / exportPDF / exportPDFVector / pdfVectorPlan / pdfVectorLabelCount / pdfFooter / vectorPage / exportLabelSheet / exportBlindSpotsGeoJson / titleBlockSpec / drawTitleBlockOnCanvas / exportTitleBlockSvg / buildSceneSvg / dxfEntitiesForExport / pdfPagePlan` | `io-fields`、`dxf`、`pdf`、`pdf-vector`、`qr`、`symbols`、`render`、`content-assets` → 顶栏、报价、规则 | 所有导出必须复用 `guardFormula` 与 `EXPORT_FIELD_DEFS`，不得另起表头。标题栏/图例默认关闭，关闭时产物必须与旧 golden 字节一致。默认 `pdf` 是整页位图；`pdf-vector` 为显式选项（底图/场地/网格为整页 JPEG，对象为矢量，文字视觉仍为透明位图并叠加不可见文字层，清单页仍为位图）。DXF 符号折线降级。新增格式必须补 golden 与“不增体积”验证。 |
 | `io-fields.js` | 导出字段描述表、CSV/TSV/XLSX 渲染、报价与盲区字段、尺寸测量 | `EXPORT_FIELD_DEFS / TABLE_COLUMNS / LEDGER_FIELDS / buildExportRow / exportParamText / xlsxExportTable / dimensionMeasure / QUOTE_FIELD_DEFS / quoteTable / buildBlindSpotGeoJson` | `geometry`（角度/面积）→ 导出、表格、报价；自身提供 `guardFormula` | 字段表是 CSV/TSV/XLSX/PDF/SVG/DXF 的共同源；改字段名会同时改变所有产物，必须说明影响面。`guardFormula` 对 `= + - @` 前缀做防注入，导出格式不得绕过。 |
 | `io-import.js` | 图片/DXF/DWG/PDF/SVG 导入、单位与保真提示、场地选择与底图缩放 | `extOfFile / dwgVersionInfo / pickConvertedFile / applyDxfImport / applyVectorSite / backgroundScalePlan / openSitePicker` | `pdf-read`、`dxf`、`geometry-transform`、`model`、`ui-shell` | DWG 需要外部转换器，缺转换器必须给明确原因而不是当作 DXF。DXF 保真度要列出“保留/降级/丢弃”；PDF 只导入第 1 页并在多页时提示页数。导入失败必须事务化回滚。 |
 | `io-table.js` | CSV/TSV/XLSX 表格预览、批量布点、条件批量替换 | `showTableImportPreview / applyTableImport / rowsToObjectsPlan / applyRowShape / applyLedgerCells / rowMatchesObject / checkRowGeom` | `io-fields`、`model`、几何、`ui-shell` | 严格模式整批事务化：任一行非法则整体失败，不允许半量写入。坐标/楼层/类型/编号解析规则必须与清单展示一致；布尔与数字解析不得用 `parseInt` 近似。 |
@@ -103,9 +103,9 @@
 | `lib/golden.mjs` | golden 写入闸门：`UPDATE_GOLDEN=1` 且 `ALLOW_GOLDEN=1` 且非 `CI` 三者同时满足才可写；拒绝时给出原因，写入时输出差异摘要并追加 `test-results/golden-change.log` | 环境变量 + 文件字节 → 写/拒 | `selftest.mjs`、`export-scope.spec.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-## tests（70 个）
+## tests（71 个）
 
-### e2e 用例（47 个 spec）
+### e2e 用例（48 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -132,7 +132,8 @@
 | `onboarding.spec.mjs` | 首访三步引导；空白开始后持久化、刷新不再打扰 |
 | `pdf-dpi.spec.mjs` | P2-02：PDF 图纸页 220dpi 默认、300dpi 封顶 3000px，版式不变 |
 | `pdf-multipage.spec.mjs` | B-13：多页 PDF 只导入第 1 页、页数与单页提示、底图入库 |
-| `pdf-vector-option.spec.mjs` | V-3b1/V-3b2b：矢量 PDF 为显式选项、文案口径、默认路径字节不变 |
+| `pdf-vector-option.spec.mjs` | V-3b1/V-3b2b/V-3b0：矢量 PDF 为显式选项、文案口径、默认路径字节不变、清单页逐页 MediaBox |
+| `pdf-text-layer.spec.mjs` | V-6：矢量 PDF 文字可提取（pdftotext 对比），等长抹掉 `/ToUnicode` 后必须退化；无 poppler 时条件跳过 |
 | `perf-render.spec.mjs` | B-11：真实 Chromium 渲染基线（2000 对象 / 1600×900）；M6 局部补绘像素采样（位移、放大、编辑 A 后 B 标签仍在），共 4 个用例 |
 | `persistence.spec.mjs` | IndexedDB v1→v2：迁移写回 v2、楼层补 `updatedAt`、不丢楼层/对象 |
 | `plugin-compat.spec.mjs` | D-06：版本矩阵，预检回传 major/minor，越界/畸形给可读原因 |

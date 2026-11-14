@@ -10734,6 +10734,58 @@ await section("V-3b0 清单页逐页 MediaBox：图纸页/清单页混排不变�
 
 });
 
+/* ---------------- V-6 不可见文字层：Type3 空字形 + ToUnicode ---------------- */
+await section("V-6 不可见文字层：Type3 空字形 + ToUnicode", async () => {
+{
+  const P = api.PdfVec;
+  /* 固定度量：汉字/字母 0.5em、空格 0.25em；A=0.8 D=0.2 → 基线偏移 (A−D)/2 = 0.3em */
+  const measure = { width: ch => (ch === ' ' ? 0.25 : 0.5), ascent: 0.8, descent: 0.2 };
+  const pdf = (texts, extra) => String.fromCharCode.apply(null, Array.from(P.docPages(842, 595,
+    [Object.assign({ body: P.image('Im0', 0, 0, 842, 595), images: [{ w: 1, h: 1, jpeg: new Uint8Array([1]) }], texts: texts }, extra || {})],
+    { measure: measure, report: undefined })));
+  const one = pdf([{ t: 'AB', x: 100, y: 200, s: 10 }]);
+  ok('V-6 写入 Type3 字体', one.includes('/Subtype /Type3'));
+  ok('V-6 写入 ToUnicode', /\/ToUnicode \d+ 0 R/.test(one));
+  ok('V-6 文字以不可见模式绘制', one.includes('3 Tr'));
+  ok('V-6 文字串为十六进制（内容流保持 ASCII）', one.includes('/T0 10 Tf <0102> Tj'));
+  ok('V-6 空字形只声明宽度', one.includes('500 0 d0'));
+  /* 水平居中：总宽 1em×10pt=10pt → x0=95；基线 = 200 − 0.3×10 = 197 */
+  ok('V-6 定位按文字宽度居中并换算基线', one.includes('1 0 0 1 95 197 Tm'));
+  ok('V-6 页面内容流为数组（正文 + 文字层）', /\/Contents \[ \d+ 0 R \d+ 0 R \]/.test(one));
+  ok('V-6 页面资源引用字体', /\/Font << \/T0 \d+ 0 R >>/.test(one));
+  ok('V-6 ToUnicode 映射每个字符', one.includes('<01> <0041>') && one.includes('<02> <0042>'));
+  /* 空格必须保留映射（否则提取时单词粘连） */
+  const sp = pdf([{ t: 'A B', x: 0, y: 0, s: 10 }]);
+  ok('V-6 空格保留 ToUnicode 映射', sp.includes('<02> <0020>'));
+  /* 换行/制表折成空格，不产生无映射控制字符 */
+  const nl = pdf([{ t: 'A\nB\tC', x: 0, y: 0, s: 10 }]);
+  ok('V-6 换行/制表折成空格', !/\<0A\>|\<0D\>|\<09\>/.test(nl) && nl.includes('<02> <0020>'));
+  /* 非 BMP 字符按 UTF-16BE 代理对写 4 字节 */
+  const emo = pdf([{ t: '😀', x: 0, y: 0, s: 10 }]);
+  ok('V-6 非 BMP 写代理对', emo.includes('<01> <D83DDE00>'));
+  /* 200 码位/字体：201 个唯一字符拆成两个字体，第二字体码位重新从 1 开始 */
+  const many = Array.from({ length: 201 }, (_, i) => String.fromCharCode(0x4e00 + i)).join('');
+  const two = pdf([{ t: many, x: 0, y: 0, s: 10 }]);
+  eq('V-6 超 200 字符拆成两个字体', (two.match(/\/Subtype \/Type3/g) || []).length, 2);
+  ok('V-6 首字体 200 宽', two.includes('/FirstChar 1 /LastChar 200'));
+  ok('V-6 次字体 1 宽', two.includes('/FirstChar 1 /LastChar 1'));
+  ok('V-6 次字体码位从 1 开始', two.includes('/T1 10 Tf <01> Tj'));
+  /* 容量上限：>64×200 唯一字符时整份降级，不写半个文字层，且回填原因 */
+  const over = Array.from({ length: 64 * 200 + 1 }, (_, i) => String.fromCharCode(0x4e00 + i)).join('');
+  const report = {};
+  const bytes = String.fromCharCode.apply(null, Array.from(P.docPages(842, 595,
+    [{ body: P.image('Im0', 0, 0, 842, 595), images: [{ w: 1, h: 1, jpeg: new Uint8Array([1]) }], texts: [{ t: over, x: 0, y: 0, s: 10 }] }],
+    { measure: measure, report: report })));
+  ok('V-6 超容量整份降级', !bytes.includes('/Subtype /Type3') && !bytes.includes('3 Tr'));
+  ok('V-6 降级原因回填', !!report.skipped && report.chars === 0);
+  /* 无文字页面：不引入字体资源与文字流，保障「未用文字层的页面」结构不变 */
+  const plain = String.fromCharCode.apply(null, Array.from(P.docPages(842, 595,
+    [{ body: P.image('Im0', 0, 0, 842, 595), images: [{ w: 1, h: 1, jpeg: new Uint8Array([1]) }] }], { measure: measure })));
+  ok('V-6 无文字页不写字体', !plain.includes('/Type3') && !plain.includes('/ToUnicode') && !/\/Contents \[/.test(plain));
+}
+
+});
+
 /* ---------------- V-3b1 矢量 PDF 导出选项：档位决策与降级原因 ---------------- */
 await section("V-3b1 矢量 PDF 导出选项：档位决策与降级原因", async () => {
 {
