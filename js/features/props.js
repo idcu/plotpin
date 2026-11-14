@@ -369,6 +369,19 @@ function renderProps(){
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
       <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L('坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。'))}</div>`;
+  }else if(o.kind==='arc'){
+    /* 描边圆弧：只有圆心/半径/起止角；没有宽高与旋转角，也没有面积与填充 */
+    const sh=o.shape||{};
+    specific=`
+      ${row('圆心 X',num('x',fmt(o.x)))}${row('圆心 Y',num('y',fmt(o.y)))}
+      ${row('半径 (m)',num('shapeR',fmt(sh.r)))}
+      ${row('起始角',num('shapeA0',fmt(Number(sh.a0)||0),1))}
+      ${row('张角 (0–360)',num('shapeSweep',fmt(Math.round(arcSweep(sh)*10)/10),.1))}
+      ${row('弧长',`<b>${fmt(objectLength(o))}</b> m`)}
+      ${row('颜色',`<input type="color" data-style="color" value="${esc(o.style.color||t.color)}">`)}
+      ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
+      ${renderAnnotToggles(o)}
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L('圆弧是描边几何：不参与面积与覆盖率，参与弧长统计与规则近似；张角上限 359.9°，整圆请用「矩形/区域」的圆形。'))}</div>`;
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
@@ -682,11 +695,15 @@ function applyField(el,o,changed){
   else if(k==='shapeRx'&&o.shape){ o.shape.rx=Math.max(.05,Number(el.value)||0); }
   else if(k==='shapeRy'&&o.shape){ o.shape.ry=Math.max(.05,Number(el.value)||0); }
   else if(k==='shapeA0'&&o.shape){
-    const sweep=sectorSweep(o.shape);
+    const sweep=o.kind==='arc'?arcSweep(o.shape):sectorSweep(o.shape);
     o.shape.a0=normalizeAngle(Number(el.value)||0); o.shape.a1=o.shape.a0+sweep;
   }
   else if(k==='shapeSweep'&&o.shape){
-    const sweep=Math.min(360,Math.max(1,Number(el.value)||90));
+    /* 圆弧张角上限 359.9°：360 会被清洗侧按"想要圆就画圆"拒收，这里先钳住避免存盘丢对象。
+       空值才回落 90；显式输入 0 对弧抬到 0.1（扇形维持 1° 下限） */
+    const isArc=o.kind==='arc', n=Number(el.value);
+    const v=(String(el.value??'').trim()!==''&&Number.isFinite(n))?n:90;
+    const sweep=isArc?Math.min(359.9,Math.max(.1,v)):Math.min(360,Math.max(1,v));
     o.shape.a1=(Number(o.shape.a0)||0)+sweep;
   }
   else if(k==='shapeSkew'&&o.shape){

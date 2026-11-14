@@ -3610,6 +3610,39 @@ await section("36.6 ARC 渲染交互：命中/手柄/画布/标注", async () =>
 }
 });
 
+/* 36.7 S3：ARC 面板与表格——统计防 NaN/导出列/写回钳制 ------------------------ */
+await section("36.7 ARC 面板与表格：统计/导出列/写回钳制", async () => {
+{
+  const arc=api.baseObject('arc','arc.builtin',{name:'A1',x:0,y:0,shape:{type:'arc',r:50,a0:0,a1:90}});
+  api.resetState();
+  api.state.objects=[arc];
+  api.renderStats();
+  const html=api.$('statsPanel').innerHTML;
+  ok('S3-统计卡出现圆弧且计数为 1', /圆弧<\/div>|圆弧<\/b>|圆弧[\s\S]{0,30}<b>1<\/b>/.test(html));
+  ok('S3-统计卡无 NaN', !html.includes('NaN'));
+  eq('S3-楼层汇总 arc 计数', api.floorSummaries().total.counts.arc, 1);
+
+  const row=api.buildExportRow(arc,'1F');
+  eq('S3-CSV 形状列=圆弧', row['形状'], '圆弧');
+  eq('S3-CSV 形状参数=a0,a1', row['形状参数'], '0.00,90.00');
+  eq('S3-CSV 节点数=0', row['节点数'], 0);
+  eq('S3-CSV 面积列留空', row['面积'], '');
+  eq('S3-CSV 长度列=弧长', row['长度'], '78.54');
+
+  /* 写回：张角 360 必须钳到 359.9，否则清洗侧按「想要圆就画圆」丢对象 */
+  const el=(field,v)=>({dataset:{field},value:String(v),validity:{badInput:false},classList:{add(){},remove(){}}});
+  api.applyField(el('shapeSweep',360),arc,()=>{});
+  approx('S3-张角 360 钳到 359.9', api.arcSweep(arc.shape), 359.9, 1e-9);
+  api.applyField(el('shapeSweep',0),arc,()=>{});
+  approx('S3-张角 0 抬到 0.1', api.arcSweep(arc.shape), .1, 1e-9);
+  api.applyField(el('shapeA0',350),arc,()=>{});
+  approx('S3-起始角归一 350', arc.shape.a0, 350, 1e-9);
+  approx('S3-改起始角保持张角', api.arcSweep(arc.shape), .1, 1e-9);
+  ok('S3-写回后仍能被清洗保留', api.sanitizeArcShape(arc.shape)!==null);
+  api.resetState();
+}
+});
+
 /* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
 await section("37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG", async () => {
 asyncSuites.push((async()=>{

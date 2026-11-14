@@ -18,8 +18,8 @@
 
 | 指标 | 2026-11-14 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 4,369 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条、ARC S1 新增 20 条、ARC S2 新增 22 条均挂在新增分区 |
-| selftest 分区 | 170 个 | `node scripts/selftest.mjs --list` | 输出 171 行（含 1 行标题） |
+| selftest 断言 | 4,382 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条、ARC S1 新增 20 条、ARC S2 新增 22 条、ARC S3 新增 13 条均挂在新增分区 |
+| selftest 分区 | 171 个 | `node scripts/selftest.mjs --list` | 输出 172 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
 | e2e spec 文件 | 48 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 49 个 `.mjs`（48 spec + 1 helper） |
 | e2e 用例 | 178 个（源码 177 通过 + 1 条件跳过；dist 174 通过 + 4 跳过） | `node scripts/e2e.mjs` | 2026-11-15 收口双入口全量实跑；跳过项均为显式条件（协作 soak 需 `COLLAB_SOAK=1`，SW 三条仅 dist 入口不适用）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |

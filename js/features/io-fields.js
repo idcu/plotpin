@@ -65,6 +65,10 @@ function exportShapeSummary(o){
     else if(tt===CIR){ w=h=2*sh.r; }
     else if(tt===ELL){ w=2*sh.rx; h=2*sh.ry; }
     else { w=h=2*sh.r; param=fmt(Number(sh.a0)||0)+','+fmt(Number(sh.a1)||0); }
+  }else if(o.kind==='arc'){
+    /* 描边圆弧：宽高取外接盒直径；参数沿用扇形的 a0,a1 口径（便于与区域形状对照） */
+    const sh=o.shape||{}, a0=Number(sh.a0)||0;
+    label='圆弧'; w=h=2*Math.max(0,Number(sh.r)||0); param=fmt(a0)+','+fmt(a0+arcSweep(sh));
   }
   return {w,h,angle,label,param};
 }

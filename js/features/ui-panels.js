@@ -85,8 +85,8 @@ function populateSelects(){
   fill($('filterLayer'),state.layers,I18N.t('allLayers'),'');
   fill($('batchLayer'),state.layers,'',state.layers[0]?.id||'');
   const oldKind=$('filterKind').value;
-  const kindLabels=[I18N.t('allObjects'),I18N.t('filterPoint'),I18N.t('filterArea'),I18N.t('filterLine'),I18N.t('filterText'),I18N.t('filterDimension')];
-  $('filterKind').innerHTML=kindLabels.map((x,i)=>`<option value="${i?['','point','rect','line','text','dimension'][i]:''}">${esc(x)}</option>`).join('');
+  const kindLabels=[I18N.t('allObjects'),I18N.t('filterPoint'),I18N.t('filterArea'),I18N.t('filterLine'),I18N.t('filterArc'),I18N.t('filterText'),I18N.t('filterDimension')];
+  $('filterKind').innerHTML=kindLabels.map((x,i)=>`<option value="${i?['','point','rect','line','arc','text','dimension'][i]:''}">${esc(x)}</option>`).join('');
   $('filterKind').value=oldKind;
 }
 
@@ -492,7 +492,7 @@ function findIssues(){
   return issues;
 }
 function renderStats(){
-  const counts={point:0,rect:0,line:0,text:0,dimension:0};
+  const counts={point:0,rect:0,line:0,arc:0,text:0,dimension:0};
   state.objects.forEach(o=>counts[o.kind]++);
   const area=state.objects.reduce((s,o)=>s+objectArea(o),0);
   const len=state.objects.reduce((s,o)=>s+objectLength(o),0);
@@ -503,17 +503,18 @@ function renderStats(){
       <div class="stat-card">${esc(L('点设备'))}<b>${counts.point}</b></div>
       <div class="stat-card">${esc(L('矩形/区域'))}<b>${counts.rect}</b></div>
       <div class="stat-card">${esc(L('线段/折线'))}<b>${counts.line}</b></div>
+      <div class="stat-card">${esc(L('圆弧'))}<b>${counts.arc}</b></div>
       <div class="stat-card">${esc(L('文字'))}<b>${counts.text}</b></div>
       <div class="stat-card">${esc(L('标注总长'))}<b>${fmt(len)} m</b></div>
       <div class="stat-card">${esc(L('区域总面积'))}<b>${fmt(area)} ㎡</b></div>
     </div>
     ${fs.rows.length>1?`<div class="section" style="margin-top:10px"><h3>${esc(L('楼层汇总'))}</h3>
       <table class="floor-sum-table"><thead><tr>
-        <th>${esc(L('楼层'))}</th><th>${esc(L('对象'))}</th><th>${esc(L('点设备'))}</th><th>${esc(L('区域'))}</th><th>${esc(L('折线'))}</th><th>${esc(L('总长'))}</th><th>${esc(L('总面积'))}</th>
+        <th>${esc(L('楼层'))}</th><th>${esc(L('对象'))}</th><th>${esc(L('点设备'))}</th><th>${esc(L('区域'))}</th><th>${esc(L('折线'))}</th><th>${esc(L('圆弧'))}</th><th>${esc(L('总长'))}</th><th>${esc(L('总面积'))}</th>
       </tr></thead><tbody>
         ${fs.rows.map(r=>`<tr data-floor-sum="${esc(r.id)}" class="${r.active?'active':''}" title="${esc(L('点击切换到该楼层'))}">
-          <td>${esc(r.name)}${r.active?' ★':''}</td><td>${r.count}</td><td>${r.counts.point}</td><td>${r.counts.rect}</td><td>${r.counts.line}</td><td>${fmt(r.len)} m</td><td>${fmt(r.area)} ㎡</td></tr>`).join('')}
-        <tr class="total"><td>${esc(L('全楼合计'))}</td><td>${fs.total.count}</td><td>${fs.total.counts.point}</td><td>${fs.total.counts.rect}</td><td>${fs.total.counts.line}</td><td>${fmt(fs.total.len)} m</td><td>${fmt(fs.total.area)} ㎡</td></tr>
+          <td>${esc(r.name)}${r.active?' ★':''}</td><td>${r.count}</td><td>${r.counts.point}</td><td>${r.counts.rect}</td><td>${r.counts.line}</td><td>${r.counts.arc}</td><td>${fmt(r.len)} m</td><td>${fmt(r.area)} ㎡</td></tr>`).join('')}
+        <tr class="total"><td>${esc(L('全楼合计'))}</td><td>${fs.total.count}</td><td>${fs.total.counts.point}</td><td>${fs.total.counts.rect}</td><td>${fs.total.counts.line}</td><td>${fs.total.counts.arc}</td><td>${fmt(fs.total.len)} m</td><td>${fmt(fs.total.area)} ㎡</td></tr>
       </tbody></table>
       <p class="hint-text">${esc(L('点击楼层行可切换；汇总覆盖全部楼层。'))}</p></div>`:''}
     <div class="section" style="margin-top:10px"><h3>${esc(L('工程信息'))}</h3><div class="kv-list">
