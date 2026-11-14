@@ -79,7 +79,7 @@ npm run discipline    # 方法论自检看板
 - **状态只有一个写入口**：`replaceState(next, opts)` 统一完成赋值、活动层重别名、叠放缓存失效、静态层重建、取景复位、UI 与底图更新；`quiet` 只用于启动装载与纯迁移。门禁 9.1 扫描 `state` 直接赋值，只放行 `model.js` 的声明与 `replaceState()` 内部。
 - **依赖是显式的**：6 个必需钩子缺注册时，`assertHooksReady()` 在 `init()` 首行直接抛错，而不是静默 no-op——起不来比悄悄不保存好。耦合与软调用基线见 `contracts/coupling.json`，按文件+符号+次数严格相等，只减不增。
 
-> **CI 现状（2026-11-13 核查）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载到 GitHub Actions 并实际运行——CI 运行 60 次、全部失败（`test` 与两个 `e2e` job 为红），`Perf Nightly` 0 次，`pages-build-deployment` 87 次。**Actions 在跑但全红，不作发布门禁**：门禁以本地为准，逐条命令与期望值见 [release-checklist](docs/release-checklist.md)。
+> **CI 现状（2026-11-15 核查）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载到 GitHub Actions 并实际运行。2026-11-13 的 60 次全红里，`test` job 的根因（缺 `npm ci` → 无 terser / node_modules）已于 2026-11-14 修掉，并在 2026-11-15 的 run `43626940476` 转绿；两个 `e2e` job 的根因是 `dist/` 不入库且 job 内不构建（源码入口 3 条 `file-dist` 用例 `ERR_FILE_NOT_FOUND`、dist 入口 webServer 因产物缺失 404 超时），已在 `e2e` job 内补构建步骤：复跑后源码入口全绿（175 passed / 1 skipped），dist 入口 webServer 正常、171 passed / 4 skipped / 1 failed（`perf-render.spec.mjs:198` 像素采样 `inside1` 断言 false；本地 dist 入口同一 spec 全绿，原因未定位，不得据此放宽判定）。**Actions 仍不作发布门禁**：门禁以本地为准，逐条命令与期望值见 [release-checklist](docs/release-checklist.md)。
 
 - **性能门禁必须有数据**：`scripts/bench.mjs` 的 P95 / heapUsed / 静态重建阈值不达标即红；涉及渲染或历史栈的改动需同时跑对应基准。
 - **门禁不达标不提交**：不得放宽阈值、删除断言或跳过用例来“转绿”。

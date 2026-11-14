@@ -8,7 +8,9 @@ name: CI
 # `net::ERR_FILE_NOT_FOUND`，dist 入口 webServer 因 `/index.html` 映射到缺失产物而 20 s 超时。
 # 这不属于产品缺陷——两条入口依赖的都是「构建完成」这一前提，判定与常量一律不放宽；
 # 修复方式：在本文件 `e2e` job 内先构建再跑（见该 job 的构建步骤注释）。
-# 修复后的远端结论以推送后的 run 为准，未核实前不写成已绿。
+# 复跑（run 43626940476）：源码入口全绿（175 passed / 1 skipped）；dist 入口 webServer 恢复正常，
+# 171 passed / 4 skipped / 1 failed，失败为 perf-render.spec.mjs:198 像素采样（本地同一 spec 全绿，
+# 原因未定位）。因此 e2e job 仍未全绿，不得据此放宽判定。
 # 决策（D2，2026-11-13）：发布门禁放在本地，Actions 仅作参考，不作为合并阻断。
 # 发布门禁以本地命令为准，逐条清单与期望值见 `docs/release-checklist.md`。
 on:

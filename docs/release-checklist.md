@@ -1,8 +1,9 @@
 # 发布门禁清单（本地为准）
 
-> **Actions 在跑但全红，不作发布门禁。** `.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行
+> **Actions 已运行但未全绿，仍不作发布门禁。** `.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行
 > （2026-11-13 核查：CI 60 次全部失败、`Perf Nightly` 0 次、`pages-build-deployment` 87 次），**不能**当作自动校验。
-> 2026-11-14 已修掉 `test` job 缺 `npm ci` 的结构性全红根因（详见 `ci.yml` 步骤注释），修复后尚未复跑 Actions 核对。
+> 2026-11-14 修掉 `test` job 缺 `npm ci` 的结构性根因；2026-11-15 run `43626940476` 中该 job 已转绿。
+> 同日修掉两个 `e2e` job「`dist/` 不入库且 job 内不构建」的根因（在 job 内先 `node scripts/build.mjs`），复跑：源码入口 175 passed / 1 skipped（绿），dist 入口 171 passed / 4 skipped / 1 failed（`perf-render.spec.mjs:198` 像素采样，本地同一 spec 全绿，原因未定位）。
 > 每次发布/合并前必须在本机逐条执行并**核对数字**，不能只看退出码。
 > **基线与快照日期：2026-11-14**（A 阶段工作树：CSP 双向比对、CI 依赖安装、golden 双变量、perf 多轮取最小、门禁牙齿 19 样本）。数字以命令现场输出为准；本文快照只用于判断“是否同一次合法变化”。
 

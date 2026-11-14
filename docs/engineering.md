@@ -124,9 +124,9 @@ npm run ci       =  node scripts/check.mjs --selftest
 npm run ci:full  =  npm run ci && npm run test:e2e
 ```
 
-> **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行——CI 60 次运行全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次。
-> 因此 Actions **在跑但全红，不作发布门禁**；下表的“ci.yml 定义中的归属”只表示判据由哪个 job 承担，不代表已绿或可依赖。发布以本地门禁为准。
-> 2026-11-14 已定位并修掉 `test` job 的结构性全红根因（缺 `npm ci` → 无 terser / 无 node_modules，见 `ci.yml` 步骤注释）；修复后尚未复跑 Actions 核对。
+> **Actions 现状（2026-11-15 核查，来源 `gh api` / `gh run view`）**：`.github/workflows/ci.yml` 与 `perf-nightly.yml` 已挂载并实际运行。2026-11-13 的 60 次全红中，`test` job 的根因（缺 `npm ci` → 无 terser / 无 node_modules）已于 2026-11-14 修复，并在 2026-11-15 的 run `43626940476` 转绿。
+> 两个 `e2e` job 的根因是 `dist/` 不入库且 job 内不构建（源码入口 3 条 `file-dist` 用例 `net::ERR_FILE_NOT_FOUND`；dist 入口 `serve.mjs` 把 `/index.html` 映射到缺失产物，404 使 webServer 20 s 超时）；2026-11-15 在 `e2e` job 内补 `node scripts/build.mjs`，只补构建前提，未改用例、判定与常量。复跑：源码入口全绿（175 passed / 1 skipped），dist 入口 171 passed / 4 skipped / 1 failed（`perf-render.spec.mjs:198` 像素采样 `inside1` false；本地同一 spec 全绿，原因未定位）。
+> 因此 Actions **仍不作发布门禁**；下表的“ci.yml 定义中的归属”只表示判据由哪个 job 承担，不代表已绿或可依赖。发布以本地门禁为准。
 
 | 命令 | 作用 | 在 `npm run ci` | `ci.yml` 定义中的归属 |
 |---|---|---|---|
@@ -140,7 +140,7 @@ npm run ci:full  =  npm run ci && npm run test:e2e
 | `node scripts/check-gates.mjs` | 正面基线 10 条 + 20 种人为破坏 | 是 | `test` job |
 | `node scripts/check-ngm.mjs` / `npm test` | vendor ↔ `ngm.json` ↔ `ngm.lock` 三角对账 | **是（2026-11-14 起并入 `npm run ci`）** | 独立 `vendor-check` job（Actions 侧） |
 | `node scripts/check-discipline.mjs --strict` | 文档纪律 13 问（低于 L3 退出 1） | 是（2026-11-14 起） | 独立 `discipline` job（Actions 侧） |
-| `node scripts/e2e.mjs` | Chromium 功能 e2e（46 spec / 166 用例；2026-11-14 本地双入口全量已复跑） | 否（`npm run ci:full` 才含） | 独立 `e2e` job，matrix 双入口；**远端已运行且失败（2026-11-13），不作发布门禁** |
+| `node scripts/e2e.mjs` | Chromium 功能 e2e（46 spec / 166 用例；2026-11-14 本地双入口全量已复跑） | 否（`npm run ci:full` 才含） | 独立 `e2e` job，matrix 双入口，job 内先构建 `dist/`；**远端 2026-11-15：源码入口绿、dist 入口 1 条像素采样红，不作发布门禁** |
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI；`perf-nightly.yml` 夜间定时 + 手动，读数上传 artifact；**schedule 已挂载但尚未触发（0 次）** |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率 44.12%（按出现次数）/缺口/硬编码 | 是（`npm run ci` 独立步骤；Actions 侧经 `check.mjs` 第 11 步） | 随 `test` job |
 
@@ -247,7 +247,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `e2e` | GitHub Actions 上已执行且失败，不能作为回归依据。本地命令：`node scripts/e2e.mjs`（源码）与 `E2E_ENTRY=dist E2E_PORT=4174 node scripts/e2e.mjs`（dist）；缺 Playwright/Chromium 时打印 `[SKIP]` 并退 2，不伪装通过 |
 | `perf:browser` | 不在 `npm run ci`；`perf-nightly.yml` 的 `schedule` 已挂载但尚未触发（0 次）；本机为 SwiftShader，数据不能当真实 GPU 结论 |
 | `npm run ci` | 11 步：selftest → check-ngm → check-sw → check-contracts → check-plugin-api → i18n-scan → check-discipline --strict → check-deletions → bench → build --check → check-gates；不含 e2e、perf-browser；`ci:full` 才加 e2e。不要用“本地 ci 绿”代替浏览器 e2e 与真机结论 |
-| 本地纪律 | Actions 在跑但全红，等于没有“干净检出上的强制回归”；漏跑、跑一半、看到红仍合并都只能靠人工约束 |
+| 本地纪律 | Actions 已运行但未全绿（2026-11-15：`test` 绿，`e2e` 源码入口绿、dist 入口 1 条像素采样红），仍等于没有完整的“干净检出上的强制回归”；漏跑、跑一半、看到红仍合并都只能靠人工约束 |
 
 ### 4.6 i18n 数字口径：三个数不是同一个分母
 
@@ -382,7 +382,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 12 | 每条判据都在总闸里（没有“写了但从不跑”） |
 | 13 | 文档里的命令必须指向真实存在的脚本：`node scripts/*.mjs` 文件必须存在，`npm run <name>` 必须是 `package.json` 中的脚本 |
 
-> 第 2 问（判据在 CI 上跑）只核对 workflow 定义里是否调用了判据/总闸；Actions 虽有运行但全红且不作门禁，该问不代表判据已被可靠执行——真实执行证据只能来自本地发布清单的日志。
+> 第 2 问（判据在 CI 上跑）只核对 workflow 定义里是否调用了判据/总闸；Actions 虽有运行但未全绿且不作门禁，该问不代表判据已被可靠执行——真实执行证据只能来自本地发布清单的日志。
 
 写文档时：不要复制易漂移数字；命令必须可执行；引用旧结论前先核对代码。
 

@@ -8,14 +8,14 @@
 
 ## 1. 四层结构
 
-| 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行但红，不作门禁） |
+| 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **166 个分区 / 4,298 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **47 个 spec / 176 个用例**（源码入口 175 跑 + 1 条件跳过；dist 172 跑 + 4 跳过） | 本地双入口 2026-11-14 收口全量通过；远端 `e2e` job 仍为 2026-11-13 双入口 matrix 全红，以本地命令为准，见 §3 |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **47 个 spec / 176 个用例**（源码入口 175 跑 + 1 条件跳过；dist 172 跑 + 4 跳过） | 本地双入口 2026-11-14 收口全量通过；远端 2026-11-15 补构建后：源码入口全绿，dist 入口 171 passed / 4 skipped / 1 failed（像素采样），以本地命令为准，见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
-> **Actions 现状（2026-11-13 核查，来源 `gh api`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行——CI 60 次全部失败（`test` 与两个 `e2e` job 为红）、`Perf Nightly` 0 次、`pages-build-deployment` 87 次；**Actions 在跑但全红，不作发布门禁**。发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。2026-11-14 已修掉 `test` job 缺 `npm ci` 的结构性全红根因（详见 `ci.yml` 注释），但修复后的 Actions 尚未复跑核对，在拿到新的运行记录前不改变「以本地为准」的结论。
+> **Actions 现状（2026-11-15 核查，来源 `gh api` / `gh run view`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行。2026-11-13 的 60 次全红中，`test` job 缺 `npm ci` 的结构性根因已于 2026-11-14 修复，并在 run `43626940476` 转绿。两个 `e2e` job 的红是 `dist/` 不入库且 job 内不构建（源码入口 3 条 `file-dist` 用例 `net::ERR_FILE_NOT_FOUND`、dist 入口 webServer 20 s 超时），已在 `e2e` job 内补 `node scripts/build.mjs` 步骤——只补构建前提，未改用例、判定或常量。复跑结果：源码入口 175 passed / 1 skipped（绿）；dist 入口 webServer 正常、171 passed / 4 skipped / 1 failed，失败为 `tests/e2e/perf-render.spec.mjs:198` 像素采样 `inside1` 断言 false（同一 spec 本地 dist 入口全绿，原因未定位）。**Actions 仍不作发布门禁**，发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。
 
 四层职责不同，**数据不可互换**：
 
