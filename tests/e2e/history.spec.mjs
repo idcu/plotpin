@@ -83,6 +83,35 @@ test('撤销/重做清理交互瞬态：草稿、覆盖层与捕捉热键不残�
     .toEqual({ draft: null, osnap: null });
 });
 
+/* F3：连按 10 次撤销会叠出 10 条异步收尾；旧一轮不得再刷新 UI / 写回底图。 */
+test('F3：连续 10 次撤销，异步收尾只执行最后一轮，最终状态对应最后一次撤销', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  await openApp(page);
+
+  for (let i = 0; i < 10; i++) await drawPoint(page, i * 8 - 36, (i % 3) * 6);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(10);
+
+  /* 人为放慢照片收尾，制造 10 轮收尾互相取代的窗口；统计「收尾执行次数」 */
+  await page.evaluate(() => {
+    window.__tail = 0;
+    const rf = window.refreshUI;
+    window.refreshUI = function () { window.__tail++; return rf.apply(this, arguments); };
+    const eo = window.ensureObjectPhotoAssets;
+    window.ensureObjectPhotoAssets = async function (s) {
+      await new Promise(r => setTimeout(r, 120));
+      return eo(s);
+    };
+  });
+
+  for (let i = 0; i < 10; i++) await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(0);
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => ({ objects: state.objects.length, sel: selectedIds.size, tail: window.__tail })))
+    .toEqual({ objects: 0, sel: 0, tail: 1 });
+  expect(errors).toEqual([]);
+});
+
 test('新增楼层：新层绘制对象后刷新，楼层/活动层/对象都保持', async ({ page }) => {
   await openApp(page);
   const before = await page.evaluate(() => state.floors.map(f => f.id));

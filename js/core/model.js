@@ -204,6 +204,8 @@ function normalizeRuleConfig(raw){
 /* -------------------- 初始化 / 工程数据 -------------------- */
 /** 设置键白名单（唯一真源）：从默认设置派生，持久化与启动合并共用，避免第二套清单漏键。 */
 const SETTINGS_KEYS=Object.freeze(Object.keys(createInitialState().settings));
+/** 工程 meta 白名单（唯一真源）：默认 meta 键 + 协作绑定键 projectId；导入/合并只接受这些键（B4）。 */
+const META_KEYS=Object.freeze(Object.keys(createInitialState().meta).concat('projectId'));
 /** @returns {ProjectState} 新工程状态 */
 function createInitialState(){
   const now = new Date().toISOString();

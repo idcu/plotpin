@@ -39,6 +39,7 @@ function pushDraftPoint(points,wp){
   points.push(wp); return true;
 }
 function setTool(tool){
+  if(readOnly&&tool!=='select') return guardWrite(L('该工具'));
   /* 独立「测距」按钮 = 标注工具的 ruler 子模式：复用 dimension 全部交互，仅入口更醒目；
      点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
   if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
@@ -293,6 +294,7 @@ canvas.addEventListener('pointerdown',e=>{
   if(currentTool==='select'){
     const h=handleAt(wp,sp);
     if(h){
+      if(!guardWrite(L('拖拽'))) return;
       pushHistory();
       drag={type:h.type,handle:h,id:h.object.id,start:wp,original:deepClone(h.object)};
       return;
@@ -302,6 +304,7 @@ canvas.addEventListener('pointerdown',e=>{
       if(isEditable(o)){
         if(e.shiftKey||e.ctrlKey||e.metaKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
         else if(!selectedIds.has(o.id)){ selectedIds.clear(); selectedIds.add(o.id); }
+        if(readOnly){ refreshSelectionUI(); requestRender(); return; }
         drag={type:'move',start:wp,originals:new Map(),moved:false};
         const idx=dragObjectIndex(drag);
         selectedIds.forEach(id=>{ const obj=idx.get(id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
@@ -1047,6 +1050,7 @@ async function finishAffine(){
 
 /* -------------------- 对象操作 -------------------- */
 function deleteSelected(){
+  if(!guardWrite(L('删除'))) return;
   const deletable=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!deletable.length) return toast('没有可删除的选中对象（可能位于锁定图层）','warn');
   showConfirm(`${L('确定删除选中的')} ${deletable.length} ${L('个对象吗？')}`).then(ok=>{
@@ -1055,11 +1059,13 @@ function deleteSelected(){
     const ids=new Set(deletable.map(o=>o.id));
     deletable.forEach(o=>markTombstone(o.id,'object'));
     state.objects=state.objects.filter(o=>!ids.has(o.id));
+    syncActiveFloor();   /* B7：整体替换后立即重建活动楼层别名，不等下一次保存/统计 */
     deletable.forEach(o=>selectedIds.delete(o.id));
     commitChange('已删除对象');
   });
 }
 function duplicateSelected(){
+  if(!guardWrite(L('复制对象'))) return;
   const olds=state.objects.filter(o=>selectedIds.has(o.id)); if(!olds.length) return;
   if(!ensureObjectCapacity(olds.length)) return;   /* M-13：批量一次校验 */
   pushHistory();
@@ -1075,6 +1081,7 @@ function copySelected(){
   if(clipboard.length) toast(L('已复制 {n} 个对象到剪贴板',{n:clipboard.length}));
 }
 function pasteClipboard(){
+  if(!guardWrite(L('粘贴'))) return;
   if(!clipboard.length) return;
   if(!ensureObjectCapacity(clipboard.length)) return;   /* M-13：按粘贴数量一次校验 */
   pushHistory();
@@ -1216,6 +1223,9 @@ window.addEventListener('keydown',e=>{
   /* 弹窗优先：Esc 在输入框内也能关闭；Tab 在弹窗内循环；其余快捷键不穿透遮罩 */
   if($('modalBackdrop').classList.contains('show')){ modalKeydown(e); return; }
   if(typing) return;
+  /* G5：只读时拦截编辑类快捷键（撤销/重做/复制副本/粘贴/剪切/删除/方向键移动） */
+  const roEdit=(e.ctrlKey||e.metaKey)?['z','y','d','v','x'].includes(e.key.toLowerCase()):['Delete','Backspace','Enter'].includes(e.key)||e.key.startsWith('Arrow');
+  if(readOnly&&roEdit){ e.preventDefault(); return guardWrite(L('编辑快捷键')); }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!e.shiftKey&&(currentTool==='calibrate'||currentTool==='affine')&&calibUndo()) return; e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }

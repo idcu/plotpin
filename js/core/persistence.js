@@ -9,6 +9,8 @@
  * 漏扫快照会在工程不再引用后回收资产，导致快照回滚时底图/照片失效（B-04 补丁）。
  * @returns {Promise<Map<string,string[]>>}
  */
+/** 工程库扫描批大小（B3）：单批键数上限，批间让出事件循环，避免 GC 长时间阻塞撤销后的落盘/绘制 */
+const ASSET_SCAN_BATCH=200;
 async function assetRefsByNamespace(){
   const ns=assetRefsInMemory();
   /* R-06：localStorage 里的兜底草稿、救援副本、协作待发队列同样可能引用资产；
@@ -16,20 +18,26 @@ async function assetRefsByNamespace(){
   assetRefsFromLocalStorage(ns);
   /* 读不到工程库就不动资产：宁可晚回收，也不能删掉看不见的工程 */
   const keys=await idbAllKeys();
+  const targets=[];
   for(const key of keys){
     const k=String(key);
-    const isSnapshot=k.startsWith(SNAPSHOT_PREFIX);
-    if(k!=='current'&&!k.startsWith(PROJECT_PREFIX)&&!isSnapshot) continue;
-    let rec=null;
-    /* M-01：单键读取失败不能当作"无引用"跳过，否则该记录引用的资产会被误删 */
-    try{ rec=await idbGetKey(key); }
-    catch(e){ throw new Error('资产引用扫描失败：'+k+(e&&e.message?'（'+e.message+'）':'')); }
-    /* 快照记录是 {meta,data} 外壳；资产引用在 data 的工程结构里 */
-    const ids=isSnapshot?snapshotAssetRefs(rec):ContentAssets.collectAssetRefs(rec);
-    if(!ids.length) continue;
-    if(k==='current') ns.set('autosave',ids);
-    else if(isSnapshot) ns.set(`snapshot:${k.slice(SNAPSHOT_PREFIX.length)}`,ids);
-    else ns.set(`project:${k.slice(PROJECT_PREFIX.length)}`,ids);
+    if(k==='current'||k.startsWith(PROJECT_PREFIX)||k.startsWith(SNAPSHOT_PREFIX)) targets.push(k);
+  }
+  for(let i=0;i<targets.length;i+=ASSET_SCAN_BATCH){
+    if(i) await new Promise(r=>setTimeout(r,0));
+    for(const k of targets.slice(i,i+ASSET_SCAN_BATCH)){
+      const isSnapshot=k.startsWith(SNAPSHOT_PREFIX);
+      let rec=null;
+      /* M-01：单键读取失败不能当作"无引用"跳过，否则该记录引用的资产会被误删 */
+      try{ rec=await idbGetKey(k); }
+      catch(e){ throw new Error('资产引用扫描失败：'+k+(e&&e.message?'（'+e.message+'）':'')); }
+      /* 快照记录是 {meta,data} 外壳；资产引用在 data 的工程结构里 */
+      const ids=isSnapshot?snapshotAssetRefs(rec):ContentAssets.collectAssetRefs(rec);
+      if(!ids.length) continue;
+      if(k==='current') ns.set('autosave',ids);
+      else if(isSnapshot) ns.set(`snapshot:${k.slice(SNAPSHOT_PREFIX.length)}`,ids);
+      else ns.set(`project:${k.slice(PROJECT_PREFIX.length)}`,ids);
+    }
   }
   return ns;
 }
@@ -121,38 +129,68 @@ function scheduleAssetGc(delay){
   clearTimeout(assetGcTimer);
   assetGcTimer=setTimeout(()=>{ assetGcTimer=null; pruneBgAssets(); },Number.isFinite(delay)?delay:800);
 }
-/** 撤销/重做按钮可用态：空栈即置灰（禁用），避免点击后无反馈 */
+/** 撤销/重做按钮可用态：空栈或本地只读即置灰（禁用），避免点击后无反馈 */
 function updateHistoryButtons(){
   const u=$('undoBtn'), r=$('redoBtn');
-  if(u) u.disabled=!history.past.length;
-  if(r) r.disabled=!history.future.length;
+  if(u) u.disabled=readOnly||!history.past.length;
+  if(r) r.disabled=readOnly||!history.future.length;
 }
-function pushHistory(){
+/* G5 本地只读：运行时会话状态，不进工程/schema/协作；刷新默认可编辑。仅锁本端，不是权限位。 */
+let readOnly=false;
+function isReadOnly(){ return readOnly; }
+/** 只读写入守卫：拒绝并给出可读原因；返回 true 表示可写 */
+function guardWrite(what){
+  if(!readOnly) return true;
+  toast(L('本地只读：{what}已拒（仅锁本端编辑，对端仍可改本工程）',{what:what||L('编辑')}),'warn');
+  return false;
+}
+/** 顶栏按钮态 + 撤销/重做可用态（只读时两者恒灰） */
+function applyReadOnlyUI(){
+  const b=$('readOnlyBtn');
+  if(b) b.textContent=L(readOnly?'只读中':'只读');
+  updateHistoryButtons();
+  callHook('ui.readOnlyChanged',readOnly);
+}
+/** 切换本端只读；只读不是权限位，不通知协作对端、不改工程 */
+function setReadOnly(on){
+  if(on===readOnly) return readOnly;
+  if(on) setTool('select');
+  readOnly=!!on;
+  applyReadOnlyUI();
+  toast(L(readOnly?'已进入本地只读：仅锁本端，对端仍可改本工程':'已退出本地只读'),'warn');
+  return readOnly;
+}
+/** pushHistory(remote=true) 仅供协作远端应用旁路；本地写入一律受只读守卫 */
+function pushHistory(remote){
+  if(readOnly&&!remote) return guardWrite(L('编辑'));
   /* 结构共享快照：与上一帧比较，未变子树/字符串（照片 base64）直接复用 */
   const prev=history.past.length?history.past[history.past.length-1]:null;
   history.past.push(snapshotHistoryState(state,prev));
-  if(history.past.length>APP_LIMITS.HISTORY_MAX){ history.past.shift(); pruneBgAssets(); }
+  if(history.past.length>APP_LIMITS.HISTORY_MAX){ history.past.shift(); scheduleAssetGc(1500); }
   history.future=[];
   updateHistoryButtons();
+  return true;
 }
 function undo(){
+  if(!guardWrite(L('撤销'))) return;
   if(!history.past.length) return;
   const prevFuture=history.future.length?history.future[history.future.length-1]:null;
   history.future.push(snapshotHistoryState(state,prevFuture));
   /* 快照不可变：弹出后物化一份可编辑副本，避免 live 编辑污染共享子树（普通条目原样返回） */
   replaceState(materializeHistoryState(history.past.pop()),{fit:false});
   selectedIds.clear();
-  pruneBgAssets();
+  scheduleAssetGc(1500);           /* B3：撤销热路径不扫全库，延后回收 */
   markDirty('restore');            /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
   toast(L('已撤销'));
 }
 function redo(){
+  if(!guardWrite(L('重做'))) return;
   if(!history.future.length) return;
   const prevPast=history.past.length?history.past[history.past.length-1]:null;
   history.past.push(snapshotHistoryState(state,prevPast));
   replaceState(materializeHistoryState(history.future.pop()),{fit:false});
   selectedIds.clear();
-  pruneBgAssets();
+  scheduleAssetGc(1500);           /* B3：重做同样不扫全库 */
   markDirty('restore');            /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
   toast(L('已重做'));
 }
@@ -237,6 +275,8 @@ function stampObjectsIn(objs){
 }
 /** @param {string} [floorId] 需要打点的楼层；缺省当前楼层（CORE-P2-8：重命名非当前楼层时也要刷新该层） */
 function commitChange(message, ids, floorId){
+  if(!guardWrite(L('编辑'))) return false;
+  assertActiveFloorAlias('commit');
   stampObjects(ids);
   touchFloor(floorId);
   state.meta.updatedAt=nowISO();
@@ -246,6 +286,8 @@ function commitChange(message, ids, floorId){
   if(message) toast(message,'success');
 }
 function commitObjectEdit(ids){
+  if(!guardWrite(L('属性写入'))) return false;
+  assertActiveFloorAlias('commit');
   stampObjects(ids);
   touchFloor();
   state.meta.updatedAt=nowISO();
@@ -259,6 +301,7 @@ function commitObjectEdit(ids){
  * 返回清理前的摘要，供二次确认文案与自测使用。
  */
 function clearCurrentFloor(){
+  if(!guardWrite(L('清空楼层'))) return null;
   const summary={objects:(state.objects||[]).length,background:isImageBackground(state.background),site:!!state.site};
   (state.objects||[]).forEach(o=>{ if(o&&o.id) markTombstone(o.id,'object'); });
   state.background=createEmptyBackground();
@@ -417,9 +460,12 @@ async function listProjects(){
 /** 当前草稿绑定/另存为工程库中的命名工程，返回 projectId */
 async function saveProjectAs(name){
   if(name&&String(name).trim()) state.meta.name=String(name).trim().slice(0,80);
+  const hadPid=!!state.meta.projectId, metaId=state.meta.id;
   state.meta.projectId=state.meta.projectId||uid('PRJ');
   state.meta.updatedAt=nowISO();
   await idbPutKey(projectKey(state.meta.projectId),persistableState());
+  /* 草稿评论归属 meta.id；入库后改用 projectId，避免副本共用评论 */
+  if(!hadPid&&metaId) callHook('comments.migrateOwner',metaId,state.meta.projectId);
   return state.meta.projectId;
 }
 /** 工程对象总数（顶层当前楼层 + 其余楼层），用于导入/打开的 OBJECTS_MAX 校验 */
@@ -470,6 +516,7 @@ async function openProjectById(id){
   try{
     await replaceState(next);           /* 先等全楼层照片 dataUrl→资产转换完成，打开才算提交 */
     await pruneBgAssets();              /* IO-P1-6：提交成功后才回收；失败回滚不误删旧工程资产 */
+    callHook('collab.projectSwitched'); /* B2：作废在途协作快照，禁止旧工程写入新工程 */
     scheduleSave();
   }catch(e){
     history=prevHistory;                            /* 提交阶段失败：回滚到打开前 */
@@ -500,6 +547,8 @@ async function duplicateProjectById(id){
 }
 async function deleteProjectById(id){
   await idbDeleteKey(projectKey(id));
+  /* 工程删除后其本地评论不再有归属：按 projectId 清理，避免残留他人数据 */
+  callHook('comments.removeOwner',id);
   /* 工程删除后其快照链不再有归属：一并清理（snapshot.js 定义，独立命名空间，不影响其它工程） */
   await deleteSnapshotsForProject(id);
   if(state.meta?.projectId===id){ state.meta.projectId=''; refreshUI(); scheduleSave(); }
@@ -536,10 +585,16 @@ function scrubBackgroundForSave(bg){
   bg.kind='none'; bg.fileName=''; bg.width=0; bg.height=0; bg.metersPerPixel=0;
 }
 /** 工程落盘副本：底图字节在 assets 库，dataUrl 仅运行时存在，绝不写回工程记录；
- *  当前楼层数据保留在顶层，其余楼层携带各自 background/objects（均为已清洗的可序列化结构）。 */
+ *  当前楼层数据保留在顶层，其余楼层携带各自 background/objects（均为已清洗的可序列化结构）。
+ *  F1：优先用原生 structuredClone 一次遍历复制，替代 JSON.stringify+parse 的字符串往返；
+ *  老环境退回原 deepClone（JSON 往返），两条路径对同一 state 的 JSON 输出逐字节一致。 */
 function persistableState(){
   syncActiveFloor();
-  const copy=deepClone(state);
+  let copy;
+  /* structuredClone 拒绝函数/符号（旧 JSON 往返会静默丢弃）；state 契约里没有这类值，
+     但保存路径不允许因一次 clone 失败就整次落盘失败，异常时退回旧实现。 */
+  try{ copy=typeof structuredClone==='function'?structuredClone(state):deepClone(state); }
+  catch(_){ copy=deepClone(state); }
   scrubBackgroundForSave(copy.background);
   (copy.floors||[]).forEach(f=>{
     if(f.id===copy.activeFloorId){ delete f.background; delete f.site; delete f.objects; delete f.viewport; return; }
@@ -657,6 +712,16 @@ function floorSummaries(){
   });
   return {rows,total};
 }
+/* B7：活动楼层对象别名不变量。默认关闭（生产零成本），selftest 用 setFloorAliasAssert(true) 开启；
+   失配即抛错，避免「现场对象」与「楼层条目」各存一份后静默写盘。 */
+let floorAliasAssert=false;
+function setFloorAliasAssert(on){ floorAliasAssert=!!on; }
+function assertActiveFloorAlias(where){
+  if(!floorAliasAssert) return;
+  const f=currentFloor();
+  if(f&&f.objects!==state.objects)
+    throw new Error('活动楼层对象别名失配（'+(where||'sync')+'）：'+(f.name||f.id));
+}
 /** 把当前可编辑数据写回当前楼层条目（切换/保存/统计前调用） */
 function syncActiveFloor(){
   const f=currentFloor();
@@ -665,6 +730,7 @@ function syncActiveFloor(){
   f.site=state.site;
   f.objects=state.objects;
   f.viewport=state.viewport;
+  assertActiveFloorAlias('sync');
 }
 /**
  * 状态整体替换的唯一提交入口。除本函数外全仓不再出现 `state = ...`；
@@ -904,6 +970,24 @@ function scheduleSave(){
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
   saveTimer=setTimeout(runSave,450);
 }
+/* B5：对象列表审计（顶层与各楼层复用）。label 为空串时输出与旧版逐字一致。
+   st.n 为全局检查总量，超上限即停止并标记，避免超大工程在载入路径上卡死。 */
+const AUDIT_KINDS=['point','rect','line','text','dimension'];
+const AUDIT_MAX_OBJECTS=50000;
+function auditObjectList(list,label,ids,layerIds,st,warnings){
+  let dup=0,badKind=0,badLayer=0;
+  for(const o of Array.isArray(list)?list:[]){
+    if(st.n>=AUDIT_MAX_OBJECTS){ st.cut=true; break; }
+    st.n++;
+    if(!o||typeof o!=='object'||!o.id){ dup++; continue; }
+    if(!AUDIT_KINDS.includes(o.kind)) badKind++;
+    if(ids.has(o.id)) dup++; else ids.add(o.id);
+    if(layerIds.size&&o.layerId&&!layerIds.has(o.layerId)) badLayer++;
+  }
+  if(dup) warnings.push(label+'id 重复 '+dup);
+  if(badKind) warnings.push(label+'未知类型 '+badKind);
+  if(badLayer) warnings.push(label+'未知图层 '+badLayer);
+}
 function auditProject(raw){
   const errors=[],warnings=[];
   let p=raw;
@@ -917,14 +1001,15 @@ function auditProject(raw){
   if(!floors.length) warnings.push('楼层为空');
   if(!p.activeFloorId||!floors.some(f=>f&&f.id===p.activeFloorId)) warnings.push('活动楼层');
   if(p.objects!==undefined&&!Array.isArray(p.objects)) errors.push('对象列表损坏');
-  const objs=Array.isArray(p.objects)?p.objects:[];
-  const ids=new Set(); let dup=0;
-  objs.forEach(o=>{ if(!o||typeof o!=='object'||!o.id){ dup++; return; } if(ids.has(o.id)) dup++; else ids.add(o.id); });
-  if(dup) warnings.push('id 重复 '+dup);
+  const ids=new Set(),st={n:0,cut:false};
   const layerIds=new Set((Array.isArray(p.layers)?p.layers:[]).map(l=>l&&l.id).filter(Boolean));
-  let badLayer=0;
-  if(layerIds.size) objs.forEach(o=>{ if(o&&typeof o==='object'&&o.layerId&&!layerIds.has(o.layerId)) badLayer++; });
-  if(badLayer) warnings.push('未知图层 '+badLayer);
+  auditObjectList(p.objects,'',ids,layerIds,st,warnings);
+  /* 非活动楼层的对象在 floors[].objects；活动楼层条目的对象即顶层 p.objects，跳过避免双计 */
+  floors.forEach(f=>{
+    if(!f||typeof f!=='object'||f.id===p.activeFloorId) return;
+    auditObjectList(f.objects,'楼层「'+(f.name||'未命名')+'」('+(f.id||'?')+') ',ids,layerIds,st,warnings);
+  });
+  if(st.cut) warnings.push('对象超过 '+AUDIT_MAX_OBJECTS+' 条，仅检查前 '+AUDIT_MAX_OBJECTS+' 条');
   const bg=p.background;
   if(bg!==undefined&&(!bg||typeof bg!=='object'||Array.isArray(bg))) warnings.push('底图损坏');
   else if(bg&&bg.kind==='image'&&!bg.assetId&&!bg.dataUrl) warnings.push('资产缺失');
@@ -1120,10 +1205,19 @@ function applyLocalSettings(){
   state.settings=sanitizeSettings(raw);
   return state.settings;
 }
+/** B4：按白名单拷贝自有键，跳过原型链危险键（工程 meta 的唯一真源是 META_KEYS） */
+function assignKnown(target, src, keys){
+  if(!src||typeof src!=='object') return target;
+  for(const k of keys){
+    if(k==='__proto__'||k==='constructor'||k==='prototype') continue;
+    if(Object.prototype.hasOwnProperty.call(src,k)) target[k]=src[k];
+  }
+  return target;
+}
 /** 由原始 JSON 构建清洗后的工程对象；不写全局 state，供导入/打开工程做“先校验后替换”的事务 */
 function buildProject(p){
   const base=createInitialState();
-  const meta=Object.assign(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{});
+  const meta=assignKnown(base.meta,typeof p.meta==='object'&&p.meta?p.meta:{},META_KEYS);
   meta.name=typeof meta.name==='string'&&meta.name.trim()?meta.name:base.meta.name;
   /* B-07：图框/标题栏随 meta 持久化；旧档缺字段 → 默认模板（enabled:false，不改变既有导出） */
   meta.titleBlock=normalizeTitleBlock(meta.titleBlock);
@@ -1187,7 +1281,7 @@ function buildProject(p){
       console.warn('[sanitize] 楼层重名 '+dupFloorName+' 个，已保留原名；导入前请先重命名');
     }
     /* 读完即升级为当前 schema（v1 → v2），下一次保存写回 v2，不丢任何数据 */
-    return Object.assign(base,p,{schema:SCHEMA,meta,settings,rules:normalizeRuleConfig(p.rules),background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
+    return Object.assign(base,{schema:SCHEMA,meta,settings,rules:normalizeRuleConfig(p.rules),background,site,viewport,layers,objectTypes,objects,floors,activeFloorId,tombstones});
   }finally{ restoreNames(); }
 }
 /** 迁移并立即替换当前状态（旧调用方语义）；需要失败回滚的路径请用 buildProject */
@@ -1271,6 +1365,14 @@ async function mergeProjectJSON(raw,opts={}){
   syncActiveFloor();
   const currentRaw=persistableState();
   const incomingRaw=mergeBlankMissingTimestamps(deepClone(raw));
+  /* B2：协作代际令牌——本地已切工程、或来件属于其他工程时整包丢弃；
+     无 projectId 的旧版来件保持兼容（缺省放行），避免升级后被单方面断流 */
+  if(opts.expectProjectId!==undefined){
+    const curPid=(currentRaw.meta&&currentRaw.meta.projectId)||'';
+    const inPid=(incomingRaw.meta&&incomingRaw.meta.projectId)||'';
+    if((curPid&&curPid!==opts.expectProjectId)||(inPid&&inPid!==opts.expectProjectId))
+      return {ignored:'stale-project'};
+  }
   /* B8：入站时间戳校验/钳制，未来时间戳不得永久压制本地编辑 */
   const clockClamped=mergeClampTimestamps(incomingRaw);
   /* buildProject 自带清洗/迁移；不临时替换现场，合并结果确定后一次性提交 */
@@ -1337,14 +1439,14 @@ function sanitizeSiteAnnot(raw){
   SITE_ANNOT_SETTING_KEYS.forEach(k=>{ if(typeof raw[k]==='boolean') out[k]=raw[k]; });
   return out;
 }
-/** 时间戳清洗：不可解析或超前本机 now+5s 一律置空（与 mergeClampTimestamps 同口径，
- *  防止清洗环节把已被夹取的空值“还原”为未来时间）。 */
+/** 时间戳清洗：可解析且未超前本机 now+5s 的值统一归一为 UTC ISO（B6：跨时区同一时刻判等）；
+ *  不可解析或超前一律置空（与 mergeClampTimestamps 同口径，防止清洗环节把夹取的空值还原为未来时间）。 */
 function normalizeTimestamp(v,nowMs){
   if(typeof v!=='string'||!v) return '';
   const t=Date.parse(v);
   const tol=typeof MERGE_FUTURE_TOLERANCE_MS==='number'?MERGE_FUTURE_TOLERANCE_MS:5000;
   const max=(Number.isFinite(nowMs)?nowMs:Date.now())+tol;
-  return (!Number.isFinite(t)||t>max)?'':v;
+  return (!Number.isFinite(t)||t>max)?'':new Date(t).toISOString();
 }
 function sanitizeSite(rawSite,layers){
   if(!rawSite||typeof rawSite!=='object') return null;
@@ -1630,7 +1732,11 @@ async function afterStateLoaded(fit=true,opts={}){
     invalidateStatic();                       /* 状态整体替换：静态层必须重建 */
     resetFrameRef();                        /* 状态整体替换后重算取景框基准，避免 pan 补偿错位 */
     const oversizePhotos=await ensureObjectPhotoAssets(state);   /* JSON 内嵌照片转存资产库（失败静默，不影响工程载入） */
+    /* F3：连按撤销/重做会叠出多次收尾；本轮已被更新的一次加载取代时丢弃剩余收尾，
+       避免旧一轮的 UI 刷新/提示/底图写回盖住最新状态（finally 仍会结算本轮信号）。 */
+    if(seq!==bgLoadSeq) return;
     await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
+    if(seq!==bgLoadSeq) return;
     if(oversizePhotos) toast(oversizePhotos+' 张设备照片超过单张 16MB 上限，不会写入工程保存，仅当前会话可见','warn');
     /* 旧版底图资产 */refreshUI();
     if(fit) fitView();
@@ -1652,7 +1758,8 @@ async function afterStateLoaded(fit=true,opts={}){
       }else if(bg.dataUrl){
         url=bg.dataUrl;              // IDB 不可用的退化环境
       }
-      if(!url){ bgImageState='missing'; refreshCalibStatus(); return; }
+      if(!url){ if(seq===bgLoadSeq){ bgImageState='missing'; refreshCalibStatus(); } return; }
+      if(seq!==bgLoadSeq) return;      /* F3：底图 dataUrl 只允许最新一轮写回 */
       bgDataUrl=url;
       const img=await loadImageSrc(url);
       if(seq===bgLoadSeq){ bgImage=img; bgImageState='ready'; refreshCalibStatus(); requestRender(); }

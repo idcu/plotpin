@@ -103,3 +103,22 @@ test('P0-04 救援模式新建需显式确认：取消保持现场，确认解�
   await expect(page.locator('#loadBanner')).toHaveCount(0);
   expect(await page.evaluate(() => state.objects.length)).toBe(0);
 });
+
+/* C4：合并工程与新建/打开走同一救援守卫；取消后现场与救援保持均不变 */
+test('C4 救援模式下合并工程需显式确认：取消保持现场', async ({ page }) => {
+  const broken = '{"schema":"' + V2 + '","objects":[';
+  await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [LS, broken]);
+  await page.goto('/index.html');
+  await expect(page.locator('#loadBanner')).toBeVisible();
+  const before = await page.evaluate(() => ({ name: state.meta.name, objects: state.objects.length }));
+
+  await page.click('#projBtn');
+  const chooser = page.waitForEvent('filechooser');
+  await page.click('#projMerge');
+  const fc = await chooser;
+  await fc.setFiles({ name: 'other.json', mimeType: 'application/json', buffer: Buffer.from('{"schema":"' + V2 + '","objects":[]}') });
+  await expect(page.locator('#modalBody')).toContainText('当前处于救援模式');
+  await page.locator('#modalFooter button', { hasText: '取消' }).click();
+  expect(await page.evaluate(() => ({ name: state.meta.name, objects: state.objects.length }))).toEqual(before);
+  await expect(page.locator('#loadBanner')).toBeVisible();
+});

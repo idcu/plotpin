@@ -94,3 +94,22 @@ test('拖拽中 Esc：对象回到原位，撤销栈不留空快照', async ({ p
   });
   expect(settled).toEqual({ x: before.x, y: before.y, hist: before.hist });
 });
+
+test('B7：删除对象后活动楼层条目立即与现场同一数组', async ({ page }) => {
+  await openApp(page);
+  const { cx, cy } = await drawPointAtCenter(page);
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  await page.mouse.click(cx, cy);
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+
+  await page.keyboard.press('Delete');
+  await expect(page.locator('#modalBackdrop')).toHaveClass(/show/);
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(0);
+
+  const r = await page.evaluate(() => {
+    const f = state.floors.find(x => x.id === state.activeFloorId);
+    return { same: !!f && f.objects === state.objects, count: f ? f.objects.length : -1 };
+  });
+  expect(r).toEqual({ same: true, count: 0 });
+});

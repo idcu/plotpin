@@ -22,6 +22,16 @@ function mergeRuleSide(local, incoming){
  * 报告是 mergeProjectData 的第三个返回值，刻意不塞进 stats：§59 对 stats 做整对象深比较。
  * items 最多保留 MERGE_CONFIG_ITEM_LIMIT 条用于明细，kept/adopted 始终是精确总数。 */
 const MERGE_CONFIG_ITEM_LIMIT=40;
+/** B4：只拷自有键并跳过原型链危险键——导入/合并不得借 __proto__ 改写对象模型。
+ *  这里不引 core 的白名单常量（common→core 依赖只允许下调）；合并结果随后仍经 buildProject 白名单清洗。 */
+function assignSafe(target, src){
+  if(!src||typeof src!=='object') return target;
+  for(const k of Object.keys(src)){
+    if(k==='__proto__'||k==='constructor'||k==='prototype') continue;
+    target[k]=src[k];
+  }
+  return target;
+}
 /** 逐键比较：双侧都有且不同 → kept（本地胜）；仅远端有 → adopted；仅本地有或相同 → 不记。
  *  keys 省略时取两侧键并集；报告里的 items 只留前 N 条明细，kept/adopted 始终精确。 */
 function mergeConfigKeys(a,b,scope,id,report,keys,skip){
@@ -128,10 +138,14 @@ function mergeProjectData(currentRaw, incomingRaw){
     return { id, name:f.name, updatedAt:f.updatedAt || '', background:mergeClone(f.background || {}), site:mergeClone(f.site || null), viewport:mergeClone(f.viewport || {}), objects:objs };
   });
 
-  const meta = Object.assign({}, mergeClone(B.meta || {}), mergeClone(A.meta || {}));
+  const meta = {};
+  assignSafe(meta, mergeClone(B.meta || {}));
+  assignSafe(meta, mergeClone(A.meta || {}));
   const metaTs = mergeLater(A.meta, B.meta);
   if (metaTs) meta.updatedAt = metaTs;
-  const settings = Object.assign({}, mergeClone(B.settings || {}), mergeClone(A.settings || {}));
+  const settings = {};
+  assignSafe(settings, mergeClone(B.settings || {}));
+  assignSafe(settings, mergeClone(A.settings || {}));
   /* MERGE-10：图层/类型墓碑直接删除定义；内置类型与 layer.default 不参与删除（结构与跨工程兜底） */
   const layers = mergePrunedList(A.layers, B.layers, tombs.layer, stats, 'layersDeleted', 'layer.default', false);
   if (!layers.length) {
@@ -456,11 +470,12 @@ function mergeCloneObjects(f){
   });
 }
 function mergeClone(v){ return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
-/** 对象内容签名：键序稳定化并忽略 z（本地叠放顺序），避免等价对象误判冲突 */
+/** 对象内容签名：键序稳定化并忽略 z（本地叠放顺序）与 updatedAt（LWW 时间元数据），
+ *  避免等价对象误判冲突或把纯时间戳差异算成内容冲突（B6） */
 function mergeObjectSig(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return mergeStable(o);
   const copy = {};
-  Object.keys(o).forEach(k => { if (k !== 'z') copy[k] = o[k]; });
+  Object.keys(o).forEach(k => { if (k !== 'z' && k !== 'updatedAt') copy[k] = o[k]; });
   return mergeStable(copy);
 }
 /** 内容比较用：键序稳定化，避免等价对象因键序不同被误判为冲突 */
