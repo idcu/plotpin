@@ -8,7 +8,8 @@ $('exportBtn').onclick=()=>{
   if(kind==='svg') runExport(()=>exportSVG());
   if(kind==='pdf') runExport(()=>exportPDF());
   if(kind==='pdf-vector') runExport(()=>exportPDFVector());
-  if(kind==='dxf') runExport(()=>exportDXF());
+  /* E5：保真导出为显式选项，默认关闭；默认分支实体顺序/数值格式/写盘路径不变 */
+  if(kind==='dxf'||kind==='dxf-fidelity') runExport(()=>exportDXF({dxfFidelity:kind!=='dxf'}));
   if(kind==='csv') runExport(()=>exportDelimited(',','csv','text/csv;charset=utf-8'));
   if(kind==='tsv') runExport(()=>exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8'));
   if(kind==='xlsx') runExport(()=>exportXlsx());
@@ -16,6 +17,7 @@ $('exportBtn').onclick=()=>{
   if(kind==='quote-xlsx') runExport(()=>exportQuote('xlsx'));
   if(kind==='catalog-json') runExport(()=>exportCatalogJSON());
   if(kind==='catalog-delete') deleteCatalog();
+  if(kind==='ledger-tpl') openTemplateDialog();
   if(kind==='labels') runExport(()=>exportLabelSheet());
   if(kind==='title-block') openTitleBlockDialog();
 };
@@ -232,6 +234,50 @@ function exportXlsx(){
   const buf=ensureVendor('Xlsx').build(table, '图纸标注');
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
   toast('XLSX 已导出（可再次导入更新对象属性）','success');
+}
+/* -------------------- G7 台账模板（显式选项，不改默认导出） --------------------
+ * 模板是数据常量：cols 数组即列集合/列序，标题直接取 EXPORT_FIELD_DEFS 的 key。
+ * 内置模板只读、不可被用户覆盖；不写入 state/工程 JSON/localStorage，不改 schema。 */
+const TPL_BUILTIN=[
+  {id:'tpl.ledger',name:'设备台账',cols:['编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','备注']},
+  {id:'tpl.point',name:'点位清单',cols:['编号','名称','业务类型','图层','X','Y','楼层','备注']}
+];
+function tplParse(s){ return String(s||'').split(/[,，;；\s]+/).map(x=>x.trim()).filter(Boolean); }
+/** 未知列：保存/导出前都调用；空数组=全部可识别（已识别但无值→空单元格） */
+function tplUnknown(cols){
+  const ok=new Set(EXPORT_FIELD_DEFS.map(f=>f.key));
+  return (cols||[]).filter(k=>!ok.has(k));
+}
+/** 纯函数：按模板列导出全楼层表格（空工程只有表头，不产生空数据行） */
+function tplTable(cols){ return [cols,...objectRowsAll().map(r=>cols.map(c=>String(r[c]??'')))]; }
+function tplExport(kind,cols){
+  if(!cols||!cols.length) return {ok:0,r:'empty'};
+  const miss=tplUnknown(cols);
+  if(miss.length) return {ok:0,r:'unknown',missing:miss};
+  if(!deliveryGuard()) return {ok:0,r:'guard'};
+  const csv=kind!=='xlsx',t=tplTable(cols);
+  downloadBlob(new Blob([csv?delimitedFromTable(t,','):ensureVendor('Xlsx').build(t,L('台账'))],
+    {type:csv?'text/csv;charset=utf-8':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
+    safeName()+'-模板.'+(csv?'csv':'xlsx'));
+  toast(L('已导出 {n} 行（模板）',{n:t.length-1}),'success');
+  return {ok:1,rows:t.length-1};
+}
+function tplFail(r){
+  if(!r||r.ok) return;
+  if(r.r==='unknown') toast(L('模板列不存在：{cols}',{cols:r.missing.join('、')}),'error');
+  else if(r.r==='empty') toast(L('模板没有列'),'warn');
+}
+function openTemplateDialog(){
+  const a=TPL_BUILTIN;
+  openModal('台账模板导出',
+    '<label style="display:block;margin:7px 0"><span>'+esc(L('选择模板'))+'</span> <select id="tplPick" style="width:calc(100% - 90px)">'+
+      a.map((t,i)=>'<option value="'+i+'">'+esc(t.name)+'</option>').join('')+'</select></label>'+
+    '<label style="display:block;margin:7px 0"><span>'+esc(L('列（逗号分隔，字段名）'))+'</span><input id="tplCols" style="width:100%"></label>',
+    [{text:L('取消'),click:closeModal},
+     {text:L('导出 CSV'),class:'primary',click:()=>tplFail(tplExport('csv',tplParse($('tplCols').value)))},
+     {text:L('导出 XLSX'),click:()=>tplFail(tplExport('xlsx',tplParse($('tplCols').value)))}]);
+  const fill=()=>{const t=a[Number($('tplPick').value)||0]||a[0]; if(t) $('tplCols').value=t.cols.join(',');};
+  $('tplPick').addEventListener('change',fill); fill();
 }
 /* -------------------- 图框 / 标题栏 / 比例尺 / 图例（B-07） --------------------
  * 默认 enabled:false → 既有 PNG/PDF/SVG 导出路径完全不调用本组函数，产物字节不变。
@@ -644,7 +690,8 @@ function siteDxfEntities(){
 }
 /** 纯函数：按当前工程组装 DXF 实体与图层（导出与自测共用；不触发下载）。
  *  对象顶点统一走 outlineOf（A-15），保证 SVG/DXF 顶点源一致。 */
-function dxfEntitiesForExport(){
+function dxfEntitiesForExport(opt){
+  const fx=!!(opt&&opt.dxfFidelity);
   const entities=[];
   /* N-10：图层名在调用侧清洗（不改 vendor）；SITE 保留，清洗后重名追加 _2 后缀 */
   const usedNames=new Set(['SITE']), nameMap=new Map();
@@ -685,6 +732,7 @@ function dxfEntitiesForExport(){
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);
       if(tt===CIR) entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
+      else if(fx&&tt===ELL) entities.push({type:'ELLIPSE',layer,x:o.x,y:o.y,rx:o.shape.rx,ry:o.shape.ry,angle:o.angle||0});
       else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:true});
     }else if(o.kind==='dimension'&&o.points.length>=2){
       entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:outlineOf(o),closed:o.subtype==='area'});
@@ -702,8 +750,8 @@ function dxfEntitiesForExport(){
   const layerDefs=layers.map(l=>Object.assign({color:layerColor.get(l.name)||'#7c3aed'},l));
   return {entities,layers:layerDefs,report};
 }
-function exportDXF(){
-  const {entities,layers,report}=dxfEntitiesForExport();
+function exportDXF(opt){
+  const {entities,layers,report}=dxfEntitiesForExport(opt);
   if(!entities.length) return toast('当前没有可导出的对象','warn');
   downloadBlob(new Blob([ensureVendor('Dxf').buildDxf(entities,layers)],{type:'image/vnd.dxf;charset=utf-8'}),safeName()+'.dxf');
   if(report&&report.degraded){

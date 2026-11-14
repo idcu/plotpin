@@ -172,3 +172,39 @@ test('导入目录 → 绑定型号/数量 → 跨楼层 BOM → 导出 CSV/XLSX
   await page.fill('[data-field="propVendor"]', '大华');
   await expect.poll(() => page.evaluate(() => quoteTable(currentCatalog).slice(1, -1).find(r => r[1] === 'DUP-M')[3])).toBe(80);
 });
+
+test('G1 厂商目录 CSV：识别列 → 确认导入 → 绑定报价；台账表头不命中', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickCanvasCenter(page);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+
+  /* 台账式表头（无单价）不得被识别为目录 */
+  expect(await page.evaluate(() => catalogFromRows([['编号', '名称', '型号'], ['1', 'A', 'B']]))).toBe(null);
+
+  const csv = [
+    '厂商,型号,分类,单位,单价',
+    '海康,DS-2CD,摄像头,台,"¥1,200.00"',
+    '大华,DH-1,摄像头,台,350'
+  ].join('\n');
+  await page.setInputFiles('#fileInput', {
+    name: 'vendors.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv)
+  });
+  await expect(page.locator('#modalFooter button.primary')).toBeVisible({ timeout: 5000 });
+  await page.locator('#modalFooter button.primary').click();
+
+  await expect.poll(() => page.evaluate(() => currentCatalog && currentCatalog.items.length)).toBe(2);
+  expect(await page.evaluate(() => currentCatalog.items.map(it => [it.vendor, it.model, it.price]))).toEqual([
+    ['海康', 'DS-2CD', 1200],
+    ['大华', 'DH-1', 350]
+  ]);
+
+  await page.fill('[data-field="propModel"]', 'DS-2CD');
+  await page.fill('[data-field="propQty"]', '2');
+  await expect.poll(() => page.evaluate(() => {
+    const row = quoteTable(currentCatalog).slice(1, -1).find(r => r[1] === 'DS-2CD');
+    return row && [row[3], row[4]];
+  })).toEqual([1200, 2400]);
+});

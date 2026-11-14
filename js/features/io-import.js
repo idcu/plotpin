@@ -75,6 +75,13 @@ async function handleImportFile(f){
       const rows=DSV.parseRows(text,ext==='tsv'?'\t':DSV.detectDelimiter(text));
       const rowErrs=importLimitErrors({rows:rows.length});
       if(rowErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(rowErrs)}),'error');
+      /* G1：含厂商/型号/单价的表格按设备目录导入；用户取消则维持对象表格导入 */
+      const cat=catalogFromRows(rows);
+      if(cat&&await showConfirm(L('检测到厂商目录列（厂商/型号/单价），导入为设备目录？取消则按对象表格导入。'))){
+        try{ await importCatalog(cat); renderProps(); toast(L('目录已导入：{n} 个型号',{n:currentCatalog.items.length}),'success'); }
+        catch(e){ toast(L('目录导入失败：{msg}',{msg:e.message}),'error'); }
+        return;
+      }
       showTableImportPreview(f.name,rowsToObjectsPlan(rows));
     }catch(e){ toast(L('表格读取失败：{msg}',{msg:e.message}),'error'); }
     return;
@@ -136,7 +143,7 @@ function pickConvertedFile(accept){
   inp.addEventListener('change',()=>{
     const f=inp.files&&inp.files[0];
     inp.remove();
-    if(f) handleImportFile(f);
+    if(f) handleImportFile(f).catch(err=>toast(L('导入失败：{msg}',{msg:err&&err.message||err}),'error'));
   });
   document.body.appendChild(inp);
   inp.click();
@@ -162,6 +169,8 @@ function dxfFidelityLines(meta,parsed){
   const approx=['ARC','ELLIPSE','SPLINE','INSERT'].filter(t=>meta.entityCounts&&meta.entityCounts[t]);
   if(approx.length) lines.push('折线近似落地：'+approx.map(t=>t+' '+meta.entityCounts[t]).join(' / ')+'（弧/椭圆/样条按折线，块参照按插入变换展开）');
   if(meta.r12Bulge) lines.push('R12 凸度：'+meta.r12Bulge+' 段 VERTEX 42 会被拉直');
+  /* E4：缺码/错位被丢弃的实体如实汇总，不静默 */
+  if(parsed&&parsed.droppedEntities) lines.push(L('跳过非法实体：{n} 个（缺少坐标或必需参数）',{n:parsed.droppedEntities}));
   return lines;
 }
 function dxfRefLayerName(fileName,version){
@@ -169,6 +178,7 @@ function dxfRefLayerName(fileName,version){
   return 'DXF参考 · '+stem+(version?' · '+version:'');
 }
 async function importDxfFile(f){
+  if(!guardWrite(L('导入'))) return;
   let text;
   try{ text=await f.text(); }
   catch(e){ return toast(L('DXF 读取失败：{msg}',{msg:e.message}),'error'); }
@@ -282,6 +292,7 @@ function applyDxfImport(fileName,text,meta,opts){
     commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
       {line:counts.line,rect:counts.rect,point:counts.point,text:counts.text,extra}));
     if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
+    if(parsed.unitFallback!=null) toast(L('单位 {code} 未知，已按文件单位导入（$INSUNITS={ins}）',{code:parsed.unitFallback,ins:meta&&meta.insUnits!=null?meta.insUnits:'无'}),'warn');
     fitView();
   }catch(e){
     /* 导入异常回滚：走统一入口补上叠放缓存/静态层/取景基准与 UI 刷新 */
@@ -308,6 +319,7 @@ function pdfScaleHints(texts){
   return out.sort((a,b)=>a-b);
 }
 async function importPdfFile(f){
+  if(!guardWrite(L('导入'))) return;
   let pdf;
   try{ pdf=await ensureVendor('PdfRead').parsePdf(await f.arrayBuffer()); }
   catch(e){ return toast(L('PDF 解析失败：{msg}',{msg:e.message}),'error'); }
@@ -318,6 +330,11 @@ async function importPdfFile(f){
   const page1=pageList?pageList[0]:null;
   const pagePaths=page1?page1.paths:pdf.paths;
   const pageTexts=page1?page1.texts:pdf.texts;
+  /* E1：无法解码的文字条数只统计第 1 页（与只导入第 1 页一致），丢弃必须可见 */
+  const pageTextErrors=page1?(page1.textErrors||0):(pdf.textErrors||0);
+  /* E2：非法绘制算子与解码失败的图像同样只统计第 1 页范围 */
+  const pageBadOps=page1?(page1.badOps||0):(pdf.badOps||0);
+  const imageErrors=pdf.imageErrors||0;
   const page1Nums=page1&&Array.isArray(page1.imageNums)?new Set(page1.imageNums):null;
   /* 底图只认第 1 页实际绘制的内嵌图；仅 1 张图时允许兜底，避免资源映射缺失导致整页丢图 */
   let img=null;
@@ -396,6 +413,9 @@ async function importPdfFile(f){
   const pageNote=totalPages>1?' / '+L('共 {n} 页，已导入第 1 页',{n:totalPages}):'';
   commitChange(L('PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}',
     {line:counts.line,area:counts.area,text:counts.text,notes:pageNote+(bgNote?' / '+bgNote:'')}));
+  if(pageTextErrors) toast(L('文字 {n} 条无法解码，已跳过',{n:pageTextErrors}),'warn');
+  if(pageBadOps) toast(L('已跳过 {n} 个非法绘制操作',{n:pageBadOps}),'warn');
+  if(imageErrors) toast(L('{n} 张内嵌图无法解码，已跳过',{n:imageErrors}),'warn');
   if(!bgStored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');
   const scaleHints=pdfScaleHints(pageTexts);
   if(scaleHints.length) toast(L('检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）',{a:scaleHints[0],more:scaleHints.length>1?L('、1:{b}',{b:scaleHints[1]}):''}),'warn');
@@ -558,12 +578,14 @@ async function prepareBackgroundBytes(f){
 /** 替换底图时写入新图元数据，并强制重置旧图的校准与仿射：新图像素坐标不同，
  *  沿用旧 metersPerPixel 会让新图按错误比例测量（P2-A5）。 */
 function applyImageBackground(bg,meta){
+  if(!guardWrite(L('导入'))) return bg;
   bg.kind='image'; bg.fileName=meta.fileName; bg.assetId=meta.assetId;
   bg.width=meta.width; bg.height=meta.height;
   bg.transform=null; bg.calibrated=false; bg.metersPerPixel=0.05;
   return bg;
 }
 async function importBackgroundFile(f){
+  if(!guardWrite(L('导入'))) return;
   if(!f || !(/^image\//.test(f.type||'')||['png','jpg','jpeg','gif','webp','bmp','svg'].includes(extOfFile(f.name)))){
     return toast('请选择图片文件（PNG/JPG/WebP/BMP/GIF/SVG）','error');
   }
@@ -591,7 +613,9 @@ async function importBackgroundFile(f){
   bgImageState='ready';
   if(seq===bgLoadSeq) requestRender();
   refreshCalibStatus();   /* 图片解码完成：三个校准/变换入口从「未就绪」恢复可用 */
-  fitView(); pruneBgAssets(); commitChange('底图已导入');
+  fitView();
+  pruneBgAssets().catch(e=>toast(L('资产回收已跳过：{msg}，未删除任何文件',{msg:e&&e.message||e}),'warn'));
+  commitChange('底图已导入');
   if(!stored) toast('浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存','warn');
   else if(prepared.note) toast(prepared.note,'warn');
 }
@@ -601,9 +625,9 @@ $('bgBtn').onclick=openSitePicker;
 $('calibBtn').onclick=()=>startCalibTool('calibrate');
 $('fileInput').addEventListener('change',e=>{
   const f=e.target.files[0]; e.target.value='';
-  if(f) handleImportFile(f);
+  if(f) handleImportFile(f).catch(err=>toast(L('导入失败：{msg}',{msg:err&&err.message||err}),'error'));
 });
 $('bgInput').addEventListener('change',e=>{
   const f=e.target.files[0]; e.target.value='';
-  if(f) importBackgroundFile(f);
+  if(f) importBackgroundFile(f).catch(err=>toast(L('底图读取失败：{msg}',{msg:err&&err.message||err}),'error'));
 });

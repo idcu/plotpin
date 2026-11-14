@@ -42,6 +42,8 @@
     const lines=String(text||'').split(/\r?\n/), out=[];
     for(let i=0;i+1<lines.length;i+=2){
       const code=parseInt(lines[i],10), raw=lines[i+1]===undefined?'':lines[i+1];
+      /* E4：组码行不是数字时丢弃该对，避免错位把后续值当组码继续污染结构 */
+      if(!Number.isFinite(code)) continue;
       /* IO-P2-19：组码 1 为文本原值，保留首尾空格；其余组码仍 trim 以便结构比较 */
       out.push([code, code===1?raw:raw.trim()]);
     }
@@ -178,14 +180,33 @@
     return entities;
   }
   const baseParse=D.parseDxf;
+  /** E4：缺码/错位会让公共模块用默认 0 补齐（如 LINE 缺 11/21 → 零长线、圆缺 40 → r=0），
+   *  这里按落地类型校验坐标与必需参数，非法实体丢弃并计数，绝不进入 state。 */
+  function entityOk(e){
+    if(!e||typeof e!=='object') return false;
+    if(Array.isArray(e.points)){
+      if(!e.points.every(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1]))) return false;
+      return e.points.some((p,i)=>i>0&&(p[0]!==e.points[0][0]||p[1]!==e.points[0][1]));
+    }
+    if(e.type==='CIRCLE') return Number.isFinite(e.x)&&Number.isFinite(e.y)&&Number.isFinite(e.r)&&e.r>0;
+    if(e.type==='POINT'||e.type==='TEXT') return Number.isFinite(e.x)&&Number.isFinite(e.y);
+    return true;   /* 其它类型交给上层分类，不在适配层判死 */
+  }
   function parseDxf(text,opt){
     const src=String(text||'');
     const meta=inspectDxf(src);
-    if(meta.binary) return {entities:[],unit:1,insUnits:meta.insUnits??0,blockCount:0,inspect:meta,supplemental:0};
+    if(meta.binary) return {entities:[],unit:1,insUnits:meta.insUnits??0,blockCount:0,inspect:meta,supplemental:0,droppedEntities:0};
     const parsed=baseParse(src,opt);
     const detected=parsed.unit||1;
-    /* 单位确认：forceUnit 用 $INSUNITS 的完整米换算表把公共模块结果整体缩放到目标单位 */
-    const target=opt&&opt.forceUnit!=null?(UNIT_MAP[opt.forceUnit]?UNIT_MAP[opt.forceUnit].meter:detected):detected;
+    const raw=parsed.entities||[];
+    const kept=raw.filter(entityOk);
+    parsed.droppedEntities=raw.length-kept.length;
+    parsed.entities=kept;
+    /* 单位确认：forceUnit 用 $INSUNITS 的完整米换算表把公共模块结果整体缩放到目标单位；
+       E4：未知 forceUnit 不再静默，记录代码交由导入提示按文件单位处理 */
+    const forced=opt&&opt.forceUnit!=null?UNIT_MAP[opt.forceUnit]:null;
+    parsed.unitFallback=opt&&opt.forceUnit!=null&&!forced?opt.forceUnit:null;
+    const target=forced?forced.meter:detected;
     const f=target/detected;
     if(f!==1) scaleParsedEntities(parsed.entities,f);
     parsed.unit=target;
@@ -196,7 +217,28 @@
     return parsed;
   }
 
+  /* E5：保真导出的 ELLIPSE 写出（公共模块只写 LWPOLYLINE/CIRCLE/POINT/LINE/TEXT），
+     仅在显式选项下插入；默认路径不做任何改写，保证与旧版本逐字节一致 */
+  const baseBuild=D.buildDxf;
+  function buildDxfFid(ents,layers,opt){
+    const ell=ents.filter(e=>e.type==='ELLIPSE');
+    if(!ell.length) return baseBuild(ents,layers,opt);
+    /* 10/20/11/21 写 mm；40(短长轴比)/41/42(参数) 无量纲，不能乘 1000 */
+    const pr=(c,v)=>c+'\r\n'+v+'\r\n', n=v=>(Math.round(Number(v)*1e6)/1e6).toString();
+    let add='';
+    for(const e of ell){
+      const rx=Number(e.rx),ry=Number(e.ry),mj=Math.max(rx,ry),mn=Math.min(rx,ry);
+      if(!(mj>0)) continue;   /* 退化椭圆不写 NaN 组码 */
+      /* 对象 angle 以度存储；DXF 主轴向量按弧度计算，ry>rx 时主轴换向 +90° */
+      const a=(Number(e.angle)||0)*Math.PI/180+(ry>rx?Math.PI/2:0);
+      add+=pr(0,'ELLIPSE')+pr(8,D.safeLayer(e.layer))+pr(10,n(e.x*1000))+pr(20,n(e.y*1000))+pr(11,n(mj*Math.cos(a)*1000))+pr(21,n(mj*Math.sin(a)*1000))+pr(40,n(mn/mj))+pr(41,0)+pr(42,6.283185);
+    }
+    /* 记录插在 ENTITIES 段末尾：前缀 \r\n 补回被替换串吃掉的分行，add 自身以 \r\n 结尾 */
+    const tail='0\r\nENDSEC\r\n0\r\nEOF';
+    return baseBuild(ents.filter(e=>e.type!=='ELLIPSE'),layers,opt).replace('\r\n'+tail,'\r\n'+add+tail);
+  }
   global.Dxf=Object.assign({},D,{
+    buildDxf:buildDxfFid, build:buildDxfFid,
     parseDxf, parse:parseDxf,
     inspect:inspectDxf, supplementalEntities:collectSupplemental, scaleParsedEntities,
     unitLabel:code=>(UNIT_MAP[code]||{}).label||('未知单位 '+code),

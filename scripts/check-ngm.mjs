@@ -353,7 +353,7 @@ if (project && lock) {
        反向扫全仓，保证新增适配层不会漏登记。 */
     const ADAPTER_MARK = /适配层|实现已抽到|实现由公共模块|保留原有.{0,20}全局导出名|适配 @idcu\//;
     const SKIP_SCAN = new Set(['node_modules', 'ngm.vendor', 'scripts', 'test', 'tests',
-      'legacy', 'data', 'dist', 'analysis', '.trae', 'public', 'coverage', '.tmp']);
+      'legacy', 'data', 'dist', 'analysis', '.trae', 'public', 'coverage', '.tmp', 'backup']);
     const adapterFiles = [];
     const scanAdapters = (dir) => {
       for (const name of fs.readdirSync(dir)) {

@@ -31,9 +31,11 @@
       <option value="pdf" data-i18n="exportPdf">PDF（图纸位图+清单）</option>
       <option value="pdf-vector" data-i18n="exportPdfVector">PDF（矢量·文字为位图）</option>
       <option value="dxf" data-i18n="exportDxf">DXF（CAD 互通）</option>
+      <option value="dxf-fidelity" data-i18n="exportDxfFidelity" title="默认 DXF 与旧版本逐字节一致；保真导出为显式选项，仅椭圆输出为 ELLIPSE；部分 CAD 对 ELLIPSE 的解释可能不同，不承诺与原生 CAD 的编辑体验一致。">DXF（保真：仅椭圆）</option>
       <option value="csv" data-i18n="exportCsv">CSV 表格</option>
       <option value="tsv" data-i18n="exportTsv">TSV 表格</option>
       <option value="xlsx" data-i18n="exportXlsx">Excel (.xlsx)</option>
+      <option value="ledger-tpl" data-i18n="exportLedgerTpl">台账模板导出…</option>
       <option value="quote-csv">CSV 报价表</option>
       <option value="quote-xlsx">Excel 报价表</option>
       <option value="catalog-json">导出目录</option>
@@ -59,6 +61,7 @@
   <div class="tb-group">
     <button id="undoBtn" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)" data-i18n-aria-label="ariaUndo">↶</button>
     <button id="redoBtn" title="重做 (Ctrl+Y)" aria-label="重做 (Ctrl+Y)" data-i18n-aria-label="ariaRedo">↷</button>
+    <button id="readOnlyBtn" title="本地只读：仅锁本端编辑，对端仍可改本工程">只读</button>
     <button id="zoomOutBtn" title="缩小" aria-label="缩小" data-i18n-aria-label="ariaZoomOut">−</button>
     <button id="zoomFitBtn" title="适应窗口显示整张场地" aria-label="适应窗口显示整张场地" data-i18n-aria-label="ariaZoomFit" data-i18n="fitBtn">适应</button>
     <button id="zoomInBtn" title="放大" aria-label="放大" data-i18n-aria-label="ariaZoomIn">＋</button>
@@ -136,6 +139,7 @@
       <button class="side-tab" id="tabBtn-symbols" data-tab="symbols" role="tab" aria-selected="false" aria-controls="tab-symbols" tabindex="-1" data-i18n="tabSymbols">符号库</button>
       <button class="side-tab" id="tabBtn-stats" data-tab="stats" role="tab" aria-selected="false" aria-controls="tab-stats" tabindex="-1" data-i18n="tabStats">统计</button>
       <button class="side-tab" id="tabBtn-rules" data-tab="rules" role="tab" aria-selected="false" aria-controls="tab-rules" tabindex="-1" data-i18n="tabRules">规则</button>
+      <button class="side-tab" id="tabBtn-comments" data-tab="comments" role="tab" aria-selected="false" aria-controls="tab-comments" tabindex="-1" data-i18n="tabComments">批注</button>
     </div>
 
     <section class="tab-pane active" id="tab-props" role="tabpanel" aria-labelledby="tabBtn-props">
@@ -245,6 +249,18 @@
       </div>
     </section>
 
+    <section class="tab-pane" id="tab-comments" role="tabpanel" aria-labelledby="tabBtn-comments">
+      <div class="section">
+        <div class="hint-text" data-i18n="commentsLocalOnly">评论不随协作同步，仅本机可见</div>
+        <div class="hint-text" id="commentsReadOnly" hidden></div>
+        <div class="batch-row">
+          <input id="commentText" placeholder="写评论…" aria-label="写评论" data-i18n-placeholder="commentPlaceholder" data-i18n-aria-label="commentPlaceholder">
+          <button class="primary mini" id="addCommentBtn" data-i18n="addComment">添加</button>
+        </div>
+        <div id="commentList"></div>
+      </div>
+    </section>
+
     <section class="tab-pane" id="tab-stats" role="tabpanel" aria-labelledby="tabBtn-stats">
       <div id="statsPanel"></div>
     </section>
@@ -316,6 +332,7 @@
 <script src="js/features/props.js"></script>
 <script src="js/features/ui-panels.js"></script>
 <script src="js/features/ui-shell.js"></script>
+<script src="js/features/comments.js"></script>
 <script src="js/features/io.js"></script>
 <script src="js/features/snapshot-ui.js"></script>
 <script src="js/features/io-import.js"></script>

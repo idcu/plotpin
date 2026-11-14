@@ -125,6 +125,79 @@
     return { ok: true, spec: { id, name, version, apiVersion: String(m.apiVersion), capabilities: check.caps.slice(), code } };
   }
 
+  /* -------------------- 本地插件库（G2） ----------------------------------
+   * 独立键 plugins:library，只存清单与源码；不存「启用」意图。
+   * 刷新后必须由用户显式启用，loadPlugin 才会创建 Worker。
+   * 启用前用 SHA-256 校验 id/version/apiVersion/能力/源码，不匹配即拒绝。 */
+  const PLUGIN_LIB_KEY = 'plugins:library', PLUGIN_LIB_SCHEMA = 'plotpin.plugins/v1', PLUGIN_LIB_MAX = 20;
+  const pluginLibCache = [];
+  let pluginLibLoaded = false, pluginLibPending = null;
+  /** 库条目规范化：非法条目返回 null（整条丢弃），不抛异常 */
+  function normalizeLibEntry(e) {
+    if (!e || typeof e !== 'object') return null;
+    const v = validatePluginManifest({ schema: 'plotpin.plugin/v1', id: e.id, name: e.name, version: e.version, apiVersion: e.apiVersion, capabilities: e.capabilities, code: e.code });
+    return v.ok && typeof e.hash === 'string' && e.hash.length === 64 ? Object.assign(v.spec, { hash: e.hash }) : null;
+  }
+  async function pluginLibHash(spec) {
+    const subtle = global.crypto && global.crypto.subtle;
+    if (!subtle || !subtle.digest) throw new Error('当前环境不支持完整性校验');
+    const buf = await subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([spec.id, spec.version, spec.apiVersion, spec.capabilities.slice().sort(), spec.code])));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function ensureLibrary() {
+    if (pluginLibLoaded) return Promise.resolve(pluginLibCache);
+    if (!pluginLibPending) pluginLibPending = (async () => {
+      let items = [];
+      try {
+        const rec = await idbGetKey(PLUGIN_LIB_KEY);
+        if (rec && rec.schema === PLUGIN_LIB_SCHEMA && Array.isArray(rec.items)) items = rec.items.map(normalizeLibEntry).filter(Boolean).slice(0, PLUGIN_LIB_MAX);
+      } catch (_) { /* 读失败按空库处理，不影响工程 */ }
+      pluginLibCache.length = 0;
+      pluginLibCache.push(...items);
+      pluginLibLoaded = true;
+      return pluginLibCache;
+    })().finally(() => { pluginLibPending = null; });
+    return pluginLibPending;
+  }
+  /** 保存/更新库条目；入参可为清单或已校验的 spec */
+  async function savePlugin(raw) {
+    const v = validatePluginManifest(raw && raw.schema ? raw : Object.assign({ schema: 'plotpin.plugin/v1' }, raw));
+    if (!v.ok) throw new Error(v.reason);
+    const spec = v.spec, items = await ensureLibrary();
+    const entry = Object.assign({}, spec, { hash: await pluginLibHash(spec) });
+    const i = items.findIndex(x => x.id === spec.id);
+    if (i >= 0) items[i] = entry;
+    else if (items.length >= PLUGIN_LIB_MAX) throw new Error('插件库已满（最多 ' + PLUGIN_LIB_MAX + ' 个）');
+    else items.push(entry);
+    await idbPutKey(PLUGIN_LIB_KEY, { schema: PLUGIN_LIB_SCHEMA, items: pluginLibCache });
+    return entry;
+  }
+  /** 显式启用库条目：先校验完整性再交给既有 loadPlugin（沙箱与超时不变） */
+  async function enableSaved(id) {
+    const items = await ensureLibrary();
+    const e = items.find(x => x.id === String(id));
+    if (!e) throw new Error('插件未保存：' + String(id));
+    const spec = { id: e.id, name: e.name, version: e.version, apiVersion: e.apiVersion, capabilities: e.capabilities.slice(), code: e.code };
+    if (await pluginLibHash(spec) !== e.hash) throw new Error(e.error = '源码校验失败');
+    const prev = sandboxPlugins.get(spec.id);
+    if (prev) unloadPlugin(spec.id);
+    const r = await loadPlugin(spec);
+    if (r && r.ok) delete e.error;
+    else e.error = String(r && r.reason || '加载失败');
+    return r;
+  }
+  /** 删除库条目：只改 plugins:library，不触碰目录/工程键；使用中拒绝 */
+  async function deleteSaved(id) {
+    const key = String(id);
+    if (sandboxPlugins.has(key)) throw new Error('使用中，先卸载');
+    const items = await ensureLibrary();
+    const i = items.findIndex(x => x.id === key);
+    if (i < 0) return false;
+    items.splice(i, 1);
+    await idbPutKey(PLUGIN_LIB_KEY, { schema: PLUGIN_LIB_SCHEMA, items: pluginLibCache });
+    return true;
+  }
+
   /* -------------------- 注册表（旧路径与沙箱共用） ------------------------- */
   function builtinTypes() {
     try { return Array.isArray(BUILTIN_TYPES) ? BUILTIN_TYPES : null; } catch (_) { return null; }
@@ -470,8 +543,9 @@
     if (!sanitize) throw new Error('主工程清洗函数不可用，拒绝写入');
     const clean = sanitize(raw, layers, types);
     if (!clean.length) throw new Error('没有可添加的有效对象');
-    const objectsMax = typeof APP_LIMITS !== 'undefined' && APP_LIMITS.OBJECTS_MAX ? APP_LIMITS.OBJECTS_MAX : 100000;
-    if (Array.isArray(st.objects) && st.objects.length + clean.length > objectsMax) {
+    /* 配额按全工程累计（含非当前楼层），与导入/打开/协作合并同一判据（C3） */
+    const objectsMax = APP_LIMITS.OBJECTS_MAX;
+    if (countProjectObjects(st) + clean.length > objectsMax) {
       throw new Error('对象数量超过上限 ' + objectsMax);
     }
     /* N-18：插件写入与手动绘制走同一撤销语义——先压历史再改状态，Ctrl+Z 可完全移除。 */
@@ -764,6 +838,13 @@
     loadPlugin: loadPlugin,
     unloadPlugin: unloadPlugin,
     listPlugins: listPlugins,
+    ensureLibrary: ensureLibrary,
+    library: pluginLibCache,
+    savePlugin: savePlugin,
+    enableSaved: enableSaved,
+    deleteSaved: deleteSaved,
+    libEntry: normalizeLibEntry,
+    libHash: pluginLibHash,
     registerExporter(def) { return addExporter(def, null); },
     unregisterExporter(id) { return removeExporter(String(id), null); },
     registerImporter(def) { return addImporter(def, null); },

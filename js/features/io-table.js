@@ -433,6 +433,7 @@ function showTableImportPreview(fileName,plan){
      {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }
 function applyTableImport(plan){
+  if(!guardWrite(L('导入'))) return;
   if(plan.errors&&plan.errors.length){ toast(L('表格导入失败：存在非法行，已整批取消'),'error'); return; }
   const limitErrs=importLimitErrors({objects:countProjectObjects(state)+(plan.creates||[]).length});
   if(limitErrs.length){ toast(L('表格导入失败：{msg}',{msg:importLimitMessage(limitErrs)}),'error'); return; }

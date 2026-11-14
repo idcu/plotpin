@@ -52,6 +52,10 @@ test('D-05 合法清单：导入后导出器可用，面板可见，卸载后撤
   await expect.poll(() => page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(0);
   expect(await page.evaluate(() => window.PlotPin.listExporters().some(e => e.id === 'manifest.demo'))).toBe(false);
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelectorAll('#exportKind option')).some(o => o.value === 'plugin:manifest.demo'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(0);
+  await expect(page.locator('#pluginPanel')).toContainText('已保存未启用');
+  await page.locator('[data-plugin-del="manifest.demo"]').click();
+  await expect.poll(() => page.evaluate(() => window.PlotPin.library.length)).toBe(0);
   await expect(page.locator('#pluginPanel')).not.toContainText('manifest.demo');
 });
 
@@ -85,4 +89,68 @@ test('D-05 非法清单：缺字段 / 超限 / 未知能力被拒，注册表与
   }));
   expect(after).toEqual(before);
   await expect(page.locator('#pluginPanel')).toContainText('尚未导入插件');
+});
+
+test('G2 本地库：刷新不自动启用；源码/版本篡改拒绝且不建 Worker；显式启用成功', async ({ page }) => {
+  await page.addInitScript(() => {
+    const W = window.Worker;
+    window.__workers = 0;
+    window.Worker = function (...a) { window.__workers++; return new W(...a); };
+    window.Worker.prototype = W.prototype;
+  });
+  await openApp(page);
+  await openSettings(page);
+  page.on('dialog', d => d.accept());
+  await feed(page, manifest());
+  await expect.poll(() => page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.PlotPin.library.length)).toBe(1);
+  expect(await page.evaluate(() => window.PlotPin.library[0].hash)).toMatch(/^[0-9a-f]{64}$/);
+
+  /* 刷新：库仍在，但不得静默加载（零 Worker、零会话插件） */
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  expect(await page.evaluate(() => window.__workers)).toBe(0);
+  await openSettings(page);
+  expect(await page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(0);
+  await expect(page.locator('#pluginPanel')).toContainText('已保存未启用');
+
+  /* 篡改源码：启用被拒，不创建 Worker */
+  await page.evaluate(async () => {
+    const rec = await idbGetKey('plugins:library');
+    rec.items[0].code = 'PlotPin.toast("tampered")';
+    await idbPutKey('plugins:library', rec);
+  });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  await openSettings(page);
+  await page.locator('[data-plugin-enable="manifest.demo"]').click();
+  await expect(page.locator('#pluginPanel')).toContainText('源码校验失败');
+  expect(await page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(0);
+  expect(await page.evaluate(() => window.__workers)).toBe(0);
+
+  /* 恢复后再只改版本号：同样拒绝 */
+  await feed(page, manifest());
+  await expect.poll(() => page.evaluate(() => (window.PlotPin.listPlugins()[0] || {}).status)).toBe('active');
+  await page.evaluate(async () => {
+    const rec = await idbGetKey('plugins:library');
+    rec.items[0].version = '9.9.9';
+    await idbPutKey('plugins:library', rec);
+  });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  await openSettings(page);
+  await page.locator('[data-plugin-enable="manifest.demo"]').click();
+  await expect(page.locator('#pluginPanel')).toContainText('源码校验失败');
+  expect(await page.evaluate(() => window.PlotPin.listPlugins().length)).toBe(0);
+  expect(await page.evaluate(() => window.__workers)).toBe(0);
+
+  /* 重新导入（哈希正确的库条目）→ 刷新 → 显式启用成功，恰好新建 1 个 Worker */
+  await feed(page, manifest());
+  await expect.poll(() => page.evaluate(() => (window.PlotPin.listPlugins()[0] || {}).status)).toBe('active');
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => typeof state)).toBe('object');
+  await openSettings(page);
+  await page.locator('[data-plugin-enable="manifest.demo"]').click();
+  await expect.poll(() => page.evaluate(() => (window.PlotPin.listPlugins()[0] || {}).status)).toBe('active');
+  expect(await page.evaluate(() => window.__workers)).toBe(1);
 });

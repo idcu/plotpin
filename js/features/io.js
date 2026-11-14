@@ -3,12 +3,16 @@
 $('newBtn').onclick=async()=>{
   /* P0-04：救援模式下先让用户确认（或导出救援 JSON），避免未落盘编辑被静默丢弃 */
   if(!await guardRescueSwitch()) return;
-  const ok=await showConfirm(L('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？'));
+  const ok=await showConfirm(L('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？')
+    +(state.meta.projectId?'':' '+L('草稿评论将一并清除。')));
   if(!ok) return;
   /* 替换现场前强制落盘：租约被占用或保存失败时中止新建，避免静默丢最后一次编辑（P2-A3） */
   try{ await flushPendingSave(); }
   catch(e){ toast(L('操作失败：{msg}',{msg:e.message}),'error'); return; }
+  const prevOwner=cOw(), prevBound=!!state.meta.projectId;
   replaceState(createInitialState()); selectedIds.clear(); history={past:[],future:[]};
+  if(!prevBound&&prevOwner) cRm(prevOwner);
+  callHook('collab.projectSwitched');
   /* 只回收「任何命名空间都不再引用」的资产：其他工程库记录仍可达，绝不清空整库 */
   pruneBgAssets().catch(()=>{});
   scheduleSave(); toast('已新建工程','success');
@@ -126,6 +130,7 @@ async function openProjectLibrary(){
     input.onchange=async()=>{
       const f=input.files&&input.files[0];
       if(!f) return;
+      if(!await guardRescueSwitch()) return;
       try{
         const fileErrs=importLimitErrors({bytes:f.size});
         if(fileErrs.length) throw new Error(L('文件超限：{detail}',{detail:importLimitMessage(fileErrs)}));

@@ -72,6 +72,33 @@ function singlePagePdf() {
   return Buffer.from(s, 'utf8');
 }
 
+/* E1：纯中文（GBK 字节）单页 PDF；用 latin1 落盘，保证字节原样进入解析器 */
+function chinesePdf() {
+  const obj = (n, body) => n + ' 0 obj\n' + body + '\nendobj\n';
+  const gbk = String.fromCharCode(0xC5, 0xE4, 0xB5, 0xE7, 0xCF, 0xE4);
+  const c = '0 0 m 190 0 l S\nBT /F1 10 Tf 50 80 Td (' + gbk + ') Tj ET\n';
+  let s = '%PDF-1.4\n';
+  s += obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  s += obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  s += obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+  s += obj(4, '<< /Length ' + c.length + ' >>\nstream\n' + c + 'endstream');
+  return Buffer.from(s, 'latin1');
+}
+
+test('E1：纯中文 PDF 文字完整导入（GBK 编码）', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await page.setInputFiles('#fileInput', {
+    name: 'cn.pdf', mimeType: 'application/pdf', buffer: chinesePdf()
+  });
+  await expect.poll(() => page.evaluate(() =>
+    state.objects.filter(o => o.kind === 'text').map(o => o.text))).toEqual(['配电箱']);
+  await expect(page.locator('#toastWrap')).not.toContainText('无法解码');
+  expect(errors).toEqual([]);
+});
+
 test('B-13：多页 PDF 只导入第 1 页并提示页数', async ({ page }) => {
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
