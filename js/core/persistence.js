@@ -696,7 +696,7 @@ function floorSummaries(){
   syncActiveFloor();
   const rows=(state.floors||[]).map(f=>{
     const objs=Array.isArray(f.objects)?f.objects:[];
-    const counts={point:0,rect:0,line:0,text:0,dimension:0};
+    const counts={point:0,rect:0,line:0,text:0,dimension:0,arc:0};
     let area=0, len=0;
     objs.forEach(o=>{
       if(o&&o.kind) counts[o.kind]=(counts[o.kind]||0)+1;
@@ -704,7 +704,7 @@ function floorSummaries(){
     });
     return {id:f.id,name:f.name,active:f.id===state.activeFloorId,count:objs.length,counts,area,len};
   });
-  const total={count:0,counts:{point:0,rect:0,line:0,text:0,dimension:0},area:0,len:0};
+  const total={count:0,counts:{point:0,rect:0,line:0,text:0,dimension:0,arc:0},area:0,len:0};
   rows.forEach(r=>{
     total.count+=r.count;
     Object.keys(total.counts).forEach(k=>{ total.counts[k]+=r.counts[k]||0; });
@@ -1610,12 +1610,24 @@ function sanitizeAreaShape(raw){
   }
   return null;
 }
+/** 圆弧参数清洗（kind:'arc' 专用）：非法或退化（张角归零）返回 null，由调用方丢弃并计入 audit.dropped。
+ *  刻意不复用 sanitizeAreaShape：区域形状白名单会把 arc 判死，且区域侧有「0→360 整圆」映射，
+ *  而对象层不承载全圆弧（想要圆就画圆，见设计 §2.3）。 */
+function sanitizeArcShape(raw){
+  if(!raw||typeof raw!=='object'||raw.type!==ARC) return null;
+  const r=positiveNum(raw.r,NaN);
+  const a0=finiteNumber(raw.a0,NaN), a1=finiteNumber(raw.a1,NaN);
+  if(!Number.isFinite(r)||!Number.isFinite(a0)||!Number.isFinite(a1)) return null;
+  const sweep=((a1-a0)%360+360)%360;
+  if(!(sweep>0)) return null;   /* 全圆弧/零张角：对象层拒收（导入侧退化为折线，几何不丢） */
+  return {type:ARC,r,a0,a1:a0+sweep};
+}
 function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
   const out=[]; if(!Array.isArray(arr)) return out;
   seenIds=seenIds||new Set(); seenNames=seenNames||new Set();
   const audit=report||{duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
   arr.forEach(raw=>{
-    if(!raw||typeof raw!=='object'||!['point','rect','line','text','dimension'].includes(raw.kind)){ audit.dropped=(audit.dropped||0)+1; return; }
+    if(!raw||typeof raw!=='object'||!['point','rect','line','text','dimension','arc'].includes(raw.kind)){ audit.dropped=(audit.dropped||0)+1; return; }
     const kind=raw.kind, layerId=layers.some(l=>l.id===String(raw.layerId))?String(raw.layerId):'layer.default';
     const hasType=typeId=>types.some(t=>t.id===typeId&&t.kind===kind);
     const typeId=hasType(String(raw.typeId))?String(raw.typeId):defaultTypeId(kind);
@@ -1655,6 +1667,13 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
         o.width=positiveNum(raw.width,0); o.height=positiveNum(raw.height,0);
         if(o.width<=0||o.height<=0){ audit.dropped=(audit.dropped||0)+1; return; }
       }
+    }
+    if(kind==='arc'){
+      /* 描边圆弧：几何只在 shape 里；width/height/angle/points/closed 一律归零，
+         避免消费者误把它当区域或折线（旧版读到会按未知 kind 丢弃，见设计 §3.2） */
+      const s=sanitizeArcShape(raw.shape);
+      if(!s){ audit.dropped=(audit.dropped||0)+1; return; }
+      o.shape=s; o.points=[]; o.closed=false; o.angle=0; o.width=0; o.height=0;
     }
     if(kind==='point'){ o.iconSize=Math.min(3,Math.max(.5,finiteNumber(raw.iconSize,1))); }
     if(kind==='text'){ o.height=positiveNum(raw.height,2.2); }

@@ -27,6 +27,9 @@ const PDF_DPI_OPTIONS = [150, 220, 300];
 /* 形状类型字面量的唯一来源：几何/渲染/导入导出/属性面板共用，避免同一拼音串在各文件重复书写。
    值即 schema 中的 shape.type / scaleShape 取值，改动会破坏存档兼容。 */
 const CIR = 'circle', ELL = 'ellipse', SEC = 'sector', PARA = 'parallelogram';
+/* 圆弧（描边几何，无面积）：不在 AREA_SHAPE_TYPES 内，也不参与覆盖率；schema 写作 shape.type='arc'。
+   命名与 CIR/ELL/SEC/PARA 同层，避免 'arc' 字面量散落在几何/面板/导入导出各处。 */
+const ARC = 'arc';
 /* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限/导入限值），避免魔法数字散落各处。
  * 与 vendor 各自的上限分属两层，**刻意不合并**（语义不同、取小者生效）：
  *   - vendor 预解析护栏：`format/dxf` = 20MB 文本 / 50,000 实体；`format/pdf` = 50MB / 300 页 / 20,000 对象 / 单流解压 64MB。
@@ -148,7 +151,7 @@ const POINT_SCALE_SHAPES = {none:'仅位置图标', circle:'圆形覆盖', squar
 /* 图元图标白名单：与 render.js drawPoint 的绘制分支一一对应。
  * type.icon 来自可编辑数据（导入 JSON / 插件 / 旧存档），任意字符串不得进入 UI 或导出。 */
 const TYPE_ICONS = Object.freeze(['marker','camera','dome','light','gate','charger','warning','custom','symbol','rect','line','text','dimension']);
-const DEFAULT_ICON_BY_KIND = Object.freeze({point:'custom', rect:'rect', line:'line'});
+const DEFAULT_ICON_BY_KIND = Object.freeze({point:'custom', rect:'rect', line:'line', arc:'line'});
 /** 图标白名单化：未知值回退到 kind 默认值，绝不回传调用方传入的原始字符串 */
 function normalizeIcon(icon, kind){
   const v=String(icon||'');
@@ -180,5 +183,7 @@ const BUILTIN_TYPES = [
   {id:'line.pedestrian', kind:'line', name:'人行线', color:'#16a34a', icon:'line', builtin:true, defaultStyle:{strokeWidth:.10,closed:false}},
   {id:'line.custom', kind:'line', name:'自定义线', color:'#7c3aed', icon:'line', builtin:true, defaultStyle:{strokeWidth:.10,closed:false}},
   {id:'text.builtin', kind:'text', name:'文字', color:'#111827', icon:'text', builtin:true},
-  {id:'dimension.distance', kind:'dimension', name:'尺寸标注', color:'#111827', icon:'dimension', builtin:true}
+  {id:'dimension.distance', kind:'dimension', name:'尺寸标注', color:'#111827', icon:'dimension', builtin:true},
+  /* 圆弧：唯一内置业务类型（插件不扩展 kind:'arc'，见设计 §4.10）。描边几何，无填充、无面积。 */
+  {id:'arc.builtin', kind:'arc', name:'圆弧', color:'#0e7490', icon:'line', builtin:true, defaultStyle:{strokeWidth:.12}}
 ];

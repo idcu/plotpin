@@ -142,6 +142,7 @@ code += `\n;globalThis.__api = {
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
   PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
   sectorSweep, sectorArcPoints, sectorArcRange, pointIconScale, areaParamText,
+  arcSweep, arcWorldPoints, defaultTypeId, kindName,
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField, bindPropEvents, rotateSelected,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
@@ -154,7 +155,7 @@ code += `\n;globalThis.__api = {
   SCHEMA, SCHEMA_V1, isReadableSchema, touchFloor, commitChange, commitObjectEdit,
   markDirty, MARK_DIRTY_PROFILES,
   dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects, stampObjectsIn, migrateRefsAndDelete,
-  sanitizeObjects, sanitizeReport, safeId,
+  sanitizeObjects, sanitizeArcShape, sanitizeReport, safeId,
   setFloorAliasAssert, deleteSelected, stubConfirm(v){ showConfirm = () => Promise.resolve(v); },
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
@@ -3508,6 +3509,49 @@ await section("36.4 E5 保真导出：默认路径零改动 + ELLIPSE 显式选�
   eq('E5-保真保留POINT', JSON.stringify(noEll.find(e=>e.type==='POINT')), JSON.stringify(base.d.entities.find(e=>e.type==='POINT')));
 
   api.resetState();
+}
+});
+
+/* 36.5 S1：ARC 数据地基——kind 白名单/清洗/几何口径 -------------------------------- */
+await section("36.5 ARC 数据地基：kind/清洗/几何口径", async () => {
+{
+  const arcObj=(patch={})=>api.baseObject('arc','arc.builtin',Object.assign({
+    name:'A1', x:100, y:100, shape:{type:'arc', r:50, a0:0, a1:90}
+  }, patch));
+
+  ok('S1-内置圆弧类型存在', api.BUILTIN_TYPES.some(t=>t.id==='arc.builtin'&&t.kind==='arc'));
+  eq('S1-defaultTypeId(arc)', api.defaultTypeId('arc'), 'arc.builtin');
+  eq('S1-kindName(arc)', api.kindName('arc'), '圆弧');
+
+  approx('S1-张角 0→90', api.arcSweep({a0:0,a1:90}), 90, 1e-12);
+  approx('S1-跨 0° 张角', api.arcSweep({a0:350,a1:10}), 20, 1e-12);
+  eq('S1-张角归零不做整圆映射', api.arcSweep({a0:30,a1:30}), 0);
+  eq('S1-areaShapeType 不回落 rect', api.areaShapeType(arcObj()), 'arc');
+
+  approx('S1-长度=弧长 r=50 sweep=90', api.objectLength(arcObj()), 50*Math.PI/2, 1e-9);
+  eq('S1-弧无面积', api.objectArea(arcObj()), 0);
+  eq('S1-默认采样点数', api.outlineOf(arcObj()).length, 73);
+  eq('S1-24段采样点数', api.outlineOf(arcObj(),24).length, 25);
+  approx('S1-采样起点', api.outlineOf(arcObj(),4)[0][0], 150, 1e-9);
+  eq('S1-保守包围盒', api.objectSnapBounds(arcObj()), {minX:50,minY:50,maxX:150,maxY:150});
+
+  /* 清洗：合法弧保留、非法/退化弧丢弃并计数（负向样本 5） */
+  const layers=[{id:'layer.default',name:'默认',visible:true,locked:false}];
+  const clean=raw=>{
+    const rep={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
+    const out=api.sanitizeObjects([raw],layers,api.BUILTIN_TYPES,new Set(),new Set(),rep);
+    return {out,rep};
+  };
+  const good=clean({id:'OBJ_A',kind:'arc',typeId:'arc.builtin',name:'A1',x:1,y:2,shape:{type:'arc',r:3,a0:10,a1:100}});
+  eq('S1-合法弧保留', good.out.length, 1);
+  eq('S1-弧统一 a1=a0+sweep', JSON.stringify(good.out[0].shape), JSON.stringify({type:'arc',r:3,a0:10,a1:100}));
+  eq('S1-弧不带折线缓存', good.out[0].points.length, 0);
+  eq('S1-负样本-缺 shape 丢弃', clean({id:'OBJ_B',kind:'arc',name:'A2',x:1,y:2}).rep.dropped, 1);
+  eq('S1-负样本-全圆弧拒收', clean({id:'OBJ_C',kind:'arc',name:'A3',x:1,y:2,shape:{type:'arc',r:3,a0:0,a1:360}}).rep.dropped, 1);
+  eq('S1-负样本-r=0 丢弃', clean({id:'OBJ_D',kind:'arc',name:'A4',x:1,y:2,shape:{type:'arc',r:0,a0:0,a1:90}}).rep.dropped, 1);
+
+  const sum=api.floorSummaries();
+  ok('S1-楼层汇总含 arc 计数', sum.total.counts.arc===0);
 }
 });
 

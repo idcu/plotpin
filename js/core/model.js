@@ -507,6 +507,7 @@ function defaultTypeId(kind){
   if (kind === 'point') return 'point.marker';
   if (kind === 'rect') return 'rect.area';
   if (kind === 'dimension') return 'dimension.distance';
+  if (kind === 'arc') return 'arc.builtin';
   return 'line.custom';
 }
 /**
@@ -522,7 +523,8 @@ function baseObject(kind, typeId, patch={}){
     phys:0,   /* 点设备物理尺寸(米，高级)：0=纯位置标识(屏幕固定图标)；>0=按世界比例渲染的覆盖图形 */
     iconSize:1, /* 点设备图标屏幕大小倍率（纯视觉，无物理意义）；与类型默认值、全局倍率连乘 */
     annot:{},   /* 逐对象标注显示开关（点坐标/基点/半径/边长/周长/面积/节点坐标），未显式设置时按类型默认 */
-    shape:null, /* 区域参数形状：circle{r}/ellipse{rx,ry}/sector{r,a0,a1}；null=矩形(用 width/height/angle) */
+    shape:null, /* 参数形状：circle{r}/ellipse{rx,ry}/sector{r,a0,a1}/parallelogram{skew}（区域）；
+                   arc{r,a0,a1}（kind:'arc' 的描边圆弧，圆心即 x/y，无面积语义）；null=矩形(用 width/height/angle) */
     text:'', closed:false, subtype:kind === 'dimension' ? 'distance' : '',
     style:{}, props:{}, visible:true, locked:false, z:state.objects.length,
     createdAt: nowISO(), updatedAt: nowISO()
@@ -562,7 +564,7 @@ function styleVal(o, key, fallback){
   if (t.defaultStyle && t.defaultStyle[key] !== undefined) return t.defaultStyle[key];
   return fallback;
 }
-function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注'})[k] || k; }
+function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注',arc:'圆弧'})[k] || k; }
 /**
  * 对象索引：id → 对象。供一次操作内多次按 id 查找（拖拽 originals、批量移动/回滚）复用，
  * 把 N 次 `state.objects.find()` 的 O(N²) 扫描收敛为一次 O(N) 建索引（A-15）。
@@ -642,20 +644,23 @@ function pointIconScale(o){
 const ANNOT_KEYS={
   point:['name','coord'],
   rect:['name','base','radius','edge','vertex','perimeter','area'],
-  line:['name','node','edge','perimeter','area']
+  line:['name','node','edge','perimeter','area'],
+  arc:['name','radius','perimeter']
 };
 const ANNOT_LABELS={ name:'编号', coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', vertex:'顶点坐标', perimeter:'周长', area:'面积', node:'节点坐标' };
 /* 默认值：编号标签沿用全局「显示标签」既有观感（开）、区域/闭合折线的面积周长沿用全局开关默认（开）；其余新增标注默认关闭 */
 const ANNOT_DEFAULTS={
   point:{ name:true, coord:false },
   rect:{ name:true, base:false, radius:false, edge:false, vertex:false, perimeter:true, area:true },
-  line:{ name:true, node:false, edge:true, perimeter:true, area:true }
+  line:{ name:true, node:false, edge:true, perimeter:true, area:true },
+  arc:{ name:true, radius:false, perimeter:false }
 };
 /** 该对象（按 kind）支持的标注开关键列表 */
 function annotKeys(kind){ return ANNOT_KEYS[kind]||[]; }
 /** 标注键的面板/提示显示名：同一键在不同类型下语义不同（折线「段长」/区域「边长」，闭合折线节点即「顶点坐标」） */
 function annotLabel(o,key){
   if(key==='edge') return o&&o.kind==='line'?'段长':'边长';
+  if(key==='perimeter'&&o&&o.kind==='arc') return '弧长';
   if(key==='node') return o&&o.closed?'顶点坐标':'节点坐标';
   return ANNOT_LABELS[key]||key;
 }
