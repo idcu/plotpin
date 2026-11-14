@@ -1055,7 +1055,32 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '导出 CSV':'Export CSV', '导出 XLSX':'Export XLSX',
     '模板列不存在：{cols}':'Template columns not found: {cols}',
     '模板没有列':'Template has no columns',
-    '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger'
+    '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
+    /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
+    '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
+    '默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。':'Direct connections are used by default. One server per line: URL | username | credential; STUN needs only the URL, and multiple URLs are comma-separated. Credentials are stored in plain text in this browser and never enter invite strings, collaboration messages or project files.',
+    '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
+    '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
+    '仅本次会话':'This session only', '已记住':'Saved',
+    '未配置中继：仅使用直连候选':'No relay configured: direct candidates only',
+    '中继配置已应用（已记住，刷新后仍生效）':'Relay configuration applied (saved; persists after reload)',
+    '中继配置已应用（仅本次会话，刷新后失效）':'Relay configuration applied (this session only; gone after reload)',
+    '中继配置已清除':'Relay configuration cleared',
+    '没有可用的服务器地址':'No usable server URL',
+    '最多 {n} 个服务器':'At most {n} servers',
+    '第 {n} 行：地址无效或过长（只支持 stun/stuns/turn/turns，≤{max} 字符）':'Line {n}: invalid or overlong URL (stun/stuns/turn/turns only, ≤{max} characters)',
+    '第 {n} 行：TURN 必须填写用户名与凭据':'Line {n}: TURN requires both username and credential',
+    '第 {n} 行：用户名或凭据过长':'Line {n}: username or credential too long',
+    '地址中不要内嵌账号密码，请填到用户名/凭据列':'Do not embed credentials in the URL; use the username/credential columns',
+    '配置无法写入本机存储：{msg}':'Cannot write the configuration to local storage: {msg}',
+    '用户 {u}':'user {u}',
+    '{n} 个服务器（TURN {t} / STUN {s}）':'{n} server(s) (TURN {t} / STUN {s})',
+    /* ICE 运行时诊断：只展示候选类型计数与配对类型 */
+    '已配置中继：跨 NAT 取决于 TURN 可用性与鉴权（未验证）':'Relay configured: crossing NAT depends on TURN availability and authentication (unverified)',
+    'host {h} / srflx {s} / relay {r}':'host {h} / srflx {s} / relay {r}',
+    '本机候选：{v}':'Local candidates: {v}', '对端候选：{v}':'Remote candidates: {v}',
+    '尚未收集到候选（邀请串可能未包含候选）':'No candidates collected yet (the invite string may not include candidates)',
+    '选中候选对：{pair}':'Selected candidate pair: {pair}'
   };
   Object.assign(PHRASES, MORE);
 

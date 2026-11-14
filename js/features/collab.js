@@ -24,6 +24,198 @@ const COLLAB_WATCHDOG_MS=15000;
 /* RT-P2-18：协作内部状态只在 ?debug=1 下挂到 window，生产界面不再常驻调试全局（e2e 通过该开关读取） */
 const COLLAB_DEBUG=(()=>{ try{ return /[?&]debug=1(?:&|$)/.test(location.search||''); }catch(_){ return false; } })();
 function collabDebugSet(key,value){ if(!COLLAB_DEBUG) return; try{ window[key]=value; }catch(_){} }
+/* -------------------- ICE 中继配置（ICE-1） --------------------
+   安全红线：TURN 凭据只存在本机键或本次会话内存，不进入邀请串、协作消息、
+   工程 JSON、toast、错误信息与 URL；任何对外展示一律走 collabIceRedact/Summary。 */
+const COLLAB_ICE_KEY='plotpin.collab.ice.v1';
+const COLLAB_ICE_MAX_SERVERS=3, COLLAB_ICE_URLS_PER_SERVER=3;
+const COLLAB_ICE_URL_MAX=200, COLLAB_ICE_USER_MAX=64, COLLAB_ICE_CRED_MAX=128;
+const COLLAB_ICE_WAIT_MIN=4000, COLLAB_ICE_WAIT_MAX=8000, COLLAB_ICE_WAIT_DEFAULT=6000;
+let collabIceMem=null, collabIceLoaded=false;
+/** 候选等待：只有 4–8 s 合法，其余回默认 6 s（配置了中继才有意义，见 ICE-2） */
+function collabIceWait(v){
+  const n=Math.round(Number(v)||0);
+  return n>=COLLAB_ICE_WAIT_MIN&&n<=COLLAB_ICE_WAIT_MAX?n:COLLAB_ICE_WAIT_DEFAULT;
+}
+/** 只接受 stun/stuns/turn/turns；禁止内嵌账号密码，避免凭据藏进 URL */
+function collabIceUrlOk(u){
+  const s=String(u||'').trim();
+  return s.length>0&&s.length<=COLLAB_ICE_URL_MAX&&/^(stun|stuns|turn|turns):[^\s@]+$/i.test(s);
+}
+/** URL → scheme:host:port（丢弃查询串/路径；调用前已禁止 @，不会带出凭据） */
+function collabIceHostOf(url){
+  const m=/^([a-z]+):(.*)$/i.exec(String(url||'').trim());
+  if(!m) return '';
+  let rest=m[2];
+  if(rest.startsWith('//')) rest=rest.slice(2);
+  return m[1].toLowerCase()+':'+rest.split('?')[0].split('/')[0];
+}
+/** 用户名只露首尾字符；过短只露首字符 */
+function collabIceMaskUser(u){
+  const s=String(u||'');
+  if(!s) return '';
+  return s.length<=2?s[0]+'***':s[0]+'***'+s[s.length-1];
+}
+/** 归一化并校验服务器列表；错误信息只带行号与上限，绝不回显输入内容 */
+function collabIceNorm(list){
+  if(!Array.isArray(list)||!list.length) return {ok:false,error:L('没有可用的服务器地址')};
+  if(list.length>COLLAB_ICE_MAX_SERVERS) return {ok:false,error:L('最多 {n} 个服务器',{n:COLLAB_ICE_MAX_SERVERS})};
+  const servers=[];
+  for(let i=0;i<list.length;i++){
+    const item=list[i]||{}, line=i+1;
+    const urls=(Array.isArray(item.urls)?item.urls:String(item.urls||'').split(',')).map(s=>String(s||'').trim()).filter(Boolean);
+    if(!urls.length||urls.length>COLLAB_ICE_URLS_PER_SERVER||urls.some(u=>!collabIceUrlOk(u)))
+      return {ok:false,error:L('第 {n} 行：地址无效或过长（只支持 stun/stuns/turn/turns，≤{max} 字符）',{n:line,max:COLLAB_ICE_URL_MAX})};
+    const username=String(item.username||'').trim(), credential=String(item.credential||'').trim();
+    if((username||credential)&&(!username||!credential))
+      return {ok:false,error:L('第 {n} 行：TURN 必须填写用户名与凭据',{n:line})};
+    if(username.length>COLLAB_ICE_USER_MAX||credential.length>COLLAB_ICE_CRED_MAX)
+      return {ok:false,error:L('第 {n} 行：用户名或凭据过长',{n:line})};
+    if(urls.some(u=>/^turns?:/i.test(u))&&!username)
+      return {ok:false,error:L('第 {n} 行：TURN 必须填写用户名与凭据',{n:line})};
+    servers.push({urls,username,credential});
+  }
+  return {ok:true,servers};
+}
+/** 文本配置：每行「地址[,地址2] | 用户名 | 凭据」；# 或 // 开头为注释 */
+function collabIceParse(text){
+  const raw=String(text||'').trim();
+  if(!raw) return {ok:false,error:L('没有可用的服务器地址')};
+  const list=[];
+  for(const line of raw.split(/\r?\n/)){
+    const s=line.trim();
+    if(!s||s.startsWith('#')||s.startsWith('//')) continue;
+    if(s.includes('@')) return {ok:false,error:L('地址中不要内嵌账号密码，请填到用户名/凭据列')};
+    const parts=s.split('|').map(x=>x.trim());
+    list.push({urls:parts[0],username:parts[1]||'',credential:parts[2]||''});
+  }
+  return Object.assign(collabIceNorm(list),{waitMs:COLLAB_ICE_WAIT_DEFAULT});
+}
+function collabIceLoad(){
+  let raw='';
+  try{ raw=localStorage.getItem(COLLAB_ICE_KEY)||''; }catch(_){ return null; }
+  if(!raw) return null;
+  let rec=null;
+  try{ rec=JSON.parse(raw); }catch(_){ return null; }
+  if(!rec||rec.v!==1) return null;
+  const r=collabIceNorm(rec.servers);
+  if(!r.ok) return null;
+  return {servers:r.servers,waitMs:collabIceWait(rec.waitMs),sessionOnly:false};
+}
+/** 内存优先；首次访问才读本机键。刷新后内存清空 → 仅本次会话的配置自然消失 */
+function collabIceCurrent(){
+  if(!collabIceLoaded){ collabIceLoaded=true; collabIceMem=collabIceLoad(); }
+  return collabIceMem;
+}
+function collabIceSave(text,remember){
+  const r=collabIceParse(text);
+  if(!r.ok) return r;
+  const cfg={servers:r.servers,waitMs:r.waitMs,sessionOnly:!remember};
+  try{
+    if(remember) localStorage.setItem(COLLAB_ICE_KEY,JSON.stringify({v:1,waitMs:cfg.waitMs,servers:cfg.servers}));
+    else localStorage.removeItem(COLLAB_ICE_KEY);
+  }catch(e){
+    return {ok:false,error:L('配置无法写入本机存储：{msg}',{msg:collabIceRedact((e&&e.message)||e)})};
+  }
+  collabIceMem=cfg; collabIceLoaded=true;
+  return {ok:true,cfg};
+}
+function collabIceClear(){
+  try{ localStorage.removeItem(COLLAB_ICE_KEY); }catch(_){}
+  collabIceMem=null; collabIceLoaded=true;
+}
+/** 兜底脱敏：任何对外文案先过一遍，命中的凭据/用户名原文替换为掩码 */
+function collabIceRedact(text){
+  let s=String(text==null?'':text);
+  const cfg=collabIceCurrent();
+  if(!cfg||!Array.isArray(cfg.servers)) return s;
+  for(const sv of cfg.servers){
+    if(sv.credential) s=s.split(sv.credential).join('***');
+    if(sv.username) s=s.split(sv.username).join(collabIceMaskUser(sv.username));
+  }
+  return s;
+}
+/** 对外摘要：只给服务器数量、TURN/STUN 计数、主机名与用户名首尾字符 */
+function collabIceSummary(){
+  const cfg=collabIceCurrent();
+  if(!cfg||!cfg.servers.length) return '';
+  const turn=cfg.servers.filter(s=>/^turns?:/i.test(s.urls[0])).length;
+  const hosts=cfg.servers.map(s=>collabIceHostOf(s.urls[0])+(s.username?'（'+L('用户 {u}',{u:collabIceMaskUser(s.username)})+'）':'')).join('、');
+  return L('{n} 个服务器（TURN {t} / STUN {s}）',{n:cfg.servers.length,t:turn,s:cfg.servers.length-turn})+' · '+hosts;
+}
+function collabIceRender(){
+  const el=$('collabIceSummary');
+  if(!el) return;
+  const cfg=collabIceCurrent();
+  el.className='hint-text';
+  el.textContent=cfg&&cfg.servers.length?(cfg.sessionOnly?L('仅本次会话'):L('已记住'))+'：'+collabIceSummary():L('未配置中继：仅使用直连候选');
+  collabDiagRefresh();
+}
+/** 配了服务器才等 6 s 收集 relay 候选；否则维持 4 s，避免无中继时白等 */
+function collabIceTimeout(){
+  const cfg=collabIceCurrent();
+  return cfg&&cfg.servers.length?6000:4000;
+}
+/** 注入 RTCPeerConnection 的 iceServers：凭据只在这里出现，绝不进入 SDP 之外的任何对外文本 */
+function collabRtcConfig(){
+  const cfg=collabIceCurrent();
+  if(!cfg||!cfg.servers.length) return {iceServers:[]};
+  return {iceServers:cfg.servers.map(s=>s.username?{urls:s.urls,username:s.username,credential:s.credential}:{urls:s.urls})};
+}
+/** 只统计候选类型数量，不保留 IP/端口；SDP 原文不进任何界面 */
+function collabIceCount(sdp){
+  const out={host:0,srflx:0,relay:0,total:0};
+  String(sdp||'').split(/\r?\n/).forEach(line=>{
+    const m=/^a=candidate:.*\btyp (host|srflx|relay)\b/i.exec(line.trim());
+    if(m){ out[m[1].toLowerCase()]++; out.total++; }
+  });
+  return out;
+}
+/** 选中候选对只取类型（host/srflx/relay），不取地址 */
+async function collabDiagPair(pc){
+  if(!pc||typeof pc.getStats!=='function') return null;
+  try{
+    const rep=await pc.getStats(), pairs=[], cands=new Map();
+    rep.forEach(s=>{
+      if(!s) return;
+      if(s.type==='local-candidate'||s.type==='remote-candidate') cands.set(s.id,s);
+      else if(s.type==='candidate-pair'&&(s.selected||s.state==='succeeded'||s.nominated)) pairs.push(s);
+    });
+    const pair=pairs.find(p=>p.selected)||pairs.find(p=>p.state==='succeeded')||pairs[0];
+    if(!pair) return null;
+    const l=cands.get(pair.localCandidateId), r=cands.get(pair.remoteCandidateId);
+    return {local:(l&&l.candidateType)||'',remote:(r&&r.candidateType)||''};
+  }catch(_){ return null; }
+}
+let collabIceDiag=null;
+function collabIceRecord(pc){
+  collabIceDiag={
+    local:collabIceCount(pc&&pc.localDescription&&pc.localDescription.sdp),
+    remote:collabIceCount(pc&&pc.remoteDescription&&pc.remoteDescription.sdp),
+    pair:null
+  };
+  collabDebugSet('__collabIceDiag',collabIceDiag);
+  collabDiagRefresh();
+  collabDiagPair(pc).then(p=>{ if(p){ collabIceDiag.pair=p; collabDiagRefresh(); } });
+}
+/** 诊断只给计数与配对类型；无候选时明确说「未收集到」，不展示 SDP */
+function collabDiagText(){
+  const d=collabIceDiag;
+  if(!d) return '';
+  const f=c=>L('host {h} / srflx {s} / relay {r}',{h:c.host,s:c.srflx,r:c.relay});
+  const l=d.local||{host:0,srflx:0,relay:0}, r=d.remote||{host:0,srflx:0,relay:0};
+  let out=L('本机候选：{v}',{v:f(l)})+' · '+L('对端候选：{v}',{v:f(r)});
+  if(!l.total&&!r.total) out+=' · '+L('尚未收集到候选（邀请串可能未包含候选）');
+  else if(d.pair) out+=' · '+L('选中候选对：{pair}',{pair:d.pair.local+' ↔ '+d.pair.remote});
+  return out;
+}
+function collabDiagRefresh(){
+  const el=$('collabIceDiag');
+  if(!el) return;
+  const t=collabDiagText();
+  el.textContent=t;
+  el.className='hint-text';
+}
 /* 片C：core 只通过钩子引用协作能力。函数声明已提升，可在常量之后就登记。 */
 registerHook('collab.onLocalChange',collabOnLocalChange);
 registerHook('collab.broadcastFloor',collabBroadcastFloor);
@@ -350,11 +542,11 @@ function collabStateText(code,detail){
   return detail ? base+'：'+detail : base;
 }
 function collabRecordError(text){
-  collabLastError=String(text||'');
+  collabLastError=collabIceRedact(String(text||''));
   collabDebugSet('__collabLastError',collabLastError);
 }
 function collabSetStatus(text,type=''){
-  collabLastStatus=text||'';
+  collabLastStatus=collabIceRedact(text||'');
   if(type==='error') collabRecordError(collabLastStatus);
   const el=$('collabStatus');
   if(el){ el.textContent=collabLastStatus; el.className='hint-text'+(type?' '+type:''); }
@@ -370,8 +562,9 @@ function collabNotifyThrottled(text,type='warn'){
   const now=Date.now();
   if(now-collabNotifyAt<2000) return;
   collabNotifyAt=now;
-  if(type==='error') collabRecordError(text);
-  collabSetStatus(text,type);
+  const safe=collabIceRedact(String(text||''));
+  if(type==='error') collabRecordError(safe);
+  collabSetStatus(safe,type);
 }
 /** 合并统计的统一口径（N-17）：
  *  changed 必须计入 conflicts，否则「只有冲突、远端没赢」时界面显示「无变化」，用户完全不知情；
@@ -443,6 +636,7 @@ function collabRefreshUI(){
   }
   const el=$('collabStatus');
   if(el) el.textContent=collabLastStatus||collabStateText(collabState);
+  collabIceRender();
   collabRefreshConflictInfo();
 }
 
@@ -692,7 +886,8 @@ function collabConnected(name,peerPid){
 function collabAnnounceRights(){
   if(collabRightsShown) return;
   collabRightsShown=true;
-  const scope=collabMode==='webrtc'?' · '+L('仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）'):'';
+  const ice=collabIceCurrent();
+  const scope=collabMode==='webrtc'?' · '+L(ice&&ice.servers.length?'已配置中继：跨 NAT 取决于 TURN 可用性与鉴权（未验证）':'仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）'):'';
   toast(L('已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）')+scope,'warn');
 }
 /** 跨设备首次快照前确认：拒绝即断开，不静默应用对端覆盖 */
@@ -795,12 +990,12 @@ function collabStartLocal(name,opts){
 }
 
 function collabNewPeer(){
-  const pc=new RTCPeerConnection({iceServers:[]});
+  const pc=new RTCPeerConnection(collabRtcConfig());
   collabPC=pc;
   pc.onconnectionstatechange=()=>{
     const st=pc.connectionState;
     if(st==='connecting') collabSetState('connecting',L('正在建立连接…'));
-    else if(st==='connected') collabSetState('connected',L('实时同步已就绪'),'ok');
+    else if(st==='connected'){ collabSetState('connected',L('实时同步已就绪'),'ok'); collabIceRecord(pc); }
     else if(st==='failed') collabSetState('error',`${L('连接失败')}（connectionState=failed）`,'error');
     else if(st==='disconnected') collabSetState('disconnected',L('连接已断开，等待恢复…'),'warn');
     else if(st==='closed'&&!collabClosing) collabSetState('disconnected',L('连接已关闭'),'warn');
@@ -813,7 +1008,7 @@ function collabWaitIce(pc){
   return new Promise(resolve=>{
     const done=()=>{ clearTimeout(timer); pc.removeEventListener('icegatheringstatechange',check); resolve(); };
     const check=()=>{ if(pc.iceGatheringState==='complete') done(); };
-    const timer=setTimeout(done,4000);
+    const timer=setTimeout(done,collabIceTimeout());
     pc.addEventListener('icegatheringstatechange',check);
   });
 }
@@ -870,6 +1065,7 @@ async function collabCreateOffer(){
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
     await collabWaitIce(pc);
+    collabIceRecord(pc);
     const invite=collabInviteEncode('offer',pc.localDescription.sdp);
     const out=$('collabSignalOut');
     if(out) out.value=invite;
@@ -902,6 +1098,7 @@ async function collabAcceptSignal(){
       if(!isAnswer) throw new Error(L('请粘贴对方的应答邀请串'));
       collabSetState('connecting',L('已应用应答，正在建立连接…'));
       await collabPC.setRemoteDescription({type:'answer',sdp:parsed.sdp});
+      collabIceRecord(collabPC);
       return;
     }
     if(collabPC&&collabPC.localDescription&&collabPC.localDescription.type==='answer'){
@@ -917,6 +1114,7 @@ async function collabAcceptSignal(){
     const ans=await pc.createAnswer();
     await pc.setLocalDescription(ans);
     await collabWaitIce(pc);
+    collabIceRecord(pc);
     const invite=collabInviteEncode('answer',pc.localDescription.sdp);
     const out=$('collabSignalOut');
     if(out) out.value=invite;
@@ -978,6 +1176,19 @@ function openCollabPanel(){
        </div>
        <div id="collabInviteQr" style="margin-top:8px"></div>
      </div>
+     <div class="section"><h3>${L('中继服务器（可选：跨 NAT 才需要）')}</h3>
+       <div class="hint-text">${L('默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。')}</div>
+       <div class="form-grid" style="margin-top:6px">
+         <label>${L('中继配置')}</label><textarea id="collabIceIn" rows="3" placeholder="turn:turn.example.com:3478 | user | pass" style="width:100%;font-family:Consolas,monospace;font-size:11px"></textarea>
+       </div>
+       <div class="form-actions">
+         <button id="collabIceSaveBtn">${L('应用配置')}</button>
+         <button id="collabIceClearBtn">${L('清除配置')}</button>
+         <label style="display:inline-flex;align-items:center;gap:4px"><input type="checkbox" id="collabIceRemember">${L('在本机记住（明文存于浏览器）')}</label>
+       </div>
+       <div id="collabIceSummary" class="hint-text"></div>
+       <div id="collabIceDiag" class="hint-text"></div>
+     </div>
      <div class="hint-text">${L('底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。')}</div>
      <div id="collabPeers" class="hint-text">${L('尚未连接')}</div>
      <div id="collabStatus" class="hint-text">${collabLastStatus||L('尚未连接')}</div>
@@ -991,6 +1202,20 @@ function openCollabPanel(){
   $('collabOfferBtn').onclick=()=>collabCreateOffer();
   $('collabAcceptBtn').onclick=()=>collabAcceptSignal();
   $('collabCopyBtn').onclick=()=>collabCopySignal();
+  $('collabIceSaveBtn').onclick=()=>{
+    const remember=!!$('collabIceRemember')?.checked;
+    const r=collabIceSave($('collabIceIn').value,remember);
+    if(!r.ok){ toast(r.error,'error'); return; }
+    $('collabIceIn').value='';   /* 不在界面留存明文凭据 */
+    collabIceRender();
+    toast(remember?L('中继配置已应用（已记住，刷新后仍生效）'):L('中继配置已应用（仅本次会话，刷新后失效）'));
+  };
+  $('collabIceClearBtn').onclick=()=>{
+    collabIceClear();
+    $('collabIceIn').value='';
+    collabIceRender();
+    toast(L('中继配置已清除'));
+  };
   collabRefreshUI();
 }
 
