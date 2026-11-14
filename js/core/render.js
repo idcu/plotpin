@@ -204,8 +204,8 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
   /* 裁剪预筛用保守 O(1) 包围盒（P2-3）：圆/椭圆/扇形不再逐对象 72 段取样。
      只允许偏大——偏小会漏画；`objectSnapBounds` 的契约正是「绝不偏小」。 */
   const bnd={minX:0,minY:0,maxX:0,maxY:0};
-  state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
-    .sort((a,b)=>a.z-b.z)
+  /* F2：z 序复用 hitOrderObjects 的缓存（键=对象数+zVersion），每次重建不再对全量对象重排 */
+  hitOrderObjects().filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
     .forEach(o=>{
       if(!boundsIntersect(objectSnapBounds(o,bnd),view)) return;
       drawObject(sc,o,v,toS,iconBoost,exportGain);

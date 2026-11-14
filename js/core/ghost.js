@@ -104,9 +104,12 @@ let rRef=null;
 let rOp=.45;
 let rBl={on:false,phase:false,timer:0};
 let rSeq=0;
-/** 静态层签名：参照版（内容/不透明度/闪烁相位任一变化必须重建；幽灵图由 sceneStaticKey 另计） */
+/** 静态层签名：参照版（内容/不透明度/闪烁相位任一变化必须重建；幽灵图由 sceneStaticKey 另计）
+ *  F2：参照版这一相位根本不绘制时不进签名，避免「看不见的东西」触发整层重建。 */
 function refSig(){
-  return rRef?rRef.sig+','+rOp+','+(rBl.on?+rBl.phase:'-'):'0';
+  if(!rRef||rOp<=0) return '0';
+  if(!(rRef.byFloor.get(state.activeFloorId)||rRef.byFloor.get(rRef.data.activeFloorId)||[]).length) return '0';
+  return rRef.sig+','+rOp+','+(rBl.on?+rBl.phase:'-');
 }
 /** 按当前楼层取参照对象（载入时已分组，绘制 O(1)） */
 function revPaint(c,v,toS,ib,eg,view){
@@ -168,7 +171,7 @@ function revBlinkSet(on){
   rBl.on=!!on&&!!rRef;
   rBl.phase=false;
   if(rBl.on) rBl.timer=setInterval(()=>{
-    if(!rBl.on||!rRef) return;
+    if(!rBl.on||refSig()==='0') return;   /* F2：参照层这一相位不绘制时空转，不白烧整层重建 */
     rBl.phase=!rBl.phase;
     invalidateStatic(); requestRender();
   },500);
