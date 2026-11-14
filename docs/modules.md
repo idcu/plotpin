@@ -133,7 +133,7 @@
 | `pdf-dpi.spec.mjs` | P2-02：PDF 图纸页 220dpi 默认、300dpi 封顶 3000px，版式不变 |
 | `pdf-multipage.spec.mjs` | B-13：多页 PDF 只导入第 1 页、页数与单页提示、底图入库 |
 | `pdf-vector-option.spec.mjs` | V-3b1/V-3b2b/V-3b0：矢量 PDF 为显式选项、文案口径、默认路径字节不变、清单页逐页 MediaBox |
-| `pdf-text-layer.spec.mjs` | V-6：矢量 PDF 文字可提取（pdftotext 对比），等长抹掉 `/ToUnicode` 后必须退化；无 poppler 时条件跳过 |
+| `pdf-text-layer.spec.mjs` | V-6：矢量 PDF 文字可提取（pdftotext 对比），等长抹掉 `/ToUnicode` 后必须退化；CI 的 e2e job 已装 poppler-utils（远端真跑），无 poppler 的机器上条件跳过 |
 | `perf-render.spec.mjs` | B-11：真实 Chromium 渲染基线（2000 对象 / 1600×900）；M6 局部补绘像素采样（位移、放大、编辑 A 后 B 标签仍在），共 4 个用例 |
 | `persistence.spec.mjs` | IndexedDB v1→v2：迁移写回 v2、楼层补 `updatedAt`、不丢楼层/对象 |
 | `plugin-compat.spec.mjs` | D-06：版本矩阵，预检回传 major/minor，越界/畸形给可读原因 |

@@ -11,7 +11,7 @@
 | 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **168 个分区 / 4,327 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **48 个 spec / 177 个用例**（V-6 提取对比在无 poppler 环境条件跳过） | 本地双入口 2026-11-15 收口：源码 **176 passed / 0 failed / 1 skipped**（3.7m），dist **173 passed / 0 failed / 4 skipped**（3.4m），exit 0；见 §3 |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **48 个 spec / 177 个用例**（V-6 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地双入口 2026-11-15 收口：源码 **176 passed / 0 failed / 1 skipped**（3.7m），dist **173 passed / 0 failed / 4 skipped**（3.4m），exit 0；见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
@@ -65,12 +65,13 @@
 - `scripts/e2e.mjs` 校验目标浏览器二进制：`node scripts/e2e.mjs --browser=firefox …` 缺二进制时打印 `[SKIP]` 并**退 2**，不会退 0。Firefox 只是可复跑入口，**不进 `npm run ci`、不进默认 e2e、不构成支持承诺**；三态证据见 §3.4。
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
-- 1 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入“1 skipped”，不算失败）；已按开关单独跑过（1 passed / 5.1m）。dist 入口共 4 条 skip：协作 soak 1 条 + `sw.spec` 1 条 + `sw-atomic.spec` 2 条（单文件发行版无 SW 预缓存输入）。
+- 2 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入“skipped”，不算失败）；已按开关单独跑过（1 passed / 5.1m）。`pdf-text-layer.spec` 的提取对比需 `pdftotext`（poppler），缺这个二进制时条件跳过——**该 `test.skip` 的唯一用途是兜住没装 poppler 的机器**，避免把“环境缺二进制”误报成产品失败；本机已装 poppler，跳过分支实际不走。CI 的 e2e job 在跑 spec 之前显式 `apt-get install poppler-utils`（装不上就让 job 直接红），因此远端这条用例是真跑而不是跳过。dist 入口共 5 条 skip：上述 2 条 + `sw.spec` 1 条 + `sw-atomic.spec` 2 条（单文件发行版无 SW 预缓存输入）。
 - **三条跑法，全量 48 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
   - `file://` 入口：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
 - 2026-11-14 收口全量实跑：源码入口 **175 passed / 0 failed / 1 skipped**，exit 0（4.4m / 266s）；dist 入口 **172 passed / 0 failed / 4 skipped**，exit 0（3.5m / 208s）；`COLLAB_SOAK=1` 单独跑协作浸泡 **1 passed / 0 failed（5.1m / 305s，exit 0）**。跳过项与原因见 [release-checklist](release-checklist.md) 第 5/6 条，日志在 `2026-11-14/final-closure/work/e2e-source-full.log`、`e2e-dist-full.log`、`e2e-soak.log`。
+- 2026-11-15 修掉 `pdf-text-layer` 在远端“看似有门禁其实在跳过”：远端 run `43637912788`（commit `4c4b9ed`）里该用例报 `-`，因为 `ubuntu-latest` 默认不带 `pdftotext`；门禁读数变成源码 175 passed / 2 skipped，而 skip 不计入通过数，容易被误读成“已覆盖”。修法只在 CI 的 e2e job 里、跑 spec 之前加一步 `apt-get install poppler-utils`，**用例、跳过条件、断言一行未改**；安装失败即 job 失败，不做兜底。跳过分支保留，唯一用途是兜住没装 poppler 的本地机器（本机已装，走不到）。核对口径：CI 上该用例必须显示 `✓`（passed），出现 `-` 即视为环境缺失、按未验证处理。
 - 2026-11-15 收口全量实跑（V-6 文字层）：源码入口 **176 passed / 0 failed / 1 skipped**，exit 0（3.7m）；dist 入口 **173 passed / 0 failed / 4 skipped**，exit 0（3.4m）。跳过项同上；V-6 的提取对比在装 poppler 的本机实跑（正向提取 + 删 `/ToUnicode` 负向退化），无 poppler 的环境条件跳过。
 - **M6 局部补绘的 3 条像素采样用例**（`tests/e2e/perf-render.spec.mjs`）：对象位移、放大、编辑 A 后 B 的标签仍在。改前分别红在 `atNew`、`inside1`、`after=0`（且 `patched=true`，证明缺陷发生在局部补绘路径而非被整层重建掩盖），改后绿。覆盖只到属性面板 `commitObjectEdit` 路径；拖拽期走整层重建，未覆盖。
 - 2026-11-15 修掉 `perf-render.spec.mjs` 远端抖动：根因是画布位图与 `wrap` 布局尺寸不同步（内容被裁/采样坐标错位），改为采样前 `resizeCanvas()` 同步并按 `getBoundingClientRect` 固定 W/H，等待有界（60 帧 / 3000 ms）且耗尽后仍判红；本地双入口 `--repeat-each=10` 各 40 passed，远端 run `43631563446` 两条 e2e job 全绿（源码 175 / dist 172 passed），settle 读数 0–1 帧。
@@ -104,7 +105,7 @@
 | 界面加固 | ui-hardening(4)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **177** 个用例、**48** 个 spec（源码入口默认 176 跑 + 1 条件跳过；dist 入口 173 跑 + 4 跳过）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **177** 个用例、**48** 个 spec（装 poppler 的环境：源码入口 176 跑 + 1 条件跳过，dist 入口 173 跑 + 4 跳过；没装 poppler 时源码入口再多 1 条跳过、dist 入口再多 1 条）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 

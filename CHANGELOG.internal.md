@@ -4,6 +4,18 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-15 · CI 装 poppler，`pdf-text-layer` 从“远端跳过”改为真跑
+
+- **Commit Hash**：`待回填`
+- **核心问题**：远端 run `43637912788`（commit `4c4b9ed`）里 `pdf-text-layer.spec.mjs` 报 `-`——`ubuntu-latest` 不带 `pdftotext`，用例走条件跳过。skip 不计入 passed，读数变成源码 175 passed / 2 skipped，门禁存在“看似有门禁其实在跳过”的隐患。
+- **核心改动**：
+  - `.github/workflows/ci.yml`：`e2e` job 在跑 spec 之前新增 `安装 poppler（pdftotext…）` 步骤（`apt-get update -qq` + `apt-get install -y poppler-utils` + 打印版本），安装失败即 job 失败，不兜底。
+  - 用例、跳过条件、断言一行未改；跳过分支保留，唯一用途是兜住没装 poppler 的机器。
+  - `docs/testing.md`：§1 表、§3.1 条件跳过条目、§3.2 计数口径与收口段落写明 CI 已装 poppler、远端应显示 `✓`，出现 `-` 即按环境缺失/未验证处理；`docs/modules.md` 同步。
+- **预算**：不改产品代码，dist 体积与 SW 指纹不变。
+- **验证数据**：本机该 spec **1 passed**（本机已有 poppler，跳过分支走不到）；`npm run ci` 全绿。远端结论见推送后的 Actions。
+- **遗留风险**：`pdftotext` 只证明可提取，仍不证明查看器选中高亮/打印表现。
+
 ## 2026-11-15 · 矢量 PDF 不可见文字层（Type3 空字形 + ToUnicode）
 
 - **Commit Hash**：`待回填`
