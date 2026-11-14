@@ -4,6 +4,19 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-15 · 清单页文字层（与图纸页同一套 Type3 + ToUnicode）
+
+- **Commit Hash**：`待回填`
+- **核心问题**：清单页几何修对（`1240×1748`）后，文字层仍被排除在外；清单是给人核对数量与报价的，不能选中/复制说不通。
+- **核心改动**：
+  - `js/common/pdf-vector.js`：`textStream` 新增 `a:'l'`（x 即文字左缘，不再按文字宽度回退居中）与 `b:1`（y 已是基线，不做 middle→baseline 换算）；两者缺省时与旧行为逐字节一致。
+  - `js/features/io-export.js`：`renderPdfListPages` 新增 `opt.texts` 开关（默认关闭），按**实际绘制**的字符串回填文字层（标题、副标题、表头、每个单元格），坐标取画布基线，返回前 `y = H − base` 翻成 PDF 坐标；矢量导出侧传 `{texts:true}`。默认 `pdf`（`exportPDF`）、vendor `buildImagePdf`、默认位图路径未改动，不传 opt 时像素与旧版一致。
+  - `tests/e2e/pdf-text-layer.spec.mjs`：新增 V-6b——真实导出后断言第 2 页 MediaBox `1240×1748`；默认模式断言**完整行序列**（标题/副标题/10 个表头/3×8 单元格，行优先、列内左到右）；`-layout` 模式断言表头列序、每条记录名称与面积同一行且名称在左、三行「默认图层」列偏移一致；负向仍是等长抹掉 `/ToUnicode`，默认与 `-layout` 两种模式都必须退化。
+- **实测工具行为（poppler 26.01）**：`pdftotext` 默认模式不还原表格，每个单元格一行；`-layout` 才按行还原并按列对齐。曾尝试用尾随空格压缩列距，实测对多行表格无效（仍切行），已回退，保留真实列位。
+- **预算**：dist **801,141 → 801,426 B（+285 B）**；gzip **262,043 → 262,176 B（+133 B）**；余量 38,254 B（gzip 24,544 B）；SW `VERSION=247 → 248`，53 个预缓存输入。
+- **验证数据**：`npm run ci` 全绿（干净树 = HEAD `51c77e7` + 本批改动）；双入口 e2e：源码 **177 passed / 0 failed / 1 skipped**（4.2m），dist **174 passed / 0 failed / 4 skipped**（3.8m）；V-6b 本机实跑 1 passed。
+- **未验证项**：真实查看器（Edge/Adobe/Foxit/WPS）清单页的选中高亮与复制顺序未自动验证；`pdftotext` 只证明可提取与顺序，不冒充查看器通过。
+
 ## 2026-11-15 · CI 装 poppler，`pdf-text-layer` 从“远端跳过”改为真跑
 
 - **Commit Hash**：`待回填`

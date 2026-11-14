@@ -825,8 +825,13 @@ async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
   cc.fillText(pdfFooter(floorName,pageNo,pageTotal),margin,H0-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
-async function renderPdfListPages(floorName,pageNos,pageTotal){
+/** 清单页渲染。默认（不传 opt）只出位图，与旧版逐像素一致；
+ *  opt.texts=true 时额外回填该页的不可见文字层坐标（画布像素→PDF pt 需翻转 y，
+ *  由矢量导出侧换算）。文字层只记录已实际绘制的字符串（含列宽截断后的「…」），
+ *  不在格式层二次拼装，保证「看到的」与「复制的」同源。 */
+async function renderPdfListPages(floorName,pageNos,pageTotal,opt){
   const {W,H,margin,rowH,headH}=PDF_LIST_PAGE;
+  const wantText=!!(opt&&opt.texts);
   const rows=objectRows(pdfDrawObjectsFor(null)), pages=[];
   const per=pdfListRowsPerPage();
   const chunks=[]; for(let i=0;i<rows.length;i+=per) chunks.push(rows.slice(i,i+per));
@@ -834,17 +839,22 @@ async function renderPdfListPages(floorName,pageNos,pageTotal){
   for(let pi=0;pi<chunks.length||rows.length===0;pi++){
     const c=document.createElement('canvas'); c.width=W; c.height=H;
     const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+    /* 文字层按左缘 + 基线落位（a:'l' / b:1），y 在返回前翻转成 PDF 坐标 */
+    const cap=[];
+    const put=(t,x,base,s)=>{ if(wantText) cap.push({t:String(t),x:x,y:H-base,s:s,a:'l',b:1}); };
     g.fillStyle='#111827'; g.font='bold 26px Microsoft YaHei,Arial'; g.textBaseline='alphabetic';
-    g.fillText(state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单'),margin,margin+8);
+    const title=state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单');
+    g.fillText(title,margin,margin+8); put(title,margin,margin+8,26);
     g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
     const pageNo=(pageNos&&pageNos[pi])||pi+1, pageAll=pageTotal||total;
-    g.fillText(L('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',{n:rows.length,page:pageNo,total:pageAll,time:new Date().toLocaleString()}),margin,margin+34);
+    const sub=L('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',{n:rows.length,page:pageNo,total:pageAll,time:new Date().toLocaleString()});
+    g.fillText(sub,margin,margin+34); put(sub,margin,margin+34,14);
     let y=margin+70;
     g.fillStyle='#f1f5f9'; g.fillRect(margin,y,W-margin*2,headH);
     g.strokeStyle='#cbd5e1'; g.lineWidth=1; g.strokeRect(margin,y,W-margin*2,headH);
     g.fillStyle='#111827'; g.font='bold 14px Microsoft YaHei,Arial';
     let x=margin+8;
-    PDF_COLS.forEach(([name,w])=>{ g.fillText(L(name),x,y+26); x+=w; });
+    PDF_COLS.forEach(([name,w])=>{ const label=L(name); g.fillText(label,x,y+26); put(label,x,y+26,14); x+=w; });
     y+=headH;
     const list=chunks[pi]||[];
     g.font='13px Consolas,Microsoft YaHei,Arial';
@@ -854,10 +864,16 @@ async function renderPdfListPages(floorName,pageNos,pageTotal){
       g.fillStyle='#1f2937';
       x=margin+8;
       /* 列布局来自字段表投影；值一律取 objectRows() 的行，不在格式层二次拼装 */
-      PDF_COLS.forEach(([name,w])=>{ let s=String(name==='对象类型'?L(r[name]):(r[name]??'')); if(g.measureText(s).width>w-14) s=s.slice(0,10)+'…'; g.fillText(s,x,y+20); x+=w; });
+      PDF_COLS.forEach(([name,w])=>{
+        let v=String(name==='对象类型'?L(r[name]):(r[name]??''));
+        if(g.measureText(v).width>w-14) v=v.slice(0,10)+'…';
+        g.fillText(v,x,y+20); put(v,x,y+20,13); x+=w;
+      });
       y+=rowH;
     });
-    pages.push({width:W,height:H,b64:await canvasToJpegBase64(c,.9)});
+    const page={width:W,height:H,b64:await canvasToJpegBase64(c,.9)};
+    if(wantText) page.texts=cap;
+    pages.push(page);
     if(rows.length===0) break;
   }
   return pages;
@@ -977,9 +993,10 @@ async function exportPDFVectorNow(){
     const one=async(name,id)=>{
       const dr=plan.find(p=>p.kind==='drawing'&&(id===undefined||p.floorId===id));
       pages.push(await vectorPage(name,dr&&dr.pageNo,total));
-      for(const p of await renderPdfListPages(name,plan.filter(x=>x.kind==='list'&&(id===undefined||x.floorId===id)).map(x=>x.pageNo),total))
-        /* 清单页画布是 1240×1748（纵向），MediaBox 必须逐页跟图走，否则整页图被拉伸到 842×595 */
-        pages.push({body:V.image('Im0',0,0,p.width,p.height),images:[{w:p.width,h:p.height,jpeg:b64b(p.b64)}],w:p.width,h:p.height});
+      for(const p of await renderPdfListPages(name,plan.filter(x=>x.kind==='list'&&(id===undefined||x.floorId===id)).map(x=>x.pageNo),total,{texts:true}))
+        /* 清单页画布是 1240×1748（纵向），MediaBox 必须逐页跟图走，否则整页图被拉伸到 842×595；
+           文字层与图纸页同一套 Type3 + ToUnicode，坐标已由渲染侧翻成页面 pt（左对齐 + 基线落位） */
+        pages.push({body:V.image('Im0',0,0,p.width,p.height),images:[{w:p.width,h:p.height,jpeg:b64b(p.b64)}],w:p.width,h:p.height,texts:p.texts});
     };
     if(fs.rows.length<=1) await one(null,undefined);
     else for(const row of fs.rows) await withFloor(row.id,()=>one(row.name,row.id));
@@ -994,14 +1011,13 @@ async function exportPDFVectorNow(){
   }catch(e){ toast(L('PDF 生成失败：{msg}',{msg:e.message}),'error'); }
 }
 /** 导出 PDF（矢量）选项：先明示文字口径与当前档位，再按档位导出。
- *  图纸页为「位图视觉 + 不可见文字层」：可选中/搜索/复制，但放大仍发虚；
- *  清单页保持整页位图（本阶段不写文字层）。 */
+ *  图纸页与清单页都是「位图视觉 + 不可见文字层」：可选中/搜索/复制，但放大仍发虚。 */
 function exportPDFVector(){
   const plan=pdfVectorPlan(pdfVectorLabelCount());
   const tier=plan.reason==='labels'?L('150 DPI（标签数 > 300，自动降档）'):L('200 DPI（默认）');
   const tail=plan.fallback
     ?'<p><b>'+esc(L('当前环境不支持压缩流，只能退回整页位图（无文字层）。'))+'</b></p>'
-    :'<p class="hint-text">'+esc(L('本选项输出：底图为位图、对象为矢量、文字带不可见文字层；含图纸页与清单页（清单页仍为位图）。'))
+    :'<p class="hint-text">'+esc(L('本选项输出：底图为位图、对象为矢量、文字带不可见文字层；含图纸页与清单页，两页都带文字层。'))
       +'<br>'+esc(L('文字层不受清晰度档位影响。'))+'</p>';
   openModal(L('导出 PDF（矢量）'),
     '<p><b>'+esc(L('文字可选中·可搜索（视觉仍为位图，放大会发虚）。'))+'</b></p>'

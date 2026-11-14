@@ -6,7 +6,7 @@
  * 只为选中/搜索/复制服务，内容流仍只接受 ASCII（文字串写成十六进制）。
  *
  * 用法：PdfVec.docPages(595, 842, [{body: PdfVec.image('Im0',…), images:[img],
- *        texts:[{t,x,y,s}]}])
+ *        texts:[{t,x,y,s}]}])   // 每条文字可选 a:'l' 左对齐、b:1 表示 y 已是基线
  *   → Uint8Array，可直接 new Blob([bytes], {type:'application/pdf'})。
  */
 (function (global) {
@@ -84,7 +84,9 @@
   }
 
   /* 单页文字流：BT 3 Tr（不可见）→ 每条文字一次 Tm + Tf + 十六进制 Tj → ET。
-     水平居中口径与位图一致（宽度和的一半左移）；基线由 middle 基线换算。 */
+     默认水平居中口径与位图一致（宽度和的一半左移），基线由 middle 基线换算。
+     `a:'l'` 改为左对齐（x 即文字左缘，清单页单元格用）；`b:1` 表示 y 已经是基线
+     （清单页按画布基线落位，不再做 middle→baseline 换算）。两者缺省时行为不变。 */
   function textStream(texts, reg, measure) {
     const A = Number(measure.ascent) > 0 ? Number(measure.ascent) : 0.88;
     const D = Number(measure.descent) > 0 ? Number(measure.descent) : 0.12;
@@ -107,7 +109,9 @@
       if (hex) segs.push([cur, hex]);
       if (!segs.length) continue;
       /* 字宽为千分之一 em：总宽 pt = Σw/1000×s；与位图「按文字宽度居中」同口径 */
-      out.push('1 0 0 1 ' + n(Number(t.x) - wsum / 1000 * s / 2) + ' ' + n(Number(t.y) - (A - D) / 2 * s) + ' Tm');
+      const x0 = t.a === 'l' ? Number(t.x) : Number(t.x) - wsum / 1000 * s / 2;
+      const y0 = t.b ? Number(t.y) : Number(t.y) - (A - D) / 2 * s;
+      out.push('1 0 0 1 ' + n(x0) + ' ' + n(y0) + ' Tm');
       for (const seg of segs) out.push('/T' + seg[0] + ' ' + n(s) + ' Tf <' + seg[1] + '> Tj');
       lines++;
     }
@@ -118,7 +122,8 @@
   /* 多页版：pages = [{body, images, texts?, w?, h?}]；images 项为 {w,h,rgb,alpha}（Flate+SMask）
      或 {w,h,jpeg}（DCTDecode 整页图）。页级 w/h 覆盖本次调用的默认页面尺寸
      （图纸页 842×595 与清单页 1240×1748 混排时，MediaBox 必须逐页取真实宽高，
-     否则整页图会被非等比拉伸）。texts 为页面 pt 坐标 [{t,x,y,s}]，写成独立文字流；
+     否则整页图会被非等比拉伸）。texts 为页面 pt 坐标 [{t,x,y,s,a?,b?}]（a:'l' 左对齐、
+     b:1 表示 y 已是基线），写成独立文字流；
      全文档共用一套 Type3 字体（每 200 码一个）。opt.measure 可注入度量函数（自测用），
      opt.report 回填 {chars, fonts, skipped}。对象编号：1 Catalog / 2 Pages，
      其后每页占 Page、Contents、文字流（有文字时），图片与 SMask 紧随该页，
