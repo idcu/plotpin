@@ -23,10 +23,12 @@ test('D-03 帮助中心三页签与焦点回归', async ({ page }) => {
 
   await page.locator('.help-tab[data-help-tab="exports"]').click();
   await expect(page.locator('.help-tab.active')).toHaveText('导出检查清单');
-  await expect(page.locator('.help-panel:not([hidden]) .help-term')).toHaveCount(8);
+  await expect(page.locator('.help-panel:not([hidden]) .help-term')).toHaveCount(9);
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('SITE 图层');
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('位图页');
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('公式注入');
+  /* 圆弧前向不兼容必须出现在清单里：只改条数会漏掉「条目被换掉」的情况 */
+  await expect(page.locator('.help-panel:not([hidden])')).toContainText('旧版保存一次后弧永久消失');
 
   await page.keyboard.press('Escape');
   await expect(page.locator('#modalBackdrop')).not.toHaveClass(/show/);

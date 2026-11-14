@@ -10448,11 +10448,13 @@ await section("D-03 帮助中心：三页签与 i18n", async () => {
   eq('D-03 概念词典 6 条', gloss.length, 6);
   eq('D-03 概念词典主题', gloss.map(r => r[0]).join('|'), '图片底图|矢量场地|楼层|比例尺|仿射|覆盖率口径');
   const exp = api.helpExportRows();
-  eq('D-03 导出清单 8 种', exp.length, 8);
+  eq('D-03 导出清单 9 种', exp.length, 9);
   eq('D-03 导出格式顺序', exp.map(r => r[0]).join('|'),
-    'JSON 工程|PNG 高清图|SVG 矢量图|PDF（图纸位图+清单）|DXF（CAD 互通）|CSV 表格|TSV 表格|Excel (.xlsx)');
+    'JSON 工程|PNG 高清图|SVG 矢量图|PDF（图纸位图+清单）|DXF（CAD 互通）|DXF（保真：椭圆+圆弧）|CSV 表格|TSV 表格|Excel (.xlsx)');
   ok('D-03 导出清单标注 PDF 位图页', exp.some(r => r[1].includes('位图页')));
   ok('D-03 导出清单标注 DXF SITE 图层', exp.some(r => r[1].includes('SITE 图层')));
+  ok('D-03 导出清单标注圆弧前向不兼容',
+    exp.some(r => r[1].includes('旧版打开会丢弃这些圆弧') && r[1].includes('保存一次后弧永久消失')));
   ok('D-03 导出清单标注表格公式防护',
     exp.filter(r => r[0].includes('表格') || r[0].includes('Excel')).every(r => r[1].includes('公式')));
   const keys = ['帮助中心', ...tabs.map(t => t.label), ...gloss.flat(), ...exp.flat()];

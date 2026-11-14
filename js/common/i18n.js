@@ -372,6 +372,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Drawing page bitmap; list pages separate.',
     '场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。':
       'Site in standalone SITE layer; millimetre coordinates stay editable.',
+    'DXF（保真：椭圆+圆弧）':'DXF (fidelity: ellipse + arc)',
+    '含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。':
+      'Open projects containing arcs with this version or newer; older builds discard arcs, and one save in an older build loses them for good.',
     '全楼层台账；= + - @ 开头加单引号防公式注入。':
       'All-floor ledger; leading apostrophe guards = + - @ formula injection.',
     '同 CSV，制表符分隔；同一公式防护。':
