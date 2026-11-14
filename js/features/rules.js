@@ -476,9 +476,9 @@ function ruleBoundsCheck(ctx){
   return {violations,pairs:0,theoretical:0,objects:ctx.objects.length};
 }
 
-registerRule({id:'overlap',name:'对象重叠',description:'同楼层对象 footprint 实质重叠；容差内贴合不报',builtin:true,check:ruleOverlapCheck});
-registerRule({id:'spacing',name:'最小间距',description:'按类型配置阈值，两对象净距小于阈值时报告',builtin:true,check:ruleSpacingCheck});
-registerRule({id:'bounds',name:'越界',description:'对象完全或部分越出矢量场地边界',builtin:true,check:ruleBoundsCheck});
+registerRule({id:'overlap',name:L('对象重叠'),description:'同楼层对象 footprint 实质重叠；容差内贴合不报',builtin:true,check:ruleOverlapCheck});
+registerRule({id:'spacing',name:L('最小间距'),description:'按类型配置阈值，两对象净距小于阈值时报告',builtin:true,check:ruleSpacingCheck});
+registerRule({id:'bounds',name:L('越界'),description:'对象完全或部分越出矢量场地边界',builtin:true,check:ruleBoundsCheck});
 /* 内建标记后置：registerRule 默认 builtin=false，这里补标记，保持注册入口可复用 */
 ['overlap','spacing','bounds'].forEach(id=>{ const r=RULE_REGISTRY.get(id); if(r) r.builtin=true; });
 
@@ -711,11 +711,19 @@ function initRuleUI(){
   renderRuleResults();
   const cfg=$('ruleConfig');
   if(cfg&&typeof cfg.addEventListener==='function'){
+    let cfgTimer=0;
     cfg.addEventListener('change',()=>{
-      state.rules=readRuleConfigFromUI();
-      scheduleSave();
       ruleLastResult=null;
       renderRuleResults();
+      /* C2：规则配置入历史并走显式协作通道；300ms 合并，连续改多个输入只留一条历史。
+         不弹 toast（避免新增 UI 文案；面板本身已即时反馈）。 */
+      clearTimeout(cfgTimer);
+      cfgTimer=setTimeout(()=>{
+        pushHistory();
+        state.rules=readRuleConfigFromUI();
+        commitChange();
+        callHook('collab.sendRules',state.rules);
+      },300);
     });
   }
   const runBtn=$('runRulesBtn'), expBtn=$('exportRulesBtn'), clrBtn=$('clearRulesBtn');

@@ -55,6 +55,22 @@ test('覆盖率口径 v3：4 个缩放级别一致、隐藏图层不计入、面
   expect(text).toContain('固定目标');
 });
 
+/* C5：2 万公里级边长在 40 次放大后仍超格数上限，必须降级并在报告里显式标注。 */
+test('C5 极端几何：覆盖率降级可见且不抛 RangeError', async ({ page }) => {
+  await openApp(page);
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.evaluate(() => {
+    state.objects = [baseObject('rect', 'rect.area', { name: 'XT', x: 0, y: 0, width: 2e8, height: 2e8 })];
+  });
+  await page.locator('#coverageBtn').click();
+  const text = await page.locator('#modalBody').innerText();
+  expect(text).toContain('覆盖率已降级');
+  const cells = await page.evaluate(() => analyzeCoverage(state).gridCells);
+  expect(cells).toBeLessThanOrEqual(200000);
+  expect(errs).toEqual([]);
+});
+
 test('DORI 最远判读距离：属性写入分辨率/张角后，覆盖率报告同源输出且缺省显示未填', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {

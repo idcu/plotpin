@@ -233,6 +233,13 @@ function bindPropHistory(box){
   const once=e=>{
     const el=e.target;
     if(!isField(el)||el===propHistoryField||(el.matches&&el.matches('[data-photo-input]'))) return;
+    if(readOnly){
+      e.preventDefault(); e.stopPropagation();
+      if(propHistoryField!==el){ propHistoryField=el; guardWrite(L('属性写入')); }
+      return;
+    }
+    /* C1：X/Y 非法输入不写 state，也不该产生撤销帧（与 N-19「无聊输入不消耗历史」同口径） */
+    if((el.dataset.field==='x'||el.dataset.field==='y')&&!isCoordInput(el)) return;
     propHistoryField=el;
     pushHistory();
   };
@@ -523,7 +530,15 @@ function bindPropEvents(box,o){
   /* 属性面板所有写路径统一走 commitObjectEdit([id]) 打点：手写 updatedAt 会绕过 stampObjects
      的同毫秒严格递增保护，合并时本地较新修改可能被判旧而被远端覆盖（P1-5）。 */
   const changed=()=>commitObjectEdit([o.id]);
-  box.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>applyField(el,o,changed)));
+  box.querySelectorAll('[data-field]').forEach(el=>{
+    el.addEventListener('input',()=>applyField(el,o,changed));
+    /* C1：半成品输入（"-"、"12."）在输入过程中不重置，失焦仍非法时恢复旧值并标红 */
+    if(el.dataset.field==='x'||el.dataset.field==='y')['blur','change'].forEach(ev=>el.addEventListener(ev,()=>{
+      if(isCoordInput(el)) return;
+      el.value=fmt(o[el.dataset.field]);
+      markFieldInvalid(el);
+    }));
+  });
   /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘（与场地面板共用同一绑定实现） */
   bindAnnotToggleInputs(box,{apply:(key,val)=>setAnnot(o,key,val),changed});
   box.querySelectorAll('[data-style]').forEach(el=>el.addEventListener('input',()=>{
@@ -623,12 +638,36 @@ function bindNodeRowDrag(box,o){
     dragFrom=Number(g.dataset.nodeGrip);
     g.closest('.node-row')?.classList.add('drag-source');
   }));
-  box.addEventListener('dragend',()=>{ dragFrom=-1; box.querySelectorAll('.node-row').forEach(r=>r.classList.remove('drag-over','drag-source')); },{once:true});
+  /* C1/L-29：#propPanel 在多次渲染间复用，{once:true} 会让监听器逐次累积；改命名 handler 并在重绑前移除 */
+  if(box.__nodeDragEnd) box.removeEventListener('dragend',box.__nodeDragEnd);
+  const endDrag=()=>{ dragFrom=-1; box.querySelectorAll('.node-row').forEach(r=>r.classList.remove('drag-over','drag-source')); };
+  box.__nodeDragEnd=endDrag;
+  box.addEventListener('dragend',endDrag);
+}
+/** C1：坐标输入是否可提交（空串/非有限数不提交；"-"、"12." 等半成品由 validity.badInput 标识） */
+function isCoordInput(el){
+  const raw=String(el.value).trim();
+  return raw!==''&&Number.isFinite(Number(raw));
+}
+/** C1：非法坐标标红 1.5s；恢复显示由调用方决定（半成品输入保留光标） */
+function markFieldInvalid(el){
+  el.classList.add('field-invalid');
+  clearTimeout(el.__invalidTimer);
+  el.__invalidTimer=setTimeout(()=>el.classList.remove('field-invalid'),1500);
 }
 function applyField(el,o,changed){
   const k=el.dataset.field;
   /* 基点坐标允许负值（可在场地外，与拖拽移动同一基准）；尺寸类字段仍非负 */
-  if(k==='x'||k==='y'){ const n=Number(el.value); o[k]=Number.isFinite(n)?n:0; }
+  if(k==='x'||k==='y'){
+    /* C1：空值/非有限数不写 state（旧实现写 0 会把对象静默打到原点） */
+    if(!isCoordInput(el)){
+      if(!(el.validity&&el.validity.badInput)) el.value=fmt(o[k]);
+      markFieldInvalid(el);
+      return;
+    }
+    el.classList.remove('field-invalid');
+    o[k]=Number(el.value);
+  }
   else if(['width','height','angle','strokeWidth','phys'].includes(k)) o[k]=Math.max(0,Number(el.value)||0);
   else if(k==='closed'){
     if(el.checked && o.points.length<3){ el.checked=false; toast('闭合区域至少需要 3 个节点，请先插入节点','warn'); return; }

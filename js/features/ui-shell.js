@@ -9,7 +9,8 @@ function revInfoText(){
 function revInfoHTML(){ return esc(revInfoText()).replace(/\n/g,'<br>'); }
 function revInfoSync(){ const el=$('revInfo'); if(el) el.innerHTML=revInfoHTML(); }
 /* -------------------- 设置弹窗 -------------------- */
-$('settingsBtn').onclick=()=>{
+$('settingsBtn').onclick=async()=>{
+  await PlotPin.ensureLibrary().catch(()=>{});
   const T=I18N.t;
   revDiff();   /* 打开的瞬间按当前工程重算，不沿用旧结论 */
   openModal(T('settingsTitle'),`
@@ -20,11 +21,11 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('showGrid'))}</label><input id="setGridVisible" type="checkbox" ${state.settings.gridVisible?'checked':''}>
       <label>${esc(T('crosshair'))}</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
       <label>${esc(T('exportOnlyDelivered'))}</label><input id="setExportOnlyDelivered" type="checkbox" ${state.settings.exportOnlyDelivered?'checked':''}>
-      <label>${esc(T('pdfDpi'))}</label><select id="setPdfDpi">${PDF_DPI_OPTIONS.map(d=>`<option value="${d}"${state.settings.pdfDpi===d?' selected':''}>${d} dpi</option>`).join('')}</select>
+      <label>${esc(T('pdfDpi'))}</label><select id="setPdfDpi">${PDF_DPI_OPTIONS.map(d=>'<option value="'+d+'"'+(state.settings.pdfDpi===d?' selected':'')+'>'+d+' dpi</option>').join('')}</select>
       <label>${esc(T('segLabelMinPxSetting'))}</label><input id="setSegLabelMinPx" type="number" min="${APP_LIMITS.SEG_LABEL_MIN_PX_MIN}" max="${APP_LIMITS.SEG_LABEL_MIN_PX_MAX}" step="1" value="${state.settings.segLabelMinPx}" title="${esc(L('屏幕上短于该像素长度的线段不显示段长标注，避免拥挤'))}">
       <label>${esc(T('osnapSetting'))}</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="${esc(L('自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）'))}">
       <label>${esc(T('polarSetting'))}</label><input id="setPolar" type="checkbox" ${state.settings.polar?'checked':''} title="${esc(L('逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）'))}">
-      <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="${esc(L('极轴追踪的角度步长'))}">${[15,30,45,90].map(x=>`<option value="${x}" ${Number(state.settings.polarStep)===x?'selected':''}>${x}°</option>`).join('')}</select>
+      <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="${esc(L('极轴追踪的角度步长'))}">${[15,30,45,90].map(x=>'<option value="'+x+'" '+(Number(state.settings.polarStep)===x?'selected':'')+'>'+x+'°</option>').join('')}</select>
       <label>${esc(T('precisionSetting'))}</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>${esc(T('languageLabel'))}</label><select id="setLang"><option value="zh" ${state.settings.lang!=='en'?'selected':''}>中文</option><option value="en" ${state.settings.lang==='en'?'selected':''}>English</option></select>
       <label>${esc(T('pluginSessionOnly'))}</label><div id="pluginPanel">${pluginPanelHTML()}</div>
@@ -49,7 +50,7 @@ $('settingsBtn').onclick=()=>{
     </div>`,[
     {text:T('cancel'),class:'',click:closeModal},{text:T('save'),class:'primary',click:()=>{
       pushHistory();
-      state.meta.name=$('setName').value.trim()||'未命名图纸工程';
+      state.meta.name=$('setName').value.trim()||L('未命名图纸工程');
       state.settings.gridSize=Math.max(.01,Number($('setGrid').value)||1);
       state.settings.snap=$('setSnap').checked; state.settings.gridVisible=$('setGridVisible').checked;
       state.settings.showCursor=$('setCursor').checked;
@@ -96,12 +97,14 @@ $('settingsBtn').onclick=()=>{
   };
 };
 
-/** D-05 插件面板：列表（id/版本/能力/状态/原因）+ 清单导入 + 卸载；仅会话内，不持久化 */
+/** D-05 / G2 插件面板：会话插件 + 本地插件库；保存不等于启用，刷新后须手动启用 */
 function pluginPanelHTML(){
   const T=I18N.t;
   const st={active:T('pluginStatusActive'),loading:T('pluginStatusLoading'),disabled:T('pluginStatusDisabled'),unloaded:T('pluginStatusUnloaded')};
-  const list=PlotPin.listPlugins();
-  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(st[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||T('pluginNoCapabilities'))+(p.reason?' · '+esc(p.reason):'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'<div class="hint-text">'+esc(T('pluginNoneImported'))+'</div>')+
+  const list=PlotPin.listPlugins(), live=new Set(list.map(p=>p.id));
+  const saved=PlotPin.library.filter(e=>!live.has(e.id));
+  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(st[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||T('pluginNoCapabilities'))+(p.reason?' · '+esc(p.reason):'')+(p.status!=='active'?' <button type="button" data-plugin-enable="'+esc(p.id)+'">'+esc(T('pluginEnable'))+'</button>':'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'<div class="hint-text">'+esc(T('pluginNoneImported'))+'</div>')+
+    (saved.length?'<div class="hint-text" style="margin-top:6px">'+esc(T('pluginLibrary'))+'</div>'+saved.map(e=>'<div class="hint-text" style="margin:4px 0">'+esc(e.id)+' · '+esc(e.error||T('pluginSavedDisabled'))+' <button type="button" data-plugin-enable="'+esc(e.id)+'">'+esc(T('pluginEnable'))+'</button> <button type="button" data-plugin-del="'+esc(e.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'')+
     '<button type="button" id="pluginImportBtn">'+esc(T('pluginImportManifest'))+'</button><input type="file" id="pluginFile" accept=".json,application/json" hidden>'+
     '<div class="hint-text">'+esc(T('pluginManifestHint'))+'</div>';
 }
@@ -110,17 +113,29 @@ function bindPluginPanel(){
   const refresh=()=>{ panel.innerHTML=pluginPanelHTML(); bindPluginPanel(); };
   const btn=$('pluginImportBtn'), file=$('pluginFile');
   if(btn&&file) btn.onclick=()=>file.click();
+  panel.onclick=async ev=>{
+    const b=ev.target.closest('[data-plugin-enable],[data-plugin-del]'); if(!b) return;
+    const id=b.getAttribute('data-plugin-enable')||b.getAttribute('data-plugin-del');
+    try{ if(b.hasAttribute('data-plugin-enable')) await PlotPin.enableSaved(id); else await PlotPin.deleteSaved(id); }
+    catch(_){ /* 原因已写入库条目，下面重绘展示 */ }
+    refresh();
+  };
   if(file) file.onchange=async()=>{
     const f=file.files&&file.files[0]; if(!f) return;
-    let raw='';
-    try{ raw=await f.text(); }catch(_){ toast('插件清单读取失败','error'); return; }
-    const r=PlotPin.validatePluginManifest(raw);
-    if(!r.ok){ toast('插件清单被拒：'+r.reason,'error'); file.value=''; return; }
-    if(!confirm('加载插件 '+r.spec.id+' ？\n能力：'+(r.spec.capabilities.join(' / ')||'无'))){ file.value=''; return; }
-    const res=await PlotPin.loadPlugin(r.spec);
-    if(res&&res.ok) toast('插件已加载：'+r.spec.id,'success');
+    try{
+      let raw='';
+      try{ raw=await f.text(); }catch(_){ toast('插件清单读取失败','error'); return; }
+      const r=PlotPin.validatePluginManifest(raw);
+      if(!r.ok){ toast('插件清单被拒：'+r.reason,'error'); file.value=''; return; }
+      if(!confirm('加载插件 '+r.spec.id+' ？\n能力：'+(r.spec.capabilities.join(' / ')||'无'))){ file.value=''; return; }
+      const res=await PlotPin.loadPlugin(r.spec);
+      if(res&&res.ok){
+        toast('插件已加载：'+r.spec.id,'success');
+        try{ await PlotPin.savePlugin(r.spec); }catch(e){ toast(String(e&&e.message||e),'error'); }
+      }
+      refresh();
+    }catch(e){ toast(L('插件清单读取失败')+'：'+(e&&e.message||e),'error'); }
     file.value='';
-    refresh();
   };
   Array.from(panel.querySelectorAll('[data-plugin-unload]')).forEach(b=>{
     b.onclick=()=>{
@@ -129,6 +144,45 @@ function bindPluginPanel(){
       PlotPin.unloadPlugin(id); toast('插件已卸载：'+id); refresh();
     };
   });
+}
+
+/* G3 带宽/存储估算：输入只在弹窗会话内，不写 state/settings/工程 */
+function openBandwidthEstimate(){
+  const T=I18N.t, d=BWD;
+  const sel=(id,k,l,v)=>`<label>${T(k)}</label><select id="${id}">${l.map(x=>'<option value="'+x[0]+'"'+(x[0]===v?' selected':'')+'>'+esc(L(x[1]))+'</option>').join('')}</select>`;
+  const num=(id,k,v,hi)=>`<label>${T(k)}</label><input id="${id}" type="number" min="0" max="${hi}" value="${v}">`;
+  openModal(T('bwTitle'),`<div class="form-grid">
+    ${sel('bwC','bwCodec',BWC,d.codec)}${sel('bwR','bwRes',BWR,d.res)}
+    ${num('bwF','bwFps',d.fps,120)}${sel('bwS','bwStream',BWS,d.stream)}
+    ${num('bwCh','bwChannels',d.channels,10000)}${num('bwD','bwDays',d.days,36500)}
+    ${num('bwH','bwHours',d.hours,24)}${num('bwX','bwRedundancy',d.redundancy,1000)}
+    <div class="hint-text" id="bwOut"></div></div>`,
+    [{text:T('close'),click:closeModal}]);
+  const upd=()=>{const e=bwEst({codec:$('bwC').value,res:$('bwR').value,fps:$('bwF').value,stream:$('bwS').value,
+    channels:$('bwCh').value,days:$('bwD').value,hours:$('bwH').value,redundancy:$('bwX').value});
+    $('bwOut').innerHTML=`<b>${+(e.mbps.toFixed(2))} Mbps/ch · ${+(e.totalMbps.toFixed(2))} Mbps</b><br><b>${+(e.gb.toFixed(2))} GB / ${+(e.gib.toFixed(2))} GiB</b>`;};
+  $('modalBox').querySelectorAll('select,input').forEach(el=>el.addEventListener('input',upd));upd();
+}
+
+/* G4 布线/线缆统计：几何估算（非实测）；当前楼层，输入只在弹窗会话内 */
+function openWiringStats(){
+  const T=I18N.t, d=WGD, F=n=>fmt(n);
+  openModal(T('wireTitle'),`<div class="form-grid">
+    <select id="wrM"><option value="route">${T('wireRoute')}</option><option value="chain">${T('wireChain')}</option></select>
+    <label>${T('wireReserve')}</label><input id="wrR" type="number" value="${d.reserve}">
+    <label>${T('wireBend')}</label><input id="wrB" type="number" value="${d.bend}">
+    <div class="hint-text" id="wrOut" style="white-space:pre-line"></div></div>`,
+    [{text:T('close'),click:closeModal}]);
+  const upd=()=>{
+    const e=wireStats({mode:$('wrM').value,reserve:$('wrR').value,bend:$('wrB').value,objects:state.objects,layers:state.layers});
+    const lines=e.rows.slice(0,100).map(r=>r.name+': '+F(r.len)+' m');
+    if(e.rows.length>100) lines.push('…');
+    if(e.groups.length>1) lines.push(L('图层')+'：'+e.groups.map(g=>g.name+' '+F(g.len)+' m').join('｜'));
+    lines.push(`${T('wireGeom')} ${F(e.geometry)} + ${T('wireReserveLen')} ${F(e.reserveLen)}（${e.ends}×${F(e.reserve)}） + ${T('wireBendLen')} ${F(e.bendLen)} = ${T('wireTotal')} ${F(e.total)} m`);
+    lines.push(T('wireHint'));
+    $('wrOut').textContent=lines.join('\n');
+  };
+  $('modalBox').querySelectorAll('select,input').forEach(el=>el.addEventListener('input',upd));upd();
 }
 
 /* -------------------- 通用弹窗 / Toast -------------------- */

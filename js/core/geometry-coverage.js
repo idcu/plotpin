@@ -98,15 +98,27 @@ function coverageGridPlan(items,opt){
     return {bb:r.bb,cell,nx:Math.max(1,Math.ceil(r.bb.w/cell)),ny:Math.max(1,Math.ceil(r.bb.h/cell))};
   });
   const totalCells=()=>plan.reduce((s,p)=>s+p.nx*p.ny,0);
+  const scale=k=>{ for(const p of plan){
+    p.cell*=k;
+    p.nx=Math.max(1,Math.ceil(p.bb.w/p.cell));
+    p.ny=Math.max(1,Math.ceil(p.bb.h/p.cell));
+  }};
   let guard=0;
-  while(totalCells()>maxCells&&guard++<40){
-    for(const p of plan){
-      p.cell*=1.2;
-      p.nx=Math.max(1,Math.ceil(p.bb.w/p.cell));
-      p.ny=Math.max(1,Math.ceil(p.bb.h/p.cell));
-    }
+  while(totalCells()>maxCells&&guard++<40) scale(1.2);
+  /* C5：极端几何（十万米级边长 × 最小格）40 次放大后仍可能超限，继续分配会 RangeError/OOM。
+     此时按面积比例一次性放大到上限内，并把降级倍数写进 spec；常规工程不进入此分支，数值不变。 */
+  let degraded=false, factor=1;
+  const over=totalCells();
+  if(over>maxCells){
+    degraded=true;
+    factor=Math.sqrt(over/maxCells);
+    scale(factor);
+    /* 逐区域向上取整可能仍略超，有限次兜底 */
+    let g2=0;
+    while(totalCells()>maxCells&&g2++<8) scale(1.1);
   }
-  return {targetCells,maxCells,plan,totalCells:totalCells()};
+  return {targetCells,maxCells,plan,totalCells:totalCells(),
+    degraded,factor:degraded?Math.round(factor*100)/100:1};
 }
 /**
  * 栅格覆盖率：固定格数按区域面积分配（v2，与缩放无关），
@@ -186,6 +198,7 @@ function analyzeCoverage(st,opt){
     fovSource:'point-type.fov', rangeSource:'object.phys',
     sectorRadius:'phys', circleRadius:'phys/2', squareHalfSide:'phys/2',
     areaSource:'shapeArea/polygonArea',
+    degraded:layout.degraded, degradedFactor:layout.factor,
     zoomIndependent:true
   });
   return {regions,cameraCount:cameras.length,ignoredPoints:ignored,

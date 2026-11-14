@@ -45,3 +45,58 @@ test('确认/输入弹窗 Esc 与遮罩关闭均返回结果，按钮路径语�
   await page.locator('#modalFooter button.primary').click();
   await expect.poll(() => page.evaluate(() => window.__prompt2)).toBe('新名');
 });
+
+/* C1：X/Y 清空或非法输入曾被写成 0，把对象静默打到原点；空输入也不该消耗撤销帧。 */
+test('C1：属性面板 X/Y 空值或非法输入不写 state、不涨历史，失焦恢复旧值', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const o = baseObject('point', 'point.marker', { name: 'C1', x: 5, y: 5 });
+    state.objects.push(o);
+    selectedIds.clear();
+    selectedIds.add(o.id);
+    renderProps();
+  });
+  const x = page.locator('#propPanel input[data-field="x"]');
+  await expect(x).toHaveValue(/^5/);
+  const before = await page.evaluate(() => ({ x: state.objects[0].x, hist: history.past.length }));
+
+  await x.fill('');
+  await expect(x).not.toHaveValue('');
+  await expect(x).toHaveClass(/field-invalid/);
+  expect(await page.evaluate(() => ({ x: state.objects[0].x, hist: history.past.length }))).toEqual(before);
+
+  /* 半成品 "-" 只能模拟真实键入：Playwright fill 拒绝给 number 输入非数字 */
+  await x.click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('-');
+  expect(await page.evaluate(() => ({ x: state.objects[0].x, hist: history.past.length }))).toEqual(before);
+  await x.blur();
+  await expect(x).not.toHaveValue('');
+  expect(await page.evaluate(() => ({ x: state.objects[0].x, hist: history.past.length }))).toEqual(before);
+
+  await x.fill('12.5');
+  await expect.poll(() => page.evaluate(() => state.objects[0].x)).toBe(12.5);
+  await expect(x).not.toHaveClass(/field-invalid/);
+  expect(await page.evaluate(() => history.past.length)).toBe(before.hist + 1);
+});
+
+/* C1/L-29：#propPanel 在多次渲染间复用，dragend 曾按 {once:true} 逐次累积监听器。 */
+test('C1：属性面板连续渲染 20 次，dragend 监听器净增不超过 1 个', async ({ page }) => {
+  await openApp(page);
+  const d = await page.evaluate(() => {
+    const o = baseObject('line', 'line.custom', { name: 'D', points: [[0, 0], [6, 0], [6, 4]] });
+    state.objects.push(o);
+    selectedIds.clear();
+    selectedIds.add(o.id);
+    const panel = document.getElementById('propPanel');
+    window.__drag = { add: 0, remove: 0 };
+    const add = panel.addEventListener.bind(panel);
+    const remove = panel.removeEventListener.bind(panel);
+    panel.addEventListener = (t, f, opts) => { if (t === 'dragend') window.__drag.add++; return add(t, f, opts); };
+    panel.removeEventListener = (t, f, opts) => { if (t === 'dragend') window.__drag.remove++; return remove(t, f, opts); };
+    for (let i = 0; i < 20; i++) renderProps();
+    return window.__drag;
+  });
+  expect(d.add).toBe(20);
+  expect(d.add - d.remove).toBe(1);
+});

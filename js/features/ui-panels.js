@@ -46,6 +46,8 @@ $('dimensionType').addEventListener('change',()=>{ if(currentTool==='dimension')
 $('finishDraftBtn').addEventListener('click',finishDraft);
 $('undoBtn').addEventListener('click',undo);
 $('redoBtn').addEventListener('click',redo);
+$('readOnlyBtn').addEventListener('click',()=>setReadOnly(!isReadOnly()));
+applyReadOnlyUI();
 /* 依赖图片底图的工具统一走状态机：不可用时不切换工具，原因由 #calibStatus 与 toast 同步给出 */
 function startCalibTool(tool){
   const pre=calibPrecheck(tool);
@@ -277,7 +279,7 @@ function renderLayers(){
 }
 function getLayer(id){ return state.layers.find(l=>l.id===id); }
 $('addLayerBtn').onclick=()=>{
-  const name=$('newLayerName').value.trim()||'新图层';
+  const name=$('newLayerName').value.trim()||L('新图层');
   pushHistory(); state.layers.push({id:uid('layer'),name,visible:true,locked:false}); $('newLayerName').value=''; commitChange('已新增图层');
 };
 function renderTypes(){
@@ -335,7 +337,7 @@ $('symFileInput').addEventListener('change',async e=>{
   if(!f) return;
   try{
     const parsed=parseSvgSymbol(await f.text());
-    const name=(f.name||'SVG 图元').replace(/\.svg$/i,'').slice(0,30)||'SVG 图元';
+    const name=(f.name||L('SVG 图元')).replace(/\.svg$/i,'').slice(0,30)||L('SVG 图元');
     pushHistory();
     state.objectTypes.push({id:uid('sym'),kind:'point',name,color:'#7c3aed',icon:'symbol',
       scaleShape:'none',builtin:false,symbol:parsed.paths,symbolViewBox:parsed.vb});
@@ -520,7 +522,11 @@ function renderStats(){
       <span>${esc(L('对象总数'))}</span><b>${state.objects.length}</b><span>${esc(L('最近更新'))}</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
     </div></div>
     <div class="section"><h3>${esc(L('几何检查'))} v${STATS_ISSUE_VERSION}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>
-    <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>`;
+    <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>
+    <div class="section"><h3>${esc(I18N.t('bwTitle'))}</h3><button type="button" id="bwOpen">${esc(I18N.t('bwTitle'))}…</button></div>
+    <div class="section"><h3>${esc(I18N.t('wireTitle'))}</h3><button type="button" id="wireOpen">${esc(I18N.t('wireTitle'))}…</button></div>`;
+  const bwBtn=$('bwOpen'); if(bwBtn) bwBtn.onclick=openBandwidthEstimate;
+  const wireBtn=$('wireOpen'); if(wireBtn) wireBtn.onclick=openWiringStats;
   $('statsPanel').querySelectorAll('tr[data-floor-sum]').forEach(tr=>{
     tr.onclick=async()=>{
       const id=tr.dataset.floorSum;
@@ -577,6 +583,7 @@ function runCoverageAnalysis(){
     <div>${esc(L('区域/闭合折线：'))}<b>${res.regions.length}</b> ${esc(L('个'))} ｜ ${esc(L('合计覆盖'))} <b>${pct(res.ratio)}</b></div>
     <div>${esc(L('覆盖面积'))} <b>${fmt(res.totalCovered)}</b> m² ｜ ${esc(L('盲区'))} <b>${fmt(res.totalBlind)}</b> m² ｜ ${esc(L('总面积'))} <b>${fmt(res.totalArea)}</b> m²</div>
     <div style="margin-top:6px"><b>${esc(L('统计口径 v3'))}</b>：${esc(L('固定目标'))} <b>${res.targetCells}</b> ${esc(L('格，按可见区域面积分配（实际'))} <b>${res.gridCells}</b> ${esc(L('格），格边'))} <b>${fmt(cellMin)}–${fmt(cellMax)}</b> m</div>
+    ${res.spec.degraded?`<div class="hint-text" style="color:#b45309"><b>${esc(L('覆盖率已降级：格边放大 {n} 倍以控制在格数上限内',{n:res.spec.degradedFactor}))}</b></div>`:''}
     <div class="hint-text">${esc(L('统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。'))}</div>
     <div class="hint-text">${esc(L('镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。'))}</div>
   </div>`;
@@ -650,7 +657,9 @@ function refreshUI(){
   if(msEl) msEl.value=String(Number(state.settings.markerScale)||1);
   const msLbl=$('markerScaleLabel');
   if(msLbl) msLbl.textContent=(Number(state.settings.markerScale)||1).toFixed(1)+'×';
-  renderProps(); renderList(); renderLayers(); renderTypes(); renderSymbolPanel(); renderStats(); updateZoomLabel();
+  renderProps(); renderList(); renderLayers(); renderTypes(); renderSymbolPanel(); renderStats(); cRender(); updateZoomLabel();
+  /* C2：撤销/重做会整状态替换，规则配置控件需按 state.rules 重建，避免面板显示旧值 */
+  if($('ruleConfig')) renderRuleConfig();
   updateHistoryButtons();
   refreshCalibStatus();
 }

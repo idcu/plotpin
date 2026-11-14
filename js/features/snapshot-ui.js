@@ -9,7 +9,7 @@ function snapSizeText(bytes){
 function snapTimeText(iso){
   try{ return iso?new Date(iso).toLocaleString():''; }catch(_){ return String(iso||''); }
 }
-function snapLabel(meta){ return (meta&&meta.label)||'自动快照'; }
+function snapLabel(meta){ return (meta&&meta.label)||L('自动快照'); }
 function snapDiffFieldText(it){
   if(it.scope==='scene') return it.fields.map(k=>diffFieldLabel(k)).join('；')||'—';
   if(it.category==='added') return L('新增于 {floor}',{floor:it.bFloorId});
