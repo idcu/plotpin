@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { buildStandalone } from './pack-core.mjs';
 import { minifyJs } from './minify-core.mjs';
+import { goldenWritable, refusalReason, writeGolden } from './lib/golden.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -77,6 +78,7 @@ const sandbox = {
   Float32Array, Float64Array, Int8Array, Int32Array, Array, Object, String, Number,
   Boolean, Error, TypeError, isFinite, isNaN, parseInt, parseFloat, encodeURIComponent,
   decodeURIComponent, escape, unescape, TextEncoder, TextDecoder, Blob, atob, btoa,
+  crypto: globalThis.crypto,
   setTimeout: setTimeoutStub, clearTimeout, setInterval: setTimeoutStub, clearInterval,
   CompressionStream:globalThis.CompressionStream, DecompressionStream:globalThis.DecompressionStream, Response:globalThis.Response,
   ReadableStream:globalThis.ReadableStream,
@@ -111,7 +113,8 @@ code += `\n;globalThis.__api = {
   orthoPoint, polarSnap45, squareCorner, segmentsIntersect,
   boundsIntersect, scaleWorldAround, reachableBgAssetIds, assetRefsInMemory, unionAssetRefs,
   assetRefsByNamespace, assetRefsFromLocalStorage, pruneBgAssets, scheduleAssetGc,
-  get assetGcTimer(){ return assetGcTimer; },
+  get assetGcTimer(){ return assetGcTimer; }, set assetGcTimer(v){ assetGcTimer=v; },
+  get idbAllKeys(){ return idbAllKeys; }, set idbAllKeys(fn){ idbAllKeys=fn; },
   get assetGcLastSkip(){ return assetGcLastSkip; },
   translateObject, alignObjects, distributeObjects, objectBounds, objectSnapBounds,
   renumberObjects, restackObjects, allObjectNames, nextObjectId, objectNameScopeFor, beginObjectNameScope, withObjectNameScope,
@@ -152,6 +155,7 @@ code += `\n;globalThis.__api = {
   markDirty, MARK_DIRTY_PROFILES,
   dragChanged, dragChangedIds, sameSerializable, objectMovedFrom, cancelActiveDrag, stampObjects, stampObjectsIn, migrateRefsAndDelete,
   sanitizeObjects, sanitizeReport, safeId,
+  setFloorAliasAssert, deleteSelected, stubConfirm(v){ showConfirm = () => Promise.resolve(v); },
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
@@ -209,6 +213,7 @@ code += `\n;globalThis.__api = {
   get collabHelloSeen(){ return collabHelloSeen; },
   get collabState(){ return collabState; },
   undo, redo, pushHistory, get history(){ return history; },
+  isReadOnly, setReadOnly, applyReadOnlyUI, guardWrite,
   snapshotHistoryState, materializeHistoryState, isHistorySnapshot, historyValueEqual,
   applyLedgerCells, LEDGER_FIELDS,
   dimensionMeasure, BLIND_SPOT_FIELDS, buildBlindSpotGeoJson,
@@ -273,9 +278,10 @@ code += `\n;globalThis.__api = {
   leaseSaveBlocked, flushBeforeUnload, LS_KEY,
   directionalSnap, addGuideLine, removeLastGuideLine, clearGuideLines, guideLineList, guideEdges,
   mergeProjectData, mergeTombstoneMap, sanitizeTombstones, markTombstone, TOMBSTONE_LIMIT, mergeProjectJSON, mergeBlankMissingTimestamps, mergeClampTimestamps, normalizeTimestamp,
-  CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, importCatalog, catalogLoad,
+  CATALOG_SCHEMA, CATALOG_KEY, catalogValidate, catalogFromRows, importCatalog, catalogLoad,
   get catalogLoadError(){ return catalogLoadError; },
   quoteTable, quoteAggregate, quoteColumns, QUOTE_FIELD_DEFS, delimitedFromTable, roundMoney, exportQuote,
+  bwEst, BWC, BWR, BWS, BWD, wireStats, WGD,
   catalogVersion, QUOTE_SNAPSHOT_KEY, quoteSignature, quoteSnapshotTable, quoteMetaTable,
   get currentCatalog(){ return currentCatalog; }, setCurrentCatalog(v){ currentCatalog=v; },
   createRuleConfig, normalizeRuleConfig, RULE_MAX_VIOLATIONS,
@@ -285,6 +291,16 @@ code += `\n;globalThis.__api = {
   locateRuleViolation, normalizeRuleTypes, mergeRuleSide, ruleExportName,
   renderRuleResults,
   get ruleLastResult(){ return ruleLastResult; }, set ruleLastResult(v){ ruleLastResult=v; },
+  COMMENT_PREFIX:CPFX, COMMENT_MAX:CMAX, COMMENT_TEXT_MAX:CTEXT,
+  commentOwnerId:cOw, commentStorageKey:cKy, loadComments:cLd,
+  saveComments:(a,o)=>!!cSv(a,o),
+  addComment:s=>{const x=cAdd(s);return{ok:!!x.ok,reason:x.r,comment:x.c}},
+  updateComment:(i,t)=>{const x=cUp(i,t);return{ok:!!x.ok,reason:x.r}},
+  deleteComment:i=>{const x=cDel(i);return{ok:!!x.ok,reason:x.r}},
+  commentTarget:c=>{const o=cOb(c);return{exists:!!o,name:o?(o.name||o.id):'',floorName:''}},
+  cleanCommentText:cTx, migrateCommentOwner:(f,t)=>!!cMv(f,t),
+  removeCommentsForOwner:o=>!!cRm(o), renderComments:cRender,
+  TPL_BUILTIN, tplParse, tplUnknown, tplTable, tplExport, tplFail, openTemplateDialog,
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
 
@@ -1165,7 +1181,7 @@ await section("18. 迁移：区域参数形状、点 iconSize、全局倍率、�
 await section("19. 区域基点：面板设置 (o.x,o.y) 与渲染/命中同基准，允许负值", async () => {
 {
   api.resetState();
-  const field=(k,v)=>({dataset:{field:k}, value:String(v), type:'number', checked:false});
+  const field=(k,v)=>({dataset:{field:k}, value:String(v), type:'number', checked:false, classList:{add(){},remove(){}}});
   const noop=()=>{};
 
   /* 圆形：基点=圆心，改基点后命中判定立刻跟随同一基准 */
@@ -1179,11 +1195,16 @@ await section("19. 区域基点：面板设置 (o.x,o.y) 与渲染/命中同基�
   eq('基点-新圆心在圆内', api.shapeHit(c,[20,20]), true);
   eq('基点-半径不随移动改变', c.shape.r, 5);
 
-  /* 基点允许负值（可在场地外，与拖拽移动一致），非法输入归零 */
+  /* 基点允许负值（可在场地外，与拖拽移动一致）；空值/非法输入不写 state（C1：不得静默归零） */
   api.applyField(field('x',-12.5),c,noop);
   eq('基点-负坐标保留', c.x, -12.5);
   api.applyField(field('y','abc'),c,noop);
-  eq('基点-非法输入归零', c.y, 0);
+  eq('基点-非法输入不写 state', c.y, 20);
+  const emptyX=field('x',''); api.applyField(emptyX,c,noop);
+  eq('基点-空输入不写 state', c.x, -12.5);
+  eq('基点-空输入恢复旧值', Number(emptyX.value), -12.5);
+  api.applyField(field('x','-'),c,noop);
+  eq('基点-半成品输入不写 state', c.x, -12.5);
 
   /* 矩形：基点=第一角点；尺寸字段仍被钳为非负 */
   const r=api.baseObject('rect','rect.area',{x:0,y:0,width:8,height:4});
@@ -2324,6 +2345,24 @@ await section("28.12 P2-A4 加载丢对象计数可见 + 审计 layerId 修正",
   const a3=api.auditProject(mk({id:'C',kind:'point',layerId:'layer.default'}));
   ok('P2-A4 合法 layerId 不报未知图层', !a3.warnings.some(w=>w.includes('未知图层')));
 
+  /* B5：非活动楼层审计（第 2 层重复 id + 非法类型；第 3 层未知图层） */
+  const mf={schema:'offline-drawing-annotation/v2',layers:[{id:'L1'}],activeFloorId:'F1',
+    floors:[{id:'F1',name:'1F',updatedAt:''},
+      {id:'F2',name:'2F',updatedAt:'',objects:[{id:'D',kind:'point',layerId:'L1'},{id:'D',kind:'bogus',layerId:'L1'}]},
+      {id:'F3',name:'3F',updatedAt:'',objects:[{id:'E',kind:'rect',layerId:'L9'}]}],
+    objects:[{id:'A',kind:'point',layerId:'L1'}]};
+  const af=api.auditProject(mf);
+  ok('B5 非活动楼层重复 id 带楼层名', af.warnings.some(w=>w.includes('2F')&&w.includes('id 重复')));
+  ok('B5 非活动楼层非法类型带楼层名与楼层 id', af.warnings.some(w=>w.includes('2F')&&w.includes('F2')&&w.includes('未知类型')));
+  ok('B5 第三层未知图层带楼层名', af.warnings.some(w=>w.includes('3F')&&w.includes('未知图层')));
+  /* 单层样本与旧版逐字一致（golden）：warning 顺序与文案不得漂移 */
+  const golden=api.auditProject({schema:'offline-drawing-annotation/v2',layers:[{id:'L1'}],
+    floors:[{id:'F1',name:'1F',updatedAt:''}],activeFloorId:'F1',
+    objects:[{id:'A',kind:'point',layerId:'L1'},{id:'A',kind:'line',layerId:'LX'}],
+    background:{kind:'image',assetId:''},site:'x'});
+  eq('B5 单层审计输出与旧版逐字一致', JSON.stringify(golden),
+    '{"level":"warn","errors":[],"warnings":["id 重复 1","未知图层 1","资产缺失","场地损坏"]}');
+
   const rep={duplicateIds:0,normalizedIds:0,duplicateNames:0,dropped:0};
   const out=api.sanitizeObjects([
     {kind:'unknown',id:'X'},
@@ -3141,8 +3180,11 @@ await section("35. DXF 解析/生成往返 + 多页 PDF 结构", async () => {
   const shaB=createHash('sha256').update(Buffer.from(pdfB)).digest('hex');
   eq('A2-PDF 同输入两次字节一致', shaA, shaB);
   const pdfGolden=join(root,'tests','golden','fixed-pages.pdf');
-  if(process.env.UPDATE_GOLDEN==='1'){
-    writeFileSync(pdfGolden,Buffer.from(pdfA));
+  const pdfRefusal=refusalReason();
+  if(goldenWritable()){
+    writeGolden(pdfGolden,Buffer.from(pdfA),'fixed-pages.pdf');
+  }else if(pdfRefusal){
+    ok('A2-PDF 容器逐字节 golden 拒绝更新基线（'+pdfRefusal+'）', false);
   }else{
     ok('A2-PDF 容器逐字节 golden', Buffer.compare(Buffer.from(pdfA),readFileSync(pdfGolden))===0);
   }
@@ -3291,6 +3333,22 @@ await section("36.1 B-03：DXF 版本审计 + SOLID/3DFACE/LEADER/ATTRIB 补充�
     +P(0,'ENDSEC')+P(0,'EOF'));
   eq('B-03-仅不支持实体不产出对象', onlyDim.entities.length, 0);
   eq('B-03-不支持类型如实记录', Object.keys(onlyDim.inspect.unsupportedTypes).sort().join(','), 'DIMENSION,HATCH');
+  /* E4：缺码/错位不产生错误实体，跳过数如实汇总；未知 forceUnit 不静默 */
+  const badEnt=head('AC1032')+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'LINE')+P(8,'0')+P(10,0)+P(20,0)          /* 缺 11/21 → 公共模块补 0 成零长线 */
+    +P(0,'CIRCLE')+P(8,'0')+P(10,5)+P(20,5)        /* 缺 40 → r=0 */
+    +P(0,'POINT')+P(8,'0')+P(10,7)+P(20,7)         /* 合法 */
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const e4=api.Dxf.parseDxf(badEnt);
+  eq('E4-缺码实体计数', e4.droppedEntities, 2);
+  eq('E4-合法实体保留', e4.entities.length, 1);
+  eq('E4-不产生零长线', e4.entities.some(e=>Array.isArray(e.points)&&e.points.length===2&&e.points[0][0]===e.points[1][0]&&e.points[0][1]===e.points[1][1]), false);
+  eq('E4-正常样本无丢弃', r.droppedEntities, 0);
+  const fb=api.Dxf.parseDxf(sample('AC1032'),{strictUnits:true,forceUnit:99});
+  eq('E4-未知forceUnit回退计数', fb.unitFallback, 99);
+  eq('E4-未知forceUnit不改比例', fb.unit, 0.001);
+  ok('E4-坏组码不抛', (()=>{try{api.Dxf.inspect('x\ny\n0\nEOF');return true;}catch(_){return false;}})());
+  ok('E4-保真报告含跳过数', api.dxfFidelityLines(e4.inspect,e4).some(l=>l.includes('跳过非法实体：2')));
 }
 
 });
@@ -3386,6 +3444,66 @@ await section("36.3 R-08：DXF 弧/椭圆/样条/块参照折线近似落地", a
 
 });
 
+/* 36.4 E5：保真导出（DXF ELLIPSE）——默认路径零改动，显式选项才产保真实体 ------- */
+await section("36.4 E5 保真导出：默认路径零改动 + ELLIPSE 显式选项", async () => {
+{
+  const mkEll=patch=>api.baseObject('rect','rect.area',Object.assign({name:'E1',x:20,y:15,angle:30,
+    shape:{type:'ellipse',rx:6,ry:3}},patch));
+  const build=opt=>{
+    const d=api.dxfEntitiesForExport(opt);
+    return {d,text:api.Dxf.buildDxf(d.entities,d.layers)};
+  };
+  /* 组码回读：DXF 两行一组；取第一条 ELLIPSE 记录，到下一个 0 组码为止 */
+  const ellipseCodes=txt=>{
+    const rows=txt.split('\r\n'), out={};
+    let on=false;
+    for(let i=0;i+1<rows.length;i+=2){
+      const c=rows[i],v=rows[i+1];
+      if(c==='0'){ if(on) break; on=v==='ELLIPSE'; continue; }
+      if(on&&!Object.prototype.hasOwnProperty.call(out,c)) out[c]=Number(v);
+    }
+    return out;
+  };
+
+  api.resetState();
+  api.state.objects=[mkEll()];
+  const def=build();
+  ok('E5-默认不产ELLIPSE', !def.d.entities.some(e=>e.type==='ELLIPSE'));
+  ok('E5-默认DXF无ELLIPSE记录', !/\r\n0\r\nELLIPSE\r\n/.test(def.text));
+  ok('E5-默认ELL仍为闭合LWPOLYLINE', /\r\n0\r\nLWPOLYLINE\r\n/.test(def.text)&&/\r\n70\r\n1\r\n/.test(def.text));
+  eq('E5-关闭选项=默认逐字节一致', build({dxfFidelity:false}).text, def.text);
+
+  const fid=build({dxfFidelity:true});
+  eq('E5-保真产1个ELLIPSE', fid.d.entities.filter(e=>e.type==='ELLIPSE').length, 1);
+  ok('E5-保真DXF含ELLIPSE记录', /\r\n0\r\nELLIPSE\r\n/.test(fid.text));
+  const g=ellipseCodes(fid.text);
+  approx('E5-中心X', g['10']/1000, 20, 1e-6);
+  approx('E5-中心Y', g['20']/1000, 15, 1e-6);
+  approx('E5-长半轴', Math.hypot(g['11'],g['21'])/1000, 6, 1e-6);
+  approx('E5-短长轴比', g['40'], 0.5, 1e-6);
+  approx('E5-主轴角(度)', Math.atan2(g['21'],g['11'])*180/Math.PI, 30, 1e-6);
+  approx('E5-起始参数', g['41'], 0, 1e-9);
+  approx('E5-终止参数', g['42'], 2*Math.PI, 1e-6);
+
+  /* ry>rx：主轴自动换向 +90°，比值仍 ≤1 */
+  api.state.objects=[mkEll({shape:{type:'ellipse',rx:2,ry:4}})];
+  const g2=ellipseCodes(build({dxfFidelity:true}).text);
+  approx('E5-ry>rx长半轴', Math.hypot(g2['11'],g2['21'])/1000, 4, 1e-6);
+  approx('E5-ry>rx短长轴比', g2['40'], 0.5, 1e-6);
+  approx('E5-ry>rx主轴角(度)', Math.atan2(g2['21'],g2['11'])*180/Math.PI, 120, 1e-6);
+
+  /* 保真只新增 ELLIPSE 记录：其它实体数量/顺序不变，椭圆不再写折线近似 */
+  api.state.objects=[mkEll(), api.baseObject('point','point.marker',{name:'P1',x:5,y:6})];
+  const plain=build({dxfFidelity:true}), base=build();
+  const noEll=plain.d.entities.filter(e=>e.type!=='ELLIPSE');
+  eq('E5-保真其它实体数量', noEll.length, base.d.entities.length-1);
+  eq('E5-保真不再写椭圆折线', base.d.entities.filter(e=>e.type==='LWPOLYLINE').length-noEll.filter(e=>e.type==='LWPOLYLINE').length, 1);
+  eq('E5-保真保留POINT', JSON.stringify(noEll.find(e=>e.type==='POINT')), JSON.stringify(base.d.entities.find(e=>e.type==='POINT')));
+
+  api.resetState();
+}
+});
+
 /* 37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG ------ */
 await section("37. PDF 读取器：矢量路径/文本（未压缩流）+ Flate 栅格重组 PNG + DCT JPEG", async () => {
 asyncSuites.push((async()=>{
@@ -3442,6 +3560,50 @@ asyncSuites.push((async()=>{
   /* CID 乱码文本过滤 */
   eq('PDF-CID乱码丢弃', api.PdfRead.looksLikeCidGarbage('\u0001\u0002\u0003'), true);
   eq('PDF-拉丁文本保留', api.PdfRead.looksLikeCidGarbage('Building A-101'), false);
+  eq('PDF-正常文本无解码错误', r.textErrors, 0);
+  /* E1：编码链样本 —— 纯中文 GBK / 中英混排 / UTF-16BE BOM / 真 CID 乱码计数 */
+  const mkTextPdf=bytes=>{
+    const content='BT /F1 12 Tf 50 80 Td ('+toLatin(new Uint8Array(bytes))+') Tj ET\n';
+    let p='%PDF-1.4\n';
+    p+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+    p+=obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    p+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+    p+=obj(4,'<< /Length '+content.length+' >>\nstream\n'+content+'endstream');
+    return p;
+  };
+  const cn=await api.PdfRead.parsePdf(mkTextPdf([0xC5,0xE4,0xB5,0xE7,0xCF,0xE4]));
+  eq('E1-纯中文文字对象1段', cn.texts.length, 1);
+  eq('E1-纯中文完整提取', cn.texts[0]&&cn.texts[0].text, '配电箱');
+  eq('E1-纯中文无解码错误', cn.textErrors, 0);
+  console.log('[E1] 纯中文 PDF 提取 =', JSON.stringify(cn.texts[0]&&cn.texts[0].text));
+  const mixed=await api.PdfRead.parsePdf(mkTextPdf([0xB1,0xC3,0xB7,0xBF,0x20,0x50,0x75,0x6D,0x70,0x20,0x52,0x6F,0x6F,0x6D,0x20,0x32]));
+  eq('E1-混排完整提取', mixed.texts[0]&&mixed.texts[0].text, '泵房 Pump Room 2');
+  const u16=await api.PdfRead.parsePdf(mkTextPdf([0xFE,0xFF,0x91,0x4D,0x75,0x35,0x7B,0xB1]));
+  eq('E1-UTF16BE完整提取', u16.texts[0]&&u16.texts[0].text, '配电箱');
+  const cid=await api.PdfRead.parsePdf(mkTextPdf([0x01,0x02,0x03]));
+  eq('E1-真CID乱码不产生文字', cid.texts.length, 0);
+  eq('E1-真CID乱码计数1', cid.textErrors, 1);
+  eq('E1-中文不再误判乱码', api.PdfRead.looksLikeCidGarbage('配电箱'), false);
+  /* E2：坏 token 不产 NaN 坐标；非法算子与坏图像都计数 */
+  const mkRawPdf=(content,extra)=>{
+    let p='%PDF-1.4\n';
+    p+=obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+    p+=obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    p+=obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>');
+    p+=obj(4,'<< /Length '+content.length+' >>\nstream\n'+content+'endstream');
+    return p+(extra||'');
+  };
+  const bad=await api.PdfRead.parsePdf(mkRawPdf(
+    '10 10 m 110 10 l S\n20 20 m 30 l S\n0 0 cm 40 40 m 50 50 l S\nBT /F1 12 Tf . . Td (X) Tj ET\n'));
+  eq('E2-非法算子计数3', bad.badOps, 3);
+  eq('E2-非法算子不产文字', bad.texts.length, 0);
+  eq('E2-非法算子后合法路径保留', bad.paths.length, 2);
+  ok('E2-坐标全部有限', bad.paths.every(p=>p.points.every(q=>Number.isFinite(q[0])&&Number.isFinite(q[1]))));
+  eq('E2-正常PDF无非法算子', r.badOps, 0);
+  const badImg=await api.PdfRead.parsePdf(mkRawPdf('10 10 m 90 10 l S\n',
+    '5 0 obj\n<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length 7 >>\nstream\nnotzlib\nendstream\nendobj\n'));
+  eq('E2-坏图像解码计数1', badImg.imageErrors, 1);
+  eq('E2-坏图像不入图像列表', badImg.images.length, 0);
 })());
 
 });
@@ -5225,6 +5387,17 @@ await section("48.1 覆盖率口径 v3：与缩放无关、面积同源、隐藏
   ok('覆盖口径v3-5000×5000m 格数不超上限', huge.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
   approx('覆盖口径v3-5000×5000m 无设备覆盖率为0', huge.ratio, 0, 1e-9);
   ok('覆盖口径v3-5000×5000m 单次分析 <300ms（实测 '+hugeMs+'ms）', hugeMs<300);
+  eq('覆盖口径v3-常规大场地不标注降级', huge.spec.degraded, false);
+  eq('覆盖口径v3-常规大场地降级倍数为1', huge.spec.degradedFactor, 1);
+
+  /* C5：极端几何（2 万公里级边长）40 次放大后仍超限，必须降级而不是分配巨数组 */
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect','rect.area',{name:'XT',x:0,y:0,width:2e8,height:2e8}));
+  const xt=api.analyzeCoverage(api.state);
+  ok('覆盖口径v3-极端几何格数受上限约束', xt.gridCells<=api.APP_LIMITS.COVERAGE_MAX_CELLS);
+  eq('覆盖口径v3-极端几何标注降级', xt.spec.degraded, true);
+  ok('覆盖口径v3-极端几何降级倍数>1', xt.spec.degradedFactor>1);
+  approx('覆盖口径v3-极端几何无设备覆盖率为0', xt.ratio, 0, 1e-9);
 
   /* N-20：统计面板、覆盖率面板、导出区域三处面积同源（圆/椭圆/扇形用解析公式） */
   api.resetState();
@@ -5952,11 +6125,13 @@ await section("55. 符号库（C-04）：36 个六类图元、别名搜索、安
     build();
     const svg=api.buildSceneSvg();
     const dxf=api.Dxf.buildDxf(api.dxfEntitiesForExport().entities,api.dxfEntitiesForExport().layers);
-    if(process.env.UPDATE_GOLDEN==='1'){
-      writeFileSync(join(goldenRoot,name+'.svg'),svg,'utf8');
-      writeFileSync(join(goldenRoot,name+'.dxf'),dxf,'utf8');
+    const refuse=refusalReason();
+    if(goldenWritable()){
+      writeGolden(join(goldenRoot,name+'.svg'),svg,name+'.svg');
+      writeGolden(join(goldenRoot,name+'.dxf'),dxf,name+'.dxf');
       return;
     }
+    if(refuse) ok('golden-'+name+' 拒绝更新基线（'+refuse+'）', false);
     const wantSvg=readFileSync(join(goldenRoot,name+'.svg'),'utf8');
     const wantDxf=readFileSync(join(goldenRoot,name+'.dxf'),'utf8');
     eq('golden-'+name+'.svg 逐字节一致', svg, wantSvg);
@@ -5965,7 +6140,9 @@ await section("55. 符号库（C-04）：36 个六类图元、别名搜索、安
   function goldenSvgOnly(name,build){
     build();
     const svg=api.buildSceneSvg();
-    if(process.env.UPDATE_GOLDEN==='1'){ writeFileSync(join(goldenRoot,name+'.svg'),svg,'utf8'); return; }
+    const refuse=refusalReason();
+    if(goldenWritable()){ writeGolden(join(goldenRoot,name+'.svg'),svg,name+'.svg'); return; }
+    if(refuse) ok('golden-'+name+'.svg 拒绝更新基线（'+refuse+'）', false);
     eq('golden-'+name+'.svg 逐字节一致', svg, readFileSync(join(goldenRoot,name+'.svg'),'utf8'));
   }
   goldenCase('plain-scene',plainFixture);
@@ -6873,11 +7050,11 @@ await section("58. 中英界面切换与无障碍标记", async () => {
 
   /* ARIA tablist：每个页签有关联面板，每个面板有标签来源 */
   const tabBtns=[...html.matchAll(/<button[^>]*class="side-tab[^"]*"[^>]*>/g)].map(m=>m[0]);
-  eq('无障碍-页签按钮数', tabBtns.length, 6);
+  eq('无障碍-页签按钮数', tabBtns.length, 7);
   ok('无障碍-页签均有 aria-controls', tabBtns.every(s=>/aria-controls="tab-/.test(s)));
   ok('无障碍-页签均有 roving tabindex', tabBtns.every(s=>/tabindex="(?:0|-1)"/.test(s)));
   const tabPanels=[...html.matchAll(/<section[^>]*class="tab-pane[^"]*"[^>]*>/g)].map(m=>m[0]);
-  eq('无障碍-页签面板数', tabPanels.length, 6);
+  eq('无障碍-页签面板数', tabPanels.length, 7);
   ok('无障碍-面板均为 tabpanel', tabPanels.every(s=>/role="tabpanel"/.test(s)));
   ok('无障碍-面板均有 aria-labelledby', tabPanels.every(s=>/aria-labelledby="tabBtn-/.test(s)));
 
@@ -6966,6 +7143,18 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   eq('合并-仅叠放顺序不同不算冲突', m5z.stats.conflicts, 0);
   eq('合并-仅叠放顺序不同保留本地', m5z.project.objects[0].z, 0);
 
+  /* B6：updatedAt 不参与内容签名；跨时区同一时刻归一为 UTC ISO 后判等 */
+  const m6u = M(P([O('A', T1, 1)]), P([Object.assign(O('A', T2, 1), { createdAt: T1 })]));
+  eq('B6 仅时间戳不同不记冲突', m6u.stats.conflicts, 0);
+  eq('B6 仅时间戳不同不计更新', m6u.stats.updated, 0);
+  eq('B6 仅时间戳不同保留本地', m6u.project.objects[0].updatedAt, T1);
+  const now6 = Date.parse('2030-01-01T00:00:00Z');
+  eq('B6 跨时区同一时刻归一相等',
+    api.normalizeTimestamp('2024-11-14T10:00:00+08:00', now6),
+    api.normalizeTimestamp('2024-11-14T02:00:00Z', now6));
+  eq('B6 归一为 UTC ISO 规范形',
+    api.normalizeTimestamp('2024-11-14T10:00:00+08:00', now6), '2024-11-14T02:00:00.000Z');
+
   /* MERGE-10：图层/类型墓碑传播 + 引用迁移 */
   const l10A = P([], { layers: [
     { id: 'layer.default', name: '默认图层' },
@@ -6996,7 +7185,7 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   api.state.meta.projectId='PRJ_P15';
   const po=O('PX', T3, 1);
   api.state.objects=[po];
-  const fieldY={dataset:{field:'y'},value:'7',type:'number'};
+  const fieldY={dataset:{field:'y'},value:'7',type:'number',classList:{add(){},remove(){}}};
   fieldY.addEventListener=(ev,fn)=>{ fieldY[ev]=fn; };
   const fakeEl={};
   const box={querySelectorAll:sel=>sel==='[data-field]'?[fieldY]:[], querySelector:()=>fakeEl};
@@ -7360,6 +7549,21 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
   eq('A3 入口-报告随 JSON 序列化保留', JSON.parse(JSON.stringify(yesStats)).config.kept, yesStats.config.kept);
   eq('A3 入口-无差异不带 config 键', 'config' in noStats, false);
 
+  /* B2：协作代际令牌——跨工程快照整包丢弃，不写现场、不写历史；同工程不受影响 */
+  const b2Before = api.state.objects.length;
+  const b2Hist = api.history.past.length;
+  const b2Stale = await api.mergeProjectJSON(
+    P([O('OBJ_STALE', T2)], { meta: { name: '旧工程', projectId: 'PRJ_OTHER', createdAt: T1, updatedAt: T2 } }),
+    { history: false, expectProjectId: 'PRJ_LOCAL' });
+  eq('B2 合并入口-跨工程快照被忽略', b2Stale.ignored, 'stale-project');
+  eq('B2 合并入口-跨工程不写对象', api.state.objects.length, b2Before);
+  eq('B2 合并入口-跨工程不写历史', api.history.past.length, b2Hist);
+  const b2Same = await api.mergeProjectJSON(
+    P([O('OBJ_SAME', T2)], { meta: { name: '本地工程', projectId: 'PRJ_LOCAL', createdAt: T1, updatedAt: T2 } }),
+    { history: false, expectProjectId: 'PRJ_LOCAL' });
+  eq('B2 合并入口-同工程仍合并', b2Same.ignored, undefined);
+  eq('B2 合并入口-同工程写入对象', api.state.objects.some(o => o.id === 'OBJ_SAME'), true);
+
   /* MERGE-10：图层/类型墓碑经入口删除后，悬空引用由 migrateProject 统一迁移 */
   api.resetState();
   api.state.layers.push({ id: 'layer.L2', name: '二号层', visible: true, locked: false });
@@ -7589,6 +7793,23 @@ await section("61. 停车规划：双面垂直车位/通道布局、净宽检查
   const p2=api.state.objects.filter(o=>o.typeId==='rect.parking').map(o=>o.name);
   eq('停车-清除再生成避开墓碑名', p2[0], 'P313');
   eq('停车-清除再生成总数不变', api.state.objects.filter(o=>o.typeId==='rect.parking').length, 312);
+  /* C3：生成前先做锁定与全工程容量校验，被拒时整体不写（不建层、不写对象、不进历史） */
+  api.resetState();
+  api.history.past=[]; api.history.future=[];
+  api.state.layers.push({id:'layer.parking',name:'停车场',visible:true,locked:true});
+  const c3Msgs=[], c3Toast=sandbox.toast;
+  sandbox.toast=(m,k)=>c3Msgs.push({m,k});
+  api.applyParkingLayout();
+  eq('停车-锁定图层拒绝生成', api.state.objects.length, 0);
+  eq('停车-锁定图层拒绝不写历史', api.history.past.length, 0);
+  eq('停车-锁定图层提示可读', c3Msgs.some(x=>x.m==='图层已锁定'), true);
+  api.resetState();
+  api.state.floors.push({id:'floor.cap',name:'2F',objects:Array.from({length:api.APP_LIMITS.OBJECTS_MAX-1},(_,i)=>({id:'CAPF'+i,name:'F'+i,kind:'point',layerId:'layer.default',x:0,y:0,props:{}}))});
+  api.applyParkingLayout();
+  eq('停车-超容量拒绝生成', api.state.objects.length, 0);
+  eq('停车-超容量拒绝不写历史', api.history.past.length, 0);
+  eq('停车-超容量提示可读', c3Msgs.some(x=>String(x.m).includes('对象数量已达上限')), true);
+  sandbox.toast=c3Toast;
   api.history.past=[]; api.history.future=[];
   api.resetState();
 }
@@ -8858,6 +9079,45 @@ await section("74b. CORE-P2-3 历史快照活动楼层别名归一化（多楼�
   const refs = api.reachableBgAssetIds();
   ok('CORE-P2-3 快照资产仍可达', refs.includes('P23_BG') && refs.includes('P23_PHOTO'));
 
+  /* B3：撤销不得同步扫描全库（spy 计数为 0），回收延后调度；仅历史帧引用的资产仍可达（防误删） */
+  api.resetState();
+  api.history.past = []; api.history.future = [];
+  api.state.objects.push(api.baseObject('point','point.marker',{id:'B3A',name:'B3A',x:0,y:0}));
+  api.syncActiveFloor();
+  api.state.background = { assetId: 'B3_KEEP' }; api.pushHistory();
+  api.state.background = {}; api.pushHistory();
+  const b3real = api.idbAllKeys;
+  let b3calls = 0;
+  api.idbAllKeys = (...a) => { b3calls++; return b3real(...a); };
+  api.undo();
+  api.idbAllKeys = b3real;
+  eq('B3-撤销不同步扫描全库', b3calls, 0);
+  ok('B3-撤销已排延迟回收', !!api.assetGcTimer);
+  ok('B3-仅历史帧引用的资产仍可达', api.reachableBgAssetIds().includes('B3_KEEP'));
+  if (api.assetGcTimer) { clearTimeout(api.assetGcTimer); api.assetGcTimer = null; }
+
+  /* B7：整体替换后活动楼层别名必须立即重建；提交入口在不变量失守时抛错（负向用例证明断言有牙齿） */
+  api.setFloorAliasAssert(true);
+  api.stubConfirm(true);
+  api.resetState();
+  const b7a = api.baseObject('point','point.marker',{id:'B7A',name:'B7A',x:1,y:1});
+  const b7b = api.baseObject('point','point.marker',{id:'B7B',name:'B7B',x:2,y:2});
+  api.state.objects.push(b7a,b7b);
+  api.syncActiveFloor();
+  api.selectedIds.add(b7a.id);
+  api.deleteSelected();
+  await new Promise(r => setTimeout(r, 0));
+  const b7f = api.currentFloor();
+  eq('B7-删除后对象数', api.state.objects.length, 1);
+  ok('B7-删除后活动楼层别名同数组', !!b7f && b7f.objects === api.state.objects);
+  eq('B7-楼层条目不含已删对象', b7f && b7f.objects.map(o => o.id), ['B7B']);
+  api.state.objects = [];
+  let b7threw = false;
+  try { api.commitChange(''); } catch (e) { b7threw = /别名失配/.test(e.message || ''); }
+  ok('B7-提交入口捕获别名失配', b7threw);
+  api.syncActiveFloor();
+  api.setFloorAliasAssert(false);
+
   api.resetState(); api.history.past = []; api.history.future = [];
 }
 });
@@ -8968,8 +9228,40 @@ await section("75. B-05 产品目录校验 / BOM 聚合 / 报价字段表与数�
   od.props.vendor = '大华';
   const t4 = api.quoteTable(dup);
   eq('重名-填厂商后精确绑定', [t4[1][0], t4[1][3], t4[1][4]], ['大华', 80, 160]);
+
+  /* 75.7b G1：厂商目录 CSV 识别 / 金额清洗 / 不误伤台账 CSV */
+  const rowsCsv = [
+    ['厂商','型号','分类','单位','单价'],
+    [' 海康 ','DS-2CD','监控','台','¥1,200.00'],
+    ['大华','DH-1','','','350'],
+    ['','','','',''],
+    ['博世','B-1','','','900']
+  ];
+  const csvCat = api.catalogFromRows(rowsCsv);
+  eq('CSV目录-schema', csvCat.schema, api.CATALOG_SCHEMA);
+  eq('CSV目录-空行跳过', csvCat.items.length, 3);
+  eq('CSV目录-金额清洗+去空白', [csvCat.items[0].vendor,csvCat.items[0].price,csvCat.items[2].price], ['海康',1200,900]);
+  const csvNorm = api.catalogValidate(csvCat);
+  eq('CSV目录-校验补默认类别/单位', [csvNorm.items[1].category,csvNorm.items[1].unit], ['其他','台']);
+  ok('CSV目录-缺单价列不识别', api.catalogFromRows([['编号','型号','数量'],['1','X','2']]) === null);
+  ok('CSV目录-空表不识别', api.catalogFromRows([['厂商','型号','单价']]) === null);
+  ok('CSV目录-坏单价被校验拦住', bad(api.catalogFromRows([['厂商','型号','单价'],['A','B','abc']]), '单价'));
   api.setCurrentCatalog(null);
   api.resetState();
+
+  /* 75.7c G2a：本地插件库条目规范化 + 完整性哈希口径 */
+  const PP = api.PlotPin;
+  const libBase = { id:'g2.demo', name:'库插件', version:'1.0.0', apiVersion:'1.0', capabilities:['export'], code:'PlotPin.toast("x")', hash:'a'.repeat(64), addedAt:1 };
+  ok('G2a-合法库条目保留哈希', PP.libEntry(libBase).hash === 'a'.repeat(64));
+  ok('G2a-缺哈希被丢弃', PP.libEntry(Object.assign({}, libBase, { hash:'' })) === null);
+  ok('G2a-非法版本被丢弃', PP.libEntry(Object.assign({}, libBase, { version:'1.0' })) === null);
+  ok('G2a-未知能力被丢弃', PP.libEntry(Object.assign({}, libBase, { capabilities:['network'] })) === null);
+  const h1 = await PP.libHash({ id:'g2.demo', version:'1.0.0', apiVersion:'1.0', capabilities:['state:read','export'], code:'a' });
+  const h2 = await PP.libHash({ id:'g2.demo', version:'1.0.0', apiVersion:'1.0', capabilities:['export','state:read'], code:'a' });
+  ok('G2a-哈希64位十六进制', /^[0-9a-f]{64}$/.test(h1));
+  eq('G2a-哈希与能力顺序无关', h1, h2);
+  ok('G2a-源码变化哈希变化', h1 !== await PP.libHash({ id:'g2.demo', version:'1.0.0', apiVersion:'1.0', capabilities:['state:read','export'], code:'b' }));
+  ok('G2a-版本纳入哈希', h1 !== await PP.libHash({ id:'g2.demo', version:'1.0.1', apiVersion:'1.0', capabilities:['state:read','export'], code:'a' }));
 }
 
 asyncSuites.push((async()=>{
@@ -9028,6 +9320,228 @@ asyncSuites.push((async()=>{
   api.resetState();
 })());
 
+});
+
+/* 75.7d G3 带宽/存储估算：查表码率 / 参数联动 / 边界 / CSV 同源 ---------------- */
+await section("75.7d G3 带宽/存储估算：查表码率 / 参数联动 / 边界 / CSV 同源", async () => {
+  const d = api.bwEst({});
+  approx('G3-默认1080p H.264 单路码率 4 Mbps', d.mbps, 4, 1e-9);
+  approx('G3-默认总码率 8 路 = 32 Mbps', d.totalMbps, 32, 1e-9);
+  /* 手算：32 Mbps ÷ 8 = 4e6 B/s × 86400 × 30 天 × 1.1 = 1.14048e13 B = 11404.8 GB */
+  approx('G3-默认容量与手算一致 11404.8 GB', d.gb, 11404.8, 0.01);
+  approx('G3-GB→GiB 按 2^30 换算', d.gib, d.gb / 1.073741824, 0.01);
+  ok('G3-十进制 GB 数值大于 GiB', d.gb > d.gib);
+  approx('G3-帧率 30→码率线性 4.8 Mbps', api.bwEst({ fps:30 }).mbps, 4.8, 1e-9);
+  approx('G3-H.265 系数 0.6 → 2.4 Mbps', api.bwEst({ codec:'h265' }).mbps, 2.4, 1e-9);
+  approx('G3-子码流 0.3 → 1.2 Mbps', api.bwEst({ stream:'sub' }).mbps, 1.2, 1e-9);
+  approx('G3-保留 60 天→容量翻倍', api.bwEst({ days:60 }).gb, d.gb * 2, 0.02);
+  approx('G3-冗余 0% → 容量 ÷1.1', api.bwEst({ redundancy:0 }).gb, d.gb / 1.1, 0.02);
+  eq('G3-0 天容量为 0（GB/GiB 皆 0）', [api.bwEst({ days:0 }).gb, api.bwEst({ days:0 }).gib], [0, 0]);
+  const edge = api.bwEst({ fps:'', channels:'', days:'', hours:'', redundancy:'', codec:'nope', res:'nope', stream:'nope' });
+  ok('G3-空输入/未知选项：有限且非负', [edge.mbps, edge.totalMbps, edge.gb, edge.gib].every(n => Number.isFinite(n) && n >= 0));
+  const huge = api.bwEst({ channels:1e9, days:1e9, fps:1e9, redundancy:1e9 });
+  ok('G3-超大值夹取且结果有限', Number.isFinite(huge.gb) && huge.gb > 0
+    && [huge.channels, huge.days, huge.fps, huge.redundancy].join(',') === '10000,36500,120,1000');
+  const neg = api.bwEst({ channels:-5, days:-1 });
+  ok('G3-负数不产生负容量', neg.gb === 0 && neg.gib === 0);
+});
+
+/* 75.7e G4 布线/线缆统计：3-4-5 / 串联 / 参数联动 / 边界 ---------------- */
+await section("75.7e G4 布线/线缆统计：3-4-5 / 串联 / 参数联动 / 边界", async () => {
+  const line=(name,layer,points,closed=false)=>({kind:'line',name,layer,points,closed});
+  const pt=(name,x,y)=>({kind:'point',name,x,y});
+  const r1 = api.wireStats({ mode:'route', objects:[line('R1','L1',[[0,0],[3,0],[3,4]])], layers:[] });
+  approx('G4-折线 3+4=7 m', r1.geometry, 7, 1e-9);
+  approx('G4-默认预留 2 端×0.5=1 m', r1.reserveLen, 1, 1e-9);
+  approx('G4-默认弯曲 10%=0.7 m', r1.bendLen, .7, 1e-9);
+  approx('G4-总计 7+1+0.7=8.7 m', r1.total, 8.7, 1e-9);
+  const tri = api.wireStats({ mode:'route', objects:[line('T','L1',[[0,0],[3,0],[3,4]],true)] });
+  approx('G4-闭合折线补 3-4-5 斜边=12 m', tri.geometry, 12, 1e-9);
+  const chain = api.wireStats({ mode:'chain', objects:[pt('B',3,0),pt('A',0,0),pt('C',3,4)] });
+  approx('G4-设备按名称排序串联 3+4=7 m', chain.geometry, 7, 1e-9);
+  eq('G4-设备链 3 点只计首尾 2 端', chain.ends, 2);
+  approx('G4-设备链默认总计 8.7 m', chain.total, 8.7, 1e-9);
+  const chain4 = api.wireStats({ mode:'chain', objects:[pt('A',0,0),pt('B',3,0),pt('C',3,4),pt('D',3,10)] });
+  approx('G4-四点多段串联 3+4+6=13 m', chain4.geometry, 13, 1e-9);
+  approx('G4-弯曲 0% 总计=几何+预留', api.wireStats({ mode:'route', objects:[line('R','L',[[0,0],[3,0],[3,4]])], bend:0 }).total, 8, 1e-9);
+  approx('G4-预留 0 总计=几何×1.1', api.wireStats({ mode:'route', objects:[line('R','L',[[0,0],[3,0],[3,4]])], reserve:0 }).total, 7.7, 1e-9);
+  approx('G4-弯曲 20% 弯曲=1.4 m', api.wireStats({ mode:'route', objects:[line('R','L',[[0,0],[3,0],[3,4]])], bend:20 }).bendLen, 1.4, 1e-9);
+  const two = api.wireStats({ mode:'route', objects:[line('R1','L1',[[0,0],[3,0]]),line('R2','L2',[[0,0],[0,4]])] });
+  eq('G4-两条路径=4 端', two.ends, 4);
+  eq('G4-按图层汇总几何长度', two.groups.map(g=>g.name+':'+g.len).join(','), 'L1:3,L2:4');
+  const empty = api.wireStats({});
+  ok('G4-空选：全 0 且有限', [empty.geometry,empty.reserveLen,empty.bendLen,empty.total].every(n=>n===0));
+  const one = api.wireStats({ mode:'chain', objects:[pt('A',1,2)] });
+  ok('G4-单点：无段、无预留、总计 0', one.rows.length===0&&one.ends===0&&one.total===0);
+  const zero = api.wireStats({ mode:'chain', objects:[pt('A',1,2),pt('B',1,2)] });
+  ok('G4-零长线段：几何 0、预留 1、总计 1', zero.geometry===0&&Math.abs(zero.total-1)<1e-9);
+  const neg2 = api.wireStats({ mode:'route', objects:[line('R','L',[[0,0],[3,0],[3,4]])], reserve:-9, bend:-9 });
+  approx('G4-负预留/负弯曲夹取为 0', neg2.total, 7, 1e-9);
+  const bad = api.wireStats({ mode:'route', objects:[{kind:'line',name:'X',points:[[NaN,0],[undefined,2]]}] });
+  ok('G4-非法坐标不产生 NaN/负值', [bad.geometry,bad.reserveLen,bad.bendLen,bad.total].every(n=>Number.isFinite(n)&&n>=0));
+  const huge = api.wireStats({ mode:'chain', objects:[pt('A',0,0),pt('B',1e9,1e9)], reserve:1e9, bend:1e9 });
+  ok('G4-超大值夹取且结果有限', Number.isFinite(huge.total)&&huge.reserve<=1e6&&huge.bend<=1000);
+});
+
+/* 75.7f G5 本地只读：写入入口拒绝 / 负向不变 / 协作旁路 ------------------ */
+await section("75.7f G5 本地只读：写入入口拒绝 / 负向不变 / 协作旁路", async () => {
+{
+  api.resetState();
+  const msgs=[], origToast=sandbox.toast, origSave=api.scheduleSave;
+  sandbox.toast=(m,k)=>msgs.push({m,k});
+  let saves=0; api.scheduleSave=()=>{ saves++; };
+  const objs0=api.state.objects.length, past0=api.history.past.length, fut0=api.history.future.length;
+
+  api.setReadOnly(false);
+  eq('G5-刷新默认可编辑', api.isReadOnly(), false);
+  eq('G5-进入只读返回 true', api.setReadOnly(true), true);
+  eq('G5-只读状态生效', api.isReadOnly(), true);
+  eq('G5-重复进入幂等', api.setReadOnly(true), true);
+
+  eq('G5-本地 pushHistory 被拒', api.pushHistory(), false);
+  eq('G5-commitChange 被拒', api.commitChange('x'), false);
+  eq('G5-commitObjectEdit 被拒', api.commitObjectEdit([]), false);
+  eq('G5-clearCurrentFloor 被拒', api.clearCurrentFloor(), null);
+  api.undo(); api.redo();
+  eq('G5-撤销/重做不写历史', api.history.past.length, past0);
+  eq('G5-撤销/重做不动未来栈', api.history.future.length, fut0);
+  eq('G5-负向：对象数不变', api.state.objects.length, objs0);
+  eq('G5-负向：未触发落盘', saves, 0);
+  ok('G5-被拒有可见提示且写明仅锁本端', msgs.some(m=>m.k==='warn'&&/^本地只读/.test(m.m||'')&&/仅锁本端编辑/.test(m.m)&&/对端仍可改/.test(m.m)));
+  ok('G5-只读仍可读测量（3-4-5=5 m）', api.objectLength({kind:'line',points:[[0,0],[3,4]]})===5);
+
+  /* 协作对端旁路：远端应用照常入栈并直落盘，不被本地只读吞掉 */
+  eq('G5-协作远端 pushHistory 旁路可用', api.pushHistory(true), true);
+  eq('G5-旁路入栈 +1', api.history.past.length, past0+1);
+  api.state.objects.push(api.baseObject('point','point.marker',{x:1,y:2}));
+  api.markDirty('object');
+  eq('G5-只读期间远端更新仍落盘', saves, 1);
+  eq('G5-只读期间远端更新已写入', api.state.objects.length, objs0+1);
+
+  eq('G5-退出只读', api.setReadOnly(false), false);
+  ok('G5-退出后可提交', api.commitChange('x')!==false);
+  eq('G5-退出后落盘恢复', saves, 2);
+  ok('G5-退出后 pushHistory 可用', api.pushHistory()===true);
+
+  sandbox.toast=origToast; api.scheduleSave=origSave;
+  api.setReadOnly(false); api.resetState();
+}
+});
+
+/* 75.7g G6 评论：持久/隔离/孤儿/只读/上限/迁移 ------------------ */
+await section("75.7g G6 评论：持久/隔离/孤儿/只读/上限/迁移", async () => {
+{
+  api.setReadOnly(false); api.resetState();
+  const owner=api.commentOwnerId();
+  eq('G6-草稿 owner 用 meta.id', owner, api.state.meta.id);
+  eq('G6-键前缀', api.commentStorageKey(owner), api.COMMENT_PREFIX+owner);
+  eq('G6-初始为空', api.loadComments().length, 0);
+
+  const o=api.baseObject('point','point.marker',{x:1,y:2});
+  api.state.objects.push(o);
+  const a=api.addComment({objectId:o.id,floorId:api.state.activeFloorId,text:'  第一条  '});
+  eq('G6-新增成功', a.ok, true);
+  eq('G6-文本去首尾空白', a.comment.text, '第一条');
+  eq('G6-重读仍在', api.loadComments().length, 1);
+  const cid=a.comment.id;
+  eq('G6-修改成功', api.updateComment(cid,'第二条').ok, true);
+  eq('G6-修改后重读', api.loadComments()[0].text, '第二条');
+  eq('G6-空文本拒绝', api.updateComment(cid,'   ').reason, 'empty');
+  eq('G6-修改不存在的评论', api.updateComment('CMT_NOPE','x').reason, 'missing');
+
+  const savedId=api.state.meta.id;
+  api.state.meta.id='PRJ_OTHER_G6';
+  eq('G6-切工程不串', api.loadComments().length, 0);
+  api.state.meta.id=savedId;
+  eq('G6-切回仍在', api.loadComments().length, 1);
+
+  api.state.meta.projectId='PID_G6';
+  eq('G6-绑定后 owner=projectId', api.commentOwnerId(), 'PID_G6');
+  eq('G6-绑定后草稿评论不可见', api.loadComments().length, 0);
+  eq('G6-草稿→工程迁移', api.migrateCommentOwner(savedId,'PID_G6'), true);
+  eq('G6-迁移后可见', api.loadComments().length, 1);
+  eq('G6-旧键已清', api.loadComments(savedId).length, 0);
+  eq('G6-副本 projectId 隔离', api.loadComments('PID_COPY').length, 0);
+
+  api.state.objects=api.state.objects.filter(x=>x.id!==o.id);
+  const orphan=api.loadComments()[0];
+  eq('G6-对象删后评论保留', api.loadComments().length, 1);
+  eq('G6-孤儿判定', api.commentTarget(orphan).exists, false);
+
+  const origToast=sandbox.toast, msgs=[];
+  sandbox.toast=(m,k)=>msgs.push({m,k});
+  api.setReadOnly(true);
+  const before=api.loadComments().length;
+  const ra=api.addComment({objectId:o.id,floorId:api.state.activeFloorId,text:'x'});
+  const ru=api.updateComment(orphan.id,'x');
+  const rd=api.deleteComment(orphan.id);
+  ok('G6-只读新增/编辑/删除全拒', !ra.ok&&ra.reason==='ro'&&!ru.ok&&ru.reason==='ro'&&!rd.ok&&rd.reason==='ro');
+  eq('G6-只读条数不变', api.loadComments().length, before);
+  eq('G6-只读仍可读', api.loadComments()[0].text, '第二条');
+  ok('G6-只读拒绝文案含本地只读', msgs.some(x=>x.k==='warn'&&/本地只读/.test(x.m||'')));
+  api.setReadOnly(false);
+  sandbox.toast=origToast;
+
+  api.removeCommentsForOwner('PID_G6');
+  const o2=api.baseObject('point','point.marker',{x:2,y:3});
+  api.state.objects.push(o2);
+  const long=api.addComment({objectId:o2.id,floorId:api.state.activeFloorId,text:'x'.repeat(api.COMMENT_TEXT_MAX+5)});
+  eq('G6-超长截断 2000', long.comment.text.length, api.COMMENT_TEXT_MAX);
+  api.removeCommentsForOwner('PID_G6');
+  for(let i=0;i<api.COMMENT_MAX;i++) api.addComment({objectId:o2.id,floorId:api.state.activeFloorId,text:'c'+i});
+  eq('G6-上限 200 条', api.loadComments().length, api.COMMENT_MAX);
+  eq('G6-第 201 条被拒', api.addComment({objectId:o2.id,floorId:api.state.activeFloorId,text:'over'}).reason, 'limit');
+
+  const origSet=localStorageStub.setItem;
+  localStorageStub.setItem=()=>{ throw new Error('quota'); };
+  eq('G6-配额失败返回 false', api.saveComments([{id:'C',objectId:'O',text:'t'}],'QUOTA_G6'), false);
+  localStorageStub.setItem=origSet;
+
+  const target=api.loadComments()[0];
+  eq('G6-单条删除成功', api.deleteComment(target.id).ok, true);
+  eq('G6-删除后少一条', api.loadComments().length, api.COMMENT_MAX-1);
+  eq('G6-重复删除报缺失', api.deleteComment(target.id).reason, 'missing');
+  api.removeCommentsForOwner('PID_G6');
+  api.state.meta.projectId=''; api.resetState();
+}
+});
+
+/* 75.7h G7 台账模板：默认不变/列序/失配可见/空工程 ------ */
+await section("75.7h G7 台账模板：默认不变/列序/失配可见/空工程", async () => {
+{
+  api.setReadOnly(false); api.resetState();
+  eq('G7-内置模板为代码常量', api.TPL_BUILTIN.length, 2);
+  eq('G7-内置模板列均在字段表内', api.TPL_BUILTIN.every(t=>api.tplUnknown(t.cols).length===0), true);
+
+  const cols=['编号','IP','X','责任人'];
+  const empty=api.tplTable(cols);
+  eq('G7-空工程只有表头', empty.length, 1);
+  eq('G7-空工程 CSV 无空数据行', api.delimitedFromTable(empty,','), '\ufeff'+cols.join(',')+'\r\n');
+
+  const p=api.baseObject('point','point.marker',{name:'P1',x:12,y:14,props:{ip:'10.0.0.1',owner:'张三'}});
+  api.state.objects=[p];
+  const t=api.tplTable(cols);
+  eq('G7-模板表头即列序', t[0], cols);
+  eq('G7-单对象按模板列序取值', t[1], ['P1','10.0.0.1','12.00','张三']);
+  ok('G7-单对象行宽与列数一致', t.every(r=>r.length===cols.length));
+  eq('G7-未匹配字段输出空单元格', api.tplTable(['编号','面积'])[1], ['P1','']);
+
+  eq('G7-未知列可检出', api.tplUnknown(['编号','不存在列']), ['不存在列']);
+  eq('G7-合法列无失配', api.tplUnknown(cols).length, 0);
+  eq('G7-导出含未知列被拒', api.tplExport('csv',['编号','不存在列']).r, 'unknown');
+  eq('G7-空列导出被拒', api.tplExport('csv',[]).r, 'empty');
+  const origDl=sandbox.downloadBlob, origToast=sandbox.toast, dl=[], msgs=[];
+  sandbox.downloadBlob=(b,n)=>dl.push(n); sandbox.toast=(m,k)=>msgs.push({m,k});
+  const badOut=api.tplExport('csv',['编号','不存在列']);
+  api.tplFail(badOut);
+  eq('G7-失配不产生下载', dl.length, 0);
+  ok('G7-失配 toast 列出缺列', msgs.some(x=>x.k==='error'&&x.m.includes('不存在列')));
+  sandbox.downloadBlob=origDl; sandbox.toast=origToast;
+  const ex=api.tplExport('csv',['编号','名称']);
+  eq('G7-套模板导出成功', [ex.ok, ex.rows], [1,1]);
+  eq('G7-解析逗号/顿号/分号', api.tplParse('编号, 名称，X；Y'), ['编号','名称','X','Y']);
+  api.resetState();
+}
 });
 
 /* 75.10 B-07 图框/标题栏：默认模板、旧档降级、持久化、导出叠加与默认不变 --- */
@@ -9486,7 +10000,9 @@ await section("N-26 导出 golden：CSV/TSV/XLSX/GeoJSON 逐字节基线", async
   ];
   for (const [name, buf] of cases) {
     const p = join(goldenRoot, name);
-    if (process.env.UPDATE_GOLDEN === '1') { writeFileSync(p, buf); continue; }
+    const refuse = refusalReason();
+    if (goldenWritable()) { writeGolden(p, buf, name); continue; }
+    if (refuse) { ok('golden-' + name + ' 拒绝更新基线（' + refuse + '）', false); continue; }
     eq('golden-' + name + ' 逐字节一致', Buffer.compare(buf, readFileSync(p)), 0);
   }
 
@@ -9733,6 +10249,25 @@ await section("P2-CORE 批次 5：schema 与安全", async () => {
   eq('CORE-P2-1 启动兜底读取本机设置', api.state.settings.gridVisible, false);
   eq('CORE-P2-1 启动兜底 segLabelMinPx', api.state.settings.segLabelMinPx, 31);
   sandbox.localStorage.removeItem('offline-drawing-annotation.settings'); api.resetState();
+
+  /* B4：导入/合并不得因 JSON 自有的 __proto__ / constructor.prototype 改写工程模型 */
+  const b4Poison = JSON.parse('{"__proto__":{"polluted":"yes"},"constructor":{"prototype":{"polluted":"yes"}},"schema":"'
+    + api.SCHEMA + '","meta":{"__proto__":{"polluted":"yes"},"name":"B4 来件"},"settings":{"__proto__":{"polluted":"yes"}},"objects":[],"floors":[],"tombstones":[]}');
+  const b4Imp = api.buildProject(b4Poison);
+  eq('B4-导入后全局原型未被污染', ({}).polluted, undefined);
+  eq('B4-导入 meta 未继承污染键', 'polluted' in b4Imp.meta, false);
+  eq('B4-导入 settings 未继承污染键', 'polluted' in b4Imp.settings, false);
+  eq('B4-导入保留合法 meta 键', b4Imp.meta.name, 'B4 来件');
+  ok('B4-导入丢弃未知顶层键', !Object.prototype.hasOwnProperty.call(b4Imp, 'constructor')
+    && !Object.prototype.hasOwnProperty.call(b4Imp, 'polluted'));
+  const b4Local = api.buildProject({ schema: api.SCHEMA, meta: { name: '本地工程', updatedAt: '2026-01-01T00:00:00.000Z' } });
+  const b4Merged = api.mergeProjectData(b4Local, b4Poison).project;
+  eq('B4-合并后全局原型未被污染', ({}).polluted, undefined);
+  eq('B4-合并 meta 未继承污染键', 'polluted' in b4Merged.meta, false);
+  eq('B4-合并 settings 未继承污染键', 'polluted' in b4Merged.settings, false);
+  ok('B4-合并丢弃未知顶层键', !Object.prototype.hasOwnProperty.call(b4Merged, 'constructor')
+    && !Object.prototype.hasOwnProperty.call(b4Merged, 'polluted'));
+  api.resetState();
 
   /* CORE-P2-8：重命名非当前楼层必须刷新该层 updatedAt，否则 LWW 合并会丢重命名 */
   api.resetState();
