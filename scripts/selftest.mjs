@@ -202,6 +202,13 @@ code += `\n;globalThis.__api = {
   COLLAB_FLOOR_OPS, COLLAB_FLOOR_TYPES, COLLAB_PENDING_KEY, COLLAB_PENDING_PREFIX, COLLAB_PENDING_NOPID, COLLAB_PENDING_BAK_KEY,
   get collabMode(){ return collabMode; }, set collabMode(v){ collabMode=v; },
   collabQueueApply,
+  collabIceParse, collabIceNorm, collabIceWait, collabIceUrlOk, collabIceHostOf, collabIceMaskUser,
+  collabIceSave, collabIceLoad, collabIceClear, collabIceCurrent, collabIceRedact, collabIceSummary,
+  COLLAB_ICE_KEY, COLLAB_ICE_MAX_SERVERS,
+  collabRecordError, collabSetState,
+  collabIceTimeout, collabRtcConfig, collabIceCount, collabDiagPair, collabIceRecord, collabDiagText,
+  get collabIceDiag(){ return collabIceDiag; }, set collabIceDiag(v){ collabIceDiag=v; },
+  get collabLastError(){ return collabLastError; },
   get collabRemoteHistoryUsed(){ return collabRemoteHistoryUsed; },
   resetCollabSecurity(){ clearTimeout(collabApplyTimer); collabApplyTimer=null; collabApplyPending=null; collabRtcPending=null;
     collabRtcTrusted=false; collabRtcAskOpen=false; collabRightsShown=false; collabRemoteHistoryUsed=false; collabLastApplyAt=0; },
@@ -9541,6 +9548,104 @@ await section("75.7h G7 台账模板：默认不变/列序/失配可见/空工�
   eq('G7-套模板导出成功', [ex.ok, ex.rows], [1,1]);
   eq('G7-解析逗号/顿号/分号', api.tplParse('编号, 名称，X；Y'), ['编号','名称','X','Y']);
   api.resetState();
+}
+});
+
+/* 75.7i ICE-1 本机中继配置：校验/脱敏/零泄露/仅本次会话 ------ */
+await section("75.7i ICE-1 本机中继配置：校验/脱敏/零泄露/仅本次会话", async () => {
+{
+  const CRED='S3cr3t-Passw0rd', USER='alice';
+  api.collabIceClear();
+  eq('ICE-1 清除后无配置', api.collabIceCurrent(), null);
+
+  /* 校验：拒绝非法/内嵌凭据/TURN 缺凭据/超量，错误不回显输入 */
+  eq('ICE-1 空输入被拒', api.collabIceParse('').ok, false);
+  eq('ICE-1 非法协议被拒', api.collabIceParse('http://evil/x').ok, false);
+  eq('ICE-1 URL 内嵌凭据被拒', api.collabIceParse('turn:'+USER+':'+CRED+'@host:3478').ok, false);
+  const noCred=api.collabIceParse('turn:turn.example.com:3478 | '+USER);
+  eq('ICE-1 TURN 缺凭据被拒', noCred.ok, false);
+  ok('ICE-1 错误信息不回显用户名', !noCred.error.includes(USER));
+  eq('ICE-1 STUN 可只填地址', api.collabIceParse('stun:stun.example.com:3478').ok, true);
+  eq('ICE-1 服务器数量上限', api.collabIceParse('stun:a:1\nstun:b:2\nstun:c:3\nstun:d:4').error, '最多 3 个服务器');
+  eq('ICE-1 等待默认 6s', api.collabIceWait(0), 6000);
+  eq('ICE-1 等待越界回默认', [api.collabIceWait(1000), api.collabIceWait(99999)], [6000, 6000]);
+  eq('ICE-1 等待合法区间保留', api.collabIceWait(5000), 5000);
+  eq('ICE-1 用户名首尾掩码', api.collabIceMaskUser(USER), 'a***e');
+  eq('ICE-1 短用户名只露首字符', api.collabIceMaskUser('ab'), 'a***');
+  eq('ICE-1 主机只留 scheme:host:port', api.collabIceHostOf('turns:relay.example.com:5349?transport=tcp'), 'turns:relay.example.com:5349');
+
+  /* 仅本次会话：不写本机键；刷新等价于从本机键读取 → 必然为空 */
+  const cfg='turn:turn.example.com:3478 | '+USER+' | '+CRED+'\nstun:stun.example.com:3478';
+  const saved=api.collabIceSave(cfg,false);
+  eq('ICE-1 仅本次会话应用成功', [saved.ok, saved.cfg.servers.length], [true, 2]);
+  eq('ICE-1 仅本次会话不写本机键', sandbox.localStorage.getItem(api.COLLAB_ICE_KEY), null);
+  eq('ICE-1 刷新等价：本机键读不到配置', api.collabIceLoad(), null);
+
+  /* 零泄露遍历：邀请串 / 协作消息 / 工程 JSON / 摘要 / 错误出口 */
+  const sdp='v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:abcd\r\na=candidate:1 1 udp 1 10.0.0.1 5000 typ host\r\n';
+  const inv=api.collabInviteEncode('offer',sdp);
+  const snap=JSON.stringify({t:'snapshot',project:api.persistableState()});
+  const proj=JSON.stringify(api.buildProject(api.persistableState()));
+  const sum=api.collabIceSummary();
+  api.collabSetState('error','失败 '+CRED+' user '+USER,'error');
+  const err=api.collabLastError;
+  const red=api.collabIceRedact('credential='+CRED+' username='+USER);
+  for(const [name,text] of [['邀请串',inv],['协作消息',snap],['工程 JSON',proj],['摘要',sum],['错误信息',err],['脱敏出口',red]])
+    ok('ICE-1 零泄露：'+name, !String(text).includes(CRED)&&!String(text).includes(USER));
+  ok('ICE-1 摘要只露主机与首尾掩码', sum.includes('turn.example.com')&&sum.includes('a***e'));
+  ok('ICE-1 工程状态不含中继键', !JSON.stringify(api.persistableState()).includes('collab.ice'));
+  eq('ICE-1 错误出口已脱敏', err.includes('***'), true);
+
+  /* 正向对照：记住才落本机键，清除后删除 */
+  const kept=api.collabIceSave(cfg,true);
+  eq('ICE-1 记住后本机键存在', [kept.ok, !!sandbox.localStorage.getItem(api.COLLAB_ICE_KEY)], [true, true]);
+  const back=api.collabIceLoad();
+  eq('ICE-1 记住后可读回且默认 6s', [back.servers.length, back.waitMs, back.sessionOnly], [2, 6000, false]);
+  api.collabIceClear();
+  eq('ICE-1 清除后本机键删除', sandbox.localStorage.getItem(api.COLLAB_ICE_KEY), null);
+  eq('ICE-1 清除后配置为空', api.collabIceCurrent(), null);
+}
+});
+
+/* 75.7j ICE-2 运行时：注入/6s 等待/候选计数/配对诊断 ------ */
+await section("75.7j ICE-2 运行时：注入/6s 等待/候选计数/配对诊断", async () => {
+{
+  const CRED='S3cr3t-Passw0rd', USER='alice';
+  api.collabIceClear();
+  eq('ICE-2 无配置时等待 4s', api.collabIceTimeout(), 4000);
+  eq('ICE-2 无配置时 iceServers 为空', api.collabRtcConfig().iceServers, []);
+  api.collabIceSave('turn:turn.example.com:3478 | '+USER+' | '+CRED, false);
+  eq('ICE-2 有配置时等待 6s', api.collabIceTimeout(), 6000);
+  const rc=api.collabRtcConfig();
+  eq('ICE-2 凭据注入到 PeerConnection 配置', [rc.iceServers.length, rc.iceServers[0].username, rc.iceServers[0].credential], [1, USER, CRED]);
+  eq('ICE-2 地址数组保留', rc.iceServers[0].urls, ['turn:turn.example.com:3478']);
+
+  const sdp='v=0\r\na=candidate:1 1 udp 1 10.0.0.1 5000 typ host\r\na=candidate:2 1 udp 2 1.2.3.4 6000 typ srflx raddr 10.0.0.1 rport 5000\r\na=candidate:3 1 udp 3 5.6.7.8 3478 typ relay raddr 1.2.3.4\r\na=candidate:4 1 udp 4 10.0.0.1 5001 typ host\r\n';
+  const c=api.collabIceCount(sdp);
+  eq('ICE-2 候选按类型计数', [c.host,c.srflx,c.relay,c.total], [2,1,1,4]);
+  eq('ICE-2 空 SDP 不计候选', api.collabIceCount('').total, 0);
+
+  const stats=new Map([
+    ['l',{type:'local-candidate',id:'l',candidateType:'relay'}],
+    ['r',{type:'remote-candidate',id:'r',candidateType:'srflx'}],
+    ['p',{type:'candidate-pair',id:'p',selected:true,state:'succeeded',localCandidateId:'l',remoteCandidateId:'r'}]
+  ]);
+  eq('ICE-2 选中候选对只取类型', await api.collabDiagPair({getStats:async()=>stats}), {local:'relay',remote:'srflx'});
+  eq('ICE-2 无 getStats 时不抛错', await api.collabDiagPair({}), null);
+
+  api.collabIceDiag=null;
+  api.collabIceRecord({localDescription:{sdp},remoteDescription:{sdp:sdp.replace(/typ host/g,'typ srflx')},getStats:async()=>stats});
+  await new Promise(r=>setTimeout(r,10));
+  const dt=api.collabDiagText();
+  ok('ICE-2 本机候选行', dt.includes('本机候选：host 2 / srflx 1 / relay 1'));
+  ok('ICE-2 对端候选行', dt.includes('对端候选：host 0 / srflx 3 / relay 1'));
+  ok('ICE-2 诊断显示选中配对类型', dt.includes('relay ↔ srflx'));
+  ok('ICE-2 诊断不含 IP/端口/凭据', !dt.includes('10.0.0.1')&&!dt.includes('5000')&&!dt.includes(CRED)&&!dt.includes(USER));
+
+  api.collabIceDiag=null;
+  api.collabIceRecord({localDescription:{sdp:''},remoteDescription:{sdp:''},getStats:async()=>null});
+  ok('ICE-2 无候选时明说未收集', api.collabDiagText().includes('尚未收集到候选'));
+  api.collabIceClear();
 }
 });
 

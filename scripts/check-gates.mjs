@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* check-gates.mjs —— 门禁的牙齿：正面基线 + 19 种人为破坏，断言对应门禁会红
+/* check-gates.mjs —— 门禁的牙齿：正面基线 + 20 种人为破坏，断言对应门禁会红
  *
  * 为什么需要它：门禁脚本本身也会假绿（只打印不比对、缺文件退 0、模板缺失空操作、把 --selftest 透传给
  * 只跑解析器自检的分支）。一条从未红过的判据，与没有判据的区别只在于它更贵。这里把「会红」这件事本身
@@ -28,11 +28,12 @@
  *  17. 必需钩子缺少提供方（删 registerHook）→ node scripts/check.mjs          必须非 0
  *  18. CSP 内联脚本哈希与脚本体错位        → node scripts/build.mjs --check     必须非 0
  *  19. i18n 覆盖率跌破阈值（--json --check）→ node scripts/i18n-scan.mjs --json --check 必须非 0
+ *  20. TURN 凭据脱敏被破坏（错误文案回带凭据）→ node scripts/selftest.mjs --filter=ICE-1 必须非 0
  *
  * 所有破坏只发生在系统临时目录的整仓副本里，仓库本身一个字节都不改。零第三方依赖。
  *
  * 用法：node scripts/check-gates.mjs [--only 1,3,18] [--skip-baseline]
- *   全量在本机约 4–5 分钟（其中 8 个场景各跑一次 selftest），超过 3 分钟时可用 --only 拆批；
+ *   全量在本机约 4–5 分钟（其中 9 个场景各跑一次 selftest），超过 3 分钟时可用 --only 拆批；
  *   默认（不带参数）仍然是「基线 + 全部破坏样本」，拆批只影响单次跑哪些，不影响判据。
  */
 import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
@@ -343,6 +344,24 @@ const scenarios = [
       appendFileSync(p, block);
       /* --json --check 的退出码修复（H-07）：旧实现只打印不置退出码，
          这条场景同时证明「JSON 模式下 fails 非空 → 退出码 1」。 */
+    }
+  },
+  {
+    name: 'TURN 凭据脱敏被破坏（错误/状态出口回带凭据）',
+    expected: 'node scripts/selftest.mjs --filter=ICE-1 退出码非 0',
+    args: ['scripts/selftest.mjs', '--filter=ICE-1'],
+    expect: /零泄露|脱敏/,
+    sabotage(dir) {
+      /* 安全红线：凭据只允许进 RTCPeerConnection 配置，不得进任何对外文案。
+         这里把 collabIceRedact 的「替换为掩码」改成「拼回原文」——模拟
+         「把 host 拼进错误提示时顺手带上 credential」的真实回归形态。
+         未加零泄露断言时它不会被任何门禁发现；加了之后必须红。 */
+      const p = join(dir, 'js', 'features', 'collab.js');
+      const src = readFileSync(p, 'utf8');
+      const needle = "if(sv.credential) s=s.split(sv.credential).join('***');";
+      if (!src.includes(needle)) throw new Error('collab.js 找不到 collabIceRedact 凭据掩码注入点');
+      writeFileSync(p, src.replace(needle,
+        "if(sv.credential) s=s+' '+sv.credential; /* 门禁牙齿：把凭据拼回对外文案 */"));
     }
   }
 ];
