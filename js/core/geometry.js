@@ -509,6 +509,18 @@ function objectArea(o){
   if(o.kind==='dimension'&&o.subtype==='area') return polygonArea(o.points);
   return 0;
 }
+/** 圆弧命中判据（世界坐标）：点是否落在角度区间内（端点按弧长容差换算成角度放宽）。
+ *  与半径判据配合使用：|dist-r|<=tol 且本函数为真，才算点中弧线。 */
+function arcContainsAngle(o,p,tolWorld){
+  const sh=(o&&o.shape)||{}, r=Math.max(0,Number(sh.r)||0);
+  const sweep=arcSweep(sh);
+  if(!(r>0)||!(sweep>0)) return false;
+  const a0=Number(sh.a0)||0;
+  const deg=Math.atan2((Number(p&&p[1])||0)-(Number(o.y)||0),(Number(p&&p[0])||0)-(Number(o.x)||0))*180/Math.PI;
+  const rel=((deg-a0)%360+360)%360;
+  const tolDeg=Math.max(0,Number(tolWorld)||0)/r*180/Math.PI;
+  return rel<=sweep+tolDeg || rel>=360-tolDeg;
+}
 /** 对象长度（米）：圆弧取弧长；折线逐段求和，闭合折线补首尾边；不足两点为 0。 */
 function objectLength(o){
   if(o.kind==='arc'){

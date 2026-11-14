@@ -142,7 +142,7 @@ code += `\n;globalThis.__api = {
   convertAreaShape, parallelogramPoints, parallelogramSkew, AREA_SHAPE_TYPES,
   PARALLELOGRAM_DEFAULT_SKEW, PARALLELOGRAM_MAX_SKEW, AREA_SHAPE_LABELS, applyRowShape,
   sectorSweep, sectorArcPoints, sectorArcRange, pointIconScale, areaParamText,
-  arcSweep, arcWorldPoints, defaultTypeId, kindName,
+  arcSweep, arcWorldPoints, arcContainsAngle, defaultTypeId, kindName,
   collectSnapCandidates, collectSnapEdges, collectSnapCircles, findOsnap, OSNAP_LABELS,
   applyField, bindPropEvents, rotateSelected,
   lineMinNodes, setNodeCoord, insertLineNode, removeLineNode, moveNode, moveNodeStep,
@@ -168,7 +168,7 @@ code += `\n;globalThis.__api = {
   exportTitleBlockSvg, drawTitleBlockOnCanvas,
   xmlEscape, modalBody, safeHTML, sanitizeSiteStyle,
   $, renderTypes, renderProps, renderStats, tabTargetIndex, isCanvasShortcutTarget, modalKeydown, openModal, closeModal,
-  getHandles, hitObject, hitOrderObjects, bumpZVersion,
+  getHandles, hitObject, hitOrderObjects, bumpZVersion, resizeShapeByHandle,
   get selectedIds(){ return selectedIds; },
   objectRows, objectRowsAll, buildExportRow, exportShapeSummary, exportParamText, xlsxExportTable,
   effectiveVisible, isVisible, exportScope, isDelivered, setDelivered, deliveryGuard, pdfDrawObjectsFor, pdfPagePlan, pdfPagePixels,
@@ -3552,6 +3552,61 @@ await section("36.5 ARC 数据地基：kind/清洗/几何口径", async () => {
 
   const sum=api.floorSummaries();
   ok('S1-楼层汇总含 arc 计数', sum.total.counts.arc===0);
+}
+});
+
+/* 36.6 S2：ARC 渲染与交互——命中/手柄/画布/标注 -------------------------------- */
+await section("36.6 ARC 渲染交互：命中/手柄/画布/标注", async () => {
+{
+  const arc=api.baseObject('arc','arc.builtin',{name:'A1',x:0,y:0,shape:{type:'arc',r:50,a0:0,a1:90}});
+  const at=a=>[50*Math.cos(a*Math.PI/180),50*Math.sin(a*Math.PI/180)];
+
+  ok('S2-角度区间内命中', api.arcContainsAngle(arc,at(45),0.1));
+  ok('S2-角度区间外不命中', !api.arcContainsAngle(arc,at(180),0.1));
+  ok('S2-起点前端点容差内命中', api.arcContainsAngle(arc,at(-0.05),0.2));
+  ok('S2-容器外不越界', !api.arcContainsAngle(arc,at(-5),0.2));
+
+  api.state.viewport.zoom=10;
+  api.state.objects=[arc];
+  ok('S2-hitObject 命中弧线', api.hitObject(at(45),[0,0])===arc);
+  ok('S2-hitObject 半径不符不命中', api.hitObject([25,25],[0,0])===null);
+  ok('S2-hitObject 角度不符不命中', api.hitObject(at(180),[0,0])===null);
+
+  const hs=api.getHandles(arc);
+  eq('S2-三个形状手柄', hs.length, 3);
+  eq('S2-手柄模式', JSON.stringify(hs.map(h=>h.mode)), JSON.stringify(['edge0','edge1','arcR']));
+  approx('S2-edge0 落点角度 0°', hs[0].x, 50, 1e-9);
+  approx('S2-edge1 落点角度 90°', hs[1].y, 50, 1e-9);
+  approx('S2-arcR 落在弧中点', hs[2].y, 50*Math.SQRT1_2, 1e-9);
+
+  /* 画布：ctx.arc 精确描边（不采样）；默认不显示半径/弧长，开标注后显示 */
+  const rec=()=>{
+    const calls=[], texts=[];
+    const c={save(){},restore(){},beginPath(){},stroke(){},closePath(){},fill(){},lineTo(){},moveTo(){},setLineDash(){},translate(){},rotate(){},fillRect(){},strokeRect(){},rect(){},roundRect(){},
+      fillText(s){texts.push(String(s));},measureText(s){return {width:String(s).length*7};},
+      strokeStyle:'',lineWidth:1,lineCap:'',lineJoin:'',fillStyle:'',font:'',globalAlpha:1,textAlign:'',textBaseline:'',
+      arc(x,y,r,s,e,ccw){calls.push([x,y,r,s,e,ccw]);}};
+    return {c,calls,texts};
+  };
+  const toS=p=>[p[0]*10,-p[1]*10];
+  const r1=rec(); api.drawObject(r1.c,arc,{zoom:10},toS,1,1);
+  eq('S2-精确弧：单次 arc 调用', r1.calls.length, 1);
+  approx('S2-arc 半径=世界米×缩放', r1.calls[0][2], 500, 1e-9);
+  ok('S2-arc 反向绘制（屏幕角递减）', r1.calls[0][5]===true && r1.calls[0][4]<r1.calls[0][3]);
+  ok('S2-编号画在弧中点附近', r1.texts.includes('A1'));
+  ok('S2-默认不显示半径/弧长', !r1.texts.some(t=>t.startsWith('R ')) && !r1.texts.some(t=>t.startsWith('Σ ')));
+  api.setAnnot(arc,'radius',true); api.setAnnot(arc,'perimeter',true);
+  const r2=rec(); api.drawObject(r2.c,arc,{zoom:10},toS,1,1);
+  ok('S2-开标注显示半径', r2.texts.includes('R 50.00 m'));
+  ok('S2-开标注显示弧长', r2.texts.some(t=>t.startsWith('Σ 78.54 m')));
+
+  /* 手柄拖拽沿用形状参数：arcR 改半径、edge1 改终角（口径与扇形一致） */
+  api.resizeShapeByHandle(arc,{mode:'arcR'},[0,80]);
+  approx('S2-arcR 拖拽改半径', arc.shape.r, 80, 1e-9);
+  api.resizeShapeByHandle(arc,{mode:'edge1'},[0,-60]);
+  approx('S2-edge1 拖拽改终角', api.arcSweep(arc.shape), 270, 1e-9);
+  ok('S2-拖拽后仍无折线缓存', arc.points.length===0);
+  api.resetState();
 }
 });
 

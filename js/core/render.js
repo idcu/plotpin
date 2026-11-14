@@ -35,6 +35,11 @@ function hitObject(p,screenP){
       if(Math.hypot(s[0]-screenP[0],s[1]-screenP[1])<=11*pointIconScale(o)) return o;
     }else if(o.kind==='rect'){
       if(shapeHit(o,p)) return o;
+    }else if(o.kind==='arc'){
+      /* 描边弧：先判半径环带，再判角度区间（端点容差按弧长换算） */
+      const tolArc=Math.max(tol,styleVal(o,'strokeWidth',.1)/2);
+      const r=Math.abs(Number(o.shape&&o.shape.r)||0);
+      if(r>0 && Math.abs(dist(p,[o.x,o.y])-r)<=tolArc && arcContainsAngle(o,p,tolArc)) return o;
     }else if(o.kind==='text'){
       if(pointInPolygon(p,textCorners(o))) return o;
     }else if(o.closed && o.points.length>=3){
@@ -60,7 +65,7 @@ function getHandles(o){
   }else if(o.kind==='text'){
     const a=(o.angle+90)*Math.PI/180, off=28/state.viewport.zoom;
     handles.push({type:'rotate',x:o.x+Math.cos(a)*off,y:o.y+Math.sin(a)*off});
-  }else if(o.kind==='rect'){
+  }else if(o.kind==='rect'||o.kind==='arc'){
     areaShapeHandles(o,handles);
   }else if(o.points){
     o.points.forEach((p,i)=>handles.push({type:'node',index:i,x:p[0],y:p[1]}));
@@ -90,11 +95,11 @@ function areaShapeHandles(o,handles){
     handles.push({type:'shapeHandle',mode:'ry',x:o.x+Math.cos(b)*sh.ry,y:o.y+Math.sin(b)*sh.ry});
     const off=Math.max(.55,30/state.viewport.zoom);
     handles.push({type:'rotate',x:o.x+Math.cos(b)*off,y:o.y+Math.sin(b)*off});
-  }else if(tt===SEC){
+  }else if(tt===SEC||tt===ARC){
     const p=a=>[o.x+sh.r*Math.cos(a*Math.PI/180),o.y+sh.r*Math.sin(a*Math.PI/180)];
-    const a0=Number(sh.a0)||0, mid=a0+sectorSweep(sh)/2;
+    const a0=Number(sh.a0)||0, sweep=tt===ARC?arcSweep(sh):sectorSweep(sh), mid=a0+sweep/2;
     handles.push({type:'shapeHandle',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
-    handles.push({type:'shapeHandle',mode:'edge1',x:p(a0+sectorSweep(sh))[0],y:p(a0+sectorSweep(sh))[1]});
+    handles.push({type:'shapeHandle',mode:'edge1',x:p(a0+sweep)[0],y:p(a0+sweep)[1]});
     handles.push({type:'shapeHandle',mode:'arcR',x:p(mid)[0],y:p(mid)[1]});
   }
 }
@@ -840,6 +845,16 @@ function annotationItems(o,opt={}){
     if(annotOn(o,'vertex') && (tt==='rect'||tt===PARA)){
       rectPoints(o).forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     }
+  }else if(o.kind==='arc'){
+    const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+    const at=a=>[o.x+r*Math.cos(a*Math.PI/180),o.y+r*Math.sin(a*Math.PI/180)];
+    if(annotOn(o,'radius')&&r>0){
+      const m=at(a0+sweep/2); push(m[0],m[1],'R '+fmt(r)+' m',6,6);
+    }
+    if(annotOn(o,'perimeter')&&sweep>0){
+      /* 弧是描边几何：这里标注的是弧长（annotLabel 已把 perimeter 显示为「弧长」） */
+      const e=at(a0+sweep); push(e[0],e[1],'Σ '+fmt(objectLength(o))+' m',9,-9);
+    }
   }else if(o.kind==='line'){
     if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     if(annotOn(o,'edge')){
@@ -873,6 +888,7 @@ function drawObject(c,o,v,toS,iconBoost,exportGain){
   if(o.kind==='point') drawPoint(c,o,color,type,toS,iconBoost,v);
   else if(o.kind==='rect') drawRect(c,o,color,toS,v,g);
   else if(o.kind==='line') drawLine(c,o,color,toS,v);
+  else if(o.kind==='arc') drawArc(c,o,color,toS,v);
   else if(o.kind==='text') drawText(c,o,color,toS,v,g);
   else if(o.kind==='dimension') drawDimension(c,o,toS);
   drawObjectAnnotations(c,o,toS,v);
@@ -1010,6 +1026,21 @@ function drawAreaTag(c,cx,cy,area,perimeter,showArea=true,showPerim=true){
   c.fillStyle='#1e3a8a';
   lines.forEach((t,i)=>c.fillText(t,cx,cy-(lines.length-1)*8+i*16));
   c.restore();
+}
+/** 圆弧：直接用 ctx.arc 精确描边，不采样（导出/SVG 才走采样）。
+ *  世界角逆时针、Y 向上；屏幕 Y 向下，故屏幕角取负且方向反转（anticlockwise=true）。 */
+function drawArc(c,o,color,toS,v){
+  const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), sweep=arcSweep(sh);
+  if(!(r>0)||!(sweep>0)) return;
+  const cs=toS([o.x,o.y]), R=r*v.zoom, a0=Number(sh.a0)||0;
+  const s0=-a0*Math.PI/180, s1=-(a0+sweep)*Math.PI/180;
+  c.save(); c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineCap='round';
+  c.beginPath(); c.arc(cs[0],cs[1],R,s0,s1,true); c.stroke(); c.restore();
+  if(o.name){
+    const m=(a0+sweep/2)*Math.PI/180;
+    const ms=toS([o.x+r*Math.cos(m),o.y+r*Math.sin(m)]);
+    drawLabel(c,o,ms[0],ms[1]-8,color,toS);
+  }
 }
 function drawLine(c,o,color,toS,v){
   if(!o.points.length) return;
