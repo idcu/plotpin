@@ -32,9 +32,17 @@
   if(caps.sw){
     try{
       const reg=await navigator.serviceWorker.register('sw.js');
+      /* 安装结果由 SW 用 STATUS 回答：failed>0 表示新缓存不完整、旧版本仍在服务 */
+      navigator.serviceWorker.addEventListener('message',ev=>{
+        const d=ev.data;
+        if(!d||d.type!=='STATUS'||!navigator.serviceWorker.controller) return;
+        toast(d.failed>0
+          ? L('预缓存失败 {n} 项，已保留旧版本',{n:d.failed})
+          : L('新版本可用：刷新页面后生效'),'warn');
+      });
       const notify=()=>{
-        if(!reg.waiting || !navigator.serviceWorker.controller) return;
-        toast(L('新版本可用：刷新页面后生效'),'warn');
+        /* 首次安装也会短暂出现 waiting，此时页面尚无 controller，不应提示「新版本可用」 */
+        if(reg.waiting && navigator.serviceWorker.controller) reg.waiting.postMessage({type:'STATUS'});
       };
       reg.addEventListener('updatefound',()=>{
         const w=reg.installing;
