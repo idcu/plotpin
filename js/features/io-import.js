@@ -165,9 +165,19 @@ function dxfFidelityLines(meta,parsed){
   if(Object.keys(meta.supplementalTypes||{}).length) lines.push('补充解析：'+Object.keys(meta.supplementalTypes).join(' / '));
   const uns=Object.keys(meta.unsupportedTypes||{});
   if(uns.length) lines.push('未落地（已跳过）：'+uns.join(' / ')+'（'+Object.values(meta.unsupportedTypes).reduce((a,b)=>a+b,0)+' 条）');
-  /* ARC/ELLIPSE/SPLINE/INSERT 由解析器统一展开为多段线（含块插入变换），报告里如实给出条数 */
-  const approx=['ARC','ELLIPSE','SPLINE','INSERT'].filter(t=>meta.entityCounts&&meta.entityCounts[t]);
+  /* ARC/ELLIPSE/SPLINE/INSERT 由解析器统一展开为多段线（含块插入变换），报告里如实给出条数；
+     勾选保留圆弧时 ARC 走 arc 实体，不再计入折线近似 */
+  const arcKept=!!(parsed&&parsed.arcCount!=null);
+  const hasArcs=!!(meta.entityCounts&&meta.entityCounts.ARC);
+  const approx=['ARC','ELLIPSE','SPLINE','INSERT']
+    .filter(t=>meta.entityCounts&&meta.entityCounts[t]&&!(t==='ARC'&&arcKept));
   if(approx.length) lines.push('折线近似落地：'+approx.map(t=>t+' '+meta.entityCounts[t]).join(' / ')+'（弧/椭圆/样条按折线，块参照按插入变换展开）');
+  if(arcKept){
+    const deg=parsed.arcsDegraded||0;
+    lines.push('圆弧落地：'+parsed.arcCount+' 条写入圆弧对象'+(deg?'（另有 '+deg+' 条张角退化，仍按折线）':''));
+  }else if(hasArcs){
+    lines.push('圆弧：ARC '+meta.entityCounts.ARC+' 条默认按折线近似；勾选「保留圆弧」写入圆弧对象（旧版打开会丢弃）');
+  }
   if(meta.r12Bulge) lines.push('R12 凸度：'+meta.r12Bulge+' 段 VERTEX 42 会被拉直');
   /* E4：缺码/错位被丢弃的实体如实汇总，不静默 */
   if(parsed&&parsed.droppedEntities) lines.push(L('跳过非法实体：{n} 个（缺少坐标或必需参数）',{n:parsed.droppedEntities}));
@@ -216,18 +226,25 @@ async function importDxfFile(f){
       ' <select id="dxfUnitSelect">'+unitOpts.map(([v,t])=>'<option value="'+v+'">'+esc(t)+'</option>').join('')+'</select></label>'+
     '<label style="display:block;margin:8px 0">'+esc(L('落点'))+
       ' <select id="dxfLanding"><option value="editable">'+esc(L('可编辑对象（按原图层）'))+'</option><option value="reference">'+esc(L('只读参考层（新建层并锁定）'))+'</option></select></label>'+
+    (meta&&meta.entityCounts&&meta.entityCounts.ARC?
+      '<label style="display:flex;gap:6px;align-items:flex-start;margin:8px 0;line-height:1.6">'+
+        '<input type="checkbox" id="dxfKeepArcs" style="margin-top:3px">'+
+        '<span>'+esc(L('保留圆弧（ARC {n} 条）：写入圆弧对象；旧版 PlotPin 打开该工程会丢弃这些圆弧',{n:meta.entityCounts.ARC}))+'</span></label>'+
+      '<p class="hint-text">'+esc(L('不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。'))+'</p>'
+      :'')+
     '<p class="hint-text">'+esc(L(TXT_REF_LAYER_HINT))+'</p>',
     [{text:L('取消'),click:closeModal},
      {text:L('导入'),class:'primary',click:()=>{
        const unit=$('dxfUnitSelect').value, landing=$('dxfLanding').value;
+       const keepBox=$('dxfKeepArcs');
        closeModal();
-       applyDxfImport(f.name,text,meta,{unit,reference:landing==='reference'});
+       applyDxfImport(f.name,text,meta,{unit,reference:landing==='reference',keepArcs:!!(keepBox&&keepBox.checked)});
      }}]);
 }
 function applyDxfImport(fileName,text,meta,opts){
   const Dxf=ensureVendor('Dxf');
   let parsed;
-  try{ parsed=Dxf.parseDxf(text,{strictUnits:true,forceUnit:opts.unit==='auto'?null:Number(opts.unit)}); }
+  try{ parsed=Dxf.parseDxf(text,{strictUnits:true,forceUnit:opts.unit==='auto'?null:Number(opts.unit),keepArcs:!!opts.keepArcs}); }
   catch(e){ return toast(L('DXF 解析失败：{msg}',{msg:e.message}),'error'); }
   const ents=parsed.entities;
   if(!ents.length) return toast('DXF 中没有可导入实体','error');
@@ -251,7 +268,7 @@ function applyDxfImport(fileName,text,meta,opts){
       if(refLayer) return refLayer.id;
       const l=state.layers.find(x=>x.name===n); return l?l.id:'layer.default';
     };
-    const counts={line:0,rect:0,point:0,text:0};
+    const counts={line:0,rect:0,point:0,text:0,arc:0};
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     const bounds=p=>p.forEach(([x,y])=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);});
     /* 批量实体一次建立编号作用域：避免逐个 baseObject → nextObjectId 扫描全量 state（O(E²)） */
@@ -268,6 +285,13 @@ function applyDxfImport(fileName,text,meta,opts){
           const x=e.x,y=e.y,r=e.r; bounds([[x-r,y-r],[x+r,y+r]]);
           const o=baseObject('rect','rect.area',{x,y,shape:{type:CIR,r},width:0,height:0,layerId:layerIdFor(e.layer)});
           state.objects.push(o); counts.rect++;
+        }else if(e.type==='ARC'){
+          /* S4：保真回填的圆弧（公共模块只给折线，ARC 由适配层产出） */
+          const x=Number(e.x), y=Number(e.y), r=Number(e.r), a1=Number(e.a1);
+          if(!(r>0)||!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(a1)) return;
+          bounds([[x-r,y-r],[x+r,y+r]]);
+          const o=baseObject('arc','arc.builtin',{x,y,shape:{type:ARC,r,a0:Number(e.a0)||0,a1},layerId:layerIdFor(e.layer)});
+          state.objects.push(o); counts.arc++;
         }else if(e.type==='POINT'){
           const x=e.x,y=e.y; bounds([[x,y]]);
           const o=baseObject('point','point.marker',{x,y,layerId:layerIdFor(e.layer)});
@@ -289,8 +313,8 @@ function applyDxfImport(fileName,text,meta,opts){
     const lines=dxfFidelityLines(meta,parsed).filter(l=>!l.startsWith('单位：'));
     const extra=' · '+L('单位')+' '+Dxf.unitLabel(unitCode)+(opts.reference?' · '+L('落点 只读参考层（已锁定）'):'')+
       (lines.length?' · '+lines.join(' · '):'');
-    commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
-      {line:counts.line,rect:counts.rect,point:counts.point,text:counts.text,extra}));
+    commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {arc} 圆弧 / {point} 点 / {text} 文字{extra}',
+      {line:counts.line,rect:counts.rect,arc:counts.arc,point:counts.point,text:counts.text,extra}));
     if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
     if(parsed.unitFallback!=null) toast(L('单位 {code} 未知，已按文件单位导入（$INSUNITS={ins}）',{code:parsed.unitFallback,ins:meta&&meta.insUnits!=null?meta.insUnits:'无'}),'warn');
     fitView();

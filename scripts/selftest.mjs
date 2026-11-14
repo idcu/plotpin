@@ -180,6 +180,8 @@ code += `\n;globalThis.__api = {
   outlineOf, objectIndexById, dragObjectIndex, ensureVendor, siteDomainOf,
   Dxf: globalThis.Dxf, Pdf: globalThis.Pdf,
   dwgVersionInfo, dxfFidelityLines, dxfRefLayerName,
+  arcLineRanges: globalThis.Dxf.arcLineRanges, stripArcRanges: globalThis.Dxf.stripArcRanges,
+  collectArcs: globalThis.Dxf.collectArcs, applyDxfImport,
   PdfRead: globalThis.PdfRead, PdfVec: globalThis.PdfVec, Qr: globalThis.Qr,
   SYMBOL_LIBRARY: globalThis.SYMBOL_LIBRARY, parseSvgSymbol: globalThis.parseSvgSymbol, BUILTIN_TYPES,
   SYMBOL_CATEGORIES: globalThis.SYMBOL_CATEGORIES, SYMBOL_LIMITS: globalThis.SYMBOL_LIMITS,
@@ -3639,6 +3641,128 @@ await section("36.7 ARC 面板与表格：统计/导出列/写回钳制", async 
   approx('S3-起始角归一 350', arc.shape.a0, 350, 1e-9);
   approx('S3-改起始角保持张角', api.arcSweep(arc.shape), .1, 1e-9);
   ok('S3-写回后仍能被清洗保留', api.sanitizeArcShape(arc.shape)!==null);
+  api.resetState();
+}
+});
+
+/* 36.8 S4：ARC 导入保真——摘除/回填/退化/单位/端到端 ----------------------------- */
+await section("36.8 ARC 导入保真：摘除/回填/退化/单位/端到端", async () => {
+{
+  const P=(c,v)=>c+'\n'+v+'\n';
+  const head=ins=>P(0,'SECTION')+P(2,'HEADER')+P(9,'$ACADVER')+P(1,'AC1032')
+    +(ins==null?'':P(9,'$INSUNITS')+P(70,ins))+P(0,'ENDSEC');
+  const body=ins=>P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'LINE')+P(8,'0')+P(10,0)+P(20,0)+P(11,10)+P(21,0)
+    +P(0,'ARC')+P(8,'弧层')+P(10,100)+P(20,100)+P(40,50)+P(50,0)+P(51,90)
+    +P(0,'CIRCLE')+P(8,'0')+P(10,0)+P(20,0)+P(40,5)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const src=head(6)+body(6);
+  const meta=api.Dxf.inspect(src);
+  eq('S4-审计到 1 条 ARC', meta.entityCounts.ARC, 1);
+
+  /* 摘除：行区间定位 → 剔除后 ENTITIES 内不再有 ARC，其余实体照常解析 */
+  const ranges=api.arcLineRanges(src);
+  eq('S4-定位 1 段 ARC 行区间', ranges.length, 1);
+  eq('S4-行区间起点是 0/ARC 行', src.split(/\r?\n/)[ranges[0][0]].trim(), '0');
+  eq('S4-行区间终点是下一实体行', src.split(/\r?\n/)[ranges[0][1]].trim(), '0');
+  const stripped=api.stripArcRanges(src,ranges);
+  eq('S4-剔净后 ENTITIES 无 ARC', api.collectArcs(stripped).length, 0);
+  eq('S4-剔净后其余实体数 2', api.Dxf.parseDxf(stripped).entities.length, 2);
+  eq('S4-回收 ARC 原值', JSON.stringify(api.collectArcs(src).map(a=>[a.x,a.y,a.r,a.a0,a.a1])),
+    JSON.stringify([[100,100,50,0,90]]));
+
+  /* 默认（不勾选）：旧口径折线近似，25 点，不产生 arc 实体 */
+  const legacy=api.Dxf.parseDxf(src,{strictUnits:true});
+  eq('S4-默认 ARC 折线 25 点', legacy.entities.filter(e=>e.points&&e.points.length===25).length, 1);
+  eq('S4-默认无 arc 实体', legacy.entities.filter(e=>e.type==='ARC').length, 0);
+  eq('S4-默认不标记 arcCount', legacy.arcCount, undefined);
+
+  /* 勾选：ARC 回填为 arc 实体，且不再有同类折线（不重复落地） */
+  const kept=api.Dxf.parseDxf(src,{strictUnits:true,keepArcs:true});
+  eq('S4-勾选后实体数 3', kept.entities.length, 3);
+  eq('S4-勾选后 1 条 arc', kept.entities.filter(e=>e.type==='ARC').length, 1);
+  const a=kept.entities.find(e=>e.type==='ARC');
+  approx('S4-圆心 x', a.x, 100); approx('S4-圆心 y', a.y, 100);
+  approx('S4-半径', a.r, 50); approx('S4-起始角', a.a0, 0); approx('S4-终止角', a.a1, 90);
+  eq('S4-图层保留', a.layer, '弧层');
+  eq('S4-不再产生 25 点折线', kept.entities.filter(e=>e.points&&e.points.length===25).length, 0);
+  eq('S4-arcCount', kept.arcCount, 1);
+  eq('S4-勾选后无新增丢弃', kept.droppedEntities, 0);
+
+  /* 跨 0°：a0=350,a1=10 按逆时针 20° 归一（公共模块公式会画成 -340°） */
+  const cross=head(6)+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'ARC')+P(8,'0')+P(10,0)+P(20,0)+P(40,10)+P(50,350)+P(51,10)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const ca=api.Dxf.parseDxf(cross,{strictUnits:true,keepArcs:true}).entities[0];
+  approx('S4-跨0°张角20', api.arcSweep(ca), 20, 1e-9);
+  approx('S4-跨0°终止角归一 370', ca.a1, 370, 1e-9);
+
+  /* 整圆弧（a0=0,a1=360）：对象层不收 sweep=0，退化为 24 段折线 */
+  const full=head(6)+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'ARC')+P(8,'0')+P(10,0)+P(20,0)+P(40,10)+P(50,0)+P(51,360)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const fr=api.Dxf.parseDxf(full,{strictUnits:true,keepArcs:true});
+  eq('S4-整圆弧不产 arc 实体', fr.entities.filter(e=>e.type==='ARC').length, 0);
+  eq('S4-整圆弧退化折线 25 点', fr.entities[0].points.length, 25);
+  approx('S4-整圆弧首尾闭合 x', fr.entities[0].points[24][0], fr.entities[0].points[0][0], 1e-9);
+  approx('S4-整圆弧首尾闭合 y', fr.entities[0].points[24][1], fr.entities[0].points[0][1], 1e-9);
+  eq('S4-退化计数 1', fr.arcsDegraded, 1);
+  eq('S4-退化不算 arcCount', fr.arcCount, 0);
+
+  /* 零长度弧（a0=a1）：折线全部重合，按非法实体丢弃并计数 */
+  const zero=head(6)+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'ARC')+P(8,'0')+P(10,0)+P(20,0)+P(40,10)+P(50,30)+P(51,30)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const zr=api.Dxf.parseDxf(zero,{strictUnits:true,keepArcs:true});
+  eq('S4-零长弧不落地', zr.entities.length, 0);
+  eq('S4-零长弧计入丢弃', zr.droppedEntities, 1);
+
+  /* 缺半径：r<=0 非法丢弃，不让 NaN 进入 entities */
+  const noR=head(6)+P(0,'SECTION')+P(2,'ENTITIES')
+    +P(0,'ARC')+P(8,'0')+P(10,1)+P(20,2)+P(50,0)+P(51,90)
+    +P(0,'ENDSEC')+P(0,'EOF');
+  const nr=api.Dxf.parseDxf(noR,{strictUnits:true,keepArcs:true});
+  eq('S4-缺半径丢弃', nr.entities.length, 0);
+  eq('S4-缺半径计入丢弃', nr.droppedEntities, 1);
+
+  /* 单位：INSUNITS=4（毫米）→ 半径 50mm = 0.05m，圆心 100mm = 0.1m */
+  const mr=api.Dxf.parseDxf(head(4)+body(4),{strictUnits:true,keepArcs:true});
+  const ma=mr.entities.find(e=>e.type==='ARC');
+  approx('S4-毫米半径换算', ma.r, 0.05, 1e-12);
+  approx('S4-毫米圆心换算', ma.x, 0.1, 1e-12);
+
+  /* 块定义内的 ARC 不摘除：仍随 INSERT 展开为折线（既有行为不变） */
+  const blk=P(0,'SECTION')+P(2,'BLOCKS')
+    +P(0,'BLOCK')+P(8,'0')+P(2,'B')+P(70,0)+P(10,0)+P(20,0)
+    +P(0,'ARC')+P(8,'0')+P(10,0)+P(20,0)+P(40,5)+P(50,0)+P(51,90)
+    +P(0,'ENDBLK')+P(8,'0')+P(0,'ENDSEC');
+  const blkEnt=P(0,'SECTION')+P(2,'ENTITIES')+P(0,'INSERT')+P(8,'0')+P(2,'B')
+    +P(10,0)+P(20,0)+P(0,'ENDSEC')+P(0,'EOF');
+  const br=api.Dxf.parseDxf(head(6)+blk+blkEnt,{strictUnits:true,keepArcs:true});
+  eq('S4-块内 ARC 仍折线', br.entities.length, 1);
+  ok('S4-块内 ARC 展开 25 点', br.entities[0].points.length===25);
+
+  /* 报告文案：勾选前后各一份 */
+  const linesOff=api.dxfFidelityLines(meta,legacy);
+  ok('S4-未勾选报告含默认折线提示', linesOff.some(l=>l.includes('圆弧')&&l.includes('折线')));
+  const linesOn=api.dxfFidelityLines(meta,kept);
+  ok('S4-勾选报告含圆弧落地条数', linesOn.some(l=>l.startsWith('圆弧落地：1 条')));
+
+  /* 端到端：applyDxfImport 把 ARC 落成 kind:'arc' 对象并参与场地扩边 */
+  api.resetState();
+  api.state.objects=[];
+  api.state.site={kind:'rect',x:0,y:0,shape:{type:'rect',w:10,h:10}};
+  const msgs=[], prevToast=sandbox.toast;
+  sandbox.toast=m=>msgs.push(String(m));
+  try{ api.applyDxfImport('t.dxf',src,meta,{unit:'auto',reference:false,keepArcs:true}); }
+  finally{ sandbox.toast=prevToast; }
+  const arcObjs=api.state.objects.filter(o=>o.kind==='arc');
+  eq('S4-端到端落 1 个圆弧对象', arcObjs.length, 1);
+  eq('S4-端到端圆弧类型 ID', arcObjs[0]&&arcObjs[0].typeId, 'arc.builtin');
+  approx('S4-端到端圆弧半径', arcObjs[0]&&arcObjs[0].shape.r, 50, 1e-9);
+  ok('S4-端到端图层指向弧层', api.state.layers.some(l=>l.id===arcObjs[0].layerId&&l.name==='弧层'));
+  ok('S4-端到端成功提示含圆弧计数', msgs.some(m=>m.includes('1 圆弧')));
+  ok('S4-端到端场地已扩边', api.state.site.shape.w>=160&&api.state.site.shape.h>=160);
   api.resetState();
 }
 });
