@@ -3,7 +3,7 @@
  * 缓存清单从 index.html 动态解析，新增脚本无需手工维护。
  * 版本策略：CACHE 名带版本号；activate 仅在新缓存完整时删除其他版本缓存。
  * 更新原子性：任一预缓存失败都不 skipWaiting、不删旧缓存，页面用 STATUS 查询失败项数。 */
-const VERSION = '241';
+const VERSION = '243';
 const CACHE = 'plotpin-v' + VERSION;
 const STATE_KEY = new URL('./__sw-precache.json', self.location.href).href;
 const OFFLINE_HTML = '<!doctype html><html lang="zh-CN"><meta charset="utf-8">' +
