@@ -135,6 +135,7 @@ code += `\n;globalThis.__api = {
   rowsToObjectsPlan, applyTableImport, applyTableCommonCells, rowMatchesObject,
   TABLE_MATCH_COLUMNS, tableImportColumns, formulaUnguard,
   siteDomainOf, rectShapeFromCorners, circleShapeFrom, polygonShapeFromPoints, mppFromScale, pdfScaleHints,
+  parsePdfPageRange, pdfPagePlacements, pdfImportCapacity, pdfPageEntityCounts,
   ellipseShapeFromCorners, sectorShapeFrom, ellipseShapeFromInput, applyVectorSite,
   siteDescription, siteDescriptionParts, worldDims, findIssues, STATS_ISSUE_VERSION,
   hitPhysicalPoint, siteKindName,
@@ -2702,6 +2703,32 @@ await section("28.17 G-01 比例预设换算", async () => {
   eq('G-01 PDF 多值去重升序', api.pdfScaleHints([{text:'1:500 / 1:100 / 1:100'}]).join(','), '100,500');
   eq('G-01 PDF 无比例返回空', api.pdfScaleHints([{text:'SITE PLAN'}]).length, 0);
   eq('G-01 PDF 非 1:x 前缀不误判', api.pdfScaleHints([{text:'门牌 21:12'}]).length, 0);
+  /* M1：多页导入的页范围/落位/容量纯函数 */
+  eq('M1 页范围 1-3,5 展开', api.parsePdfPageRange('1-3,5',10).pages.join(','), '1,2,3,5');
+  eq('M1 页范围去重升序', api.parsePdfPageRange('5,2-3,3',10).pages.join(','), '2,3,5');
+  eq('M1 页范围全角逗号与波浪号', api.parsePdfPageRange('1，2～4',10).pages.join(','), '1,2,3,4');
+  eq('M1 页范围空输入报 empty', api.parsePdfPageRange('  ',10).error, 'empty');
+  eq('M1 页范围语法错误', api.parsePdfPageRange('1,,a',10).error, 'syntax');
+  eq('M1 页范围越界', api.parsePdfPageRange('1-11',10).error, 'range');
+  eq('M1 页范围倒序拒绝', api.parsePdfPageRange('5-3',10).error, 'range');
+  eq('M1 页范围 0 页拒绝', api.parsePdfPageRange('0',10).error, 'range');
+  eq('M1 页范围超长拒绝', api.parsePdfPageRange('1'.repeat(201),10).error, 'tooLong');
+  /* 落位：第 1 页原点，后续页 = 前页 x + 页宽(米) + 间距；84.67pt≈0.0298m 不四舍五入 */
+  const place=api.pdfPagePlacements([
+    {pageNo:1,width:200,height:100},{pageNo:2,width:300,height:200}
+  ],1,1);
+  eq('M1 落位页数', place.length, 2);
+  eq('M1 首页锚定原点', place[0].xM+'/'+place[0].yM, '0/0');
+  eq('M1 次页横移含页宽与间距', place[1].xM, 201);
+  eq('M1 次页纵向不偏移', place[1].yM, 0);
+  eq('M1 落位沿用 PDF 点→米', api.pdfPagePlacements([{pageNo:1,width:200,height:100}],0.0254/72,1)[0].wM.toFixed(4), '0.0706');
+  /* 容量：paths+texts 求和，并按现有对象数校验 objects 上限 */
+  const cap=api.pdfImportCapacity([{paths:[1,2],texts:[1]},{paths:[1],texts:[]}],5);
+  eq('M1 容量实体合计', cap.entities, 4);
+  eq('M1 容量对象已含现有', cap.objects, 9);
+  eq('M1 容量未超限无错误', cap.errors.length, 0);
+  ok('M1 容量实体超限可检出', api.pdfImportCapacity([{paths:new Array(api.APP_LIMITS.IMPORT_ENTITIES_MAX+1).fill(0),texts:[]}],0).errors.includes('entities'));
+  eq('M1 每页实体数', api.pdfPageEntityCounts([{pageNo:1,paths:[1],texts:[1]},{pageNo:2,paths:[],texts:[]}]).map(x=>x.entities).join(','), '2,0');
 }
 });
 

@@ -43,12 +43,13 @@ function multiPagePdf() {
   return Buffer.from(s, 'utf8');
 }
 
-/* 三页矢量 PDF：用于断言「只导入第 1 页」与页数提示。 */
+/* 三页矢量 PDF：用于断言「只导入第 1 页」与页数提示。
+   各页线长必须 > 0.05 m 去噪阈值（150 点 ≈ 0.053 m），否则该页只剩文字，多页对象数会少一个。 */
 function threePagePdf() {
   const obj = (n, body) => n + ' 0 obj\n' + body + '\nendobj\n';
   const c1 = '0 0 m 190 0 l S\nBT /F1 10 Tf 50 80 Td (P1) Tj ET\n';
   const c2 = '0 0 m 160 0 l S\nBT /F1 10 Tf 30 80 Td (P2) Tj ET\n';
-  const c3 = '0 0 m 120 0 l S\nBT /F1 10 Tf 20 80 Td (P3) Tj ET\n';
+  const c3 = '0 0 m 150 0 l S\nBT /F1 10 Tf 20 80 Td (P3) Tj ET\n';
   let s = '%PDF-1.4\n';
   s += obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   s += obj(2, '<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>');
@@ -85,6 +86,14 @@ function chinesePdf() {
   return Buffer.from(s, 'latin1');
 }
 
+/* 多页 PDF 现在先弹「PDF 导入预检」：默认「仅第 1 页」，点「导入」沿用既有单页路径。
+   这里只加交互步骤，B-13 的断言保持原样。 */
+async function confirmPdfPicker(page) {
+  await expect(page.locator('#modalBackdrop.show')).toBeVisible();
+  await page.click('#pdfPickImport');
+  await expect(page.locator('#modalBackdrop.show')).toHaveCount(0);
+}
+
 test('E1：纯中文 PDF 文字完整导入（GBK 编码）', async ({ page }) => {
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
@@ -109,6 +118,7 @@ test('B-13：多页 PDF 只导入第 1 页并提示页数', async ({ page }) => 
   await page.setInputFiles('#fileInput', {
     name: 'two-pages.pdf', mimeType: 'application/pdf', buffer: multiPagePdf()
   });
+  await confirmPdfPicker(page);
   await expect(page.locator('#toastWrap')).toContainText(/共 2 页，已导入第 1 页/);
   await expect(page.locator('#toastWrap')).not.toContainText('独立原点');
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
@@ -132,6 +142,7 @@ test('B-13：三页 PDF 只导入第 1 页，页数提示正确', async ({ page 
   await page.setInputFiles('#fileInput', {
     name: 'three-pages.pdf', mimeType: 'application/pdf', buffer: threePagePdf()
   });
+  await confirmPdfPicker(page);
   await expect(page.locator('#toastWrap')).toContainText(/共 3 页，已导入第 1 页/);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
 
@@ -145,12 +156,105 @@ test('B-13：三页 PDF 只导入第 1 页，页数提示正确', async ({ page 
   expect(r.texts).toEqual(['P1']);
 });
 
+test('M1：显式选 1-3 页，三页横向并排且各归其图层', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await page.setInputFiles('#fileInput', {
+    name: 'three-pages.pdf', mimeType: 'application/pdf', buffer: threePagePdf()
+  });
+  await expect(page.locator('#modalBackdrop.show')).toBeVisible();
+  await page.check('input[name="pdfPageMode"][value="range"]');
+  await page.fill('#pdfPageRange', '1-3');
+  await expect(page.locator('#pdfPickSummary')).toContainText('已选 3 页');
+  await page.click('#pdfPickImport');
+  await expect(page.locator('#modalBackdrop.show')).toHaveCount(0);
+  await expect(page.locator('#toastWrap')).toContainText(/共 3 页，已导入第 1、2、3 页/);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(6);
+
+  const r = await page.evaluate(() => {
+    const layerName = id => (state.layers.find(l => l.id === id) || {}).name || '';
+    const out = { layers: state.layers.filter(l => /^PDF 第/.test(l.name)).map(l => l.name), pages: {} };
+    for (const o of state.objects) {
+      const n = layerName(o.layerId);
+      const p = out.pages[n] = out.pages[n] || { min: Infinity, max: -Infinity, texts: [] };
+      if (o.kind === 'line') {
+        p.min = Math.min(p.min, ...o.points.map(q => q[0]));
+        p.max = Math.max(p.max, ...o.points.map(q => q[0]));
+      } else if (o.kind === 'text') p.texts.push({ text: o.text, x: o.x });
+    }
+    return out;
+  });
+  expect(r.layers).toEqual(['PDF 第 1 页', 'PDF 第 2 页', 'PDF 第 3 页']);
+  /* 第 1 页锚定原点，第 2/3 页 = 前页 x + 页宽(米) + 1 m 间距 */
+  const dx2 = 200 * PT_M + 1, dx3 = dx2 + 300 * PT_M + 1;
+  expect(r.pages['PDF 第 1 页'].min).toBeCloseTo(0, 6);
+  expect(r.pages['PDF 第 1 页'].max).toBeCloseTo(190 * PT_M, 6);
+  expect(r.pages['PDF 第 2 页'].min).toBeCloseTo(dx2, 6);
+  expect(r.pages['PDF 第 2 页'].max).toBeCloseTo(dx2 + 160 * PT_M, 6);
+  expect(r.pages['PDF 第 3 页'].min).toBeCloseTo(dx3, 6);
+  expect(r.pages['PDF 第 3 页'].max).toBeCloseTo(dx3 + 150 * PT_M, 6);
+  expect(r.pages['PDF 第 1 页'].texts.map(t => t.text)).toEqual(['P1']);
+  expect(r.pages['PDF 第 1 页'].texts[0].x).toBeCloseTo(50 * PT_M, 6);
+  expect(r.pages['PDF 第 2 页'].texts[0].text).toBe('P2');
+  expect(r.pages['PDF 第 2 页'].texts[0].x).toBeCloseTo(dx2 + 30 * PT_M, 6);
+  expect(r.pages['PDF 第 3 页'].texts[0].text).toBe('P3');
+  expect(r.pages['PDF 第 3 页'].texts[0].x).toBeCloseTo(dx3 + 20 * PT_M, 6);
+  expect(errors).toEqual([]);
+});
+
+test('M1：只选 2-3 页时，所选第一页锚定原点，第 1 页不导入', async ({ page }) => {
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await page.setInputFiles('#fileInput', {
+    name: 'three-pages.pdf', mimeType: 'application/pdf', buffer: threePagePdf()
+  });
+  await page.check('input[name="pdfPageMode"][value="range"]');
+  await page.fill('#pdfPageRange', '2-3');
+  await page.click('#pdfPickImport');
+  await expect(page.locator('#toastWrap')).toContainText(/共 3 页，已导入第 2、3 页/);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(4);
+
+  const r = await page.evaluate(() => ({
+    layers: state.layers.filter(l => /^PDF 第/.test(l.name)).map(l => l.name),
+    texts: state.objects.filter(o => o.kind === 'text').map(o => o.text),
+    lines: state.objects.filter(o => o.kind === 'line').map(o => Math.min(...o.points.map(p => p[0])))
+  }));
+  expect(r.layers).toEqual(['PDF 第 2 页', 'PDF 第 3 页']);
+  expect(r.texts).toEqual(['P2', 'P3']);
+  expect(r.lines[0]).toBeCloseTo(0, 6);
+  expect(r.lines[1]).toBeCloseTo(300 * PT_M + 1, 6);
+});
+
+test('M1：非法页范围即时提示且导入按钮禁用，取消则整份不导入', async ({ page }) => {
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await page.setInputFiles('#fileInput', {
+    name: 'three-pages.pdf', mimeType: 'application/pdf', buffer: threePagePdf()
+  });
+  await page.check('input[name="pdfPageMode"][value="range"]');
+  await page.fill('#pdfPageRange', '9-2');
+  await expect(page.locator('#pdfPickSummary')).toContainText('页码必须在 1–3 内');
+  await expect(page.locator('#pdfPickImport')).toBeDisabled();
+  await page.fill('#pdfPageRange', '');
+  await expect(page.locator('#pdfPickSummary')).toContainText('请输入页范围');
+  await expect(page.locator('#pdfPickImport')).toBeDisabled();
+  await page.fill('#pdfPageRange', '1-3');
+  await expect(page.locator('#pdfPickImport')).toBeEnabled();
+  await page.locator('#modalFooter button', { hasText: '取消' }).click();
+  await expect(page.locator('#modalBackdrop.show')).toHaveCount(0);
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+});
+
 test('B-13：单页 PDF 保持旧行为（原点归零、无多页提示）', async ({ page }) => {
   await page.goto('/index.html');
   await expect(page.locator('#canvas')).toBeVisible();
   await page.setInputFiles('#fileInput', {
     name: 'one-page.pdf', mimeType: 'application/pdf', buffer: singlePagePdf()
   });
+  /* 单页 PDF 不进入预检：入口与旧版完全一致 */
+  await expect(page.locator('#modalBackdrop.show')).toHaveCount(0);
   await expect(page.locator('#toastWrap')).toContainText(/PDF 已导入：1 线/);
   await expect(page.locator('#toastWrap')).not.toContainText('独立原点');
   await expect(page.locator('#toastWrap')).not.toContainText('已导入第 1 页');
