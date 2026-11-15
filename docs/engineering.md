@@ -159,7 +159,7 @@ vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件�
 | 7 | 插件 API 面 | 总是 | `check-plugin-api.mjs`：`PlotPin` 顶层键 ↔ 契约双向一致 |
 | 8 | 删除账本 | 总是 | `check-deletions.mjs`：`docs/deletions.md` 字段齐全、能抓假删除 |
 | 9.1 | 状态写入口 | 总是 | `state = ...` 只允许出现在 `model.js` 的 `let state` 声明与 `persistence.js` 的 `replaceState()` 内；`scripts/**` 仅放行显式夹具 |
-| 9.2 | 跨层耦合计数 | 总是 | `contracts/coupling.json` 按“文件+符号+次数”严格相等；`core → features` 25 条、`common → core` 3 条，只减不增 |
+| 9.2 | 跨层耦合计数 | 总是 | `contracts/coupling.json` 按“文件+符号+次数”严格相等；`core → features` 21 条、`common → core` 3 条，只减不增 |
 | 9.3 | 钩子配对 | 总是 | `callHook ↔ registerHook` 一一配对；6 个 `REQUIRED_HOOKS` 必须同时有提供方与调用点；重复/非函数注册也算违约 |
 | 9.4 | 软调用登记 | 总是 | `typeof X==='function'` 形式必须按 `required / host / optional / param` 分类登记；当前 13 条（5/2/5/1），次数严格相等、只减不增 |
 | 10 | 逻辑层自测 | 仅 `--selftest` | 执行 `scripts/selftest.mjs`，退出码纳入门禁 |
@@ -309,10 +309,10 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 
 | 字段 | 当前基线（2026-11-13） | 规则 |
 |---|---|---|
-| `coreToFeatures` | 25 条 | 实际计数必须与登记**严格相等**；只允许删除或下调次数，不允许新增/上调 |
+| `coreToFeatures` | 21 条 | 实际计数必须与登记**严格相等**；只允许删除或下调次数，不允许新增/上调 |
 | `commonToCore` | 3 条 | 已知违规（`merge.js` 读设置键、`qr.js` 取 vendor），同样只减不增 |
 | `softCalls` | 13 条 | 按 `required(5) / host(2) / optional(5) / param(1)` 分类；新增必须带理由 |
-| 必需钩子 | 11 个提供方 / 11 个调用点 / 6 个必需 | 定义在 `js/core/config.js` 的 `REQUIRED_HOOKS`；9.3 校验提供方与调用点各 11、必需项 6 |
+| 必需钩子 | 13 个提供方 / 13 个调用点 / 8 个必需 | 定义在 `js/core/config.js` 的 `REQUIRED_HOOKS`；9.3 校验提供方与调用点各 13、必需项 8 |
 
 **为什么不用行号**：行号随注释、空行、格式化漂移，会导致基线频繁失效并被“顺手放宽”；次数只在真实增删调用时变化。**审计报告里的软调用表行号已漂移，不要沿用**；要定位实现，按 `coupling.json` 的文件+符号在代码里搜。
 

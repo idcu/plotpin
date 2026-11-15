@@ -92,11 +92,13 @@ test('F3：连续 10 次撤销，异步收尾只执行最后一轮，最终状�
   for (let i = 0; i < 10; i++) await drawPoint(page, i * 8 - 36, (i % 3) * 6);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(10);
 
-  /* 人为放慢照片收尾，制造 10 轮收尾互相取代的窗口；统计「收尾执行次数」 */
+  /* 人为放慢照片收尾，制造 10 轮收尾互相取代的窗口；统计「收尾执行次数」。
+     C-01 起 core 不再直调 refreshUI，而是走必需钩子 ui.refresh：探针要包钩子注册的实现，
+     包 window.refreshUI 已经拦不到 core 的调用（断言本身不变，仍是只收尾 1 次）。 */
   await page.evaluate(() => {
     window.__tail = 0;
-    const rf = window.refreshUI;
-    window.refreshUI = function () { window.__tail++; return rf.apply(this, arguments); };
+    const rf = HOOKS.get('ui.refresh') || window.refreshUI;
+    HOOKS.set('ui.refresh', function () { window.__tail++; return rf.apply(this, arguments); });
     const eo = window.ensureObjectPhotoAssets;
     window.ensureObjectPhotoAssets = async function (s) {
       await new Promise(r => setTimeout(r, 120));

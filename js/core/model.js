@@ -491,6 +491,19 @@ function createSiteSlot(shape){
 }
 /** 图片底图判定：只有 kind==='image' 的槽才承载栅格 */
 function isImageBackground(bg){ return !!(bg && bg.kind==='image'); }
+/** 应用矢量场地：只更新独立 site 槽，保留图片底图、场地元数据（id/name/layer/visible/locked/annot/style）。
+ *  C-01：从 features/io-import.js 下沉——它只做状态槽写入 + 历史提交 + 取景/工具切换，依赖全是 core，
+ *  原先放在 features 使 core 的落笔（interaction.js 六种场地拖拽）反向依赖导入模块。 */
+function applyVectorSite(kind,shape){
+  pushHistory();
+  const site=state.site||createSiteSlot(shape);
+  site.kind=shape.type||kind;
+  site.shape=deepClone(shape);
+  site.updatedAt=nowISO();
+  if(!state.site) state.site=site;
+  selectedIds.clear();
+  fitView(); commitChange(L('已设置为{name}',{name:L(siteKindName(kind))})); setTool('select');
+}
 /** 场地形状（兼容旧 background 对象） */
 function siteShapeOf(site){ return (site && site.shape) || defaultSiteShape(); }
 /** 场地所属图层（缺失时返回始终可见/未锁定的占位层，避免旧工程无图层字段时报错） */

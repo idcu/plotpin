@@ -755,3 +755,5 @@ function rotateSelected(delta){
   });
   commitChange('已旋转选中对象', objs.map(o=>o.id));
 }
+/* core 在切层、载入工程后需要重绘属性面板：走必需钩子，未注册时启动断言直接失败 */
+registerHook('ui.renderProps', renderProps);

@@ -41,7 +41,7 @@ node scripts/check-discipline.mjs --strict
 | 体积上限与预警线 | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES\|GZIP_\|MARGIN_'` | `scripts/lib/budget.mjs` 常量 | **唯一来源**；`dist-manifest.json` 的 `maxBytes` 必须与它一致（`build.mjs --check` 守这条） |
 | Service Worker 版本 | `node scripts/check-sw.mjs` | `sw.js` 的 `VERSION` + `scripts/sw-inputs.sha256` | 预缓存输入变了而版本没升，此命令必红 |
 | 契约违约数 | `node scripts/check-contracts.mjs` | `contracts/conventions.json` | 看「N 项核对」与「0 违约」，N 不能是 0（空跑曾是假绿） |
-| 耦合 / 钩子基线 | `node scripts/check.mjs`（9.2～9.4） | `contracts/coupling.json` + `REQUIRED_HOOKS` | 计数必须**严格相等**：`core→features` 25、`common→core` 3、软调用 13、必需钩子 11 提供方 / 11 调用点 / 6 必需；只减不增，新增即红 |
+| 耦合 / 钩子基线 | `node scripts/check.mjs`（9.2～9.4） | `contracts/coupling.json` + `REQUIRED_HOOKS` | 计数必须**严格相等**：`core→features` 21、`common→core` 3、软调用 13、必需钩子 13 提供方 / 13 调用点 / 8 必需；只减不增，新增即红 |
 | 状态写入口 | `node scripts/check.mjs`（9.1） | `state = ...` 扫描 | 只允许 `model.js` 声明与 `persistence.js` 的 `replaceState()`；绕过入口即红 |
 | 插件 API 面 | `node scripts/check-plugin-api.mjs` | `contracts/plugin-api.json` ↔ `PlotPin` 顶层键 | 泄漏数、落空数都必须为 0 |
 | 第三方依赖锁 | `node scripts/check-ngm.mjs` | `ngm.vendor/**` 实际字节 + `ngm.lock` | 改过 vendor 或重新 lock 后必跑 |

@@ -130,7 +130,7 @@ function ensureVendor(name){
 const HOOKS=new Map();
 const REQUIRED_HOOKS=Object.freeze([
   'collab.onLocalChange','collab.broadcastFloor','collab.pendingCandidates','collab.pendingStorageKeys',
-  'ui.staleWriteBanner','ui.toast'
+  'ui.refresh','ui.renderProps','ui.staleWriteBanner','ui.toast'
 ]);
 /** 注册提供方；重复注册直接抛错（静默覆盖会让"谁提供了什么"失去意义） */
 function registerHook(id,fn){

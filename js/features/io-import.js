@@ -767,17 +767,7 @@ function ellipseShapeFromInput(text){
   if(m.length<2||!(m[0]>0)||!(m[1]>0)) return null;
   return {type:ELL,cx:0,cy:0,rx:m[0],ry:m[1],angle:0};
 }
-/** 应用矢量场地：只更新独立 site 槽，保留图片底图、场地元数据（id/name/layer/visible/locked/annot/style） */
-function applyVectorSite(kind,shape){
-  pushHistory();
-  const site=state.site||createSiteSlot(shape);
-  site.kind=shape.type||kind;
-  site.shape=deepClone(shape);
-  site.updatedAt=nowISO();
-  if(!state.site) state.site=site;
-  selectedIds.clear();
-  fitView(); commitChange(L('已设置为{name}',{name:L(siteKindName(kind))})); setTool('select');
-}
+/* applyVectorSite 已下沉到 core/model.js（C-01）：它是站点槽的状态写入，core 的拖拽落笔不应依赖导入模块 */
 
 /* -------------------- 底图导入：字节入资产库 + 大图自动降采样 -------------------- */
 /** 底图降采样策略（纯函数）：最长边一律限制在 BG_MAX_EDGE，避免大尺寸图片解码后占用巨量内存。

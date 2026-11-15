@@ -664,3 +664,6 @@ function refreshUI(){
   updateHistoryButtons();
   refreshCalibStatus();
 }
+/* core 的三处刷新（切工具 / 取消拖拽 / Esc 中断）只认这个钩子：未注册时启动断言直接失败，
+   而不是让 callHook 静默变成 no-op —— 刷新是同步复合动作，不能改成异步或延迟。 */
+registerHook('ui.refresh', refreshUI);

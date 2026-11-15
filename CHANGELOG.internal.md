@@ -4,6 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-15 · C-01 跨层耦合收口：S1 暴露的 4 条 core→features 反向调用清零
+
+- **Commit Hash**：`待回填`
+- **核心问题**：S1 修好扫描器后暴露 4 条 core 反向依赖 features 的既有真实调用（`interaction.js` 的 `applyVectorSite` ×6、`refreshUI` ×3；`persistence.js` 的 `refreshUI` ×6、`renderProps` ×2），当时只登记为已知违规，理由是 callHook 会动载入热路径与交互刷新链、等价性无法在 S1 证明。本轮逐条收口。
+- **逐条结论**：
+  - `interaction.js:applyVectorSite` ×6 → **移动，不走钩子**。它只写 `state.site` 槽 + `pushHistory` + `commitChange` + `fitView`/`setTool`，依赖全在 core；放在 features 使 core 的落笔反向依赖导入模块。下沉到 `core/model.js`（紧邻 `createSiteSlot`），features 侧的导入路径照旧调用，方向变成 features→core，合法。core 自己的状态迁移不应绕道钩子。
+  - `interaction.js:refreshUI` ×3（切工具 / 取消拖拽 / Esc 中断）→ **必需钩子 `ui.refresh`**。三处都是「改完工具或瞬态后立刻刷新面板」，必须同步；`callHook` 是同步直调，时序不变。core 不可能自带默认 UI 实现，因此登记进 `REQUIRED_HOOKS`，缺失即启动断言失败，而不是静默 no-op。
+  - `persistence.js:refreshUI` ×6（`commitChange` 的 `ui==='full'` 分支、重命名/删除工程、切层、`replaceState` 收尾、载入热路径）→ **同一个 `ui.refresh` 钩子**。载入热路径（`afterStateLoaded`）保留同步调用，**没有改成异步/延迟**——钩子本身是同步函数调用，只是把实现从 features 解耦；若改成异步会改变「载入完成时面板已就绪」的时序，明确不做。
+  - `persistence.js:renderProps` ×2（切楼层、`replaceState` 后）→ **必需钩子 `ui.renderProps`**。单独成钩子而不复用 `ui.refresh`：这两处只要求属性面板重绘，`refreshUI` 会连带清单/图层/统计/历史按钮，扩大刷新面即改变行为。
+- **等价性与负向样本**：
+  - 未注册时不是静默降级：`REQUIRED_HOOKS` 现为 8 项，`assertHooksReady()` 在 `init()` 首行校验；实测把 `registerHook('ui.refresh', refreshUI)` 注释掉后，9.3 同时报「必需钩子未注册」与「钩子无提供方」，selftest 运行时抛 `必需钩子未注册：ui.refresh`，SW 门禁因预缓存输入变化也红；恢复后全绿。
+  - selftest 新增分区「C-01 层间依赖钩子」，14 条断言含负向样本（拔掉 `ui.refresh` 后 `missingRequiredHooks()` 点名、`assertHooksReady()` 抛错且消息含钩子名、复原后清零），并断言 `setTool` 经钩子正好刷新 1 次、下沉后的 `applyVectorSite` 写入槽/清选择/切回选择工具。
+  - e2e `history.spec.mjs` F3 的探针原先把 `window.refreshUI` 打补丁来数收尾次数；core 改走钩子后该探针拦不到，改为包 `HOOKS.get('ui.refresh')`，**断言值不变（tail===1）**，只是把探针移到新的接缝上。
+- **门禁读数**：`core→features` 25 条 / 106 次 → **21 条 / 89 次**（`common→core` 仍 3 条、软调用仍 13 条）；依赖钩子 11 提供方 / 11 调用点 / 6 必需 → **13 / 13 / 8**；selftest 4,542 → **4,556 通过 / 0 失败（175 个分区）**；`check.mjs` 13 步与门禁牙齿 10/10 + 20/20 全绿（第 17 项「必需钩子缺少提供方」仍红）。
+- **体积**：dist raw 838,216 → **838,451 B（+235 B）**；gzip 273,876 → **273,944 B（+68 B）**；余量 **1,229 B**（gzip 12,776 B）。增幅来自 `callHook('ui.refresh')` 比 `refreshUI()` 长的字符串与注释，函数下沉本身净零。
+- **验证**：`npm run ci` 全绿；双入口 e2e：源码 **182 passed / 0 failed / 1 skipped**（3.9m），dist **179 passed / 0 failed / 4 skipped**（3.5m）。
+- **遗留**：余量已到 1,229 B，任何功能改动前必须先回收；D2（save/restore）仍未动。
+
 ## 2026-11-15 · 标签 LOD（对象屏幕尺寸 + 点符号密度，仅交互帧）
 
 - **Commit Hash**：`待回填`

@@ -54,10 +54,10 @@ vendor（10）
 
 | 项 | 数量 | 说明 |
 |---|---|---|
-| `core → features` 引用 | 25 条（文件+符号，合计 106 次） | 历史反向调用，不能新增，只能逐条下调 |
+| `core → features` 引用 | 21 条（文件+符号，合计 89 次） | 历史反向调用，不能新增，只能逐条下调 |
 | `common → core` 引用 | 3 条 | `merge.js` 读 `SETTINGS_KEYS` / `TITLE_BLOCK_FIELDS`，`qr.js` 调 `ensureVendor`；已知违规 |
 | 软调用 | 13 条 | `required 5 / host 2 / optional 5 / param 1` |
-| 必需钩子 | 11 个提供方 / 11 个调用点 / 6 个必需 | 启动首行 `assertHooksReady()` 校验 |
+| 必需钩子 | 13 个提供方 / 13 个调用点 / 8 个必需 | 启动首行 `assertHooksReady()` 校验 |
 
 **为什么用次数而不是行号**：行号会随注释、空行、格式化漂移，基线一改就全员重录，最后只能不断放宽；`文件+符号+次数` 只在你真的新增/删除一处跨层调用时变化，能稳定回答“这次有没有加重耦合”。**不要引用审计报告里的旧行号**，以代码和 `contracts/coupling.json` 为准。
 

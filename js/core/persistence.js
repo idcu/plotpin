@@ -236,7 +236,7 @@ function markDirty(kind, ids){
   if(!patched) invalidateStatic();     /* 静态层（非选中对象）需要重建 */
   scheduleSave();
   requestRender();
-  if(p.ui==='full') refreshUI();
+  if(p.ui==='full') callHook('ui.refresh');
   else if(p.ui==='lists'){
     /* R-09：逐键编辑的对象表/统计重绘合并为一次，避免 5k 行表格阻塞输入 */
     if(kind==='objectEdit'&&typeof scheduleListsRefresh==='function') scheduleListsRefresh();
@@ -532,7 +532,7 @@ async function renameProjectById(id,name){
   raw.meta=raw.meta||{}; raw.meta.name=String(name||L('未命名工程')).trim().slice(0,80)||L('未命名工程');
   raw.meta.updatedAt=nowISO();
   await idbPutKey(projectKey(id),raw);
-  if(state.meta?.projectId===id){ state.meta.name=raw.meta.name; refreshUI(); scheduleSave(); }
+  if(state.meta?.projectId===id){ state.meta.name=raw.meta.name; callHook('ui.refresh'); scheduleSave(); }
 }
 async function duplicateProjectById(id){
   const raw=await idbGetKey(projectKey(id));
@@ -551,7 +551,7 @@ async function deleteProjectById(id){
   callHook('comments.removeOwner',id);
   /* 工程删除后其快照链不再有归属：一并清理（snapshot.js 定义，独立命名空间，不影响其它工程） */
   await deleteSnapshotsForProject(id);
-  if(state.meta?.projectId===id){ state.meta.projectId=''; refreshUI(); scheduleSave(); }
+  if(state.meta?.projectId===id){ state.meta.projectId=''; callHook('ui.refresh'); scheduleSave(); }
   await pruneBgAssets();
 }
 
@@ -773,7 +773,7 @@ async function switchFloor(id, silent){
   if(!switchFloorData(id)) return false;
   if(!silent) touchProjectUpdated();
   await afterStateLoaded(false);
-  fitView(); requestRender(); renderProps();
+  fitView(); requestRender(); callHook('ui.renderProps');
   scheduleSave();                  /* 切换也是一次状态变更：刷新后回到上次活动楼层（审计 P0-4 补口） */
   return true;
 }
@@ -798,7 +798,7 @@ async function withFloor(id, fn){
       state.viewport=prevViewport;
       selectedIds.clear(); prevSelection.forEach(x=>selectedIds.add(x));
       invalidateStatic(); resetFrameRef();
-      renderProps(); refreshUI(); requestRender();
+      callHook('ui.renderProps'); callHook('ui.refresh'); requestRender();
     }
   }
 }
@@ -1397,7 +1397,7 @@ async function mergeProjectJSON(raw,opts={}){
   selectedIds.clear(); draft=null;
   await replaceState(buildProject(project),{fit:false});
   scheduleSave();
-  refreshUI(); requestRender();
+  callHook('ui.refresh'); requestRender();
   return stats;
 }
 /** 图片槽清洗：只接受 kind:'image'；其余一律空槽（矢量数据由 site 承载） */
@@ -1760,7 +1760,7 @@ async function afterStateLoaded(fit=true,opts={}){
     await ensureFloorBackgroundAssets(state); /* 非当前楼层的底图 dataUrl 同样转存资产库 */
     if(seq!==bgLoadSeq) return;
     if(oversizePhotos) toast(oversizePhotos+' 张设备照片超过单张 16MB 上限，不会写入工程保存，仅当前会话可见','warn');
-    /* 旧版底图资产 */refreshUI();
+    /* 旧版底图资产；载入热路径同样同步刷新（钩子是同步调用，不改变时序） */callHook('ui.refresh');
     if(fit) fitView();
     requestRender();
     const bg=state.background;

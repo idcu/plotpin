@@ -161,7 +161,7 @@ code += `\n;globalThis.__api = {
   normalizeFloorName, floorNameTaken, floorRefs, addFloor, renameFloor,
   get coverageResult(){ return coverageResult; }, set coverageResult(v){ coverageResult=v; },
   get collabOnLocalChange(){ return collabOnLocalChange; }, set collabOnLocalChange(fn){ collabOnLocalChange=fn; },
-  HOOKS,
+  HOOKS, REQUIRED_HOOKS, missingRequiredHooks, assertHooksReady, hookReady,
   collabPendingCandidates, collabTokenOfProject, collabPendingKeyFor,
   esc, segLabelMinPx, APP_LIMITS, backgroundScalePlan, prepareBackgroundBytes,
   createTitleBlock, normalizeTitleBlock, TITLE_BLOCK_FIELDS, TITLE_BLOCK_TEXT_MAX,
@@ -11416,6 +11416,46 @@ await section("V-5 参照版：标定判定/三类差异/清除无痕", async ()
   sandbox.toast=origToast2;
   eq('V-5 空参照不进入运行时', api.rRef, null);
   eq('V-5 空参照给出 warn', msgs[0]&&msgs[0].k, 'warn');
+  api.resetState();
+}
+});
+
+/* ---------------- C-01 层间依赖钩子：必需装配缺失必须可见（负向样本） ---------------- */
+await section("C-01 层间依赖钩子：必需装配缺失必须可见", async () => {
+{
+  ok('C-01 必需钩子含 ui.refresh', api.REQUIRED_HOOKS.includes('ui.refresh'));
+  ok('C-01 必需钩子含 ui.renderProps', api.REQUIRED_HOOKS.includes('ui.renderProps'));
+  eq('C-01 装配完整时无缺失', api.missingRequiredHooks().join(','), '');
+  ok('C-01 启动断言通过', api.assertHooksReady() === true);
+  ok('C-01 ui.refresh 已注册', api.hookReady('ui.refresh'));
+  ok('C-01 ui.renderProps 已注册', api.hookReady('ui.renderProps'));
+
+  /* 负向样本：拿掉提供方，启动断言必须抛错，而不是让 callHook 静默变成 no-op */
+  const savedRefresh = api.HOOKS.get('ui.refresh');
+  api.HOOKS.delete('ui.refresh');
+  eq('C-01 缺失清单点名 ui.refresh', api.missingRequiredHooks().join(','), 'ui.refresh');
+  let thrown = null;
+  try { api.assertHooksReady(); } catch (e) { thrown = e; }
+  ok('C-01 缺提供方时启动断言抛错', !!thrown);
+  ok('C-01 抛错信息点名钩子', /ui\.refresh/.test(String((thrown && thrown.message) || '')));
+  api.HOOKS.set('ui.refresh', savedRefresh);
+  eq('C-01 复原后无缺失', api.missingRequiredHooks().join(','), '');
+
+  /* 直调等价性：core 的切工具路径必须真的触发一次刷新 */
+  api.resetState();
+  let refreshes = 0;
+  const realRefresh = api.HOOKS.get('ui.refresh');
+  api.HOOKS.set('ui.refresh', () => { refreshes++; });
+  sandbox.setTool('select');
+  eq('C-01 setTool 经钩子刷新一次', refreshes, 1);
+  api.HOOKS.set('ui.refresh', realRefresh);
+
+  /* applyVectorSite 已下沉 core：槽写入 + 清选择 + 切回选择工具，全程无 DOM 依赖 */
+  api.resetState();
+  sandbox.applyVectorSite('circle', { type:'circle', cx:0, cy:0, r:5 });
+  eq('C-01 下沉后写入 site 槽', api.state.site && api.state.site.kind, 'circle');
+  eq('C-01 下沉后半径入槽', api.state.site.shape.r, 5);
+  eq('C-01 下沉后清空选择', api.selectedIds.size, 0);
   api.resetState();
 }
 });

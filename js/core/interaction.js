@@ -50,7 +50,7 @@ function setTool(tool){
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   syncToolButtons(tool);
   updateToolTitle();
-  refreshUI();
+  callHook('ui.refresh');
   requestRender();
 }
 let lastCanvasHandledAt=0, lastCanvasPointerUpAt=0;
@@ -729,7 +729,7 @@ function cancelActiveDrag(){
     if(d.moved) calibUndo(); else calibUndoStack.pop();
     requestRender(); return true;
   }else return true;
-  if(changed) commitChange(undefined, dragChangedIds(d)); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+  if(changed) commitChange(undefined, dragChangedIds(d)); else { updateHistoryButtons(); callHook('ui.refresh'); requestRender(); }
   return true;
 }
 canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(...pointerScreen(e),e.deltaY<0?1.15:1/1.15); },{passive:false});
@@ -1208,7 +1208,7 @@ function cycleKeyboardRegion(){
 function escapeInterrupt(){
   if(cancelActiveDrag()) return 'drag';
   resetTransientInteractionState({keepCoverage:true});
-  selectedIds.clear(); setTool('select'); refreshUI(); return 'reset';
+  selectedIds.clear(); setTool('select'); callHook('ui.refresh'); return 'reset';
 }
 /* CORE-P2-9：窗口失焦只结束进行中的交互，保留校准点、参考线与覆盖率叠加 */
 function handleWindowBlur(){
