@@ -17,9 +17,10 @@ test('D-03 帮助中心三页签与焦点回归', async ({ page }) => {
   await page.locator('.help-tab[data-help-tab="glossary"]').click();
   await expect(page.locator('.help-tab.active')).toHaveText('概念词典');
   await expect(page.locator('.help-tab[data-help-tab="glossary"]')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('.help-panel:not([hidden]) .help-term')).toHaveCount(6);
+  await expect(page.locator('.help-panel:not([hidden]) .help-term')).toHaveCount(7);
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('图片底图');
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('覆盖率口径');
+  await expect(page.locator('.help-panel:not([hidden])')).toContainText('低缩放标签');
 
   await page.locator('.help-tab[data-help-tab="exports"]').click();
   await expect(page.locator('.help-tab.active')).toHaveText('导出检查清单');
