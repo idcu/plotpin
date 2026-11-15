@@ -18,7 +18,7 @@
 
 | 指标 | 2026-11-15 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 4,499 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条、ARC S1 新增 20 条、ARC S2 新增 22 条、ARC S3 新增 13 条、ARC S4 新增 45 条、ARC S5 新增 29 条、ARC S6 新增 23 条均挂在新增分区；帮助中心导出清单随产品加条目由 8 改 9（新增 1 条断言）；多页 PDF 的页范围/落位/容量新增 M1 断言 19 条 |
+| selftest 断言 | 4,542 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；G7 新增 16 条、ICE-1 新增 30 条、ICE-2 新增 14 条、ARC S1 新增 20 条、ARC S2 新增 22 条、ARC S3 新增 13 条、ARC S4 新增 45 条、ARC S5 新增 29 条、ARC S6 新增 23 条均挂在新增分区；帮助中心导出清单随产品加条目由 8 改 9（新增 1 条断言）；多页 PDF 的页范围/落位/容量新增 M1 断言 19 条；冲突可见性 S1 覆盖报告新增 26 条、S2 内容基线新增 18 条（S1 内 1 条改为无基线口径） |
 | selftest 分区 | 174 个 | `node scripts/selftest.mjs --list` | 输出 175 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
 | e2e spec 文件 | 48 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 49 个 `.mjs`（48 spec + 1 helper） |

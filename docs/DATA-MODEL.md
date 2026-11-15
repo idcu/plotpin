@@ -189,7 +189,7 @@ state = {
 
 ## 9. 合并（离线与协作共用）
 
-`mergeProjectData(currentRaw, incomingRaw)` 是纯函数，返回 `{project, stats, config}`；无 DOM、无 IO。
+`mergeProjectData(currentRaw, incomingRaw, base?)` 是纯函数，返回 `{project, stats, config, overwrites}`；无 DOM、无 IO。
 
 ### 9.1 对象
 
@@ -222,7 +222,15 @@ state = {
 - 界面通过 `mergeConfigText(stats)` 显示“配置未采纳 N 项 / 配置已补缺 N 项”；协作状态栏、冲突提示、手动合并 toast 共用同一拼装。
 - 明确边界：报告只增加可见性，**不代表远端配置已经生效**。
 
-### 9.5 时间戳与限额
+### 9.5 覆盖报告与会话基线
+
+- `overwrites` 只读报告，不参与 `pick`：`local` = 本端被覆盖（有损失），`remote` = 本端胜出、对端版本未采纳（本端无损失）。
+- 明细 `items`：`{scope:'object'|'site'|'floor', dir, kind:'update'|'delete', floorId, id, name, loserSig, winnerSig, known, both, snapshot?}`，最多 200 条；`truncated` 记超出条数。
+- `nextBase` 是下一轮基线：键 `o:<floorId>:<id>` / `s:<floorId>`，值为内容签名（不含 `updatedAt`/`z`）。**只有本轮收敛才推进**；本端胜出时保持旧基线，避免下次真丢改动被当成“已同步”。
+- 无基线（`known=false`）时只记“本端被覆盖”，且仅在远端时间严格更新时才宣称损失；同刻平局与对端未采纳条目不记，防止刷新后刷屏。
+- 账本存储是界面层职责：`plotpin.collab.conflicts.v1.<projectId>`，20 批次 / 200 条 / 64 KB / 7 天；对象快照只存 `dir='local'` 的非整层条目。恢复不手删墓碑，只写严格更新的对象时间。
+
+### 9.6 时间戳与限额
 
 - 入站 `updatedAt/deletedAt` 无法解析或晚于本机 `now + 5s` 视为异常，置空（LWW 必输给本地），返回 `clockClamped` 计数。
 - 合并前后都跑 `assertProjectWithinLimits()`：两侧各自未超限，并集仍可能超限。
