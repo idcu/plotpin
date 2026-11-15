@@ -10,8 +10,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **175 个分区 / 4,556 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **48 个 spec / 183 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地双入口 2026-11-15 收口：源码 **182 passed / 0 failed / 1 skipped**（4.1m），dist **179 passed / 0 failed / 4 skipped**（3.6m），exit 0；见 §3 |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **175 个分区 / 4,558 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **49 个 spec / 188 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地双入口 2026-11-15 收口：源码 **187 passed / 0 failed / 1 skipped**（4.3m），dist **184 passed / 0 failed / 4 skipped**（3.9m），exit 0；见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
@@ -66,7 +66,7 @@
 - 全局预置 `firstRunSeenStorage`（跳过首次引导），需要引导的用例自行覆盖存储。
 - `tests/e2e/helpers/scenes.mjs` 统一构造测试场景，禁止各 spec 各写一份状态样本。
 - 2 个条件跳过：协作 soak 用例需 `COLLAB_SOAK=1` 才执行，默认 skip（计入“skipped”，不算失败）；已按开关单独跑过（1 passed / 5.1m）。`pdf-text-layer.spec` 的提取对比需 `pdftotext`（poppler），缺这个二进制时条件跳过——**该 `test.skip` 的唯一用途是兜住没装 poppler 的机器**，避免把“环境缺二进制”误报成产品失败；本机已装 poppler，跳过分支实际不走。CI 的 e2e job 在跑 spec 之前显式 `apt-get install poppler-utils`（装不上就让 job 直接红），因此远端这条用例是真跑而不是跳过。dist 入口共 5 条 skip：上述 2 条 + `sw.spec` 1 条 + `sw-atomic.spec` 2 条（单文件发行版无 SW 预缓存输入）。
-- **三条跑法，全量 48 个 spec**：
+- **三条跑法，全量 49 个 spec**：
   - 源码入口：`node scripts/e2e.mjs`（webServer 直接服务仓库根，`http://127.0.0.1:4173/index.html`）。
   - dist 入口：`E2E_PORT=4174 E2E_ENTRY=dist node scripts/e2e.mjs`。`serve.mjs` 在该模式下把 `/` 与 `/index.html` 映射到 `dist/plotpin-standalone.html`（其余路径仍按仓库解析，残留外链会 404 暴露）；`E2E_PORT` 同时决定 Playwright `baseURL` 与静态服务器端口，避免复用 4173 上的源码服务器。
   - `file://` 入口：`file-dist.spec` 不经过 webServer，直接 `page.goto(file:///…/dist/plotpin-standalone.html)`，覆盖导入图片/PDF 底图、比例预设、新增点位与画区域、导出 PDF 与 CSV 清单；它同时出现在上面两套里（与入口无关），不额外增加门禁命令。
@@ -94,7 +94,7 @@
 |---|---|
 | 冒烟/基础交互/加载 | smoke(4)、interaction(3)、load-audit(6)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(7)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
-| 协作 | collab(16)（含 1 个 soak 条件跳过） |
+| 协作 | collab(18)（含 1 个 soak 条件跳过） |
 | 导出与图面 | pdf-multipage(10)、pdf-dpi(1)、pdf-vector-option(1)、pdf-text-layer(2：V-6 图纸页 + V-6b 清单页，均含删 ToUnicode 负向)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(3)、publish-state(2) |
 | 符号与目录 | symbols(3)、catalog(2) |
 | 批量与表格 | batch-annot(3)、batch-layout(2)、table-batch(4) |
@@ -107,9 +107,10 @@
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
 | 界面加固 | ui-hardening(4)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
+| 本地批注 | comments(5)（新增即时渲染与独立本地键、编辑 Esc 取消/确认更新、删除二次确认、只读禁用、锚点对象删除后保留并标注） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **181** 个用例、**48** 个 spec（装 poppler 的环境：源码入口 180 跑 + 1 条件跳过，dist 入口 177 跑 + 4 跳过；没装 poppler 时源码入口再多 1 条跳过、dist 入口再多 1 条）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **188** 个用例、**49** 个 spec（装 poppler 的环境：源码入口 187 跑 + 1 条件跳过，dist 入口 184 跑 + 4 跳过；没装 poppler 时源码入口再多 1 条跳过、dist 入口再多 1 条）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 

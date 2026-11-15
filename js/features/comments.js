@@ -69,9 +69,12 @@ function cRender(){
 }
 function cEdit(id){
   const c=cLd().find(x=>x.id===id); if(!c) return;
-  const t=prompt(L('编辑评论'),c.text); if(t==null) return;
-  const r=cUp(id,t); if(!r.ok) return cFail(r.r);
-  cRender();
+  /* 与全站一致的模态输入：Esc/遮罩=取消（null），确认值在关闭前捕获 */
+  showPrompt({title:L('编辑评论'),label:L('评论'),value:c.text}).then(t=>{
+    if(t==null) return;
+    const r=cUp(id,t); if(!r.ok) return cFail(r.r);
+    cRender();
+  });
 }
 $('addCommentBtn').addEventListener('click',()=>{
   const s=Array.from(selectedIds);

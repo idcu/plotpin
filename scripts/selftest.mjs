@@ -2355,6 +2355,11 @@ await section("28.12 P2-A4 加载丢对象计数可见 + 审计 layerId 修正",
   ok('P2-A4 旧 layer 字段不再误报未知图层', !a2.warnings.some(w=>w.includes('未知图层')));
   const a3=api.auditProject(mk({id:'C',kind:'point',layerId:'layer.default'}));
   ok('P2-A4 合法 layerId 不报未知图层', !a3.warnings.some(w=>w.includes('未知图层')));
+  /* 一等类型 arc 必须与内置类型同等对待，否则含圆弧的工程每次载入都会误报 */
+  const a4=api.auditProject(mk({id:'R',kind:'arc',layerId:'layer.default'}));
+  eq('ARC 审计零警告（不报未知类型）', a4.warnings.length, 0);
+  const a5=api.auditProject(mk({id:'U',kind:'blob',layerId:'layer.default'}));
+  ok('负向：未知类型仍被审计告警', a5.warnings.includes('未知类型 1'));
 
   /* B5：非活动楼层审计（第 2 层重复 id + 非法类型；第 3 层未知图层） */
   const mf={schema:'offline-drawing-annotation/v2',layers:[{id:'L1'}],activeFloorId:'F1',

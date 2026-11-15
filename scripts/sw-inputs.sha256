@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=265
+version=266
 3123e72fb5f38b6ccd6f91e485e796f7302725669740dae96f14421933255168  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 dc4056970c30b77da2708144eae1fea43fc262f268684e02d72116d3fa23f806  index.html
@@ -24,14 +24,14 @@ ea9f08d04fc068a51f27e55b408f2f94e8cd3af12a0a81ea0e93ad60142d79e6  js/core/geomet
 4c479ff9269a46f66b1c6e587aeb5e3f2605532987b623ecf70e9fe5f3b79499  js/core/ghost.js
 04c6d716078fc0fdc944598db6d81d734d6daf53b4cb9a51ec5bac6b1748ccf3  js/core/interaction.js
 5cd6d9e0acea14866278f0e5124f06d031cecffc07caeec4c3cc13fd72895131  js/core/model.js
-3f21d4b662407efb6b6178a4f723d9923458b9f697978d77f96ce62e07c82498  js/core/persistence.js
+d3e5e1f23903a9868b0d0ccd753d9cc20d64a769369f07af1d41ee46e2aee55c  js/core/persistence.js
 45933a526f5d6d50d4aca43a65ce134eace6ee2f55d1625c1a92922311232c1d  js/core/render.js
 dd77b4e851ac5a38754a5527c9217b8ba703cd7fef37eba32cf75da71de3020f  js/core/snapshot.js
 e76b082f8bee86c3dc72b57d850a16e34eceb297ccc338459f34af2ba0f2566a  js/core/tab-lease.js
 c4ecfa089e5f0a86cab9704a622f6ea0877985cfbbdda4673e301cfb0f3ed945  js/core/viewport.js
 375ee417d4b6ff072d9eace9e72f601d42e410749b1382bd6ab1af09fa9f3c9f  js/features/catalog.js
 0f2e07f5a8f71fa3123fa34a7d368686dd9c0ae116390070d6af0452b449c71c  js/features/collab.js
-469f8b0d89b067840e099c03347adc7ac0e4ac1f9f404f03835f423c788af377  js/features/comments.js
+121537859883e64e043a20ea8a979ea2c4dbe1c24aa42a10c0b107302a959a0b  js/features/comments.js
 d8e03df689f54b712934d07f2196e6c35a17fb290c2df762d1af1f32f6e8d6b2  js/features/io-export.js
 d1b47f4719da3449f15d9983ba128bb67cd9a93da460ebc7a03f9840c215d501  js/features/io-fields.js
 e5671cc1a49278a9bacac7758f96bc905ac3936467301abd036b74e3f8e413ef  js/features/io-import.js
@@ -55,4 +55,4 @@ a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/git
 95e74909dbe0fa2393303a34a2365ba3020f08d61553a7454f340e19f10139b1  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-5df68d29ee8685f5301ac5d35c128bcedc383feaa8a444801f9edf61ba7f9b32  sw.js
+2c5911c7333fd894442ef81f566f37e954c220a9460b07f9947051b3feed1730  sw.js

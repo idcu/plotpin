@@ -972,7 +972,7 @@ function scheduleSave(){
 }
 /* B5：对象列表审计（顶层与各楼层复用）。label 为空串时输出与旧版逐字一致。
    st.n 为全局检查总量，超上限即停止并标记，避免超大工程在载入路径上卡死。 */
-const AUDIT_KINDS=['point','rect','line','text','dimension'];
+const AUDIT_KINDS=['point','rect','line','text','dimension','arc'];
 const AUDIT_MAX_OBJECTS=50000;
 function auditObjectList(list,label,ids,layerIds,st,warnings){
   let dup=0,badKind=0,badLayer=0;

@@ -348,13 +348,18 @@ for (const [listName, fromLayer, toLayer, label] of [
 /* 9.3 必需依赖注册表：callHook ↔ registerHook 一一配对，REQUIRED_HOOKS 必须全部注册。
    软调用只留给真正的可选特性；必需依赖靠这张表变成可检查的显式引用。 */
 const hookCalls = new Set();
+const hookCallSites = new Map();
 const hookRegs = new Map();
 /* 钩子 id 本身是字符串字面量：必须用保留字符串模式扫描，9.2 的 jsSrc 会把 id 清成 ''。 */
 const jsSrcKeepStrings = jsFiles.map(f => [jsRel(f), stripJsForScan(readFileSync(f, 'utf8'), true)]);
 for (const [, text] of jsSrcKeepStrings) {
-  for (const m of text.matchAll(/\bcallHook\(\s*['"]([\w.:-]+)['"]/g)) hookCalls.add(m[1]);
+  for (const m of text.matchAll(/\bcallHook\(\s*['"]([\w.:-]+)['"]/g)) {
+    hookCalls.add(m[1]);
+    hookCallSites.set(m[1], (hookCallSites.get(m[1]) || 0) + 1);
+  }
   for (const m of text.matchAll(/\bregisterHook\(\s*['"]([\w.:-]+)['"]/g)) hookRegs.set(m[1], (hookRegs.get(m[1]) || 0) + 1);
 }
+const hookCallTotal = [...hookCallSites.values()].reduce((a, b) => a + b, 0);
 const cfgSrc = (jsSrcKeepStrings.find(([rel]) => rel === 'js/core/config.js') || [])[1] || '';
 const reqMatch = cfgSrc.match(/REQUIRED_HOOKS\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\)/);
 const requiredHooks = reqMatch
@@ -371,7 +376,7 @@ for (const [id, n] of hookRegs) {
   if (!hookCalls.has(id) && !requiredHooks.includes(id)) errors.push(`钩子无使用方：registerHook('${id}') 没有任何 callHook`);
 }
 if (hookCalls.size || hookRegs.size) {
-  console.log(`  [门禁] 依赖钩子：${hookRegs.size} 个提供方 / ${hookCalls.size} 个调用点 / ${requiredHooks.length} 个必需`);
+  console.log(`  [门禁] 依赖钩子：${hookRegs.size} 个提供方 / ${hookCalls.size} 个被调钩子 / ${hookCallTotal} 处调用 / ${requiredHooks.length} 个必需`);
 }
 
 /* 9.4 软调用分类完备：每个 typeof X==='function' 必须登记类别与次数（只减不增）。

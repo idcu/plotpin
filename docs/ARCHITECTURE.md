@@ -48,16 +48,16 @@ vendor（10）
 
 1. **状态写入口**：`state = ...` 只允许出现在 `model.js` 的 `let state` 声明和 `persistence.js` 的 `replaceState()` 函数体内；`scripts/**` 的测试夹具按文件白名单放行。
 2. **跨层耦合计数**：按 `contracts/coupling.json` 的 `文件 + 符号 + 次数` 严格相等核对（9.2），覆盖 `core → features` 与 `common → core`。
-3. **钩子配对**：`callHook ↔ registerHook` 一一配对，`REQUIRED_HOOKS` 6 个必须同时有提供方与调用点（9.3）；`typeof X==='function'` 形式的软调用必须按 `optional / required / host / param` 分类登记，次数只减不增（9.4）。
+3. **钩子配对**：`callHook ↔ registerHook` 一一配对，`REQUIRED_HOOKS` 8 个必须同时有提供方与调用点（9.3）；`typeof X==='function'` 形式的软调用必须按 `optional / required / host / param` 分类登记，次数只减不增（9.4）。
 
-**当前基线**（2026-11-13 实测，取数：`node scripts/check.mjs` 与 `node -e "…contracts/coupling.json…"`）：
+**当前基线**（2026-11-15 实测，取数：`node scripts/check.mjs` 与 `node -e "…contracts/coupling.json…"`）：
 
 | 项 | 数量 | 说明 |
 |---|---|---|
 | `core → features` 引用 | 21 条（文件+符号，合计 89 次） | 历史反向调用，不能新增，只能逐条下调 |
 | `common → core` 引用 | 3 条 | `merge.js` 读 `SETTINGS_KEYS` / `TITLE_BLOCK_FIELDS`，`qr.js` 调 `ensureVendor`；已知违规 |
 | 软调用 | 13 条 | `required 5 / host 2 / optional 5 / param 1` |
-| 必需钩子 | 13 个提供方 / 13 个调用点 / 8 个必需 | 启动首行 `assertHooksReady()` 校验 |
+| 必需钩子 | 13 个提供方 / 13 个被调钩子 / 26 处调用 / 8 个必需 | 启动首行 `assertHooksReady()` 校验 |
 
 **为什么用次数而不是行号**：行号会随注释、空行、格式化漂移，基线一改就全员重录，最后只能不断放宽；`文件+符号+次数` 只在你真的新增/删除一处跨层调用时变化，能稳定回答“这次有没有加重耦合”。**不要引用审计报告里的旧行号**，以代码和 `contracts/coupling.json` 为准。
 
@@ -66,7 +66,7 @@ vendor（10）
 ### 显式依赖钩子：起不来比悄悄不保存好
 
 - `HOOKS` / `REQUIRED_HOOKS` / `registerHook` / `callHook` / `hookReady` 都定义在 `js/core/config.js`，不新增文件、不改加载顺序。
-- `REQUIRED_HOOKS` 固定 6 项：`collab.onLocalChange`、`collab.broadcastFloor`、`collab.pendingCandidates`、`collab.pendingStorageKeys`、`ui.staleWriteBanner`、`ui.toast`。
+- `REQUIRED_HOOKS` 固定 8 项：`collab.onLocalChange`、`collab.broadcastFloor`、`collab.pendingCandidates`、`collab.pendingStorageKeys`、`ui.refresh`、`ui.renderProps`、`ui.staleWriteBanner`、`ui.toast`。`ui.refresh` / `ui.renderProps` 是 C-01 收口时新增的：core 在切工具、载入收尾、切层等时序点必须同步刷新面板，而 core 不可能自带 UI 实现，故登记为必需而不是可选。
 - `app.js` 的 `init()` 第一行调用 `assertHooksReady()`；缺注册时直接抛错并列出缺失项，**不进入后续初始化**。
 - 这是**有意的失败模式**：协作广播或保存横幅缺提供方时，旧实现会静默 no-op，表现为“能画、能导出，但改动不同步/保存失败不提示”；启动即失败能把装配错误暴露在开发与验收阶段，而不是等用户丢数据。
 - `callHook` 对未注册的可选钩子仍返回 `undefined`；可选特性用 `hookReady(id)` 判断“未启用”，不要再用 `typeof` 猜“是不是忘了注册”。
