@@ -4,9 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-15 · 收尾批次：arc 装载审计白名单、comments e2e 与钩子计数精确化
+
+- **Commit Hash**：`209117f`
+- **核心问题**：全维度审计（`2026-11-15/full-audit`）列出 I-01～I-10。本批处理 I-01（P1 用户可见）、I-05（comments 无 e2e、编辑用阻塞 `prompt`）、I-08（9.3 汇总把「13 个被调钩子」写成「13 个调用点」，实际 26 处调用）、I-04（文档口径漂移），并回填本文件 26 处历史哈希。
+- **核心改动**：
+  - `js/core/persistence.js`：`AUDIT_KINDS` 补 `'arc'`。此前每份含圆弧工程载入都会走 `badKind` 分支，横幅报「未知类型 N」——数据没错，提示是错的。
+  - `scripts/selftest.mjs`：28.12 新增 2 条断言——arc 工程 `warnings.length===0`（正向）、伪造 `kind:'blob'` 仍报「未知类型 1」（负向）。
+  - `js/features/comments.js`：编辑批注从 `prompt()` 改为 `showPrompt()`，Esc/遮罩=取消，与全站模态一致；取消路径不写存储。
+  - `tests/e2e/comments.spec.mjs`：新增 5 条——新增即时渲染 + 独立 localStorage 键 + 工程 JSON 不含正文；编辑 Esc 取消/确认更新；删除二次确认；只读禁用与恢复；锚点对象删除后保留并标注「对象已删除」。
+  - `scripts/check.mjs`：9.3 同时统计调用处数，汇总改为「13 个提供方 / 13 个被调钩子 / 26 处调用 / 8 个必需」；判据未放宽。
+  - 文档：facts / modules / ARCHITECTURE / control-plane / engineering 同步钩子口径与 e2e 计数（49 spec / 188 用例）；known-issues 口径行更新；`.gitignore` 补 `2026-11-14/`、`2026-11-15/`、`backup/`，与「日期目录与本地备份不入库」的既有规则一致。
+- **预算**：dist **838,451 → 838,486 B（+35 B）**；gzip **273,944 → 273,958 B（+14 B）**；余量 1,194 B（gzip 12,762 B）；SW `VERSION=265 → 266`，53 个预缓存输入。
+- **验证数据**：selftest **4,558 通过 / 0 失败**（175 分区）；双入口 e2e：源码 **187 passed / 0 failed / 1 skipped**（4.3m），dist **184 passed / 0 failed / 4 skipped**（3.9m），均 exit 0；`badge --check` 绿（断言 4,558 / 分区 175 / 脚本 48 / spec 49 / 13 步）；`npm run ci` 全绿（门禁牙齿 10/10 + 20/20）。
+- **未验证项 / 边界**：审计 S2-A 的 `drop_console` 未采用，余量仍是 1,194 B；移动端/Safari/真实 GPU/Actions 远端结果按 known-issues 的 U 清单继续记为未验证。
+
 ## 2026-11-15 · C-01 跨层耦合收口：S1 暴露的 4 条 core→features 反向调用清零
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`7870e24`
 - **核心问题**：S1 修好扫描器后暴露 4 条 core 反向依赖 features 的既有真实调用（`interaction.js` 的 `applyVectorSite` ×6、`refreshUI` ×3；`persistence.js` 的 `refreshUI` ×6、`renderProps` ×2），当时只登记为已知违规，理由是 callHook 会动载入热路径与交互刷新链、等价性无法在 S1 证明。本轮逐条收口。
 - **逐条结论**：
   - `interaction.js:applyVectorSite` ×6 → **移动，不走钩子**。它只写 `state.site` 槽 + `pushHistory` + `commitChange` + `fitView`/`setTool`，依赖全在 core；放在 features 使 core 的落笔反向依赖导入模块。下沉到 `core/model.js`（紧邻 `createSiteSlot`），features 侧的导入路径照旧调用，方向变成 features→core，合法。core 自己的状态迁移不应绕道钩子。
@@ -24,7 +39,7 @@
 
 ## 2026-11-15 · 标签 LOD（对象屏幕尺寸 + 点符号密度，仅交互帧）
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`7484c79（配套 293645c 测试、68eec92 文档）`
 - **核心问题**：低缩放下标签占静态层重建 63–70%，且 1:500 起 100% 标签互相重叠（1:1000 时 chip 已是对象的 2.3 倍），画了也读不出来。按固定比例做 LOD 会切错：同一 1:1000 下 16 px 的对象该藏、80 px 的不该；点符号图标屏幕固定 22 px，尺寸判据永远不成立，它们的问题是密度。
 - **口径与落位**：
   - 尺寸判据：对象屏幕包围盒高度（未闭合折线取长边）低于标签自身高度即不画——名称 chip **18 px**（`LABEL_LOD_NAME_PX`），面积/周长行与坐标/段长 tag **16 px**（`LABEL_LOD_TAG_PX`）。段长标注原有的 26 px 门槛（`SEG_LABEL_MIN_PX`）与折线名称 tag 归一到同一套判定，不再两套规则。
@@ -43,7 +58,7 @@
 
 ## 2026-11-15 · 多页 PDF 显式选页导入（默认仍只导第 1 页）
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`aa50aef（测试 c975220、文档 9d51015）`
 - **核心问题**：此前「多页 PDF 只导入第 1 页」是明确的产品决策；现在要做多页，但既有 golden 与单页断言必须逐字节不变，不能把默认路径改成多页合并。
 - **口径与落位**：
   - 单页 PDF 不进预检，入口与旧版一致；多页 PDF 才弹「PDF 导入预检」，默认选项固定为「仅第 1 页」，走原路径，输出与旧版一致。
@@ -65,7 +80,7 @@
 
 ## 2026-11-15 · 清单页文字层（与图纸页同一套 Type3 + ToUnicode）
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`880da1a`
 - **核心问题**：清单页几何修对（`1240×1748`）后，文字层仍被排除在外；清单是给人核对数量与报价的，不能选中/复制说不通。
 - **核心改动**：
   - `js/common/pdf-vector.js`：`textStream` 新增 `a:'l'`（x 即文字左缘，不再按文字宽度回退居中）与 `b:1`（y 已是基线，不做 middle→baseline 换算）；两者缺省时与旧行为逐字节一致。
@@ -78,7 +93,7 @@
 
 ## 2026-11-15 · CI 装 poppler，`pdf-text-layer` 从“远端跳过”改为真跑
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`51c77e7`
 - **核心问题**：远端 run `43637912788`（commit `4c4b9ed`）里 `pdf-text-layer.spec.mjs` 报 `-`——`ubuntu-latest` 不带 `pdftotext`，用例走条件跳过。skip 不计入 passed，读数变成源码 175 passed / 2 skipped，门禁存在“看似有门禁其实在跳过”的隐患。
 - **核心改动**：
   - `.github/workflows/ci.yml`：`e2e` job 在跑 spec 之前新增 `安装 poppler（pdftotext…）` 步骤（`apt-get update -qq` + `apt-get install -y poppler-utils` + 打印版本），安装失败即 job 失败，不兜底。
@@ -90,7 +105,7 @@
 
 ## 2026-11-15 · 矢量 PDF 不可见文字层（Type3 空字形 + ToUnicode）
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`27680e9`
 - **核心能力**：`pdf-vector` 图纸页新增一条独立不可见内容流（`BT 3 Tr … ET`），字形为 Type3 空字形（只声明宽度 `d0`，不画路径），字符→Unicode 走每个字体对象的 `/ToUnicode` CMap。视觉仍全部来自原透明位图，像素零变化；文字可选中·可搜索（视觉仍为位图，放大会发虚）。默认 `pdf`、`exportPDF()` 与厂商容器 `buildImagePdf` 未改动。
 - **核心改动**：
   - `js/common/pdf-vector.js`：文档级字形注册表（每 200 码一个 Type3 字体，最多 64 字体）、单字节十六进制文字串、多字体分段 `Tf/Tj`、水平居中与基线换算、`opt.measure` 注入度量、`opt.report` 回填字符/字体/降级原因；无文字页不写字体与文字流。
@@ -105,7 +120,7 @@
 
 ## 2026-11-15 · 矢量 PDF 清单页逐页 MediaBox（修复非等比拉伸）
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`62ebcb8`
 - **核心问题**：`PdfVec.docPages` 对所有页统一写调用参数 `842×595`，但清单页位图是 `PDF_LIST_PAGE` 的 `1240×1748`，且以 `V.image('Im0',0,0,842,595)` 落位 → 清单页被横向约 ×1.47、纵向约 ×2.94 拉伸；默认位图导出的清单页本来就是 `[0 0 1240 1748]`，说明这是矢量路径特有缺陷。
 - **核心改动**：
   - `js/common/pdf-vector.js`：`docPages` 支持逐页 `w/h` 覆盖本次调用尺寸（缺省/非法值回落到调用参数，NaN/0 不进 MediaBox）。
@@ -118,7 +133,7 @@
 
 ## 2026-11-13 · 文档口径校正：Actions 实际在跑、GitHub Pages 发布与同步通道
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`66337e6`
 - **核心问题**：多份文档仍写「runner 未接入、无 GitHub 运行条件、唯一 remote 为 Gitee」，与实测相反；release-checklist §4.6 把同步来源写成「外部镜像或并发推送」，未给结论。
 - **核心改动**：
   - 统一为「**Actions 在跑但全红，不作发布门禁，以本地门禁为准**」：README、`docs/engineering.md`（§3.1 引言、§3.5、纪律第 2 问）、`docs/testing.md`（§1 表头与引言、§3.1）、`docs/release-checklist.md` 文首、两份 workflow 文件头、`docs/manual-acceptance-report-2026-11-07.md` 归档注。
@@ -132,7 +147,7 @@
 
 ## 2026-11-12 · V-5 图纸修订双版对比 + size-report 误报修复
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`933bb55`
 - **核心改动**：
   - 设置弹窗新增「参照版」：导入另一工程的 JSON 作为同画布半透明垫底（不透明度可调），按对象 id 用既有 `diffSnapshots` 比出新增/删除/移动或改动三类差异并复用 `setDiffOverlay` 叠加；提供 1 Hz 闪烁（可关）与「标定不一致」提示（mpp / 画布尺寸不一致时面板信息行 + 导入瞬间 warn toast）。
   - 渲染接入复用幽灵参考层的静态层签名路径：`sceneStaticContentKey` 追加 `refSig()`，`drawStaticContent` 在 ghostPaint 前调用 `revPaint`；不另建渲染路径。
@@ -149,7 +164,7 @@
 
 ## 2026-11-10 · 离线协作（MERGE-10）：图层/类型删除传播
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`28251aa`
 - **核心问题**：合并只对对象/楼层/场地做墓碑 LWW，图层与对象类型按 id 取并集；一端删除图层/类型后，另一端仍保留定义，离线合并会把已删定义复活。
 - **核心改动**：
   - 墓碑 kind 扩展为 `object / floor / layer / type`（`TOMBSTONE_KINDS` 单一来源，merge 与 persistence 共用）；`markTombstone` / `sanitizeTombstones` 同步保留新类型。
@@ -167,7 +182,7 @@
 
 ## 2026-11-10 · 减字节专项：清理“看似在用、实际从未查表”的字典条目
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`b97ba99`
 - **核心改动**：进一步区分「字符串出现过」与「真的走翻译查表」：删除 `js/common/i18n.js` 中 **13 条**从未被 `L()/p()/toast/commitChange` 查表的 PHRASES 条目（`' m ｜ '`、`' ｜ '`、`'」'`、`'项'`、`'测'`、`'无'`、`'加载插件 '`、`'卸载插件 '`、`'工程加载异常'`、`'已从本地备份恢复'`、三条 `'保存失败：…'` 原文），并清掉 **8 组** PHRASES 重复键的先前定义（保留最终生效值，语义不变）；删除未引用的 `DICT.zh/en.language`。
 - **决策记录**：曾评估将 53 条 `DICT.en` 与 `PHRASES` 完全重复的译文改为运行时回退，可再省约 570 B（净约 440 B），但会破坏「`DICT.en` 与 `DICT.zh` 键集一致」的既有断言与公开 `I18N.dict` 契约，收益不足，已回退不做。
 - **预算**：`i18n.js` 源文件 **95,494 → 94,371 B（−1,123 B）**；dist **830,938 → 829,890 B（−1,048 B）**；gzip **258,950 → 258,623 B**；余量 **8,742 → 9,790 B**；SW `VERSION=129 → 130`。
@@ -180,7 +195,7 @@
 
 ## 2026-11-10 · 减字节专项：清理 i18n 未引用字典条目
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`0047b3a`
 - **核心改动**：删除 `js/common/i18n.js` 中无静态引用的 PHRASES **44 条**、TEMPLATES **2 条**；均为已被完整模板键（如 `无法导入：{name}`、`已导出 {n} 条违规`）或 `TXT_*` 常量键取代的旧片段/整句，以及重复登记在 `DICT` 中的 `data-i18n` 键。删除项含 `'可用'`、`'已禁用'`、`'已记录'`、`'已对齐'`、`'已重新编号'`、`'填充'`、`'圆形覆盖区'` 等。
 - **误报纠正**：初版扫描只按“带引号字面量”判死，漏掉 `props.js` 的 `L('上移'+nodeLabel)` / `L(nodeLabel+' X（米，可为负）')` 动态拼接；已恢复此前误删的 6 条（上移/删除顶点、节点/顶点 X、在此节点后插入一个节点），并保留 4 条动态键（下移节点/下移顶点/节点 Y/顶点 Y）。终版扫描对 12 条动态键显式排除，结果 `unused phrases 0 templates 0`。
 - **预算**：dist **834,593 → 830,938 B（−3,655 B）**；gzip **259,923 → 258,950 B**；余量 **5,087 → 8,742 B**；SW `VERSION=128 → 129`。
@@ -193,7 +208,7 @@
 
 ## 2026-11-10 · 合并语义（data-io P3-11）：远端空楼层名回退旧名
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`509719b`
 - **核心问题**：`mergeFloorMeta` 中 `name: newer ? fb.name : (fa.name || fb.name)`；较新一侧 `name` 为空串时结果为空，重建时被归一化成 `F<n>`，用户看到楼层名被重置（data-io P3-11）。
 - **核心改动**：`js/common/merge.js:297` 改为 `(newer && fb.name) || fa.name || fb.name || ''`；空名不再视为有效覆盖。
 - **预算**：预计 +10 B 内，实际 **+8 B**；余量 5,095 → **5,087 B**（>5,000 停线）。
@@ -204,7 +219,7 @@
 
 ## 2026-11-10 · core 跨层依赖（core-kernel P2-18）：按方案 A 下沉 effectiveVisible
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`0352090`
 - **背景**：上一条 `003bcbd` 只出影响报告（方案 A 属搬迁函数，按约束等待授权）。本轮获授权后执行方案 A。
 - **核心改动**：
   - `js/core/model.js` 新增 `effectiveVisible(o)`（紧随 `layerOf`），成为「对象 + 图层可见」的唯一实现。
@@ -219,7 +234,7 @@
 
 ## 2026-11-10 · 导出健壮性（data-io P3-04）：导出统一错误出口；合并语义待产品决策
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`68802f6`
 - **P3-04（已完整修复）**：CSV/TSV/XLSX/PNG/SVG/DXF（以及 JSON/PDF/报价/目录/标签）原先直接调用，同步异常与异步 rejection 都会变成未处理错误；PDF/打印已有自己的 try/catch。
   - `js/features/io-export.js` 新增 `runExport(fn)`：同步异常立即提示，返回 thenable 时挂 `.catch`；导出分发器 12 个分支统一经它调用，插件导出分支保持原路径（`plugins.js` 已有 catch）。
   - 错误文案复用 `L('导出失败：{msg}')`（补英文条目，缺口不增）。
@@ -233,7 +248,7 @@
 
 ## 2026-11-10 · 渲染分配（core-kernel P2-3）：objectBounds 解析式改造标记不做
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`6867508`
 - **结论**：**不做**。按本轮要求「净减少或持平才做」。
 - **理由**：
   - 解析式包围盒需要为椭圆（含旋转）与扇形新增分支：椭圆需 `hypot(rx·cosθ, ry·sinθ)` 两个半轴投影，扇形还需把起止角与四个象限角比较后取极值；属净增字节，当前无同量级回收来源。
@@ -244,7 +259,7 @@
 
 ## 2026-11-10 · 多标签（core-kernel P2-17）：冲突标签 pagehide 不再覆盖 IndexedDB 草稿
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`2d2c160`
 - **核心问题**：`flushBeforeUnload` 无条件 `idbPut(snapshot)` 写 `current`，不检查多标签租约；被判定为「非持有者」的标签在 `pagehide` 仍会覆盖对端草稿（`scheduleSave` 有 `leaseSaveBlocked` 拦截，flush 没有）。
 - **核心改动**：`js/core/interaction.js` 的 `flushBeforeUnload` 先写本地兜底草稿，再检查 `leaseSaveBlocked()`；冲突时跳过 `idbPut`、复用「另一标签页正在编辑，已暂停自动保存」状态提示，并返回 `false`（非冲突返回 `true`，事件监听器忽略返回值）。
 - **预算**：本条预计 +100~200 B，实际 **+138 B**，余量 5,693 → **5,555 B**（仍 >5,000 停线）。
@@ -257,7 +272,7 @@
 
 ## 2026-11-10 · core 跨层依赖（core-kernel P2-18）：影响范围报告，本轮不动代码
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`003bcbd`
 - **结论**：按本轮约束（不改行为、不改公共签名；搬迁函数/改调用图须先出报告），**未改代码**，仅把影响分析与方案写入 `docs/known-issues.md` §2.13。
 - **证据**：`geometry-coverage.js:45/94/105` 调用 `isVisible`，其定义在 `render.js:12`（`effectiveVisible` 的别名，本体在 `render.js:10`，只依赖 `model.js:549` 的 `layerOf`）。`isVisible` 共 8 处调用、`effectiveVisible` 共 4 处（含 selftest 契约断言）。
 - **方案 A（行为等价，需授权后执行）**：把 `effectiveVisible` 从 `render.js` 搬到 `model.js`，`render.js` 保留 `isVisible` 别名；`io-export.js:137`、`io-fields.js:44` 无需改；加载顺序 model→render 安全；预计 dist ±20 B。
@@ -266,7 +281,7 @@
 
 ## 2026-11-10 · 规则 i18n（features-ui F12）：规则名 / 违规消息 / 跳过原因 / CSV 表头统一走 L()
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`d4cb88d`
 - **核心问题**：规则名（`对象重叠/最小间距/越界`）、违规消息（`'与 '+name+' 实质重叠 '+area+' m²'` 这类拼接）、跳过原因（`未设置矢量场地`）、CSV 表头全部硬编码中文；`lang=en` 时英文交付物里出现中文，且拼接消息无法被短语/模板覆盖（审计 F12）。
 - **核心改动**：
   - `js/features/rules.js`：三条内建规则的 `ruleName` 与 `message` 改为 `L(key, params)` 模板（重叠/净距/部分或完全越界/轮廓自相交后缀）；`res.skipped` 与异常原因同走 `L()`；`runRuleCheck` 汇总层统一 `L(rule.name)`；CSV 表头与截断说明按当前语言生成（X/Y 不翻译）。
@@ -282,7 +297,7 @@
 
 ## 2026-11-10 · 快照对比（features-ui F22）：列表与叠加层共用 2000 条上限
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`a27697c`
 - **核心问题**：`snapshot-ui.js` 列表 `diff.items.slice(0,2000)`，但 `setDiffOverlay(true,diff.items,…)` 传入**全量**差异；两份快照差异数万时，画布每帧都要遍历全部条目（虽有当前楼层过滤，仍是 O(全量)），打开/关闭与每次视图刷新都会变慢（审计 F22）。
 - **核心改动**：
   - `js/core/snapshot.js`：新增 `DIFF_ITEM_MAX=2000`；`setDiffOverlay` 内统一 `items.slice(0,DIFF_ITEM_MAX)`（防线放在状态入口，任何调用方都受限）。
@@ -296,7 +311,7 @@
 
 ## 2026-11-10 · 规则统计（features-ui F14）：截断前的完整计数 + 展示/导出显式标注
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`e09abe3`
 - **核心问题**：`runRuleCheck` 先按 `RULE_MAX_VIOLATIONS`（5000）截断，再用截断后的数组统计 `perRule.count`；总违规 >5000 时排在后面的规则显示 `count=0`，用户误判「某类问题没有」；CSV 只含前 5000 条且无任何标注（审计 F14）。
 - **核心改动**：
   - `js/features/rules.js`：`perRule.count` 改为在截断前逐条累加；结果新增 `fullCount`（完整总数）与 `exportedCount`（实际返回条数）；UI 统计行在截断时显示「仅展示前 N 条」，计数徽标显示完整总数；CSV 在截断时首行写入 `# 仅导出前 N 条（共 M 条）`；导出 toast 改为「已导出前 N 条」。
@@ -311,7 +326,7 @@
 
 ## 2026-11-10 · 文档计数补充（engineering P2-05）：modules.md 计数纳入同一门禁
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`0a400d9`
 - **核心问题**：`docs/modules.md:100,102` 仍写「tests 45 个」「34 个 spec」「19 个 .mjs + 1 个 json 共 20」，实测为 55 个测试文件、35 个 spec、`scripts/*.mjs` 19 + `lib/*.mjs` 2 + manifest 1 共 22 个文件；本轮新增的 `lib/budget.mjs`、`lib/fs-utils.mjs` 也未列入模块表。
 - **核心改动**：
   - `docs/modules.md`：更新 tests/spec/脚本文件计数，补 `lib/budget.mjs`、`lib/fs-utils.mjs` 两行。
@@ -323,7 +338,7 @@
 
 ## 2026-11-10 · 脚本公共逻辑（engineering P2-09）：walk/readJson 收敛到 scripts/lib
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`7207c9f`
 - **核心问题**：`scripts/lib/fs-utils.mjs` 已存在，但 `check-ngm.mjs` 仍自带一份 `walkFiles`（多后缀 + 目录跳过）与 `readJson`（缺文件即 fail）；`build.mjs`、`check-plugin-api.mjs` 也各自 `JSON.parse(readFileSync(...))`。审计 P2-09 的剩余重复点。
 - **核心改动**：
   - `scripts/lib/fs-utils.mjs` 的 `walkFiles` 增补 `exts`（多后缀）与 `skipDir(dir,name)`（目录级跳过）两个可选参数；原 `ext` / `skip` 行为不变（纯增量）。
@@ -342,7 +357,7 @@
 
 ## 2026-11-10 · 文档计数（engineering P2-05/P2-06）：计数改为实测值并由门禁锚定
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`7a1e173`
 - **核心问题**：`docs/testing.md:15` 写「127 个分区 / 3,516 条断言」，实测为 136 / 3,616；`docs/engineering.md:101,117`、`README.md:68,77`、`docs/modules.md:78` 仍写 `check.mjs` 12 步 / 3,023 断言 / 118 分区；`docs/testing.md:76` 把 123 通过 + 1 跳过写成「124 用例通过」。审计 P2-05/P3-02。
 - **核心改动**：
   - `scripts/badge.mjs`：除原有 README 三处断言锚点外，新增文档计数校验——`docs/facts.md`（断言 / 分区 / 加载脚本 / e2e spec）、`docs/testing.md`（分区 / 断言 / 脚本 / spec）、`docs/engineering.md`（`check.mjs` 步数两处）、`README.md`（步数两处）。任一与实测不一致即退出 1；解析不到锚点同样判红（防止锚点被删后静默假绿）。
@@ -357,7 +372,7 @@
 
 ## 2026-11-10 · 工程门禁（engineering P2-04）：vendor 实际字节锚定，篡改本地即红
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`9950cf3`
 - **核心问题**：`check-ngm.mjs` 只校验 `ngm.lock` 的 `moduleDigest/subtreeOid` **格式**与 vendor 模块存在性，不重算任何内容哈希；审计 P2-04。补丁改过 `format/zip`、`format/pdf`、`format/dxf` 的 vendor 字节后，本地门禁仍全绿，只有配置了 `NGM_BIN_URL` 的 CI job 才可能发现。
 - **能力边界（如实记录）**：`moduleDigest` 由 ngm 二进制生成，算法未公开，本机无 ngm 工具链（PATH / 全局 npm 均无），**无法重算**；尝试 5 种候选聚合算法均不匹配 lock 值，不再猜测。
 - **核心改动**：
@@ -373,7 +388,7 @@
 
 ## 2026-11-10 · 工程门禁（engineering P2-03/P2-06）：体积分级预警 + gzip 硬阈值 + 预算常量单一来源
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`05260fd`
 - **核心问题**：`build.mjs` 只有 `bytes > MAX_BYTES` 一条判据，余量从 56 KB 掉到 5,428 B 的全过程没有任何预警；gzip 只打印不判断；`size-report.mjs` 也不显示「离上限还有多少」。审计 P2-03。
 - **核心改动**：
   - 新增 `scripts/lib/budget.mjs`：`MAX_BYTES=839,680`、`GZIP_MAX_BYTES=286,720`（280 KiB）、`GZIP_WARN_BYTES=266,240`（260 KiB）、`MARGIN_WARN_BYTES=8,000`、`MARGIN_CRITICAL_BYTES=6,000`，`budgetStatus()` 返回 `ok/warn/error`。
