@@ -127,6 +127,10 @@ heapUsed 25.17–28.05 MB，缓存帧 P95 0.11–0.14 ms；5 次均未越过 60 
 本机 10000 对象空闲态重建 P95 另有三轮实测 294.6 / 343.8 / 336.4 ms（`p2-render`）。
 **本机当前表征以这组实测为准，不沿用 2026-11-08 的 182.3 ms**：那是历史快照，换机或换负载后不可直接比较。
 
+**2026-11-15 空闲基线（标签 LOD 落地前的参照）**：10000 档 `staticRebuild` P50 225.9 / P95 248.0 ms，
+2000/5000 档 P50 46.6 / 117.0 ms（`p2-render`，同机空闲）。**A4a 的 294–344 ms 属旧机旧版本读数，不再作为目标区间**；
+后续性能判断以本轮为参照，且需标注当轮是否有竞争负载。
+
 **结论**：四组均通过门禁，未出现超阈值回退；DPR2 重建 P95 轮2 301.6 ms（阈值 500），同用例两轮相差 72%，属 SwiftShader 抖动；heap 峰值受导入路径与 GC 时机影响，两轮可相差一倍，均远低于阈值，未做逐版本归因。
 
 ### 4.3 专项打点（都有可复跑命令）
@@ -144,6 +148,8 @@ heapUsed 25.17–28.05 MB，缓存帧 P95 0.11–0.14 ms；5 次均未越过 60 
 | 保存路径快照（F1） | `node scripts/perf-browser.mjs tests/perf/f1-save.perf.mjs` | 10k 对象 `persistableState` P95 89.6 → 64.3 ms（−28%）；单次保存分配 27.7 → 6.3 MB（−77%）；快照 JSON 与旧实现逐字节一致 |
 | 静态层重建排序与参照层空转（F2） | `node scripts/perf-browser.mjs tests/perf/f2-render.perf.mjs` | 10k 对象每次重建的大数组排序 1 → 0 次（冷排序本身仅 0.2 ms，整层 P95 差分落在宿主噪声内）；参照版不可见时 1.5 s 内 `invalidateStatic` 3 → 0 次（10k 工程约每 300 ms 一次整层重建被省掉）；缓存键 3.8 µs/次，未替换 |
 | 20k/50k 线性裁剪占比（F4 前置基准） | `node scripts/perf-browser.mjs --no-gate tests/perf/f4-scale.perf.mjs` | 裁剪占整层重建 0.22%–0.36%（10k 1.2 ms / 20k 1.8 ms / 50k 3.9 ms），`drawObject` 占 82%–95%；结论：空间索引收益上限约 4 ms/次重建，**F4 不开工** |
+| 标签 LOD（D3） | `node scripts/perf-browser.mjs tests/perf/p2-render.perf.mjs` | 空闲态重建 P50/P95：2000 18.9/25.8、5000 44.6/54.3、10000 82.6/98.7 ms（较 2026-11-15 基线 −60%~−63%）。**收益来源是「低缩放不再画标签」，不是绘制本身变快**：dense 夹具（2000 对象）同一脚本在旧树/新树各 3 轮交替，标签全保留的 1:200 档 P50 **74.3 → 72.3 ms**、fit（28.56 px/m，名称 2000/面积 1336/段长 2006 全画）**85.8 → 86.5 ms**，均在宿主噪声内——**放大细看时重建时间不变**。结构计数：1:1000 / 1:5000 未选中时对象标签 0，1:200 名称 2000 全保留；导出六档 PNG 哈希与旧树（`git archive HEAD`）**同会话实测逐字节一致**（`e4969553/c7510a6c/026aa01c/581af419/9a728725/ee1f01cd`），导出标签数 2000/1336/2006 不变。详见 `2026-11-15/perf-d3/work/measurements.md` |
+| measureText 缓存（已证伪） | `2026-11-15/perf-d3/work/mtext.perf.mjs` | 2k/5k/10k 命中率 49.0/49.6/49.8%，但零开销上界仅 1.2–1.3%；实做 Map 缓存反而慢 7–14%。**结论：不做，后续不再列入优化清单** |
 
 口径：拖动/点选帧耗时用 `PointerEvent.timeStamp` 到 rAF 完成；拖动每轮 96 个真实 `pointermove`，点选 30 个样本、前 6 次预热；重建耗时用 `invalidateStatic()` + `drawScene()` + `getImageData()` 强制光栅，2 次预热后取 3 个稳态样本 P95；堆读数经 CDP `HeapProfiler.collectGarbage` 强制 GC 两次后取 `Runtime.getHeapUsage`。
 
