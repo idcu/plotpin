@@ -347,6 +347,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
+    '低缩放标签':'Labels at low zoom',
+    '交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。':
+      'At low zoom the interactive view hides name/area/segment labels by on-screen object size, and point-symbol labels by density; selected objects always show every label. Exports are unaffected and always include labels.',
     '栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。':
       'Raster image (PNG/JPG/WebP). Calibrate pixels to metres first; affects image objects only.',
     '按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。':

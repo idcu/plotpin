@@ -172,10 +172,31 @@ function sceneStaticContentKey(cssW,cssH,d){
     bgImage?1:0,(bgDataUrl||'').length,
     (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
     dyn?dyn.slice().sort().join(','):'',   /* 只跟“正在拖拽改形”有关，与选中集无关 */
+    lodSelectedSig(),                              /* 选中即豁免 LOD：选中集变化必须重建，否则位图里仍是没有标签的旧对象 */
     coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0',
     ghostSig(),                                    /* G-1：幽灵参考层参数变化必须重建静态层 */
     refSig()                                       /* V-5：参照版内容/不透明度/闪烁相位同样必须重建 */
   ].join('|');
+}
+/**
+ * 选中对象里“标签本会被 LOD 藏掉”的 id 签名：并入静态层内容键，
+ * 让选中/取消选中时重建一次，保证「选中对象始终显示全部标签」。
+ * 通常选中集很小；全选等大集合走一次对象索引，避免逐个 find 的 O(N²)。
+ */
+function lodSelectedSig(){
+  const n=selectedIds.size;
+  if(!n) return '';
+  const zoom=Number(state.viewport&&state.viewport.zoom)||1;
+  const idx=n>64?objectIndexById():null;
+  const ids=[];
+  selectedIds.forEach(id=>{
+    const o=idx?idx.get(id):(state.objects||[]).find(x=>x&&x.id===id);
+    if(!o) return;
+    /* 尺寸型对象：小于名称 chip 高度；符号点：当前帧被密度判据隐藏 */
+    if(objectScreenLabelSpan(o,zoom)<APP_LIMITS.LABEL_LOD_NAME_PX
+      ||(isSymbolPoint(o)&&labelLodPointDense)) ids.push(id);
+  });
+  return ids.sort().join(',');
 }
 /** 静态层缓存签名：内容签名 + 视口（缩放必须重建；平移可在整数像素时搬移） */
 function sceneStaticKey(v,cssW,cssH,d){
@@ -209,13 +230,36 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
   /* 裁剪预筛用保守 O(1) 包围盒（P2-3）：圆/椭圆/扇形不再逐对象 72 段取样。
      只允许偏大——偏小会漏画；`objectSnapBounds` 的契约正是「绝不偏小」。 */
   const bnd={minX:0,minY:0,maxX:0,maxY:0};
+  /* 整层重建 vs 局部条带/补绘：只有整层重建才重算点符号密度（局部重绘看到的只是一小块） */
+  const whole=visibleWorldRect(v,d,cssW,cssH);
+  const isWhole=!!view&&view.minX===whole.minX&&view.minY===whole.minY
+    &&view.maxX===whole.maxX&&view.maxY===whole.maxY;
+  /* 一次可见性遍历同时完成：裁剪预筛、静态包围盒登记、符号点密度累加（不为密度另开遍历） */
+  let ptN=0, ptX0=Infinity, ptY0=Infinity, ptX1=-Infinity, ptY1=-Infinity;
+  const vis=[];
+  for(const o of hitOrderObjects()){
+    if(!isVisible(o)||(dynSet&&dynSet.has(o.id))) continue;
+    const b=objectSnapBounds(o,bnd);
+    if(!boundsIntersect(b,view)) continue;
+    if(isSymbolPoint(o)){
+      ptN++;
+      const sp=toS([b.minX,b.minY]);
+      if(sp[0]<ptX0) ptX0=sp[0];
+      if(sp[0]>ptX1) ptX1=sp[0];
+      if(sp[1]<ptY0) ptY0=sp[1];
+      if(sp[1]>ptY1) ptY1=sp[1];
+    }
+    staticBounds.set(o.id,[bnd.minX,bnd.minY,bnd.maxX,bnd.maxY]);
+    vis.push(o);
+  }
+  if(isWhole){
+    /* 密度 = 可见符号点数 / 其屏幕包围盒面积（换算为百万像素²）；少于 2 个点无拥挤意义 */
+    const area=Math.max(0,(ptX1-ptX0)*(ptY1-ptY0));
+    labelLodPointDense=ptN>=2&&area>0
+      &&ptN/(area/1e6)>APP_LIMITS.LABEL_LOD_POINT_DENSITY;
+  }
   /* F2：z 序复用 hitOrderObjects 的缓存（键=对象数+zVersion），每次重建不再对全量对象重排 */
-  hitOrderObjects().filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
-    .forEach(o=>{
-      if(!boundsIntersect(objectSnapBounds(o,bnd),view)) return;
-      drawObject(sc,o,v,toS,iconBoost,exportGain);
-      staticBounds.set(o.id,[bnd.minX,bnd.minY,bnd.maxX,bnd.maxY]);
-    });
+  for(const o of vis) drawObject(sc,o,v,toS,iconBoost,exportGain);
 }
 /**
  * P1：局部补绘矩形（纯函数）——旧包围盒 ∪ 新包围盒 → 屏幕矩形 → 外扩 pad → 画布夹取 → 面积阈值。
@@ -349,6 +393,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   const toS=p=>w2s(p,v,d);
   /* 交互帧使用分层缓存；导出/打印（markerScale≠1 或非交互）保持直接全量绘制 */
   const cacheable=!!opt.interactive&&(opt.markerScale===undefined||opt.markerScale===1);
+  labelLodOn=cacheable;   /* 标签 LOD 只作用于屏幕 canvas 交互帧，导出恒带标签 */
   const exportGain=opt.markerScale||1;
   const iconBoost=exportGain*(Number(state.settings.markerScale)||1);
 
@@ -400,6 +445,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawNodeFocus(c,toS);
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
+    labelLodOn=false;
     return;
   }
 
@@ -431,6 +477,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
   }
+  labelLodOn=false;
 }
 /**
  * 矢量场地控制点手柄（「场地节点」工具激活时显示）：多边形=各顶点；矩形=四角；
@@ -867,6 +914,47 @@ function annotationItems(o,opt={}){
   }
   return out;
 }
+/* -------------------- 标签 LOD（仅屏幕 canvas 交互帧） --------------------
+ * 判定输入 = 对象在**当前屏幕**上的包围盒高度（世界 AABB 投影；旋转/斜切已含在 AABB 内）。
+ * 阈值即标签自身高度：名称 chip 白底 18 px（drawLabel 的 y−9…y+9），
+ * 面积/周长行 16 px（drawAreaTag lh=16），坐标/段长 tag 16 px（drawScreenTag h=15+padY）。
+ * 数据出处 2026-11-15/perf-d3/work/measurements.md：1:500 起标签 100% 互相重叠，
+ * 1:1000 时名称 chip 已是对象的 2.3 倍。所以按对象实际屏幕尺寸判定而非固定比例：
+ * 同样 1:1000，16 px 的对象该藏、80 px 的不该藏。
+ * 边界：只在交互帧生效——导出（PNG/SVG/PDF）、命中测试、快照、协作数据一律不走 LOD，
+ * 导出在任何缩放下都带标签；选中对象（含多选）始终显示全部标签，见 lodSelectedSig。
+ * 两套判据各管一类：矩形/折线/圆弧等有世界尺寸的对象走「包围盒高度」；
+ * 点符号（phys=0，图标屏幕固定 22 px，尺寸规则永远失效）走「可见符号点屏幕分布密度」。 */
+let labelLodOn=false, labelLodObject=null, labelLodSpan=0, labelLodZoom=1;
+/** 符号点是否过密（由静态层重建时的可见性遍历累加，见 drawStaticContent） */
+let labelLodPointDense=false;
+const labelLodBox={minX:0,minY:0,maxX:0,maxY:0};
+/** 是否符号点（无物理尺寸的点，图标按屏幕像素固定绘制） */
+function isSymbolPoint(o){ return !!o&&o.kind==='point'&&!((Number(o.phys)||0)>0); }
+/**
+ * 对象能“撑起标签”的屏幕尺寸（px）：
+ * 二维图形取包围盒高度；开放折线取包围盒长边（纯水平线高度为 0，不能作为判据）；
+ * 点符号取图标屏幕高度（drawPoint 半径 r=11k，直径即高度），只用于选中签名，
+ * 标签显隐由密度判据决定。
+ */
+function objectScreenLabelSpan(o,zoom){
+  if(!o) return 0;
+  if(o.kind==='point'){
+    if((o.phys||0)>0) return o.phys*zoom;
+    return 22*pointIconScale(o);
+  }
+  const b=objectSnapBounds(o,labelLodBox);
+  const w=(b.maxX-b.minX)*zoom, h=(b.maxY-b.minY)*zoom;
+  return o.kind==='line'&&!o.closed?Math.max(w,h):h;
+}
+/** 该对象的标签在当前帧是否允许绘制（未选中且不满足判据时不画） */
+function labelLodAllows(o,minPx){
+  if(!labelLodOn||!o) return true;
+  if(selectedIds.has(o.id)) return true;
+  if(isSymbolPoint(o)) return !labelLodPointDense;
+  const span=o===labelLodObject?labelLodSpan:objectScreenLabelSpan(o,labelLodZoom);
+  return span>=minPx;
+}
 /** 段长标注最小屏幕像素（设置可调，默认 APP_LIMITS.SEG_LABEL_MIN_PX） */
 function segLabelMinPx(){
   const v=Number(state.settings&&state.settings.segLabelMinPx);
@@ -876,6 +964,7 @@ function segLabelMinPx(){
 }
 /** 绘制某对象的逐对象标注标签（屏幕固定字号；过短的段自动略去避免拥挤） */
 function drawObjectAnnotations(c,o,toS,v){
+  if(!labelLodAllows(o,APP_LIMITS.LABEL_LOD_TAG_PX)) return;
   annotationItems(o,{selected:selectedIds.has(o.id)}).forEach(it=>{
     if(it.lenWorld && it.lenWorld*v.zoom<segLabelMinPx()) return;
     const s=toS([it.wx,it.wy]);
@@ -884,6 +973,8 @@ function drawObjectAnnotations(c,o,toS,v){
 }
 function drawObject(c,o,v,toS,iconBoost,exportGain){
   const g=exportGain===undefined?iconBoost:exportGain;
+  /* 本对象的 LOD 尺寸只算一次，供名称/面积/段长标注共用 */
+  if(labelLodOn){ labelLodObject=o; labelLodZoom=(v&&Number(v.zoom))||1; labelLodSpan=objectScreenLabelSpan(o,labelLodZoom); }
   const type=getType(o.typeId), color=o.style.color||type.color||'#2563eb';
   if(o.kind==='point') drawPoint(c,o,color,type,toS,iconBoost,v);
   else if(o.kind==='rect') drawRect(c,o,color,toS,v,g);
@@ -1009,7 +1100,7 @@ function drawRect(c,o,color,toS,v,markerScale){
   if(o.name) drawLabel(c,o,s[0],s[1],color,toS,12*markerScale);
   /* 面积/周长分别由逐对象开关控制（全局「图上显示面积」仅作未配置对象的缺省值） */
   const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-  if(sa||sp) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o),sa,sp);
+  if((sa||sp)&&labelLodAllows(o,APP_LIMITS.LABEL_LOD_TAG_PX)) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o),sa,sp);
 }
 /** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性）；面积与周长可分别关闭 */
 function drawAreaTag(c,cx,cy,area,perimeter,showArea=true,showPerim=true){
@@ -1057,7 +1148,7 @@ function drawLine(c,o,color,toS,v){
     const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
     const gs=toS([gx,gy]);
     const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-    const capShown=o.points.length>=3&&(sa||sp);
+    const capShown=o.points.length>=3&&(sa||sp)&&labelLodAllows(o,APP_LIMITS.LABEL_LOD_TAG_PX);
     if(o.name) drawLabel(c,o,gs[0],gs[1]-(capShown?30:0),color,toS);
     if(capShown) drawAreaTag(c,gs[0],gs[1],polygonArea(o.points),objectLength(o),sa,sp);
   }
@@ -1123,6 +1214,7 @@ function centroidScreen(ps){ return [ps.reduce((s,p)=>s+p[0],0)/ps.length,ps.red
 function drawLabel(c,o,x,y,color,toS,fontSize=12){
   /* 编号显隐只由逐对象配置决定（全局「显示标签」仅作未配置对象的缺省值，见 annotOn） */
   if(!o.name || !annotOn(o,'name')) return;
+  if(!labelLodAllows(o,APP_LIMITS.LABEL_LOD_NAME_PX)) return;
   c.save(); c.font='bold '+fontSize+'px "Microsoft YaHei",sans-serif'; c.textAlign='center'; c.textBaseline='middle';
   const tw=c.measureText(o.name).width;
   c.fillStyle='rgba(255,255,255,.82)'; c.fillRect(x-tw/2-4,y-9,tw+8,18);

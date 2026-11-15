@@ -39,6 +39,15 @@ const APP_LIMITS = Object.freeze({
   ZOOM_MIN: 0.02, ZOOM_MAX: 200,
   ICON_SCALE_MIN: 0.2, ICON_SCALE_MAX: 8,
   SEG_LABEL_MIN_PX: 26, SEG_LABEL_MIN_PX_MIN: 10, SEG_LABEL_MIN_PX_MAX: 60,
+  /* 标签 LOD（仅屏幕 canvas 交互帧）：对象屏幕包围盒高度低于该值时不再绘制标签。
+     取值即标签自身高度——名称 chip 白底为 18 px，面积/周长行与坐标/段长 tag 为 16 px；
+     出处见 docs/engineering.md §6 与 2026-11-15/perf-d3/work/measurements.md。 */
+  LABEL_LOD_NAME_PX: 18, LABEL_LOD_TAG_PX: 16,
+  /* 点符号标签的密度阈值（个 / 百万屏幕像素²）：符号图标屏幕固定 22 px，尺寸规则对它永远失效，
+     因此改为按「可见符号点的屏幕分布密度」判定。标定见 2026-11-15/perf-d3/work/measurements.md：
+     dense 夹具 1:200 实测 1419、1:500 实测 8860、1:1000 实测 35400；取前两档几何中点
+     √(1419×8860)≈3546，圆整为 3600（1:200 保留、1:500 起隐藏）。 */
+  LABEL_LOD_POINT_DENSITY: 3600,
   BG_MAX_EDGE, BG_JPEG_QUALITY, BG_RECOMPRESS_LIMIT,
   BG_MAX_DECODE_PIXELS: 40 * 1000 * 1000,   /* 单张图片解码像素上限（约 40MP），防大图冻结主线程 */
   ASSET_MAX_BYTES: 16 * 1024 * 1024,        /* 单个内容寻址资产（底图/照片）字节上限 */
