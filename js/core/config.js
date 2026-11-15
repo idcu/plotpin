@@ -129,8 +129,6 @@ function registerHook(id,fn){
   if(HOOKS.has(id)) throw new Error('钩子重复注册：'+id);
   HOOKS.set(id,fn);
 }
-/** 取提供方；未注册返回 null（可选特性由调用方显式判断） */
-function hookOf(id){ return HOOKS.get(id)||null; }
 /** 调用提供方；未注册返回 undefined（可选特性的"未启用"语义），不抛错 */
 function callHook(id,...args){ const fn=HOOKS.get(id); return fn?fn(...args):undefined; }
 function hookReady(id){ return HOOKS.has(id); }

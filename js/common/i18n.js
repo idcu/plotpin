@@ -1135,7 +1135,6 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '{n} 个服务器（TURN {t} / STUN {s}）':'{n} server(s) (TURN {t} / STUN {s})',
     /* ICE 运行时诊断：只展示候选类型计数与配对类型 */
     '已配置中继：跨 NAT 取决于 TURN 可用性与鉴权（未验证）':'Relay configured: crossing NAT depends on TURN availability and authentication (unverified)',
-    'host {h} / srflx {s} / relay {r}':'host {h} / srflx {s} / relay {r}',
     '本机候选：{v}':'Local candidates: {v}', '对端候选：{v}':'Remote candidates: {v}',
     '尚未收集到候选（邀请串可能未包含候选）':'No candidates collected yet (the invite string may not include candidates)',
     '选中候选对：{pair}':'Selected candidate pair: {pair}'

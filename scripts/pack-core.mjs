@@ -44,7 +44,7 @@ export async function buildStandalone(html, readFile) {
     let body = codes.join(';\n');
     /* B-01：terser C（compress + 局部 mangle）。toplevel:false 保留全部顶层全局名，
        避免 plugins.js 按名探测的产品路径失效；不做属性改名、不生成 sourcemap。 */
-    const mini = await minify(body, { compress: true, mangle: { toplevel: false } });
+    const mini = await minify(body, { compress: { passes: 3 }, mangle: { toplevel: false } });
     if (typeof mini.code !== 'string') throw new Error('terser 未返回压缩结果');
     body = mini.code.replace(/<\/script/gi, '<\\/script');
     try { new vm.Script(body, { filename: 'bundle' }); }
