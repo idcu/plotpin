@@ -10,8 +10,8 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-14 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **174 个分区 / 4,480 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **48 个 spec / 178 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地双入口 2026-11-15 收口：源码 **176 passed / 0 failed / 1 skipped**（3.7m），dist **173 passed / 0 failed / 4 skipped**（3.4m），exit 0；见 §3 |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **174 个分区 / 4,499 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **48 个 spec / 181 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地双入口 2026-11-15 收口：源码 **180 passed / 0 failed / 1 skipped**（4.5m），dist **177 passed / 0 failed / 4 skipped**（3.7m），exit 0；见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
@@ -76,6 +76,7 @@
 - 2026-11-15 清单页文字层（V-6b）：清单页（`1240×1748`）与图纸页共用同一套 Type3 空字形 + ToUnicode，表格文字按行列位置落到不可见文字层。**实测 poppler 26.01 的提取行为**：默认模式不还原表格，每个单元格占一行（行优先、列内左到右；空单元格不产生行）；只有加 `-layout` 才把同一行的单元格还原成一行并按列对齐。因此 V-6b 同时断言「默认模式完整行序列」与「`-layout` 行内列序 + 三行列偏移一致」，不是「包含关键字」；发现顺序问题时会在行序列断言处红，不用弱断言掩盖。负向样本仍是同一 PDF 等长抹掉 `/ToUnicode`，默认与 `-layout` 两种模式都必须退化。
   - 列间距**不**额外补空格：曾试过用尾随空格把列距压到 poppler 的行阈值内，实测对多行表格无效（仍按列切成多行），且会改变复制文本却不改变点击区域；保留真实列位，让查看器选中高亮与单元格对齐一致。
   - 验收样本是**当次真实导出**的 PDF，不引用历史被拉伸的旧文件——旧文件只能证明当时的缺陷，不能证明当前代码写出了文字层；清单页几何由 `MediaBox ['842x595','1240x1748']` 断言单独覆盖。
+- 2026-11-15 多页 PDF 显式选页（M1）：`pdf-multipage.spec.mjs` 由 7 条增至 10 条。B-13 两条只增加「点默认导入」交互步骤、断言逐条未改，单页用例新增「不弹预检」断言；新增 M1 三条覆盖 1-3 页横排+逐页图层、只选 2-3 页时锚定原点、非法范围禁用导入与取消不落库。全量双入口：源码 **180 passed / 1 skipped**（4.5m），dist **177 passed / 4 skipped**（3.7m），exit 0。排查记录：M1 曾出现「少一个对象」，根因是三页 fixture 第 3 页的 120 点线 ≈0.042 m 低于既有 0.05 m 去噪阈值被正常丢弃，不是落位错误；把该页线改为 150 点并同步几何断言，未放宽任何断言。
 - **M6 局部补绘的 3 条像素采样用例**（`tests/e2e/perf-render.spec.mjs`）：对象位移、放大、编辑 A 后 B 的标签仍在。改前分别红在 `atNew`、`inside1`、`after=0`（且 `patched=true`，证明缺陷发生在局部补绘路径而非被整层重建掩盖），改后绿。覆盖只到属性面板 `commitObjectEdit` 路径；拖拽期走整层重建，未覆盖。
 - 2026-11-15 修掉 `perf-render.spec.mjs` 远端抖动：根因是画布位图与 `wrap` 布局尺寸不同步（内容被裁/采样坐标错位），改为采样前 `resizeCanvas()` 同步并按 `getBoundingClientRect` 固定 W/H，等待有界（60 帧 / 3000 ms）且耗尽后仍判红；本地双入口 `--repeat-each=10` 各 40 passed，远端 run `43631563446` 两条 e2e job 全绿（源码 175 / dist 172 passed），settle 读数 0–1 帧。
 - `file://` 与 http 的历史实测差异（Chromium）：
@@ -94,7 +95,7 @@
 | 冒烟/基础交互/加载 | smoke(4)、interaction(3)、load-audit(6)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(7)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
 | 协作 | collab(16)（含 1 个 soak 条件跳过） |
-| 导出与图面 | pdf-multipage(7)、pdf-dpi(1)、pdf-vector-option(1)、pdf-text-layer(2：V-6 图纸页 + V-6b 清单页，均含删 ToUnicode 负向)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(3)、publish-state(2) |
+| 导出与图面 | pdf-multipage(10)、pdf-dpi(1)、pdf-vector-option(1)、pdf-text-layer(2：V-6 图纸页 + V-6b 清单页，均含删 ToUnicode 负向)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(3)、publish-state(2) |
 | 符号与目录 | symbols(3)、catalog(2) |
 | 批量与表格 | batch-annot(3)、batch-layout(2)、table-batch(4) |
 | 导入加固 | import-errors(4) |
@@ -108,7 +109,7 @@
 | 界面加固 | ui-hardening(4)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **178** 个用例、**48** 个 spec（装 poppler 的环境：源码入口 177 跑 + 1 条件跳过，dist 入口 174 跑 + 4 跳过；没装 poppler 时源码入口再多 1 条跳过、dist 入口再多 1 条）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **181** 个用例、**48** 个 spec（装 poppler 的环境：源码入口 180 跑 + 1 条件跳过，dist 入口 177 跑 + 4 跳过；没装 poppler 时源码入口再多 1 条跳过、dist 入口再多 1 条）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 

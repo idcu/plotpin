@@ -4,6 +4,28 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-15 · 多页 PDF 显式选页导入（默认仍只导第 1 页）
+
+- **Commit Hash**：`待回填`
+- **核心问题**：此前「多页 PDF 只导入第 1 页」是明确的产品决策；现在要做多页，但既有 golden 与单页断言必须逐字节不变，不能把默认路径改成多页合并。
+- **口径与落位**：
+  - 单页 PDF 不进预检，入口与旧版一致；多页 PDF 才弹「PDF 导入预检」，默认选项固定为「仅第 1 页」，走原路径，输出与旧版一致。
+  - 只有显式选「指定页范围」才走多页：语法 `1-3,5`（支持全角逗号/波浪号，≤200 字符，页码须在 1–N 内，升序去重）。
+  - 多页按所选页升序横向并排：所选第一页锚定原点，后续页 `x = 前页 x + 页宽(米) + 1 m`；每页对象归入独立图层「PDF 第 i 页」，同一工程内据此区分来源页。
+  - 底图只取所选页中第一页的内嵌图；其余页内嵌图不叠加，避免多张图抢同一 `state.background`。
+  - 容量按既有 `importLimitErrors({entities,objects})` 口径（paths+texts 去噪前计数 + 当前工程对象数），预检实时显示「已选 N 页 · 图形 E 个 · 导入后对象 O / 上限」，超限禁用导入；不写任何 state。
+  - 失败语义：预检非法整份拒绝；提交阶段异常恢复快照并弹「已回滚」，不留「导入一半」。没有可导入实体的页按页跳过并提示页号。
+  - 中文编码链保持 `UTF-16 BOM → GBK 严格 → ASCII` 与「解不开按条计数并提示」，多页未另造解码。
+- **核心改动**：
+  - `js/features/io-import.js`：新增 `parsePdfPageRange / pdfPagePlacements / pdfImportCapacity / pdfPageEntityCounts / pdfPagePicker / importPdfPages`；把单页矢量与底图逻辑抽成 `addPdfPageVectors / pdfApplyImageBackground`，默认路径复用同一实现（`layerId=null`、`dx=0` 时字段与旧版一致）。
+  - `js/common/i18n.js`：预检标题/选项/表头/摘要/并排说明/跳过与回滚提示共 17 条中英文案；i18n 缺口仍为 0。
+  - `tests/e2e/pdf-multipage.spec.mjs`：B-13 两条只增加「点默认导入」交互步骤、断言逐条未改；单页 B-13 增加「不弹预检」断言；新增 M1 三条（1-3 页横排+分层、只选 2-3 页时锚定原点、非法范围禁用+取消不落库）。fixture 第 3 页线由 120 点改为 150 点——120 点 ≈0.042 m 低于既有 0.05 m 去噪阈值，会只剩文字，导致对象数断言与产品规则打架。
+  - `scripts/selftest.mjs`：M1 纯函数断言 19 条（范围展开/去重/全角/越界/倒序/超长、落位原点与 1 m 间距、容量与超限、每页实体数）。
+  - 文档：`docs/features.md`、`docs/user-guide.md`、`docs/known-issues.md`、`docs/modules.md`、`docs/testing.md`、`docs/plans/next-phase-2026-11.md`、`docs/facts.md` 与 `docs/engineering.md` 的 i18n 数字同步。
+- **预算**：dist **813,875 → 823,516 B（+9,641 B）**；gzip **265,742 → 268,843 B（+3,101 B）**；余量 16,164 B（gzip 17,877 B，gzip 已过 260 KiB 预警线、未过硬上限）；SW `VERSION=255 → 257`（同一未提交批次内两次改动，只保留最终版本），53 个预缓存输入。
+- **验证数据**：`npm run ci` 全绿（断言 4,499；i18n 缺口 0；门禁牙齿 10/10 + 20/20）；双入口 e2e：源码 **180 passed / 0 failed / 1 skipped**（4.5m），dist **177 passed / 0 failed / 4 skipped**（3.7m）；`pdf-multipage.spec.mjs` 单独跑 **10 passed**。
+- **未验证项 / 边界**：只保证横向并排，不做跨页自动拼图/去重叠；页数不设单独上限，靠实体与对象总数上限兜底；大页数下的可读性未做真机评估；仅在 Chromium 门禁内验证。
+
 ## 2026-11-15 · 清单页文字层（与图纸页同一套 Type3 + ToUnicode）
 
 - **Commit Hash**：`待回填`
