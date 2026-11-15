@@ -17,7 +17,8 @@
   - 文档：facts / modules / ARCHITECTURE / control-plane / engineering 同步钩子口径与 e2e 计数（49 spec / 188 用例）；known-issues 口径行更新；`.gitignore` 补 `2026-11-14/`、`2026-11-15/`、`backup/`，与「日期目录与本地备份不入库」的既有规则一致。
 - **预算**：dist **838,451 → 838,486 B（+35 B）**；gzip **273,944 → 273,958 B（+14 B）**；余量 1,194 B（gzip 12,762 B）；SW `VERSION=265 → 266`，53 个预缓存输入。
 - **验证数据**：selftest **4,558 通过 / 0 失败**（175 分区）；双入口 e2e：源码 **187 passed / 0 failed / 1 skipped**（4.3m），dist **184 passed / 0 failed / 4 skipped**（3.9m），均 exit 0；`badge --check` 绿（断言 4,558 / 分区 175 / 脚本 48 / spec 49 / 13 步）；`npm run ci` 全绿（门禁牙齿 10/10 + 20/20）。
-- **未验证项 / 边界**：审计 S2-A 的 `drop_console` 未采用，余量仍是 1,194 B；移动端/Safari/真实 GPU/Actions 远端结果按 known-issues 的 U 清单继续记为未验证。
+- **远端结果**：GitHub Actions run `43709873102`（push `7e21580`，2026-11-15 11:38Z）全绿——test 4m7s、e2e 源码 3m45s、e2e dist 3m54s、vendor 接线自检 15s、ngm binary preflight 4s、discipline 4s；`ngm verify --deep` 仍按「可选二进制」跳过；`pages-build-deployment` run `43709872603` 成功（20s）。
+- **未验证项 / 边界**：审计 S2-A 的 `drop_console` 未采用，余量仍是 1,194 B；移动端/Safari/真实 GPU/双设备协作按 known-issues 的 U 清单继续记为未验证（Actions 已不再是未验证项）。
 
 ## 2026-11-15 · C-01 跨层耦合收口：S1 暴露的 4 条 core→features 反向调用清零
 
