@@ -1377,7 +1377,10 @@ async function mergeProjectJSON(raw,opts={}){
   const clockClamped=mergeClampTimestamps(incomingRaw);
   /* buildProject 自带清洗/迁移；不临时替换现场，合并结果确定后一次性提交 */
   const incoming=buildProject(incomingRaw);
-  const {project,stats,config}=mergeProjectData(currentRaw,deepClone(incoming));
+  const {project,stats,config,overwrites}=mergeProjectData(currentRaw,deepClone(incoming),opts.base||null);
+  /* 冲突可见性：覆盖报告不进 stats 键集（§59 深比较），以不可枚举属性随返回值带走，
+     JSON.stringify / 深比较 / 结构化克隆的键集断言都不受影响。 */
+  if(overwrites) Object.defineProperty(stats,'overwrites',{value:overwrites,enumerable:false,configurable:true});
   if(clockClamped) stats.clockClamped=clockClamped;
   /* A3：配置差异报告。仅在非空时作为可枚举 config 字段随 stats 返回：spread / structuredClone /
      JSON 序列化都能带走；空报告不新增键，既有 stats 深比较（§59）不变。 */

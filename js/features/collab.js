@@ -233,6 +233,8 @@ let collabBC=null, collabPC=null, collabDC=null, collabMode=null, collabActive=f
 let collabTimer=null, collabApplyChain=Promise.resolve(), collabLastStatus='', collabLastError='';
 let collabState='idle', collabClosing=false, collabPendingSnapshot=false, collabSendRetry=null;
 let collabLastMerge=null, collabNotifyAt=0;
+/* 覆盖提示独立时钟：与状态行的 2 s 节流分开，避免连接期的发送告警把冲突提示饿死 */
+let collabOverwriteAt=0;
 /* 片2 协作安全默认：跨设备连接首次快照需确认；接收端节流；远端撤销栈隔离 */
 let collabRtcTrusted=false, collabRtcAskOpen=false, collabRtcPending=null, collabRightsShown=false;
 let collabApplyPending=null, collabApplyTimer=null, collabLastApplyAt=0, collabRemoteHistoryUsed=false;
@@ -240,6 +242,219 @@ let collabApplyPending=null, collabApplyTimer=null, collabLastApplyAt=0, collabR
 let collabEpoch=0;
 let collabLocalChannel='', collabReconnectAttempt=0, collabReconnectTimer=null, collabWatchdog=null;
 let collabForeignDropped=0;
+/* 冲突可见性 S2：会话级内容基线（只在本标签页内存，刷新后降级为「原因未知」）。
+   键与合并层一致：o:<floorId>:<id> 对象、s:<floorId> 场地；按工程令牌隔离，切工程即重置。 */
+const COLLAB_BASE_MAX=20000;
+let collabBase=new Map(), collabBaseToken='';
+function collabConflictBase(){
+  const tk=collabProjectToken()||'draft';
+  if(tk!==collabBaseToken){ collabBase=new Map(); collabBaseToken=tk; }
+  return collabBase;
+}
+function collabBaseAdopt(next){
+  if(!next||typeof next.forEach!=='function') return;
+  /* 超出上限淘汰最早插入（近似最久未用）；基线不得拖慢合并 */
+  if(next.size>COLLAB_BASE_MAX){
+    let drop=next.size-COLLAB_BASE_MAX;
+    for(const k of next.keys()){ if(drop--<=0) break; next.delete(k); }
+  }
+  collabBase=next; collabBaseToken=collabProjectToken()||'draft';
+}
+/* 冲突可见性 S3：本机冲突账本（按工程键；只在本机，不进工程 JSON/导出/协作载荷）。
+   寿命：20 次合并 / 200 条 / 64 KB / 7 天；恢复本身不写账本，只在条目上标 resolved。 */
+const COLLAB_LEDGER_PREFIX='plotpin.collab.conflicts.v1.';
+const COLLAB_LEDGER_MERGES=20, COLLAB_LEDGER_ITEMS=200;
+const COLLAB_LEDGER_BYTES=64*1024, COLLAB_LEDGER_TTL=7*24*60*60*1000;
+/** 32 位 FNV-1a：只用于去重/存储，不用于安全判定；内容签名可能上百字节，账本只留短哈希 */
+function collabSigHash(s){
+  let h=0x811c9dc5;
+  const t=String(s==null?'':s);
+  for(let i=0;i<t.length;i++){ h^=t.charCodeAt(i); h=(h*0x01000193)>>>0; }
+  return h.toString(16).padStart(8,'0');
+}
+function collabLedgerKey(){ return COLLAB_LEDGER_PREFIX+(collabProjectToken()||'draft'); }
+/** 每次都从存储读：多标签共享同一工程键，缓存会造成写入互相覆盖 */
+function collabLedgerGet(){
+  let led=null;
+  try{ led=JSON.parse(localStorage.getItem(collabLedgerKey())||'null'); }catch(_){ led=null; }
+  if(!led||!Array.isArray(led.items)) led={v:1,items:[]};
+  const ttl=Date.now()-COLLAB_LEDGER_TTL;
+  led.items=led.items.filter(r=>r&&typeof r.at==='string'&&Date.parse(r.at)>=ttl);
+  return led;
+}
+function collabLedgerTrim(led){
+  const ttl=Date.now()-COLLAB_LEDGER_TTL;
+  led.items=led.items.filter(r=>r&&typeof r.at==='string'&&Date.parse(r.at)>=ttl);
+  /* 只保留最近 COLLAB_LEDGER_MERGES 个合并批次 */
+  const batches=[];
+  led.items.forEach(r=>{ if(!batches.includes(r.batch)) batches.push(r.batch); });
+  const keep=new Set(batches.slice(-COLLAB_LEDGER_MERGES));
+  led.items=led.items.filter(r=>keep.has(r.batch));
+  if(led.items.length>COLLAB_LEDGER_ITEMS) led.items=led.items.slice(-COLLAB_LEDGER_ITEMS);
+  while(led.items.length>1&&JSON.stringify(led).length>COLLAB_LEDGER_BYTES) led.items.shift();
+}
+function collabLedgerSave(led){
+  const key=collabLedgerKey();
+  try{ localStorage.setItem(key,JSON.stringify(led)); }
+  catch(_){
+    /* 配额/隐私模式：减半再试一次；仍失败就放弃落盘，绝不阻断合并 */
+    led.items=led.items.slice(Math.floor(led.items.length/2));
+    try{ localStorage.setItem(key,JSON.stringify(led)); }catch(__){}
+  }
+}
+/** 报告 → 账本：去重键 (scope,floor,id,落败签名,胜出签名,方向)；同一对版本只记一次 */
+function collabLedgerAdd(rep,from){
+  if(!rep||!(rep.local||rep.remote)) return 0;
+  const led=collabLedgerGet();
+  const batch=Date.now().toString(36);
+  const seen=new Set(led.items.map(r=>[r.scope,r.floor,r.id,r.lk,r.wk,r.dir].join('|')));
+  let added=0;
+  rep.items.forEach(it=>{
+    const lk=collabSigHash(it.loserSig), wk=collabSigHash(it.winnerSig);
+    const key=[it.scope,it.floorId||'',it.id||'',lk,wk,it.dir].join('|');
+    if(seen.has(key)) return;
+    seen.add(key); added++;
+    const row={at:nowISO(),batch,from:from||'',scope:it.scope,dir:it.dir,kind:it.kind,
+      floor:it.floorId||'',id:it.id||'',name:it.name||'',known:!!it.known,both:!!it.both,lk,wk};
+    if(it.count) row.n=it.count;
+    /* 只有「本端被覆盖」的完整对象/场地才留快照（恢复来源）；整层删除只记数量 */
+    if(it.dir==='local'&&it.snapshot&&it.scope!=='floor') row.snap=it.snapshot;
+    led.items.push(row);
+  });
+  if(added){ collabLedgerTrim(led); collabLedgerSave(led); collabBadgeRefresh(); }
+  return added;
+}
+/** 未处理的「本端被覆盖」条数（角标与面板共用） */
+function collabLedgerPending(){
+  const led=collabLedgerGet();
+  let n=0;
+  led.items.forEach(r=>{ if(r.dir==='local'&&!r.resolved) n++; });
+  return n;
+}
+function collabBadgeRefresh(){
+  const el=$('collabBadge');
+  if(!el) return;
+  const n=collabLedgerPending();
+  el.textContent=n>99?'99+':String(n||'');
+  el.style.display=n?'inline-block':'none';
+  el.title=n?L('本端被覆盖 {n} 条（打开协作面板查看）',{n}):'';
+}
+function collabLedgerClear(){
+  try{ localStorage.removeItem(collabLedgerKey()); }catch(_){}
+  collabBadgeRefresh(); collabRefreshConflictInfo();
+}
+/** 清单数据：最新在前；账本已按 7 天过期过滤，这里不再二次判寿 */
+function collabConflictRows(){
+  return collabLedgerGet().items.slice().reverse();
+}
+/** 清单只展示最近 30 条：账本上限 200 条，弹窗里铺满反而找不到刚发生的那条 */
+const COLLAB_LEDGER_SHOW=30;
+/** 账本条目就地标记已处理；按内容定位而不是下标，避免多标签追加后索引漂移 */
+function collabLedgerResolve(row){
+  const led=collabLedgerGet();
+  const hit=led.items.find(r=>r&&r.batch===row.batch&&r.at===row.at&&r.scope===row.scope
+    &&r.id===row.id&&r.dir===row.dir&&r.lk===row.lk&&r.wk===row.wk);
+  if(!hit||hit.resolved) return false;
+  hit.resolved=true;
+  collabLedgerTrim(led); collabLedgerSave(led);
+  collabBadgeRefresh(); collabRefreshConflictInfo();
+  return true;
+}
+/** 恢复后的内容签名写回会话基线：本地已确认该版本，同一对版本不再计入冲突 */
+function collabBasePin(key,sig){
+  collabConflictBase().set(key,sig);
+}
+/** 清单时间：本地时区 MM-DD HH:MM，够定位批次且不占宽度 */
+function collabConflictTime(at){
+  const d=new Date(at);
+  if(!Number.isFinite(d.getTime())) return '';
+  const p=n=>String(n).padStart(2,'0');
+  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+/** 一条覆盖记录：方向、范围、楼层、旧值→新值；只有本端损失且留有快照的行给恢复入口 */
+function collabConflictRowHtml(row,i){
+  const dirTxt=row.dir==='local'?L('本端被覆盖'):L('本端保留（对端未采纳）');
+  const scopeTxt=row.scope==='site'?L('场地'):row.scope==='floor'?L('楼层'):L('对象');
+  const floor=(state.floors||[]).find(f=>f&&f.id===row.floor);
+  const floorTxt=(floor&&floor.name)||row.floor||'';
+  const oldName=row.scope==='object'?((row.snap&&mergeObjName(row.snap))||row.name):row.scope==='site'?L('场地'):(row.name||'');
+  let newName=L('已删除');
+  if(row.scope==='object'){
+    const live=(state.objects||[]).find(o=>o&&String(o.id)===String(row.id));
+    newName=live?mergeObjName(live):L('已删除');
+  } else if(row.kind!=='delete') newName=L('已更新');
+  const tags=[];
+  if(row.n) tags.push(L('{n} 个对象',{n:row.n}));
+  if(row.both) tags.push(L('双方都改过'));
+  if(!row.known) tags.push(L('无法证明并发'));
+  if(row.resolved) tags.push(L('已恢复'));
+  const canRestore=row.dir==='local'&&row.scope!=='floor'&&!!row.snap&&!row.resolved;
+  const btn=canRestore?`<button id="collabRestoreBtn${i}" style="margin-top:4px">${row.scope==='site'?L('恢复场地'):L('恢复我的版本')}</button>`:'';
+  return `<div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,.08)${row.resolved?';opacity:.55':''}">
+    <div><b>${esc(collabConflictTime(row.at))}</b> · ${esc(dirTxt)} · ${esc(scopeTxt)}${floorTxt?' · '+esc(floorTxt):''}</div>
+    <div>${esc(oldName||'-')} → ${esc(newName)}${tags.length?' · '+esc(tags.join(' · ')):''}</div>
+    ${btn}
+  </div>`;
+}
+/** 冲突清单弹窗：只读账本；恢复走 collabRestoreRow，成功后原地重绘（已处理行不再给按钮） */
+function openCollabConflictsPanel(){
+  const all=collabConflictRows();
+  const rows=all.slice(0,COLLAB_LEDGER_SHOW);
+  const body=rows.length
+    ? rows.map((r,i)=>collabConflictRowHtml(r,i)).join('')
+      +`<div class="hint-text" style="margin-top:8px">${L('恢复 = 一次新编辑（可 Ctrl+Z 撤销）；对端采纳前可能仍显示旧版本。旧值引用的底图/照片可能已被回收。')}</div>`
+      +`<div class="form-actions"><button id="collabConflictClear">${L('清除记录')}</button></div>`
+    : `<div class="hint-text">${L('尚无可恢复的冲突记录')}</div>`;
+  openModal(L('冲突清单'),body,[{text:L('关闭'),click:closeModal}]);
+  rows.forEach((row,i)=>{
+    const btn=$('collabRestoreBtn'+i);
+    if(btn) btn.onclick=()=>{ if(collabRestoreRow(row)) openCollabConflictsPanel(); };
+  });
+  const clear=$('collabConflictClear');
+  if(clear) clear.onclick=()=>{ collabLedgerClear(); toast(L('冲突记录已清除')); closeModal(); };
+}
+/** 对象级恢复：恢复=一次新的本地编辑（updatedAt 由 commitObjectEdit 单调推进并广播）。
+ *  墓碑不手删：新版必须严格晚于 deletedAt，否则下次同步会被删除盖回——拒绝并说明。 */
+function collabRestoreRow(row){
+  if(!row||row.dir!=='local'||!row.snap){ toast(L('该记录没有可恢复的旧值'),'warn'); return false; }
+  if(row.scope==='floor'){ toast(L('整层删除只有记录，请用撤销（Ctrl+Z）或版本快照'),'warn'); return false; }
+  if(!guardWrite(row.scope==='site'?L('恢复场地'):L('恢复我的版本'))) return false;
+  if(row.floor!==state.activeFloorId){ toast(L('请先切换到该楼层后再恢复'),'warn'); return false; }
+  const snap=deepClone(row.snap);
+  if(row.scope==='site'){
+    pushHistory();
+    state.site=snap;
+    state.site.updatedAt=nowISO();
+    collabBasePin('s:'+row.floor,mergeStable(state.site));
+    commitChange(L('已恢复场地（可 Ctrl+Z 撤销）'));
+  }else{
+    const id=String(row.id||'');
+    const live=(state.objects||[]).find(o=>o&&String(o.id)===id)||null;
+    const tomb=(state.tombstones||[]).find(t=>t&&String(t.id)===id&&(t.kind||'object')==='object');
+    if(!live&&tomb){
+      const now=nowISO();
+      if(!(Date.parse(now)>Date.parse(tomb.deletedAt))){
+        toast(L('本机时钟不晚于删除时间，已拒绝恢复（否则下次同步会被删除盖回）'),'error');
+        return false;
+      }
+    }
+    pushHistory();
+    if(live){
+      snap.z=live.z;
+      state.objects[state.objects.indexOf(live)]=snap;
+    }else{
+      snap.z=state.objects.length;
+      state.objects.push(snap);
+      selectedIds.clear();
+    }
+    collabBasePin('o:'+row.floor+':'+id,mergeObjectSig(snap));
+    commitObjectEdit([id]);
+    toast(L('已恢复「{name}」（可 Ctrl+Z 撤销）',{name:row.name||id}));
+  }
+  collabLedgerResolve(row);
+  collabRefreshUI();
+  return true;
+}
 const collabPeers=new Map();
 /* B7：对端在线表带心跳过期，避免异常关闭标签页后幽灵成员永久残留（3 个 watchdog 周期） */
 const COLLAB_PEER_TTL_MS=3*15000;
@@ -599,14 +814,16 @@ function collabRefreshConflictInfo(){
   const m=collabLastMerge;
   const foreign=collabForeignDropped;
   const foreignNote=foreign?` · ${L('已丢弃跨工程消息 {n} 条',{n:foreign})}`:'';
+  const pend=collabLedgerPending();
+  const pendNote=pend?` · ${L('本端被覆盖 {n} 条（可在冲突清单恢复）',{n:pend})}`:'';
   if(!m){
-    el.textContent=foreign?L('已丢弃跨工程消息 {n} 条',{n:foreign}):L('尚无冲突记录');
-    el.className='hint-text'+(foreign?' warn':'');
+    el.textContent=(foreign?L('已丢弃跨工程消息 {n} 条',{n:foreign}):L('尚无冲突记录'))+pendNote;
+    el.className='hint-text'+((foreign||pend)?' warn':'');
     return;
   }
   if(!collabMergeChanged(m)){
-    el.textContent=L('最近一次合并：无变化')+foreignNote;
-    el.className='hint-text'+(foreign?' warn':'');
+    el.textContent=L('最近一次合并：无变化')+foreignNote+pendNote;
+    el.className='hint-text'+((foreign||pend)?' warn':'');
     return;
   }
   const overwritten=collabMergeOverwritten(m);
@@ -614,14 +831,18 @@ function collabRefreshConflictInfo(){
   const configWarn=!!(c&&(c.error||c.kept));
   const cItems=c&&!c.error&&Array.isArray(c.items)&&c.items.length
     ?`（${c.items.slice(0,5).map(i=>`${i.scope}${i.id&&i.id!=='*'?':'+i.id:''}.${i.field}`).join(' / ')}${c.items.length>5?' …':''}）`:'';
+  /* 覆盖报告的计数：本端损失（可恢复）与本端保留分开报，不再混在「冲突」里 */
+  const ov=m.overwrites;
+  const ovNote=ov?` · ${L('本端被覆盖 {n}',{n:ov.local})} / ${L('本端保留 {n}',{n:ov.remote})}`:'';
   el.textContent=`${L('最近一次合并')}：+${m.added||0} ~${m.updated||0} -${m.deleted||0} · ${L('冲突')} ${m.conflicts||0}`+
     (m.conflicts&&!overwritten?`（${L('已保留较新值')}）`:'')+
     (m.siteCleared?` · ${L('场地已清空')}`:'')+
     (overwritten?` · ${L('已写入撤销栈，可 Ctrl+Z 回滚')}`:'')+
+    ovNote+
     (m.clockClamped?` · ${L('时间戳异常 {n} 条已置空',{n:m.clockClamped})}`:'')+
     mergeConfigText(m)+cItems+
-    foreignNote;
-  el.className='hint-text'+((overwritten||foreign||configWarn)?' warn':'');
+    pendNote+foreignNote;
+  el.className='hint-text'+((overwritten||foreign||configWarn||pend)?' warn':'');
 }
 function collabRefreshUI(){
   const b=$('collabLocalBtn');
@@ -637,6 +858,7 @@ function collabRefreshUI(){
   const el=$('collabStatus');
   if(el) el.textContent=collabLastStatus||collabStateText(collabState);
   collabIceRender();
+  collabBadgeRefresh();
   collabRefreshConflictInfo();
 }
 
@@ -826,14 +1048,19 @@ function collabDrainApply(){
       if(job.epoch!==collabEpoch){ collabRecordError(L('已忽略旧工程同步快照')); return; }
       /* 撤销栈隔离：一次连接最多让远端写一条历史，持续推送不会把本地 20 条撤销记录冲掉 */
       const useHistory=!collabRemoteHistoryUsed;
-      const stats=await mergeProjectJSON(raw,Object.assign({expectProjectId:job.pid},useHistory?{history:'overwrite'}:{history:false}));
+      const stats=await mergeProjectJSON(raw,Object.assign({expectProjectId:job.pid,base:collabConflictBase()},useHistory?{history:'overwrite'}:{history:false}));
       if(stats&&stats.ignored){
         collabRecordError(L('已忽略其他工程的同步快照'));
         collabSetStatus(L('已忽略其他工程的同步快照'),'warn');
         return;
       }
+      /* 覆盖报告（不可枚举，不污染 stats 键集）：先推进会话基线，再按报告更新账本/可见面 */
+      if(stats&&stats.overwrites) collabBaseAdopt(stats.overwrites.nextBase);
       if(useHistory&&mergeHistoryNeeded(stats)) collabRemoteHistoryUsed=true;
+      const rep=stats&&stats.overwrites||null;
+      if(rep) collabLedgerAdd(rep,from);
       collabLastMerge=Object.assign({at:nowISO(),from},stats);
+      if(rep) collabLastMerge.overwrites={local:rep.local,remote:rep.remote};
       collabDebugSet('__collabLastMerge',collabLastMerge);
       const changed=collabMergeChanged(stats);
       if(!changed){
@@ -853,10 +1080,11 @@ function collabDrainApply(){
         siteNote+conflictNote+configNote;
       if(overwritten){
         collabSetStatus(L('已同步：{detail} · 可按 Ctrl+Z 回滚',{detail}),'warn');
-        collabNotifyOverwrite(stats);
+        collabNotifyOverwrite(stats,rep);
       }else{
         collabSetStatus(L('已同步：{detail}',{detail}),configWarn?'warn':'ok');
       }
+      collabBadgeRefresh();
       collabRefreshConflictInfo();
     }catch(e){
       collabRecordError(L('同步失败：{msg}',{msg:e.message}));
@@ -865,10 +1093,21 @@ function collabDrainApply(){
     }
   });
 }
-function collabNotifyOverwrite(stats){
+function collabNotifyOverwrite(stats,rep){
   const now=Date.now();
-  if(now-collabNotifyAt<3000) return;
-  collabNotifyAt=now;
+  if(now-collabOverwriteAt<3000) return;
+  collabOverwriteAt=now;
+  const lost=rep&&Array.isArray(rep.items)?rep.items.filter(i=>i.dir==='local'):[];
+  if(lost.length){
+    const names=lost.slice(0,2).map(i=>i.name||i.id||L('场地')).join('、');
+    const more=lost.length>2?L(' 等 {n} 项',{n:lost.length}):'';
+    const known=lost.some(i=>i.known);
+    /* 无基线时不得把「已被对端更新」说成冲突（喊错比不喊更伤信任） */
+    toast(known
+      ? `${L('同步覆盖了你的 {n} 处修改',{n:rep.local})}：${names}${more}（${L('可在协作面板恢复')}）`
+      : `${L('已被对端更新 {n} 处',{n:rep.local})}：${names}${more}（${L('可在协作面板查看')}）`,'warn');
+    return;
+  }
   const parts=[];
   if(stats.updated) parts.push(`~${stats.updated}`);
   if(stats.deleted) parts.push(`-${stats.deleted}`);
@@ -1192,8 +1431,10 @@ function openCollabPanel(){
      <div class="hint-text">${L('底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。')}</div>
      <div id="collabPeers" class="hint-text">${L('尚未连接')}</div>
      <div id="collabStatus" class="hint-text">${collabLastStatus||L('尚未连接')}</div>
-     <div id="collabConflictInfo" class="hint-text">${L('尚无冲突记录')}</div>`,
+     <div id="collabConflictInfo" class="hint-text">${L('尚无冲突记录')}</div>
+     <div class="form-actions"><button id="collabConflictsBtn">${L('查看冲突清单…')}</button></div>`,
     [{text:L('关闭'),click:closeModal}]);
+  $('collabConflictsBtn').onclick=openCollabConflictsPanel;
   $('collabLocalBtn').onclick=()=>{
     if(collabMode==='local'&&collabActive) collabStopAll();
     else collabStartLocal($('collabChannel').value||'draft');
@@ -1220,3 +1461,5 @@ function openCollabPanel(){
 }
 
 $('collabBtn').onclick=openCollabPanel;
+/* 刷新后角标要立刻反映账本里未处理的覆盖（账本按工程键持久化） */
+collabBadgeRefresh();

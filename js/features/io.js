@@ -145,6 +145,8 @@ async function openProjectLibrary(){
         const changed=stats.added||stats.updated||stats.deleted||stats.floorsAdded||stats.layersDeleted||stats.typesDeleted;
         const conflict=stats.conflicts?L('；冲突 {n} 项按较新版本保留',{n:stats.conflicts}):'';
         const cfg=stats.config||{};
+        /* 冲突可见性：文件合并同样可能覆盖本端内容，记进本机账本（无会话基线 → 标记原因未知） */
+        if(stats.overwrites) collabLedgerAdd(stats.overwrites,'');
         /* A3：配置差异必须可见；报告异常也不阻断合并，只提示 */
         const configNote=mergeConfigText(stats);
         const extra=(stats.layersDeleted||stats.typesDeleted)?' · '+L('图层')+' -'+stats.layersDeleted+' · '+L('类型')+' -'+stats.typesDeleted:'';

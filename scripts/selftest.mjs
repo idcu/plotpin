@@ -7548,7 +7548,7 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
     id, name: String(id), kind: 'point', typeId: 'point.marker', layerId: 'layer.default',
     x, y: 0, updatedAt: ts, createdAt: ts, style: {}, props: {}, visible: true, locked: false, z: 0
   });
-  const M = (a, b) => api.mergeProjectData(a, b);
+  const M = (a, b, base) => api.mergeProjectData(a, b, base);
   const ids = p => (p.objects || []).map(o => o.id).join(',');
   const zero = { added: 0, updated: 0, deleted: 0, conflicts: 0, floorsAdded: 0, floorMetaUpdated: 0, floorsDeleted: 0, siteDeleted: 0, siteCleared: 0, layersDeleted: 0, typesDeleted: 0 };
 
@@ -7733,6 +7733,86 @@ await section("59. 离线协作：工程级 LWW 合并与删除墓碑", async ()
     P([], {site:null, floors:[{id:'floor.default',name:'1F',updatedAt:T1,site:null}]}));
   eq('合并-同时间戳保留本地场地', mTie.project.site && mTie.project.site.id, 'site.merge');
   eq('合并-同时间戳不误报清空', mTie.stats.siteCleared, 0);
+
+  /* 冲突可见性 S1：覆盖报告只读，不改 pick、不改 stats 键集 */
+  const ov1 = M(P([O('A', T1, 1)]), P([O('A', T2, 2)]));
+  eq('覆盖报告-本端被覆盖计数', ov1.overwrites.local, 1);
+  eq('覆盖报告-本端被覆盖不计 remote', ov1.overwrites.remote, 0);
+  eq('覆盖报告-条目方向与类型', ov1.overwrites.items[0].dir + '/' + ov1.overwrites.items[0].kind, 'local/update');
+  eq('覆盖报告-条目对象与楼层', ov1.overwrites.items[0].id + '@' + ov1.overwrites.items[0].floorId, 'A@floor.default');
+  eq('覆盖报告-保留本端旧值快照', ov1.overwrites.items[0].snapshot.x, 1);
+  eq('覆盖报告-快照保留旧时间戳', ov1.overwrites.items[0].snapshot.updatedAt, T1);
+  eq('覆盖报告-不改变合并结果', ov1.project.objects[0].x, 2);
+  eq('覆盖报告-stats 键集不变', Object.keys(ov1.stats).sort().join(','), Object.keys(zero).sort().join(','));
+  eq('覆盖报告-不改变 stats 深比较', JSON.stringify(ov1.stats), JSON.stringify(Object.assign({}, zero, { updated:1, conflicts:1 })));
+
+  const ov2 = M(P([O('A', T2, 2)]), P([O('A', T1, 1)]));
+  eq('覆盖报告-本端胜出无本端损失', ov2.overwrites.local, 0);
+  eq('覆盖报告-无基线不记对端条目', ov2.overwrites.remote + ov2.overwrites.items.length, 0);
+  eq('覆盖报告-本端胜出保留本地值', ov2.project.objects[0].x, 2);
+
+  const ov3 = M(P([O('A', T1, 1)]), P([O('A', T1, 1)]));
+  eq('覆盖报告-无变化不记账', ov3.overwrites.local + ov3.overwrites.remote + ov3.overwrites.items.length, 0);
+  const ov5 = M(P([O('A', T1, 1)]), P([]));
+  eq('覆盖报告-远端缺失不算覆盖', ov5.overwrites.local + ov5.overwrites.remote, 0);
+
+  const ov4 = M(P([O('A', T1, 1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
+  eq('覆盖报告-本端对象被删除计 local', ov4.overwrites.local, 1);
+  eq('覆盖报告-删除条目类型', ov4.overwrites.items[0].kind, 'delete');
+  eq('覆盖报告-删除条目保留快照', ov4.overwrites.items[0].snapshot.x, 1);
+
+  const ov7 = M(P([], { floors: [
+    { id: 'floor.default', name: '1F' },
+    { id: 'floor.F2', name: '2F', objects: [O('X1', T1)] }
+  ] }), P([], { tombstones: [{ id: 'floor.F2', deletedAt: T2, kind: 'floor' }] }));
+  eq('覆盖报告-整层删除计 local', ov7.overwrites.local, 1);
+  eq('覆盖报告-整层删除条目', ov7.overwrites.items[0].scope + '/' + ov7.overwrites.items[0].count, 'floor/1');
+
+  const ov8 = M(P([], { site: siteA, floors: [{ id: 'floor.default', name: '1F', updatedAt: T1, site: siteA }] }),
+    P([], { site: null, floors: [{ id: 'floor.default', name: '1F', updatedAt: T2, site: null }] }));
+  eq('覆盖报告-场地被远端清空计 local', ov8.overwrites.local, 1);
+  eq('覆盖报告-场地清空留快照', ov8.overwrites.items[0].scope + '/' + ov8.overwrites.items[0].snapshot.id, 'site/site.merge');
+
+  const manyN = 250;
+  const ov6 = M(P(Array.from({ length: manyN }, (_, i) => O('M' + i, T1, 1))),
+    P(Array.from({ length: manyN }, (_, i) => O('M' + i, T2, 2))));
+  eq('覆盖报告-计数精确不受上限影响', ov6.overwrites.local, manyN);
+  eq('覆盖报告-明细上限 200', ov6.overwrites.items.length, 200);
+  eq('覆盖报告-截断计数', ov6.overwrites.truncated, manyN - 200);
+  eq('覆盖报告-上限不改变合并结果', ov6.project.objects.length, manyN);
+
+  /* 冲突可见性 S2：会话级内容基线——只用于分类，只有真正收敛才推进 */
+  const baseOf = (proj) => M(proj, JSON.parse(JSON.stringify(proj))).overwrites.nextBase;
+  const bA = baseOf(P([O('A', T1, 1)]));
+  const sigT1 = bA.get('o:floor.default:A');
+  ok('基线-两侧一致后建立', typeof sigT1 === 'string' && sigT1.length > 0);
+  const mR = M(P([O('A', T1, 1)]), P([O('A', T2, 2)]), bA);
+  eq('基线-仅远端改不提示冲突', mR.overwrites.local, 0);
+  eq('基线-仅远端改仍按 LWW 更新', mR.project.objects[0].x, 2);
+  eq('基线-远端胜出且本端采纳后可推进', mR.overwrites.nextBase.get('o:floor.default:A'), baseOf(P([O('A', T2, 2)])).get('o:floor.default:A'));
+  const mL = M(P([O('A', T2, 2)]), P([O('A', T1, 1)]), bA);
+  eq('基线-仅本端改不记账', mL.overwrites.local + mL.overwrites.remote, 0);
+  eq('基线-本端胜出不推进基线', mL.overwrites.nextBase.get('o:floor.default:A'), sigT1);
+  const mBothR = M(P([O('A', T2, 2)]), P([O('A', T3, 3)]), bA);
+  eq('基线-双边改动且本端被覆盖', mBothR.overwrites.local, 1);
+  eq('基线-真冲突可证明', mBothR.overwrites.items[0].known && mBothR.overwrites.items[0].both, true);
+  const mBothL = M(P([O('A', T3, 3)]), P([O('A', T2, 2)]), bA);
+  eq('基线-双边改动本端保留只记条目', mBothL.overwrites.remote, 1);
+  eq('基线-本端保留无本端损失', mBothL.overwrites.local, 0);
+  const mConv = M(P([O('A', T2, 2)]), P([O('A', T2, 2)]), bA);
+  eq('基线-收敛后才推进', mConv.overwrites.nextBase.get('o:floor.default:A'), baseOf(P([O('A', T2, 2)])).get('o:floor.default:A'));
+  const mUnk = M(P([O('A', T1, 1)]), P([O('A', T2, 2)]));
+  eq('基线-无基线仍记本端被覆盖', mUnk.overwrites.local, 1);
+  eq('基线-无基线不得声称并发', mUnk.overwrites.items[0].known, false);
+  const mTieUnk = M(P([O('A', T1, 1)]), P([O('A', T1, 2)]));
+  eq('基线-无基线同刻平局不宣称损失', mTieUnk.overwrites.local, 0);
+  const mUnkL = M(P([O('A', T2, 2)]), P([O('A', T1, 1)]));
+  eq('基线-无基线本端胜出不刷屏', mUnkL.overwrites.remote + mUnkL.overwrites.items.length, 0);
+  const mDel = M(P([O('A', T2, 2)]), P([], { tombstones: [{ id: 'A', deletedAt: T3, kind: 'object' }] }), bA);
+  eq('基线-本端编辑被对端删除仍记账', mDel.overwrites.local, 1);
+  const mDelNoEdit = M(P([O('A', T1, 1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }), bA);
+  eq('基线-本端未改的正常远端删除不记账', mDelNoEdit.overwrites.local, 0);
+  eq('基线-对象已不在结果时清理键', mDelNoEdit.overwrites.nextBase.has('o:floor.default:A'), false);
 
   const m7 = M(P([O('A', T1)]), P([], { tombstones: [{ id: 'A', deletedAt: T2, kind: 'object' }] }));
   eq('合并-删除墓碑胜过旧对象', m7.project.objects.length, 0);

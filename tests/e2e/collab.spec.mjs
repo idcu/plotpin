@@ -514,6 +514,150 @@ test('N-17：跨工程消息隔离与纯冲突可见', async ({ page, context })
   expect(info).not.toContain('Ctrl+Z');
 });
 
+test('S3 冲突可见性：本端被覆盖进账本、角标与批量提示，单边同步不打扰', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  /* 先挂 toast 监听再建连：覆盖提示 2.6 s 后自动消失，直接查 DOM 会偶发错过 */
+  await page.evaluate(() => {
+    window.__toasts = [];
+    const orig = window.toast;
+    window.toast = (m, t) => { window.__toasts.push(String(m)); return orig(m, t); };
+  });
+  const ch = uniqueChannel('e2e-conflict-visible');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* 先收敛出内容基线：同内容快照合并只推进基线，不算冲突 */
+  await p2.evaluate(() => collabSendObject({ t: 'snapshot', project: persistableState() }));
+  await expect.poll(() => page.evaluate(() => collabConflictBase().size), { timeout: 4000 }).toBeGreaterThan(0);
+
+
+  /* 断开后双方各改一次（真并发） */
+  await page.evaluate(() => collabStopAll());
+  await waitState(p2, 'disconnected');
+  await page.evaluate(() => { const o = state.objects[0]; o.x = 100; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(80);
+  await p2.evaluate(() => { const o = state.objects[0]; o.x = 200; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await p2.waitForTimeout(800);
+
+  /* 清掉连接前遗留的提示节流窗口，确保本次覆盖提示可被观测 */
+  await page.evaluate(() => { collabOverwriteAt = 0; window.__toasts = []; });
+  await page.evaluate(c => collabStartLocal(c), ch);
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 6000 }).toBe(200);
+  await expect.poll(() => page.evaluate(() => (window.__collabLastMerge && window.__collabLastMerge.overwrites && window.__collabLastMerge.overwrites.local) || 0),
+    { timeout: 6000 }).toBe(1);
+
+  const led = await page.evaluate(() => ({
+    pending: collabLedgerPending(),
+    items: JSON.parse(localStorage.getItem(collabLedgerKey()) || '{"items":[]}').items,
+    toasts: window.__toasts
+  }));
+  console.log('[S3] conflict ledger pending=' + led.pending + ', toasts=' + JSON.stringify(led.toasts));
+  expect(led.pending).toBe(1);
+  expect(led.items.length).toBe(1);
+  expect(led.items[0].dir).toBe('local');
+  expect(led.items[0].known).toBe(true);
+  expect(led.items[0].snap.x).toBe(100);
+  expect(led.items[0].loserSig).toBeUndefined();
+  expect(led.toasts.some(t => t.includes('同步覆盖了你的 1 处修改'))).toBe(true);
+  await expect(page.locator('#collabBadge')).toHaveText('1');
+
+  /* 去重：同一对版本重复推送不再记账 */
+  await p2.evaluate(() => collabSendObject({ t: 'snapshot', project: persistableState() }));
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => collabLedgerPending())).toBe(1);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem(collabLedgerKey())).items.length)).toBe(1);
+
+  /* 单边远端更新（本端未改）不打扰：不进账本、不弹冲突 */
+  await page.evaluate(() => { window.__toasts = []; });
+  await p2.evaluate(() => { const o = state.objects[0]; o.x = 300; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await p2.waitForTimeout(800);
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 6000 }).toBe(300);
+  expect(await page.evaluate(() => collabLedgerPending())).toBe(1);
+  expect(await page.evaluate(() => (window.__collabLastMerge.overwrites || {}).local || 0)).toBe(0);
+  expect(await page.evaluate(() => window.__toasts.join('|'))).not.toContain('已被对端更新');
+
+  await openCollab(page);
+  await expect(page.locator('#collabConflictInfo')).toContainText('本端被覆盖 1');
+  await expect(page.locator('#collabConflictInfo')).toContainText('本端保留 0');
+});
+
+test('S4 冲突清单与对象级恢复：只读拒绝、非当前楼层先切层、恢复可撤销并广播', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  await page.evaluate(() => {
+    window.__toasts = [];
+    const orig = window.toast;
+    window.toast = (m, t) => { window.__toasts.push(String(m)); return orig(m, t); };
+  });
+  const ch = uniqueChannel('e2e-conflict-restore');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+  await p2.evaluate(() => collabSendObject({ t: 'snapshot', project: persistableState() }));
+  await expect.poll(() => page.evaluate(() => collabConflictBase().size), { timeout: 4000 }).toBeGreaterThan(0);
+
+  /* 断开后双方各改一次，重连后本端被覆盖（旧值 x=100 进账本） */
+  const floorId = await page.evaluate(() => state.activeFloorId);
+  await page.evaluate(() => collabStopAll());
+  await waitState(p2, 'disconnected');
+  await page.evaluate(() => { const o = state.objects[0]; o.x = 100; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(80);
+  await p2.evaluate(() => { const o = state.objects[0]; o.x = 200; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(800);
+  await page.evaluate(c => collabStartLocal(c), ch);
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 6000 }).toBe(200);
+  await expect.poll(() => page.evaluate(() => collabLedgerPending()), { timeout: 6000 }).toBe(1);
+
+  await openCollab(page);
+  await page.click('#collabConflictsBtn');
+  await expect(page.locator('#modalBody')).toContainText('本端被覆盖');
+
+  /* 只读：恢复被 guardWrite 拒绝，现场不变 */
+  await page.evaluate(() => setReadOnly(true));
+  await page.click('#collabRestoreBtn0');
+  await expect.poll(() => page.evaluate(() => window.__toasts.join('|')), { timeout: 2000 }).toContain('本地只读');
+  expect(await page.evaluate(() => state.objects[0].x)).toBe(200);
+  await page.evaluate(() => setReadOnly(false));
+
+  /* 非当前楼层：清单仍可见，但必须提示先切层 */
+  await page.evaluate(() => addFloor('E2E-2F'));
+  await expect.poll(() => page.evaluate(() => state.floors.length)).toBe(2);
+  await page.click('#collabRestoreBtn0');
+  await expect.poll(() => page.evaluate(() => window.__toasts.join('|')), { timeout: 2000 }).toContain('请先切换到该楼层');
+  expect(await page.evaluate(() => collabLedgerPending())).toBe(1);
+
+  /* 回到原楼层后恢复：写回旧值、进撤销栈、账本标记已处理、广播给对端 */
+  await page.evaluate(id => switchFloor(id), floorId);
+  const histBefore = await page.evaluate(() => history.past.length);
+  await page.click('#collabRestoreBtn0');
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 3000 }).toBe(100);
+  expect(await page.evaluate(() => history.past.length)).toBe(histBefore + 1);
+  await expect.poll(() => page.evaluate(() => collabLedgerPending()), { timeout: 3000 }).toBe(0);
+  expect(await page.evaluate(() => document.getElementById('collabBadge').style.display)).toBe('none');
+  await expect.poll(() => p2.evaluate(() => state.objects[0].x), { timeout: 8000 }).toBe(100);
+
+  /* 恢复是普通编辑：Ctrl+Z 可退回覆盖后的值 */
+  await closeModal(page);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 3000 }).toBe(200);
+});
+
 test('邀请串三步建连与二维码容量提示（同机双标签，非双设备）', async ({ page, context }) => {
   const p2 = await context.newPage();
   await openApp(page);
