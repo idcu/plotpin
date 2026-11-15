@@ -608,6 +608,19 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '画布不一致':'canvas mismatch',
     '参照版为空':'reference is empty',
     '不是工程 JSON':'not a project JSON',
+    /* M1 多页 PDF 导入 */
+    'PDF 导入预检':'PDF import pre-check',
+    '有内嵌图':'Has embedded image',
+    '尺寸':'Size',
+    '图形':'Shapes',
+    '内嵌图':'Embedded image',
+    '仅第 1 页（默认，与旧版一致）':'Page 1 only (default, same as before)',
+    '指定页范围':'Specify page range',
+    '请输入页范围':'Enter a page range',
+    '页范围过长（最多 200 字符）':'Page range is too long (max 200 characters)',
+    '页范围格式如 1-3,5':'Page range format e.g. 1-3,5',
+    '没有有效页码':'No valid page number',
+    '所选页没有可导入的图形':'The selected pages contain no importable shapes',
     [TXT_SITE_DRAG_HINT]:'Drag the control points on the canvas to adjust the site; you can also enter exact coordinates/parameters here. Coordinates are world coordinates (m) and may be negative; a site and an image base map can coexist.'
   };
 
@@ -757,7 +770,21 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？':
       'Layer "{layer}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
     '类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？':
-      'Type "{type}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?'
+      'Type "{type}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
+    /* M1 多页 PDF 导入（含占位） */
+    '检测到多页 PDF（共 {n} 页）。默认只导入第 1 页；选择页范围才会走多页导入。':
+      'Multi-page PDF detected ({n} pages). By default only page 1 is imported; choose a page range to import multiple pages.',
+    '页码必须在 1–{n} 内，且起始页不大于结束页':
+      'Page numbers must be within 1–{n}, and the start must not exceed the end',
+    '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
+      '{n} page(s) selected · {e} shapes · {o} / {max} objects after import',
+    '多页按所选页升序横向并排，所选的第一个页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，便于区分来源页。底图只取所选页中第 1 页的内嵌图。':
+      'Pages are placed side by side in ascending order with the first page at the origin and a {gap} m gap; each page\'s objects go to a "PDF page i" layer so the source page stays traceable. Only the first selected page\'s embedded image is used as the base map.',
+    '共 {total} 页，已导入第 {list} 页（横向并排，间距 {gap} m）':
+      '{total} page(s); imported page(s) {list} (side by side, {gap} m gap)',
+    '第 {list} 页没有可导入的图形，已跳过':
+      'Page(s) {list} contained no importable shapes and were skipped',
+    'PDF 导入失败（已回滚）：{msg}':'PDF import failed (rolled back): {msg}'
   };
   /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
   function fillTemplate(text, params) {
