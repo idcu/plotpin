@@ -1,28 +1,28 @@
 # 事实源（FACTS）
 
 > **用途**：易变数字的唯一集中快照。正文只写“以命令输出为准”，不复制本表的旧值。
-> **取数时间**：2026-11-15；代码基线：`209117f`（2026-11-15 收尾批次：arc 装载审计白名单、comments e2e 覆盖、钩子计数精确化、文档口径同步）。本表随文档批次提交，产品代码以上述提交为准。
+> **取数时间**：2026-11-23；代码基线：`8189ba4`（2026-11-23 ngm 消费链升级：10 个公共模块升到 schema v3 新 tag、vendor 来源恢复可验证、SW 267）。本表随文档批次提交，产品代码以上述提交为准。
 > **规则**：本表每一行必须能在当前仓库复跑；数字变化后同批更新本表，禁止估算。
 
 ## 1. 构建产物
 
-| 指标 | 2026-11-15 快照 | 取数命令 | 说明 |
+| 指标 | 2026-11-23 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 838,486 B（818.8 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser C 模式压缩（`passes:3`） |
-| gzip 字节 | 273,958 B（267.5 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 单文件产物字节 | 838,661 B（819.0 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser C 模式压缩（`passes:3`） |
+| gzip 字节 | 274,013 B（267.6 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
-| 体积余量 | 1,194 B（gzip 余量 12,762 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
-| Service Worker 版本 | `VERSION=266` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 1,019 B（gzip 余量 12,707 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| Service Worker 版本 | `VERSION=267` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
-| 指标 | 2026-11-15 快照 | 取数命令 | 说明 |
+| 指标 | 2026-11-23 快照 | 取数命令 | 说明 |
 |---|---|---|---|
 | selftest 断言 | 4,558 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；ARC S1–S6 与 C-01 的增量见前序快照；本轮新增 2 条（ARC 装载审计零警告 + 未知类型负向）；帮助中心导出清单 9 条、多页 PDF 19 条、冲突可见性 26+18 条、C-01 14 条 |
 | selftest 分区 | 175 个 | `node scripts/selftest.mjs --list` | 输出 176 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
 | e2e spec 文件 | 49 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 50 个 `.mjs`（49 spec + 1 helper） |
-| e2e 用例 | 188 个（源码 187 通过 + 1 条件跳过；dist 184 通过 + 4 跳过） | `node scripts/e2e.mjs` | 2026-11-15 收口双入口全量实跑；跳过项均为显式条件（协作 soak 需 `COLLAB_SOAK=1`，SW 三条仅 dist 入口不适用）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
+| e2e 用例 | 188 个（源码 187 通过 + 1 条件跳过；dist 184 通过 + 4 跳过） | `node scripts/e2e.mjs` | 2026-11-23 双入口全量实跑（ngm 升级后）；跳过项均为显式条件（协作 soak 需 `COLLAB_SOAK=1`，SW 三条仅 dist 入口不适用）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check-contracts.mjs` | 规则删空即红 |
 | 插件 API 面 | 31 键 / 31 条清单 / 0 泄漏 / 0 落空 | `node scripts/check-plugin-api.mjs` | 词法器 + fail-closed；API 1.1.0 / 8 项能力 |
 | 耦合基线 | `core→features` 21 条（合计 89 次）/ `common→core` 3 条 / 软调用 13 条（5+2+5+1） | `node -e "const c=require('./contracts/coupling.json');…"`；以文件为准 | 按文件+符号+次数严格相等，只减不增 |

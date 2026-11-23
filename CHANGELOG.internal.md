@@ -4,6 +4,16 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-23 · ngm 消费链升级：10 个公共模块到 schema v3 新 tag
+
+- **Commit Hash**：`8189ba4`
+- **核心问题**：plotpin 的 4 个 vendor 补丁（dxf 控制字符与首尾空格、pdf LZW 上限、xlsx-read 超限附表、zip 流式解压）直接改在 `ngm.vendor` 里，`ngm verify --content` 对 4 个模块恒为 critical（dxf 20023 vs 19812 字节）——本地字节清单制造了“来源可验证”的假绿；项目清单与 lock 也停在 schema 1 / lock v2，当前 ngm 直接拒绝。
+- **核心改动**：补丁上游化到 ngm-repo 并按新 tag 重装 —— `format/dxf 0.2.3`、`format/pdf 0.2.1`、`format/xlsx-read 0.3.2`、`format/zip 0.2.1`；`core/assets 0.2.1`、`core/geometry 0.2.1`、`format/dsv 0.3.1`、`format/pdf-image 0.1.1`、`format/qr 0.1.1`、`format/xml-lite 0.2.1` 同步 schema v3 patch 版本。`io-import.js` 的 XLSX 读取改传 `{skipOversizedSheets:true}`；`check-ngm` 升级到 lock v3 / schema v3 并刷新 vendor 字节清单；`.ngm-version` → `0.103.0-dev.2`。
+- **预算**：dist 838,486 → **838,661 B（+175 B）**；gzip 273,958 → **274,013 B（+55 B）**；余量 **1,019 B**（gzip 12,707 B）；SW `VERSION=266 → 267`，53 个预缓存输入。
+- **验证数据**：`ngm verify --content` **10/10 ok**（升级前 4 个模块 critical）；`check-ngm` OK（62 文件 / 10 模块）；selftest **4,558 通过 / 0 失败**；`npm run ci` 退 0（门禁牙齿 10/10 + 20/20）；e2e 源码 **187 通过 / 1 跳过**（4.1m），dist **184 通过 / 4 跳过**（3.8m）。
+- **跳过项**：`COLLAB_SOAK=1` 才跑的 5 分钟离线浸泡；dist 入口的 SW 预缓存用例（单文件产物无 `js/` / `sw.js`）；`V-6` / `V-6b`（未安装 poppler `pdftotext`）。
+- **未验证项 / 边界**：dist raw 余量只剩 1,019 B，下一次功能改动前必须先回收；本机未跑 Firefox 门禁，Chromium 双入口为唯一证据；ngm 0.103 dev 没有 GitHub release 资产，CI 的可选 `ngm-verify` 需自带匹配二进制。
+
 ## 2026-11-15 · 收尾批次：arc 装载审计白名单、comments e2e 与钩子计数精确化
 
 - **Commit Hash**：`209117f`
