@@ -56,6 +56,26 @@ test('limits can be overridden per call', async () => {
   );
 });
 
+test('compressed entries are capped while inflating, even if the central directory lies', async () => {
+  const buf = build(
+    [{ name: 'big.txt', text: 'compress-me-'.repeat(200) }],
+    { compress: (bytes) => deflateRawSync(bytes) }
+  );
+  /* 把中央目录声明的解压后大小改成 1 字节，绕过「解压后复核」，
+     只有流式累计能在展开过程中中止（防止先完整展开再拒绝的内存峰值）。 */
+  const bytes = new Uint8Array(buf);
+  const dv = new DataView(bytes.buffer);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= 0; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  assert.ok(eocd > 0);
+  const cen = dv.getUint32(eocd + 16, true);
+  assert.equal(dv.getUint32(cen, true), 0x02014b50);
+  dv.setUint32(cen + 24, 1, true);
+  await assert.rejects(() => readEntries(bytes, { maxEntryBytes: 3 }), /解压中超过/);
+});
+
 test('verifyCrc rejects corrupted entries when requested', async () => {
   const buf = build([{ name: 'a.txt', text: 'hello' }]);
   const bytes = new Uint8Array(buf);

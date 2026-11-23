@@ -180,11 +180,14 @@
     /**
      * 逐工作表读取（保留表名与路径，含空表），供调用方做分表告警/业务过滤。
      * 返回 [{name, path, rows}]，顺序与工作簿一致。
+     * skipOversizedSheets=true 时跳过超过 maxRows 的工作表并在返回数组上挂
+     * 非枚举 skippedSheets 计数；默认仍抛错（不静默丢数据）。
      */
     async function readSheets(arrayBuffer, callOpt) {
       const co = callOpt || {};
       const L = Object.assign({}, XLSX_LIMITS, co);
       const allowEmpty = co.allowEmpty != null ? !!co.allowEmpty : !!o.allowEmpty;
+      const skipOversized = !!co.skipOversizedSheets;
       const entries = await Zip.readEntries(arrayBuffer, co);
       const sheets = listSheets(entries);
       if (!sheets.length) {
@@ -193,11 +196,24 @@
       }
       if (sheets.length > L.maxSheets) throw new Error('工作表数量超过上限 ' + L.maxSheets + ' 个，请拆分后导入');
       const shared = readSharedStrings(entries);
-      return sheets.map((s) => ({
-        name: s.name,
-        path: s.path,
-        rows: xlsxSheetToRows(decodeUtf8(entries[s.path]), shared, XmlLite, co)
-      }));
+      const out = [];
+      let skipped = 0;
+      for (const s of sheets) {
+        let rows;
+        try {
+          rows = xlsxSheetToRows(decodeUtf8(entries[s.path]), shared, XmlLite, co);
+        } catch (e) {
+          /* 单表超限只跳过该表，避免整个工作簿因附表过大而失败；合并/全部超限仍抛错 */
+          if (skipOversized && /^表格行数超过上限 /.test(e.message)) { skipped++; continue; }
+          throw e;
+        }
+        out.push({ name: s.name, path: s.path, rows });
+      }
+      if (skipped) {
+        if (!out.length) throw new Error('所有工作表行数均超过上限 ' + L.maxRows + ' 行，请拆分后导入');
+        Object.defineProperty(out, 'skippedSheets', { value: skipped, enumerable: false });
+      }
+      return out;
     }
 
     async function readRows(arrayBuffer, callOpt) {
@@ -223,6 +239,9 @@
       if (!merged.length) {
         if (allowEmpty) return [];
         throw new Error('XLSX 工作表为空');
+      }
+      if (all.skippedSheets) {
+        Object.defineProperty(merged, 'skippedSheets', { value: all.skippedSheets, enumerable: false });
       }
       return merged;
     }

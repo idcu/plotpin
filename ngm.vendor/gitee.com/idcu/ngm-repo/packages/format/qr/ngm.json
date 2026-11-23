@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "@idcu/format-qr",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "runtime": "node",
   "main": "./src/index.mjs",
   "dependencies": []

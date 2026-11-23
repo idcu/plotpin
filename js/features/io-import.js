@@ -88,7 +88,7 @@ async function handleImportFile(f){
   }
   if(ext==='xlsx'){
     try{
-      const rows=await ensureVendor('Xlsx').readRows(await f.arrayBuffer());
+      const rows=await ensureVendor('Xlsx').readRows(await f.arrayBuffer(),{skipOversizedSheets:true});
       if(rows.skippedSheets) toast(L('已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表',{n:rows.skippedSheets}),'warn');
       if(!rows.length) return toast('XLSX 中没有可导入的工作表','warn');
       const rowErrs=importLimitErrors({rows:rows.length});

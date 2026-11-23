@@ -6023,10 +6023,10 @@ asyncSuites.push((async()=>{
     {name:'xl/worksheets/sheet1.xml',text:sheetXml([['编号','对象类型'],['O1','点设备']])},
     {name:'xl/worksheets/sheet2.xml',text:sheetXml([['编号','对象类型'],['A','点设备'],['B','点设备'],['C','点设备']])}
   ]);
-  const skipRows=await api.Xlsx.readRows(multiSheet,{maxRows:3});
+  const skipRows=await api.Xlsx.readRows(multiSheet,{maxRows:3,skipOversizedSheets:true});
   eq('加固XLSX-超限附表跳过', [skipRows.length,skipRows.skippedSheets], [2,1]);
   const onlyBig=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:sheetXml([['编号'],['1'],['2'],['3']])}]);
-  await rejects('加固XLSX-全部超限仍报错', api.Xlsx.readRows(onlyBig,{maxRows:3}), /行数/);
+  await rejects('加固XLSX-全部超限仍报错', api.Xlsx.readRows(onlyBig,{maxRows:3,skipOversizedSheets:true}), /行数/);
 
   /* ---- DXF ---- */
   eq('加固DXF-空文本返回空实体', api.Dxf.parseDxf('').entities.length, 0);

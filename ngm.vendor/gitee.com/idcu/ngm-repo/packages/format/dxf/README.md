@@ -20,6 +20,9 @@ const text = build(entities, [{ name: '围墙', color: '#334155' }], { factor: 1
   `parse(text, { maxChars, maxEntities, maxInsertDepth })` 可覆盖默认上限；
   `maxInsertDepth` 默认 1（只展开顶层 INSERT，保持旧行为），可设 1–8 递归展开嵌套块。
 - 生成默认 `$ACADVER=AC1009`（R12）；`build(..., { version: 'R14' })` 输出 `AC1014`。
+- 0.2.2：TEXT 组码值里的 C0/C1 控制字符（裸 `\r`、NUL、`\u001b`/`\u001f` 等）整段折叠为单个空格，
+  避免控制符原样写进 pair 造成解析错位。
+- 0.2.3：`parse` 不再 trim TEXT/ATTRIB 的首尾空格（组码 1 的值原样保留）。
 - 辅助函数：`nearestAci` / `safeLayer` / `bulgeSegment` / `evalBSpline` / `sampleEllipse` / `stripMtext`。
 - 不支持：ZIP 内嵌、二进制 DXF、完整 DIMENSION/HATCH 等实体。
 

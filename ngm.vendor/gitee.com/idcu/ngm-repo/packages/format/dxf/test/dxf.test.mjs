@@ -38,6 +38,19 @@ test('build + parse round trip (mm ↔ m)', () => {
   assert.equal(txt.text, 'O0001 camera-01');
 });
 
+test('TEXT control characters are folded instead of corrupting group codes', () => {
+  const text = build([{ type: 'TEXT', layer: '0', x: 0, y: 0, text: 'A\rB\0C\u001fD\nE' }], []);
+  assert.ok(!text.includes('\0'));
+  const back = parse(text);
+  assert.equal(back.entities[0].text, 'A B C D E');
+});
+
+test('TEXT leading/trailing spaces survive parsing', () => {
+  const line = '0\nTEXT\n8\n0\n10\n1\n20\n2\n40\n1\n1\n  门牌 A  \n';
+  const r = parse(dxf(6, '', line));
+  assert.equal(r.entities[0].text, '  门牌 A  ');
+});
+
 test('parse handles empty / junk / truncated input', () => {
   assert.equal(parse('').entities.length, 0);
   assert.equal(parse(null).entities.length, 0);

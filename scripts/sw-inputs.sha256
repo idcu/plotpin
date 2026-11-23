@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=266
+version=267
 3123e72fb5f38b6ccd6f91e485e796f7302725669740dae96f14421933255168  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 dc4056970c30b77da2708144eae1fea43fc262f268684e02d72116d3fa23f806  index.html
@@ -34,7 +34,7 @@ c4ecfa089e5f0a86cab9704a622f6ea0877985cfbbdda4673e301cfb0f3ed945  js/core/viewpo
 121537859883e64e043a20ea8a979ea2c4dbe1c24aa42a10c0b107302a959a0b  js/features/comments.js
 d8e03df689f54b712934d07f2196e6c35a17fb290c2df762d1af1f32f6e8d6b2  js/features/io-export.js
 d1b47f4719da3449f15d9983ba128bb67cd9a93da460ebc7a03f9840c215d501  js/features/io-fields.js
-e5671cc1a49278a9bacac7758f96bc905ac3936467301abd036b74e3f8e413ef  js/features/io-import.js
+7379934c5bd7f95f0e137532cbf6151f3ac720945a13af9d8dd4ef04e29ead2b  js/features/io-import.js
 33ced3db9cec4a12006760360c3a8650a85a979ba85fc15aefd8d2a236097d2f  js/features/io-table.js
 1bfff101011d427c9d20665373711a55a339bcf24fef19afa9435772b3447df2  js/features/io.js
 0c8aaa4a0b70d1eecfb81e9e61d7cd63957ac3b7896eba684737fc5f6fe31829  js/features/parking.js
@@ -48,11 +48,11 @@ a571b6f5b58ddc163cc0eb69b0c849a8091b3274406cc3b495cc266629328c12  js/features/ui
 5e1137eca399e2bd0a85e1890268b319aec2fffd3c20354fd8664ff079ad7909  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets/src/core.js
 4c6e26b341a211b76218e26fc9fa5f644077bc0136e28348b4b529558b42bd02  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/geometry/src/core.js
 8f893da7e2a131e5795628f813b1999879a7cbe67a57812de0072b3ede63a21a  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dsv/src/vendor/dsv.js
-94e88bdb8eaf09219b8ece98239bb89b88c8697628e0f11e627340e02708ce03  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf/src/core.js
+3dc8286a903c2308305c5b7230491da671950e0cf04535b07b0c1d6586697877  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dxf/src/core.js
 a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf-image/src/core.js
-24520fc0cec7229760570242dd73e841001466ebbffcf320fd6dec22b7c44abe  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf/src/core.js
+9e8d4bacde21fad0441a88207efc6f4966ad53fc8c28b289a11f2e4f8fbfe4fa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/pdf/src/core.js
 202910ffd949406f841020fb4f2940a8f35dec4b60610943a67748a1f46901d0  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/qr/src/core.js
-95e74909dbe0fa2393303a34a2365ba3020f08d61553a7454f340e19f10139b1  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
+1be284fb8b54201feef446fb0ad41e59f794f9ca8499eb122c290d49886451c4  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-2c5911c7333fd894442ef81f566f37e954c220a9460b07f9947051b3feed1730  sw.js
+60988cf26d297ddac490e65045e2b4a23027103ec7d0031d6abb17caed0f2dfa  sw.js

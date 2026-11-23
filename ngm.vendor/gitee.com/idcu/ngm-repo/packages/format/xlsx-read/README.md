@@ -33,6 +33,13 @@ const buf = X.build([['姓名', '工时'], ['张三', 8]], '工资');
 - 兄弟依赖 `zip` / `xml-lite` 从 v0.1.0 对齐到 v0.2.0，与消费方 `ngm.lock` 中实际锁定的版本一致。
 - 0.3.0 的 manifest 仍保留历史 refs；其 tag 不移动、不改写，消费方继续锁 0.3.0 时由 ngm 的 root-wins 规则覆盖。新接入方应使用 0.3.1。
 
+0.3.2 新增超限附表跳过（显式选择，默认行为不变）：
+
+- `skipOversizedSheets: true` 时，单张工作表超过 `maxRows` 只跳过该表，并在 `readRows` / `readSheets`
+  的返回数组上挂非枚举 `skippedSheets` 计数；所有工作表都超限时仍抛错。
+- 不传该选项时仍按原行为抛 `表格行数超过上限`，不静默丢数据。
+- 兄弟依赖 `zip` 对齐到 v0.2.1（流式解压上限），`xml-lite` 对齐到 v0.2.1。
+
 为什么是工厂而不是直接 import 依赖：ngm 的 vendor 目录是
 `ngm.vendor/<host>/<org>/<repo>/<subPath>`，没有按模块名的 Node 解析；
 工厂注入让消费方显式装配，模块之间零隐式路径依赖。

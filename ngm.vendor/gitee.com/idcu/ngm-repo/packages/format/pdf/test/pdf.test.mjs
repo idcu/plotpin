@@ -165,6 +165,14 @@ test('lzwDecode round trips the PDF LZW variant', () => {
   assert.ok(back.length > 300);               // 覆盖 9→10 位扩宽
 });
 
+test('lzwDecode enforces maxBytes so LZW bombs cannot inflate unbounded', () => {
+  const raw = new Uint8Array(700);
+  for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 251;
+  const packed = lzwEncode(raw);
+  assert.throws(() => P.lzwDecode(packed, undefined, 100), /解压炸弹/);
+  assert.equal(P.lzwDecode(packed, undefined, raw.length).length, raw.length);
+});
+
 test('decodeStream supports LZWDecode', async () => {
   const content = '0 0 m 4 4 l S';
   const packed = lzwEncode(new Uint8Array(Buffer.from(content, 'binary')));
