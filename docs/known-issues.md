@@ -37,7 +37,7 @@
 |---|---|---|---|
 | R-14 | 部分收口（冻结） | 入站对象的自有键过滤：`settings` 已走白名单，`meta`/`viewport` 仍 `Object.assign` | 异常 JSON 带入的多余键只影响该副本；改动涉及数据边界，留待专门批次 |
 | R-24 | 部分收口 | 沙箱 `getState` 快照有 16 MB 上限、写入类 RPC 参数 2 MB 上限；`props` 键数 / `points` 顶点数上限未做 | 16 MB 是资源保护线，不是设计载荷；自旋仍由 2 s 超时兜底 |
-| NGM-01 | 已知风险（已缓解） | 三处 vendor 补丁后 `moduleDigest` 未重算：`packages/format/{zip,pdf,dxf}` | 已用 `scripts/ngm-vendor-digest.json`（62 文件）校验实际字节，任意漂移会红并指出文件；`ngm verify --deep` 仍会失败，启用前需用 ngm 重新锁定 |
+| NGM-01 | 已关闭（2026-11-24） | 原三处 vendor 补丁后 `moduleDigest` 未重算；补丁已上游化到 ngm-repo 新 tag 并按 0.103.0 重锁 | `scripts/ngm-vendor-digest.json`（62 文件）继续守本地字节；`ngm verify --content` 用 ngm 0.103.0 实测 10/10 ok，原 `--deep` 称谓为其废弃别名 |
 | MERGE-09 | 决定保持现状 | 合并输出只保留显式字段白名单，不携带未知顶层字段 | 无消费未知字段的插件契约；保留会扩大原型污染与陈旧数据面 |
 | CORE-18 | 剩余未改 | `js/core/interaction.js` 仍通过 `render.js` 的 `isVisible` 别名取可见性 | 覆盖率层已下沉为 `model.js` 的 `effectiveVisible`；这处是 core→render 的残留，语义与 `effectiveVisible` 一致 |
 | P2-12 | 已确认不阻塞 | 墓碑上限与对象上限同为 100000（`APP_LIMITS`） | 无需再改 |

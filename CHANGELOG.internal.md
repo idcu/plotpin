@@ -4,6 +4,13 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-24 · 基于 ngm v0.103.0 的工具链升级
+
+- **核心改动**：`.ngm-version` → `0.103.0`（正式稳定版，GitHub Release 已提供二进制资产）；`ngm.json` 新增 `supplyChain.trustPolicy: no-downgrade`（update 时拒绝依赖锚点降级）；`package.json` 新增 opt-in `ngm:explain`（`ngm run --explain test`，只读预览计划）。
+- **CI**：可选 `ngm-verify` job 的 provenance 步骤改用 `ngm verify --content`（`--deep` 的现行名字），并新增 `ngm run --explain test` 只读计划步骤；两者仍受 `NGM_BIN_URL` / `NGM_BIN_SHA256` 门控。
+- **未接入**：`build --provenance` / `verify --receipt` / `ngm.engines.json`：本仓构建走 `scripts/build.mjs` + terser 自有链，无 ngm build 产物，无回执文件时强行 `verify --receipt` 会误红，故不接入。
+- **验证数据**：`check-ngm` OK（10 declared / 10 locked / 10 vendor modules / 10 referenced modules，ngm 0.103.0）；`ngm verify --content` **10/10 ok**；`ngm run --explain test` 输出只读计划、退出 0、未执行脚本。
+
 ## 2026-11-23 · ngm 消费链升级：10 个公共模块到 schema v3 新 tag
 
 - **Commit Hash**：`8189ba4`

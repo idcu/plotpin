@@ -144,7 +144,7 @@ npm run ci:full  =  npm run ci && npm run test:e2e
 | `node scripts/perf-browser.mjs` | 真实浏览器性能采集与阈值 | 否 | 不进主 CI；`perf-nightly.yml` 夜间定时 + 手动，读数上传 artifact；**schedule 已挂载但尚未触发（0 次）** |
 | `node scripts/i18n-scan.mjs --check` | i18n 覆盖率 44.12%（按出现次数）/缺口/硬编码 | 是（`npm run ci` 独立步骤；Actions 侧经 `check.mjs` 第 11 步） | 随 `test` job |
 
-vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件算 sha256，与 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会本地红。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。`moduleDigest` 由 ngm 二进制生成、算法未公开，本机无 ngm 工具链，**无法重算**；相关模块的 `moduleDigest` 仍未刷新，启用 `ngm verify --deep` 前需先重新锁定。
+vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件算 sha256，与 `scripts/ngm-vendor-digest.json` 比对；任何 vendor 文件被改动/增删都会本地红。修改 vendor 后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest` 重写清单。`moduleDigest` 的权威复算方式是 ngm 二进制的 `ngm verify --content`（v0.103.0 名字，`--deep` 为其废弃别名）；2026-11-24 用正式版 0.103.0 实测 **10/10 ok**，CI 的可选 `ngm-verify` job 已改用 `--content` 并追加只读的 `ngm run --explain test`（均受 `NGM_BIN_URL` / `NGM_BIN_SHA256` 门控）。`verify --receipt` 需要 `ngm build --provenance` 生成的 `ngm.build.json`，本仓无 ngm build 产物，不接入。
 
 ### 4.2 `check.mjs` 的 13 步
 

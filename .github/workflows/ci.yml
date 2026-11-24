@@ -148,9 +148,13 @@ jobs:
             echo "::error::ngm version mismatch: binary=$got expected=$want"
             exit 1
           fi
-      - name: Verify vendor provenance
+      - name: Verify vendor provenance (content)
         run: |
-          "$RUNNER_TEMP/ngm" verify --deep
+          "$RUNNER_TEMP/ngm" verify --content
+
+      - name: Explain test plan (read-only, no script executed)
+        run: |
+          "$RUNNER_TEMP/ngm" run --explain test
 
   discipline:
     # 文档纪律 13 问（方法论 §8）：只回答"这个仓库几档、缺哪一条"，不改任何东西。

@@ -17,7 +17,7 @@ PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或
 - **点位与范围分开表达**：点设备回答“设备在哪里”，图标屏幕大小固定；区域/折线回答“实际占多大范围”，始终按世界坐标（米）绘制，缩放时与底图同比例。
 - **双槽位**：每个楼层可同时保存 1 张图片底图和 1 个矢量场地，两者独立替换、互不覆盖；场地不进入对象列表，不占对象编号，也不出现在 CSV/XLSX 行中。
 - **数据留在本机**：工程写入 IndexedDB（不可用时降级 localStorage），底图与照片按内容哈希存入资产库。默认不上传任何数据；实时协作只在手动建连时通过浏览器通道传输工程快照。
-- **运行时零外部依赖**：不引用 npm、CDN 或后端。第三方能力以 `@idcu/*` 源码放在 `ngm.vendor/`，版本由 `ngm.lock` 与 `.ngm-version` 锁定；门禁会校验入口没有远程资源。
+- **运行时零外部依赖**：不引用 npm、CDN 或后端。第三方能力以 `@idcu/*` 源码放在 `ngm.vendor/`，版本由 `ngm.lock` 与 `.ngm-version` 锁定（工具链钉住 ngm 正式版 `0.103.0`，并启用 `supplyChain.trustPolicy: no-downgrade`）；门禁会校验入口没有远程资源。`npm run ngm:explain` 可在不执行脚本的前提下预览 `test` 的 pre/main/post 计划（需 PATH 上有 ngm）。
 
 `index.html` 是唯一入口：37 个项目脚本（`js/common` → `js/core` → `js/features`）加 10 个 vendor 脚本，共 47 个 classic `<script>`，按顺序加载并共享全局作用域，不使用 ES Module；`js/core/app.js` 最后加载并完成启动。
 
