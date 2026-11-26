@@ -172,6 +172,42 @@ test('线段类型与折线类型互不影响；选择模式可直接拖场地�
   await page.mouse.move(pt.x + 40, pt.y - 20, { steps: 6 });
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => state.site.shape.points[2])).not.toEqual([20, 10]);
+
+  /* 回归：fitView 后右上角落在顶栏下方（顶栏溢出曾吞掉点击，拖不动） */
+  await page.evaluate(() => {
+    state.site = createSiteSlot({ type: 'rect', x: 0, y: 0, w: 100, h: 70 });
+    commitChange();
+    fitView();
+  });
+  const tr = await page.evaluate(() => {
+    const s = w2s([100, 70]);
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { x: r.left + s[0], y: r.top + s[1] };
+  });
+  await page.mouse.move(tr.x, tr.y);
+  await page.mouse.down();
+  await page.mouse.move(tr.x - 40, tr.y + 30, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => state.site.shape.w)).toBeLessThan(100);
+
+  /* 回归：顶点落在顶部提示条区域时，提示条不吞指针 */
+  await page.evaluate(() => {
+    state.site = createSiteSlot({ type: 'polygon', points: [[0, 0], [20, 0], [20, 10], [0, 10]] });
+    commitChange();
+    state.viewport.zoom = 10;
+    state.viewport.panX = -100;
+    state.viewport.panY = 30;
+  });
+  const hud = await page.evaluate(() => {
+    const s = w2s([20, 10]);
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { x: r.left + s[0], y: r.top + s[1] };
+  });
+  await page.mouse.move(hud.x, hud.y);
+  await page.mouse.down();
+  await page.mouse.move(hud.x + 40, hud.y - 30, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => state.site.shape.points[2])).not.toEqual([20, 10]);
 });
 
 test('圆/弧工具：圆生成描边圆对象，圆弧生成 arc 对象', async ({ page }) => {

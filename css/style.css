@@ -20,7 +20,7 @@
   input,select,textarea{border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;min-width:0}
   input[type=color]{padding:2px;height:30px;width:42px}
   input[type=checkbox],input[type=radio]{width:auto;margin:0 4px 0 0}
-  .topbar{height:calc(52px + env(safe-area-inset-top));background:var(--toolbar);color:#fff;display:flex;align-items:center;gap:8px;padding:env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));box-shadow:0 2px 10px rgba(0,0,0,.18);z-index:20;position:relative}
+  .topbar{height:calc(52px + env(safe-area-inset-top));background:var(--toolbar);color:#fff;display:flex;align-items:center;gap:8px;padding:env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));box-shadow:0 2px 10px rgba(0,0,0,.18);z-index:20;position:relative;overflow:hidden}
   .brand{font-weight:700;font-size:16px;white-space:nowrap;margin-right:6px;display:flex;align-items:center;gap:8px}
   .brand::before{display:none}
   .brand-en{font-size:11px;font-weight:500;color:#93c5fd;margin-left:2px;letter-spacing:.3px}
@@ -57,14 +57,14 @@
   #canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;background:#fff}
   body.tool-pan #canvas{cursor:grab} body.tool-pan.panning #canvas{cursor:grabbing}
   .hud{position:absolute;z-index:5;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:7px 10px;font-size:12px}
-  .hud-top{left:12px;top:12px;max-width:62%;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .hud-top{left:12px;top:12px;max-width:62%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;pointer-events:none}
   .hud-bottom{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none}
   .hud-bottom .hint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .coord{font-family:Consolas,Menlo,monospace;color:#334155}
   .zoom-label{min-width:54px;text-align:right;font-weight:600}
   .osnap-chip{pointer-events:auto;cursor:default;white-space:nowrap;font-weight:600;color:#475569;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:3px 10px;user-select:none}
   .osnap-chip.locked{color:#fff;background:#d97706;border-color:#b45309;cursor:pointer}
-  .tool-options [data-for]{display:none;align-items:center;gap:6px}
+  .tool-options [data-for]{display:none;align-items:center;gap:6px;pointer-events:auto}
   body.tool-point .tool-options [data-for="point"],
   body.tool-rect .tool-options [data-for="rect"],
   body.tool-line .tool-options [data-for="line"],

@@ -4,6 +4,23 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 修复场地顶点拖动失效：顶栏溢出与顶部提示条吞指针
+
+- **Commit Hash**：`待回填`
+- **核心问题**（真实 Chromium 实测复现）：
+  - `fitView()` 后 100×70 的矩形场地右上角落在画布顶部；1280×720 实测顶栏高 52 px，但第二组 `.tb-group` 因按钮文字换行 + `#calibStatus` 竖排达到 **222.5 px**（y=−85.25..137.25），溢出画布；`elementFromPoint(868,110)` 返回 `.tb-group`，pointerdown 到不了 canvas，`history.past=0`、形状不变。
+  - 顶部提示条 `.hud-top`（画布内 y=12..44）同样接收指针；顶点落在其下时同样拖不动。
+- **核心改动**：
+  - `.topbar` 增加 `overflow:hidden`，溢出到画布的部分不再参与命中（按钮可见区域不变）。
+  - `.hud-top` 设 `pointer-events:none` 让指针穿透到画布；`.tool-options [data-for]` 恢复 `pointer-events:auto`，折线类型下拉与「闭合」复选框仍可点击（实测 `elementFromPoint` 命中 `lineType` / `lineClosed`）。
+- **预算**：dist **839,595 → 839,651 B（+56 B）**；gzip **275,109 → 275,116 B（+7 B）**；余量 **85 → 29 B**（已到硬限边缘）；SW `VERSION=275 → 276`。
+- **验证数据**：
+  - `npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；selftest 4,576 通过 / 0 失败；bench 缓存帧 P95 0.07 ms、静态重建 16.28 ms、heapUsed 27.72 MB、覆盖率 7.4 ms）。
+  - 双入口 e2e 全量：源码 **189 passed / 0 failed / 3 skipped**（3.8m），dist **186 passed / 0 failed / 6 skipped**（3.5m），均 exit 0；`interaction.spec` 在既有场地顶点用例中追加两条回归：fitView 后右上角可拖、顶点位于提示条下方可拖；另跑 layout / calibration / plugin 相关 spec 11/11 通过。
+  - i18n **48.03% = 890 / 1,853**，缺口 1，UI 硬编码 18；耦合基线无变化。
+- **公共抽象清单**：无新增公共函数/常量；复用现有 HUD 与工具选项结构。
+- **遗留风险**：余量仅 29 B，下一次改动必须先回收；顶栏在 ≤1280 px 的按钮换行与被侧栏盖住属既有布局问题（已在 known-issues 登记），本次只消除其吞点击；提示条文字不再可选中，点击该区域会穿透为画布操作。
+
 ## 2026-11-26 · 折线/线段切回工具时恢复默认类型
 
 - **Commit Hash**：`待回填`
