@@ -164,3 +164,39 @@ test('线段类型与折线类型互不影响；选择模式可直接拖场地�
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => state.site.shape.points[2])).not.toEqual([20, 10]);
 });
+
+test('圆/弧工具：圆生成描边圆对象，圆弧生成 arc 对象', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.tool-btn[data-tool="arc"]').click();
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.mouse.click(cx - 120, cy - 60);
+  await page.mouse.click(cx - 60, cy - 60);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  const circle = await page.evaluate(() => ({
+    kind: state.objects[0].kind, type: state.objects[0].shape.type,
+    r: state.objects[0].shape.r, fillAlpha: state.objects[0].style.fillAlpha, draft: draft
+  }));
+  expect(circle.kind).toBe('rect');
+  expect(circle.type).toBe('circle');
+  expect(circle.r).toBeGreaterThan(0);
+  expect(circle.fillAlpha).toBe(0);
+  expect(circle.draft).toBe(null);
+
+  await page.selectOption('#arcMode', 'arc');
+  await page.mouse.click(cx + 40, cy);
+  await page.mouse.click(cx + 100, cy);
+  await page.mouse.click(cx + 40, cy + 60);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const arc = await page.evaluate(() => ({
+    kind: state.objects[1].kind, type: state.objects[1].shape.type,
+    r: state.objects[1].shape.r, a0: state.objects[1].shape.a0, a1: state.objects[1].shape.a1,
+    sweep: arcSweep(state.objects[1].shape), draft: draft
+  }));
+  expect(arc.kind).toBe('arc');
+  expect(arc.type).toBe('arc');
+  expect(arc.r).toBeGreaterThan(0);
+  expect(arc.sweep).toBeGreaterThan(0);
+  expect(arc.sweep).toBeLessThan(360);
+  expect(arc.draft).toBe(null);
+});

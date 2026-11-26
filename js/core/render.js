@@ -1312,7 +1312,7 @@ function drawDraft(c,v,d,toS){
       const a=toS(draft.start), b=toS(draft.current);
       c.globalAlpha=.25; c.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]); c.globalAlpha=1; c.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
     }
-  }else if((draft.kind==='siteCircle'||draft.kind==='areaCircle') && draft.start && draft.current){
+  }else if((draft.kind==='siteCircle'||draft.kind==='areaCircle'||draft.kind==='arcDraft') && draft.start && draft.current){
     const ce=toS(draft.start), r=dist(draft.start,draft.current)*v.zoom;
     c.globalAlpha=.15; c.beginPath(); c.arc(ce[0],ce[1],r,0,Math.PI*2); c.fill(); c.globalAlpha=1; c.stroke();
   }else if((draft.kind==='siteEllipse'||draft.kind==='areaEllipse') && draft.start && draft.current){

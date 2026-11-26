@@ -16,6 +16,7 @@ const TOOL_TITLES={
   select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
   rect:L('区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消'),line:L(TXT_POLYLINE_HINT),
   segment:L('线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
+  arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
   calibrate:L('比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用'),
   affine:L(TXT_AFFINE_HINT),
@@ -351,6 +352,14 @@ canvas.addEventListener('pointerdown',e=>{
     else if(!pushDraftPoint(draft.points,wp)) return;
     /* 线段=两点折线：第二点落笔即完成，不需要双击/Enter */
     if(seg&&draft.points.length>=2){ finishDraft(); return; }
+    requestRender(); return;
+  }
+  if(currentTool==='arc'){
+    const mode=draft?draft.mode:$('arcMode').value;
+    if(!draft){ draft={kind:'arcDraft',mode,start:wp,current:wp,points:[wp]}; }
+    else if(mode==='circle'){ draft.points[1]=wp; finishDraft(); return; }
+    else if(!pushDraftPoint(draft.points,wp)) return;
+    else if(draft.points.length>=3){ finishDraft(); return; }
     requestRender(); return;
   }
   if(currentTool==='dimension'){
@@ -828,6 +837,21 @@ function finishDraft(){
     const o=baseObject('line',draft.segment?$('segmentType').value:$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
     commitChange(seg?'已添加线段':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
+  }else if(draft.kind==='arcDraft'){
+    const ps=draft.points, ce=ps[0], r=dist(ce,ps[1]||draft.current||ce);
+    if(!(r>=.05)){ toast(L('半径过小'),'warn'); return; }
+    pushHistory();
+    let o;
+    if(draft.mode==='circle'){
+      o=baseObject('rect','rect.area',{x:ce[0],y:ce[1],shape:{type:CIR,r},width:0,height:0,style:{fillAlpha:0}});
+      commitChange(L('已添加圆'));
+    }else{
+      const a0=Math.atan2(ps[1][1]-ce[1],ps[1][0]-ce[0])*180/Math.PI;
+      const a1=ps[2]?Math.atan2(ps[2][1]-ce[1],ps[2][0]-ce[0])*180/Math.PI:a0+90;
+      o=baseObject('arc','arc.builtin',{x:ce[0],y:ce[1],shape:{type:ARC,r,a0,a1}});
+      commitChange(L('已添加圆弧'));
+    }
+    state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); switchTab('props');
   }else if(draft.kind==='dimension'){
     const ps=draft.points;
     const okCount=(draft.subtype==='distance'&&ps.length>=2)

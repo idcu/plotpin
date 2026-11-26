@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 新增「圆/弧」工具（描边圆 + 三点圆弧）
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - 左侧工具栏新增 `圆/弧`（`data-tool="arc"`，i18n `circleArc`），工具选项区新增 `#arcMode`（`圆` / `圆弧`），与线段一样按 `data-for` 独立显示，不继承其他工具选项。
+  - `pointerdown` 起 `arcDraft` 草稿：第一点定圆心，第二点在 `circle` 模式直接完成；`arc` 模式再取起点/终点方向，第三点完成后按 `atan2` 求 `a0/a1` 建对象。半径 < 0.05 m 拒绝并提示 `半径过小`。
+  - `finishDraft` 创建对象：`圆` → `kind:'rect'` + `shape:{type:'circle',r}` + `style:{fillAlpha:0}`（描边外观，DXF 导出 `CIRCLE`）；`圆弧` → `kind:'arc'` + `shape:{type:'arc',r,a0,a1}`（纯描边、不参与面积与覆盖率）。两者复用既有 `baseObject / commitChange / switchTab('props')` 链路。
+  - 渲染复用既有圆形草稿预览（`drawDraft` 的 `siteCircle/areaCircle/arcDraft` 分支），删除单独弧草稿预览以省体积；命中沿用 `hitObject` 已有的描边弧环带 + 角度区间判定。
+- **预算**：dist **837,728 → 839,521 B（+1,793 B）**；gzip **274,542 → 275,082 B（+540 B）**；余量 **1,952 → 159 B**；SW `VERSION=272 → 273`。距 820 KiB 硬限仅 159 B，下一次功能前必须先回收。
+- **验证数据**：
+  - `node scripts/check.mjs --selftest` **4,576 通过 / 0 失败**；`npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；bench 缓存帧 P95 0.07 ms、静态重建 16.17 ms、heapUsed 28.61 MB、覆盖率 8 ms）。
+  - 双入口 e2e 全量：源码 **189 passed / 0 failed / 3 skipped**（3.8m），dist **186 passed / 0 failed / 6 skipped**（3.5m），均 exit 0；`tests/e2e/interaction.spec.mjs` 新增圆/弧用例：圆生成 `rect`+`circle`+`fillAlpha:0` 且草稿清空，圆弧生成 `kind:'arc'` 且 sweep ∈ (0,360)。
+  - i18n **48.03% = 890 / 1,853**，缺口 1，UI 硬编码 18；耦合基线 `interaction.js` 的 `switchTab` 9→10、`toast` 35→36，两处均带 reason 登记。
+- **公共抽象清单**：无新增公共函数/常量；复用 `baseObject / commitChange / switchTab / drawDraft / hitObject / areaShapeHandles` 与既有 ARC/CIR 形状定义。未改动 `contracts/plugin-api.json`，无 schema 变更。
+- **遗留风险**：余量 159 B 已到硬限边缘；`圆弧` 对象是旧版不认识的新增类型，旧版打开会丢弃（与 DXF「保留圆弧」导入同风险，已在 user-guide 披露）；`圆` 是面积对象，会计入面积统计与覆盖率，只是填充透明；圆弧工具暂无独立图标（复用 `◯` 字符）。
+
 ## 2026-11-26 · 线段独立类型下拉；选择模式可直接拖场地顶点
 
 - **Commit Hash**：`待回填`

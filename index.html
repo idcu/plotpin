@@ -81,6 +81,7 @@
     <button class="tool-btn" data-tool="rect" aria-pressed="false"><span class="ico">▭</span><span data-i18n="area">区域</span></button>
     <button class="tool-btn" data-tool="line" aria-pressed="false"><span class="ico">╱</span><span data-i18n="line">折线</span></button>
     <button class="tool-btn" data-tool="segment" aria-pressed="false"><span class="ico">—</span><span data-i18n="segment">线段</span></button>
+    <button class="tool-btn" data-tool="arc" aria-pressed="false"><span class="ico">◯</span><span data-i18n="circleArc">圆/弧</span></button>
     <button class="tool-btn" data-tool="text" aria-pressed="false"><span class="ico">T</span><span data-i18n="text">文字</span></button>
     <button class="tool-btn" data-tool="ruler" title="测距：沿路径逐点单击，双击结束（右键/Esc 取消）；实时显示每段长度与累计总长" aria-pressed="false"><span class="ico">📏</span><span data-i18n="ruler">测距</span></button>
     <button class="tool-btn" data-tool="dimension" aria-pressed="false"><span class="ico">⌁</span><span data-i18n="dimension">标注</span></button>
@@ -117,6 +118,10 @@
         <span data-for="segment"><span data-i18n="typeLabel">类型</span>
           <select id="segmentType" aria-label="线段类型"></select>
         </span>
+        <span data-for="arc"><select id="arcMode" aria-label="圆或圆弧">
+          <option value="circle" data-i18n="shapeCircle">圆形</option>
+          <option value="arc" data-i18n="filterArc">圆弧</option>
+        </select></span>
         <span data-for="dimension"><span data-i18n="typeLabel">类型</span>
           <select id="dimensionType" aria-label="标注类型">
             <option value="distance" data-i18n="dimDistance">两点距离</option>
