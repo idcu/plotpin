@@ -74,17 +74,19 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 - **不得调高上限、不得改预算常数、不得把 `size-report` 的账面值当回收承诺**。`size-report` 的重复字符串/重复行是压缩前账面值，只能当线索；dist 可回收应为 0。
 - 已证伪的回收手段不得重复列入计划：dist 注释、行首缩进、重复字符串池化、i18n 英文包、terser 全量改名。
 
-### 2.4 terser 局部 mangle（已接入）
+### 2.4 terser 局部 mangle 与 HTML 标记压缩（已接入）
 
-`pack-core.mjs` 合并出单脚本后交给 terser：`compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。
+`pack-core.mjs` 合并出单脚本后交给 terser：`ecma: 2020` + `compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。
 
 - 保留顶层名是产品约束：`plugins.js` 按名探测 `state / toast / scheduleSave / commitChange` 等全局；全量改名会让插件路径失效。
+- 不启用 `compress.toplevel`：它会把未被静态引用的顶层声明当死代码删除（实测 dist 入口 40+ 用例 `ReferenceError`），与「顶层名全保留」的约束冲突。
+- HTML 标记层在最后做等价压缩：无 `<form>` 时去掉默认 `type="text"` / `type="button"`；标签内可省略引号的属性去引号；`option/th/tr/thead/tbody/tfoot` 的可选闭合标签按 HTML5 规则省略；`script` / `style` / 注释整段跳过，外链校验在压缩之前完成。
 - 代价：构建耗时增加、生产栈帧变短名、对未文档化全局名的隐式依赖会静默失效。
 - 变更 terser 版本或配置会让产物 SHA256 漂移，进而使 `build --check` 与 SW 版本抖动；升级必须同批重跑构建、双入口 e2e 与 SW 校验。
 
 ### 2.5 单文件发行版与 Service Worker
 
-- 源码多文件入口（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 52 个（含 `sw.js` 自身）；`file://` 下不注册。
+- 源码多文件入口（`index.html`，经 http(s) 打开）：根目录 `sw.js` 负责 PWA 预缓存与版本升级，预缓存输入 53 个（含 `sw.js` 自身）；`file://` 下不注册。
 - 单文件发行版（`dist/plotpin-standalone.html`）：**不含 Service Worker**，也不含 `js/`、`css/`、`sw.js`；CSS/JS/图标全部内联，离线由文件自身保证。
 - PWA 安装、预缓存与版本升级只对源码多文件入口成立；dist 既不承诺也不需要。因此 `sw.spec` 在 dist 入口显式跳过（带原因）。
 - `file://` 实测（历史记录，Chromium）：IndexedDB 读写、`localStorage`、Blob 下载、CSP 内联哈希正常；导入图片/PDF 底图、比例预设、点位与区域、PDF/CSV 导出通过；唯一差异是 SW/PWA（按协议置 `sw=false`，不注册、不报错）。这是浏览器安全模型与产品设计的边界。

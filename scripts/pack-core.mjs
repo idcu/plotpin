@@ -13,8 +13,31 @@ import { minify } from 'terser';
 import { minifyCss, minifyJs } from './minify-core.mjs';
 import { findRemoteRefs } from './lib/offline-scan.mjs';
 
-export async function buildStandalone(html, readFile) {
-  /* 结构缩进在 HTML 渲染里等价于一个空白：去掉「换行 + 空白 + 紧跟标签」的行首缩进与空白行，
+/**
+ * HTML 属性引号与冗余 type 的等价压缩：只在标签内部处理，跳过 script/style/注释内容。
+ * HTML5 允许「不含空白与 " ' ` = < > 的值」不带引号；`<button>`/`<input type=text>` 的
+ * 默认 type 在无 form 时等价（有 form 时不动，避免语义从 button 变 submit）。
+ */
+function minifyHtmlMarkup(html) {
+  const hasForm = /<form\b/i.test(html);
+  const tagCompact = (tag) => {
+    let t = tag;
+    if (!hasForm) t = t.replace(/\s+type="(?:text|button)"/gi, '');
+    return t.replace(/(\s)([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"'`=<> \t\r\n]+)"/g,
+      (m, ws, name, val, off, all) => (all[off + m.length] === '/' || /^http-equiv$/i.test(name)) ? m : `${ws}${name}=${val}`);
+  };
+  const shields = /<!--[\s\S]*?-->|<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>/gi;
+  const compact = (text) => text.replace(/<[A-Za-z][^<>]*>/g, tagCompact)
+    /* 可省略的闭合标签：option/th/tr/thead/tbody/tfoot 在「下一个标记或父级结束」前可省 */
+    .replace(/<\/(?:option|th|tr|thead|tbody|tfoot)>(?=\s*<|$)/gi, '');
+  let out = '', last = 0, m;
+  while ((m = shields.exec(html))) {
+    out += compact(html.slice(last, m.index)) + m[0];
+    last = shields.lastIndex;
+  }
+  return out + compact(html.slice(last));
+}
+export async function buildStandalone(html, readFile) {  /* 结构缩进在 HTML 渲染里等价于一个空白：去掉「换行 + 空白 + 紧跟标签」的行首缩进与空白行，
      渲染结果不变（仍保留一个换行），省下约 1.7 KB。文本内容与属性值不受影响。
      HTML 注释先行删除：注释不参与渲染，且必须在脚本内联**之前**删（内联后 JS 里的
      `<!--` 字符串会被误判成注释起点）。 */
@@ -44,7 +67,7 @@ export async function buildStandalone(html, readFile) {
     let body = codes.join(';\n');
     /* B-01：terser C（compress + 局部 mangle）。toplevel:false 保留全部顶层全局名，
        避免 plugins.js 按名探测的产品路径失效；不做属性改名、不生成 sourcemap。 */
-    const mini = await minify(body, { compress: { passes: 3 }, mangle: { toplevel: false } });
+    const mini = await minify(body, { ecma: 2020, compress: { passes: 3 }, mangle: { toplevel: false } });
     if (typeof mini.code !== 'string') throw new Error('terser 未返回压缩结果');
     body = mini.code.replace(/<\/script/gi, '<\\/script');
     try { new vm.Script(body, { filename: 'bundle' }); }
@@ -93,5 +116,7 @@ export async function buildStandalone(html, readFile) {
     const hits = findRemoteRefs(out, kind);
     if (hits.length) throw new Error('单文件打包后仍有远程引用：' + hits[0].url);
   }
-  return out;
+  /* 最后做 HTML 标记层等价压缩：属性去引号 / 无 form 时去掉默认 type。
+     放在所有外链校验之后，不会掩盖「仍有外链」的判定。 */
+  return minifyHtmlMarkup(out);
 }

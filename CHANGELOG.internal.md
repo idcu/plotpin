@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 体积回收：terser ecma2020 + HTML 标记层等价压缩
+
+- **Commit Hash**：`待回填`
+- **核心问题**：上一提交后 dist 余量只剩 **84 B**，已到硬限边缘，无法再落任何业务改动。
+- **核心改动**：
+  - `pack-core.mjs` terser 选项加 `ecma: 2020`（仍 `mangle.toplevel=false`、不做 toplevel DCE）。
+  - 新增构建期 `minifyHtmlMarkup()`：标签内可省略引号的属性去引号；无 `<form>` 时去掉默认 `type="text"/"button"`；按 HTML5 规则省略 `option/th/tr/thead/tbody/tfoot` 的可选闭合标签。`script`/`style`/注释整段跳过，外链校验在压缩前完成。
+  - 明确不采用 `compress.toplevel`：实测省 14,199 B，但会把 dist 入口 e2e 依赖的 40+ 内部全局当死代码删除（`ReferenceError`），也违反「顶层名全保留」的产品约束。
+- **预算**：dist **839,596 → 836,361 B（−3,235 B）**；gzip **274,184 → 274,191 B（+7 B）**；余量 **84 → 3,319 B**（仍 <8,000 B 强警告区，但已脱离硬限边缘）。
+- **验证数据**：
+  - `node scripts/selftest.mjs` **4,576 通过 / 0 失败**；`npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；bench 缓存帧 P95 0.07 ms、静态重建 16.73 ms、heapUsed 26.28 MB）；`build --check` 二次构建一致；SHA256 `31e618d…`。
+  - dist 入口 e2e 全量 **183 passed / 0 failed / 6 skipped**（3.6m，exit 0；跳过为 SW 3 条、协作 soak 1 条、V-6/V-6b 2 条）。
+  - 源入口 e2e 本轮未复跑（本次只改构建期压缩，不改运行时源码）。
+- **公共抽象清单**：新增构建脚本内 `minifyHtmlMarkup()`（不进运行时代码）；无产品 API/常量变化。
+- **遗留风险**：余量 3,319 B 仍在强警告区，下一步线段工具必须保持精简；HTML 压缩只处理 dist，源码入口与文档展示不受影响；`http-equiv` 故意保留引号，避免既有 CSP 构建判定改口径。
+
 ## 2026-11-26 · 场地顶点编辑：抓手排序接线 + 锁定语义补齐
 
 - **Commit Hash**：`待回填`

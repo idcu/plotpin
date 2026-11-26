@@ -8,10 +8,10 @@
 
 | 指标 | 2026-11-26 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 839,596 B（819.9 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser C 模式压缩（`passes:3`） |
-| gzip 字节 | 274,184 B（267.8 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 单文件产物字节 | 836,361 B（816.8 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + 标记层去引号/省略可选闭合标签 |
+| gzip 字节 | 274,191 B（267.8 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
-| 体积余量 | 84 B（gzip 余量 12,536 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| 体积余量 | 3,319 B（gzip 余量 12,529 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
 | Service Worker 版本 | `VERSION=269` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
