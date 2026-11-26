@@ -55,13 +55,15 @@ function resizeCanvas(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   requestRender();
 }
-/* 窗口尺寸/DPR 变化时重建画布位图（rAF 合并，避免拖动窗口过程中频繁重建） */
+/* 画布位图跟随容器尺寸（窗口缩放、顶栏换行、语言切换导致的高度回流都用同一条 rAF 合并） */
 let resizeQueued=false;
-window.addEventListener('resize',()=>{
+function scheduleResize(){
   if(resizeQueued) return;
   resizeQueued=true;
   requestAnimationFrame(()=>{ resizeQueued=false; resizeCanvas(); });
-});
+}
+window.addEventListener('resize',scheduleResize);
+if(typeof ResizeObserver!=='undefined') new ResizeObserver(scheduleResize).observe(wrap);
 function fitView(){
   const r=wrap.getBoundingClientRect(), d=resetFrameRef();
   let z=Math.min((r.width-44)/d.w,(r.height-44)/d.h);

@@ -158,7 +158,9 @@ test('M6-P2 位移超出旧包围盒+pad：新位置重绘、旧位置清除，�
     state.viewport = { zoom: Z, panX: 0, panY: 0 };
     resetFrameRef();
     const s0 = [Math.round(W * 0.22), Math.round(H * 0.28)];
-    const s1 = [Math.round(W * 0.78), Math.round(H * 0.75)];
+    /* 位移仍需超出旧包围盒+96px pad，但不要大到让「旧∪新+pad」超过画布面积 60%
+       （patchUnionRect 超出即整层重建；顶栏换行后画布变矮，按旧比例会越过该阈值） */
+    const s1 = [Math.round(W * 0.66), Math.round(H * 0.60)];
     const w0 = s2w(s0), w1 = s2w(s1);
     const o = baseObject('point', 'point.marker', { name: 'P1', x: w0[0], y: w0[1], style: { color: '#e11d48' } });
     state.objects = [o];

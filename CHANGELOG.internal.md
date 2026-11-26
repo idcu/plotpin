@@ -4,6 +4,29 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 顶栏改为整行折行：按钮文字不再换行，控件不再被侧栏/横幅遮挡
+
+- **Commit Hash**：`待回填`
+- **核心问题**（真实 Chromium 实测）：
+  - 顶栏固定 52 px 且不折行，1280×720 下三组 `.tb-group` 被压到 73 / 222.5 / 56 px 高，按钮文字竖排并溢出到画布；右侧控件落在侧栏下方，无法点击。
+  - `#leaseBanner` 固定在 `top:44px` 居中，正好压住换行后的第二行顶栏；`page.click('#collabBtn')` 等不到可点击状态，collab/rules 共 12 条 e2e 以 30 s 超时失败。
+- **核心改动**：
+  - `body` 改 flex 纵向；`.topbar` 用 `min-height:52px` + `height:auto` + `flex-wrap:wrap`，`.app-shell{flex:1}`，画布随顶栏实际高度伸缩。
+  - `.topbar` 设 `white-space:nowrap`（按钮文字不拆行）；`.hint-text` 恢复 `white-space:normal`，窄屏长状态文案仍可折行。
+  - `viewport.js` 抽出 `scheduleResize()`，窗口 resize 与新增的 `ResizeObserver(wrap)` 共用同一条 rAF 合并路径；顶栏换行/语言切换后画布位图与 CSS 尺寸保持一致。
+  - `#leaseBanner` 从 `top:44px` 移到 `bottom:64px`，不再遮挡顶栏控件。
+  - 为抵消字节：删除死规则 `.brand::before`、移除 `.sidebar` 基础 `z-index:21`（顶栏不再纵向溢出，无需压住）、合并 `.hud-top/.hud-bottom` 的公共声明。
+- **预算**：dist **839,651 → 839,632 B（−19 B）**；gzip **275,116 → 275,143 B（+27 B）**；余量 **29 → 48 B**；SW `VERSION=276 → 281`（多次重建后最终 281）。
+- **验证数据**：
+  - 四档宽度实测（Chromium）：1280×720 顶栏 120 px / 画布 600 px；1024×768 顶栏 126 px / 画布 642 px；1920×1080 顶栏 97 px / 画布 983 px；390×844 顶栏 317 px / 画布 527 px。四档均无按钮换行、无按钮被遮挡、顶栏底边 = 主区顶边、画布位图尺寸 = CSS 尺寸。
+  - `npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；selftest 4,576 通过 / 0 失败；bench 缓存帧 P95 0.06 ms、静态重建 16.01 ms、heapUsed 27.4 MB、覆盖率 7.4 ms）。
+  - 双入口 e2e 全量：源码 **189 passed / 0 failed / 3 skipped**（3.8m），dist **186 passed / 0 failed / 6 skipped**（3.5m），均 exit 0；`batch-layout.spec` 新增顶栏断言（按钮不换行、不被遮挡、主区顶边对齐、位图同步），桌面与 390 移动触控各在中文与英文下复跑。
+  - collab / rules 单独全跑 **20 passed / 1 skipped**（跳过为协作 soak），确认横幅移到底部后协作入口恢复可点。
+  - `perf-render` M6-P2 位移落点由 0.78/0.75 收到 0.66/0.60：画布变矮后按旧比例会越过 `patchUnionRect` 的 60% 面积上限而整层重建；调整后仍满足「超出旧包围盒+96 px pad」并走局部补绘。
+  - i18n **48.03% = 890 / 1,853**，缺口 1，UI 硬编码 18；耦合基线无变化。
+- **公共抽象清单**：`viewport.js` 新增 `scheduleResize()`，替代原窗口 resize 匿名回调，并被 `ResizeObserver(wrap)` 复用；无其他新增公共函数/常量。
+- **遗留风险**：1280×720 顶栏占 3 行（120 px），画布由 668 降到 600 px；1024 宽同样 3 行。余量仅 48 B，下一次改动必须先回收。局部补绘的面积上限未改：大位移仍按设计回退整层重建（正确但更慢）。
+
 ## 2026-11-26 · 修复场地顶点拖动失效：顶栏溢出与顶部提示条吞指针
 
 - **Commit Hash**：`待回填`

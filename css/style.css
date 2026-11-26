@@ -6,7 +6,7 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
-  body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;overflow:hidden}
+  body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;overflow:hidden;display:flex;flex-flow:column}
   button,input,select,textarea{font:inherit;color:inherit}
   button{border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 10px;cursor:pointer}
   button:hover{border-color:#9db4d5;background:#f8fbff}
@@ -20,9 +20,8 @@
   input,select,textarea{border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;min-width:0}
   input[type=color]{padding:2px;height:30px;width:42px}
   input[type=checkbox],input[type=radio]{width:auto;margin:0 4px 0 0}
-  .topbar{height:calc(52px + env(safe-area-inset-top));background:var(--toolbar);color:#fff;display:flex;align-items:center;gap:8px;padding:env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));box-shadow:0 2px 10px rgba(0,0,0,.18);z-index:20;position:relative;overflow:hidden}
+  .topbar{min-height:52px;background:var(--toolbar);color:#fff;display:flex;flex-wrap:wrap;align-items:center;gap:8px;white-space:nowrap;padding:env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 6px calc(12px + env(safe-area-inset-left));box-shadow:0 2px 10px rgba(0,0,0,.18);z-index:20;position:relative}
   .brand{font-weight:700;font-size:16px;white-space:nowrap;margin-right:6px;display:flex;align-items:center;gap:8px}
-  .brand::before{display:none}
   .brand-en{font-size:11px;font-weight:500;color:#93c5fd;margin-left:2px;letter-spacing:.3px}
   .tb-group{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.08);padding:4px 6px;border-radius:9px}
   .tb-group label{font-size:11px;color:#cbd5e1;margin-right:2px;white-space:nowrap}
@@ -36,9 +35,7 @@
   /* 导出格式含长文案（文字层口径）：限宽省略，避免顶栏横向溢出压住侧栏页签；
      完整文案保留在 option 文本、下拉展开列表与导出面板中 */
   #exportKind{max-width:230px;min-width:0;text-overflow:ellipsis}
-  /* 顶栏在 1280 宽下本就横向溢出（既有问题）：侧栏必须压在顶栏之上，
-     否则溢出的 .tb-group 会盖住右侧页签并吞掉点击 */
-  .sidebar{position:relative;z-index:21}
+  /* 顶栏在 1280 宽下换行成多行（按钮文字不换行）；溢出由换行消化，不再压住侧栏 */
   .site-pick{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0}
   .site-card{text-align:left;border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:#fff;cursor:pointer;line-height:1.5}
   .site-card:hover{border-color:var(--primary);background:var(--primary-soft)}
@@ -46,7 +43,7 @@
   .site-card .hint-text{display:block}
   .site-current{background:#f8fafc;border:1px dashed var(--line);border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.6}
   .save-state{font-size:11px;color:#cbd5e1;min-width:72px;text-align:right}
-  .app-shell{height:calc(100vh - 52px - env(safe-area-inset-top));display:flex;min-height:0}
+  .app-shell{flex:1;display:flex;min-height:0}
   .tool-rail{width:58px;background:#0f172a;display:flex;flex-direction:column;align-items:center;gap:7px;padding:9px 7px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
   .tool-btn{width:42px;height:42px;border-radius:10px;border:1px solid transparent;background:transparent;color:#cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;padding:3px}
   .tool-btn:hover{background:#1e293b;border-color:#334155}
@@ -56,9 +53,9 @@
   .canvas-wrap{flex:1;position:relative;min-width:0;min-height:0;background:#dfe6ef;overflow:hidden}
   #canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;background:#fff}
   body.tool-pan #canvas{cursor:grab} body.tool-pan.panning #canvas{cursor:grabbing}
-  .hud{position:absolute;z-index:5;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:7px 10px;font-size:12px}
-  .hud-top{left:12px;top:12px;max-width:62%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;pointer-events:none}
-  .hud-bottom{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none}
+  .hud{position:absolute;z-index:5;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:7px 10px;font-size:12px;display:flex;align-items:center;pointer-events:none}
+  .hud-top{left:12px;top:12px;max-width:62%;gap:8px;flex-wrap:wrap}
+  .hud-bottom{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));justify-content:space-between;gap:12px}
   .hud-bottom .hint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .coord{font-family:Consolas,Menlo,monospace;color:#334155}
   .zoom-label{min-width:54px;text-align:right;font-weight:600}
@@ -81,7 +78,7 @@
     body.sidebar-open .sidebar{transform:none}
     body.sidebar-open::after{content:'';position:absolute;inset:0;background:rgba(15,23,42,.3);z-index:19}
     .app-shell{position:relative}
-    .topbar{flex-wrap:wrap;height:auto;padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left));gap:4px}
+    .topbar{padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left));gap:4px}
     .topbar .tb-group{flex-wrap:wrap}
     .hud-top{font-size:11px;max-width:calc(100vw - 24px)}
     .tool-rail{width:52px}
@@ -120,7 +117,7 @@
   .annot-chk input{margin:0}
   .form-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
   .mini{padding:4px 7px;font-size:12px}
-  .hint-text{font-size:11px;color:var(--muted);line-height:1.5}
+  .hint-text{font-size:11px;color:var(--muted);line-height:1.5;white-space:normal}
   .filter-row{display:grid;grid-template-columns:1fr 96px 96px;gap:6px;margin-bottom:8px}
   .batch-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
   .batch-row select{min-width:0;max-width:100%}
@@ -200,7 +197,7 @@
   .load-banner{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fef3c7;border:1px solid #f59e0b}
   .load-banner.error{background:#fee2e2;border-color:#dc2626}
   #saveBanner{top:auto;bottom:16px}
-  #leaseBanner{top:44px}
+  #leaseBanner{top:auto;bottom:64px}
   .help-tabs{margin-bottom:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
   .help-tab{margin-right:6px;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:6px;padding:5px 12px;cursor:pointer}
   .help-tab.active{background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:600}

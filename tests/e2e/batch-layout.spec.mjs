@@ -18,6 +18,32 @@ async function switchLang(page, lang) {
   await page.waitForFunction(() => !document.getElementById('modalBackdrop').classList.contains('show'));
 }
 
+async function assertTopbar(page) {
+  await expect.poll(() => page.evaluate(() => canvas.width === Math.round(canvas.clientWidth * devicePixelRatio) && canvas.height === Math.round(canvas.clientHeight * devicePixelRatio))).toBe(true);
+  const tb = await page.evaluate(() => {
+    const bar = document.querySelector('.topbar');
+    const b = bar.getBoundingClientRect();
+    const btns = [...bar.querySelectorAll('button')].filter(x => x.getBoundingClientRect().width > 0);
+    const blocked = [];
+    for (const x of btns) {
+      const q = x.getBoundingClientRect();
+      const el = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
+      if (!(el === x || x.contains(el))) blocked.push(x.id || x.textContent.trim());
+    }
+    return {
+      bottom: b.bottom,
+      shellTop: document.querySelector('.app-shell').getBoundingClientRect().top,
+      wrapped: btns.filter(x => getComputedStyle(x).whiteSpace !== 'nowrap').length,
+      blocked,
+      bitmapOk: canvas.width === Math.round(canvas.clientWidth * devicePixelRatio) && canvas.height === Math.round(canvas.clientHeight * devicePixelRatio)
+    };
+  });
+  expect(tb.wrapped).toBe(0);
+  expect(tb.blocked).toEqual([]);
+  expect(tb.shellTop).toBe(tb.bottom);
+  expect(tb.bitmapOk).toBe(true);
+}
+
 async function measure(page) {
   return page.evaluate(() => {
     const row = document.querySelector('.batch-row');
@@ -41,6 +67,7 @@ test.describe('1280×800 桌面', () => {
 
   test('数值框 ≥92px、控件不溢出侧栏；英文界面不截断', async ({ page }) => {
     const errors = await openReady(page);
+    await assertTopbar(page);
     await page.locator('#tabBtn-list').click();
     await page.locator('#batchAngle').fill('-359.9');
 
@@ -56,6 +83,7 @@ test.describe('1280×800 桌面', () => {
     expect(zh.btns.map(b => b.text)).toEqual(['全选/全不选']);
 
     await switchLang(page, 'en');
+    await assertTopbar(page);
     const en = await measure(page);
     expect(en.btns.map(b => b.text)).toEqual(['All / none']);
     for (const b of en.btns) {
@@ -76,7 +104,9 @@ test.describe('390×844 移动触控', () => {
 
   test('控件 ≥44px、数值框 ≥92px、无横向溢出；英文界面不截断', async ({ page }) => {
     const errors = await openReady(page);
+    await assertTopbar(page);
     await switchLang(page, 'en');
+    await assertTopbar(page);
     await page.locator('#sidebarToggle').click();
     await page.locator('#tabBtn-list').click();
     await page.locator('#batchAngle').fill('-359.9');
