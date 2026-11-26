@@ -1,6 +1,9 @@
 /* B-06 协作易用性：双标签建连/状态、消息层护栏、冲突回滚、离线重连、邀请串与二维码容量 */
 import { test, expect } from '@playwright/test';
-import { clickCanvasCenter } from './helpers.mjs';
+import { clickCanvasCenter, DB, idb, firstRunSeenStorage } from './helpers.mjs';
+
+/* 独立 context 需要显式 baseURL/storageState（默认 storageState 只作用于 config 的 context） */
+const E2E_BASE = `http://127.0.0.1:${Number(process.env.E2E_PORT || 4173)}`;
 
 async function openApp(page) {
   await page.goto('/index.html?debug=1');
@@ -421,6 +424,48 @@ test('N-16：断线待发队列刷新页面后仍补发', async ({ page, context
   await expect.poll(() => page.evaluate(() => collabPendingLoad()), { timeout: 4000 }).toBe(null);
 });
 
+test('R-01：待发队列按工程分键，切工程不补发他人快照', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-r01');
+  await page.evaluate(() => { state.meta.projectId = 'PROJ-A'; });
+  await p2.evaluate(() => { state.meta.projectId = 'PROJ-A'; });
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* 断线并产生 A 工程的待发快照 */
+  const keyA = await page.evaluate(() => {
+    try { collabBC.close(); } catch (_) {}
+    collabBC = null;
+    collabActive = false;
+    collabStopWatchdog();
+    const o = state.objects[0];
+    o.name = 'A_ONLY';
+    o.updatedAt = nowISO();
+    commitObjectEdit();
+    collabPendingStore(persistableState());
+    return collabPendingKeyFor(collabProjectToken());
+  });
+  expect(await page.evaluate(k => !!localStorage.getItem(k), keyA)).toBe(true);
+
+  /* 切到 B 工程：当前工程读不到 A 的待发，重连也不得把 A 的快照补发出去 */
+  await page.evaluate(() => { state.meta.projectId = 'PROJ-B'; });
+  expect(await page.evaluate(() => collabPendingLoad())).toBe(null);
+  await startLocal(page, ch);
+  await closeModal(page);
+  await expect.poll(() => page.evaluate(() => collabPendingLoad('p:PROJ-A') !== null), { timeout: 4000 }).toBe(true);
+
+  /* 还原工程标识，避免影响后续用例 */
+  await page.evaluate(() => { state.meta.projectId = 'E2E_PROJ'; });
+});
+
 test('N-17：跨工程消息隔离与纯冲突可见', async ({ page, context }) => {
   const p2 = await context.newPage();
   const p3 = await context.newPage();
@@ -469,6 +514,150 @@ test('N-17：跨工程消息隔离与纯冲突可见', async ({ page, context })
   expect(info).not.toContain('Ctrl+Z');
 });
 
+test('S3 冲突可见性：本端被覆盖进账本、角标与批量提示，单边同步不打扰', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  /* 先挂 toast 监听再建连：覆盖提示 2.6 s 后自动消失，直接查 DOM 会偶发错过 */
+  await page.evaluate(() => {
+    window.__toasts = [];
+    const orig = window.toast;
+    window.toast = (m, t) => { window.__toasts.push(String(m)); return orig(m, t); };
+  });
+  const ch = uniqueChannel('e2e-conflict-visible');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* 先收敛出内容基线：同内容快照合并只推进基线，不算冲突 */
+  await p2.evaluate(() => collabSendObject({ t: 'snapshot', project: persistableState() }));
+  await expect.poll(() => page.evaluate(() => collabConflictBase().size), { timeout: 4000 }).toBeGreaterThan(0);
+
+
+  /* 断开后双方各改一次（真并发） */
+  await page.evaluate(() => collabStopAll());
+  await waitState(p2, 'disconnected');
+  await page.evaluate(() => { const o = state.objects[0]; o.x = 100; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(80);
+  await p2.evaluate(() => { const o = state.objects[0]; o.x = 200; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await p2.waitForTimeout(800);
+
+  /* 清掉连接前遗留的提示节流窗口，确保本次覆盖提示可被观测 */
+  await page.evaluate(() => { collabOverwriteAt = 0; window.__toasts = []; });
+  await page.evaluate(c => collabStartLocal(c), ch);
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 6000 }).toBe(200);
+  await expect.poll(() => page.evaluate(() => (window.__collabLastMerge && window.__collabLastMerge.overwrites && window.__collabLastMerge.overwrites.local) || 0),
+    { timeout: 6000 }).toBe(1);
+
+  const led = await page.evaluate(() => ({
+    pending: collabLedgerPending(),
+    items: JSON.parse(localStorage.getItem(collabLedgerKey()) || '{"items":[]}').items,
+    toasts: window.__toasts
+  }));
+  console.log('[S3] conflict ledger pending=' + led.pending + ', toasts=' + JSON.stringify(led.toasts));
+  expect(led.pending).toBe(1);
+  expect(led.items.length).toBe(1);
+  expect(led.items[0].dir).toBe('local');
+  expect(led.items[0].known).toBe(true);
+  expect(led.items[0].snap.x).toBe(100);
+  expect(led.items[0].loserSig).toBeUndefined();
+  expect(led.toasts.some(t => t.includes('同步覆盖了你的 1 处修改'))).toBe(true);
+  await expect(page.locator('#collabBadge')).toHaveText('1');
+
+  /* 去重：同一对版本重复推送不再记账 */
+  await p2.evaluate(() => collabSendObject({ t: 'snapshot', project: persistableState() }));
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => collabLedgerPending())).toBe(1);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem(collabLedgerKey())).items.length)).toBe(1);
+
+  /* 单边远端更新（本端未改）不打扰：不进账本、不弹冲突 */
+  await page.evaluate(() => { window.__toasts = []; });
+  await p2.evaluate(() => { const o = state.objects[0]; o.x = 300; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await p2.waitForTimeout(800);
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 6000 }).toBe(300);
+  expect(await page.evaluate(() => collabLedgerPending())).toBe(1);
+  expect(await page.evaluate(() => (window.__collabLastMerge.overwrites || {}).local || 0)).toBe(0);
+  expect(await page.evaluate(() => window.__toasts.join('|'))).not.toContain('已被对端更新');
+
+  await openCollab(page);
+  await expect(page.locator('#collabConflictInfo')).toContainText('本端被覆盖 1');
+  await expect(page.locator('#collabConflictInfo')).toContainText('本端保留 0');
+});
+
+test('S4 冲突清单与对象级恢复：只读拒绝、非当前楼层先切层、恢复可撤销并广播', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  await page.evaluate(() => {
+    window.__toasts = [];
+    const orig = window.toast;
+    window.toast = (m, t) => { window.__toasts.push(String(m)); return orig(m, t); };
+  });
+  const ch = uniqueChannel('e2e-conflict-restore');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  await drawPoint(page);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+  await p2.evaluate(() => collabSendObject({ t: 'snapshot', project: persistableState() }));
+  await expect.poll(() => page.evaluate(() => collabConflictBase().size), { timeout: 4000 }).toBeGreaterThan(0);
+
+  /* 断开后双方各改一次，重连后本端被覆盖（旧值 x=100 进账本） */
+  const floorId = await page.evaluate(() => state.activeFloorId);
+  await page.evaluate(() => collabStopAll());
+  await waitState(p2, 'disconnected');
+  await page.evaluate(() => { const o = state.objects[0]; o.x = 100; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(80);
+  await p2.evaluate(() => { const o = state.objects[0]; o.x = 200; o.updatedAt = nowISO(); commitObjectEdit(); });
+  await page.waitForTimeout(800);
+  await page.evaluate(c => collabStartLocal(c), ch);
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 6000 }).toBe(200);
+  await expect.poll(() => page.evaluate(() => collabLedgerPending()), { timeout: 6000 }).toBe(1);
+
+  await openCollab(page);
+  await page.click('#collabConflictsBtn');
+  await expect(page.locator('#modalBody')).toContainText('本端被覆盖');
+
+  /* 只读：恢复被 guardWrite 拒绝，现场不变 */
+  await page.evaluate(() => setReadOnly(true));
+  await page.click('#collabRestoreBtn0');
+  await expect.poll(() => page.evaluate(() => window.__toasts.join('|')), { timeout: 2000 }).toContain('本地只读');
+  expect(await page.evaluate(() => state.objects[0].x)).toBe(200);
+  await page.evaluate(() => setReadOnly(false));
+
+  /* 非当前楼层：清单仍可见，但必须提示先切层 */
+  await page.evaluate(() => addFloor('E2E-2F'));
+  await expect.poll(() => page.evaluate(() => state.floors.length)).toBe(2);
+  await page.click('#collabRestoreBtn0');
+  await expect.poll(() => page.evaluate(() => window.__toasts.join('|')), { timeout: 2000 }).toContain('请先切换到该楼层');
+  expect(await page.evaluate(() => collabLedgerPending())).toBe(1);
+
+  /* 回到原楼层后恢复：写回旧值、进撤销栈、账本标记已处理、广播给对端 */
+  await page.evaluate(id => switchFloor(id), floorId);
+  const histBefore = await page.evaluate(() => history.past.length);
+  await page.click('#collabRestoreBtn0');
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 3000 }).toBe(100);
+  expect(await page.evaluate(() => history.past.length)).toBe(histBefore + 1);
+  await expect.poll(() => page.evaluate(() => collabLedgerPending()), { timeout: 3000 }).toBe(0);
+  expect(await page.evaluate(() => document.getElementById('collabBadge').style.display)).toBe('none');
+  await expect.poll(() => p2.evaluate(() => state.objects[0].x), { timeout: 8000 }).toBe(100);
+
+  /* 恢复是普通编辑：Ctrl+Z 可退回覆盖后的值 */
+  await closeModal(page);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects[0].x), { timeout: 3000 }).toBe(200);
+});
+
 test('邀请串三步建连与二维码容量提示（同机双标签，非双设备）', async ({ page, context }) => {
   const p2 = await context.newPage();
   await openApp(page);
@@ -499,8 +688,89 @@ test('邀请串三步建连与二维码容量提示（同机双标签，非双�
   const elapsed = Date.now() - t0;
   const stateAfter = await page.evaluate(() => window.__collabState);
   console.log(`[B-06] same-machine WebRTC open=${open}, elapsed=${elapsed}ms, state=${stateAfter}`);
-  expect(['connecting', 'connected', 'error']).toContain(stateAfter);
-  if (open) expect(stateAfter).toBe('connected');
+  /* D1：连不上必须红。「connected」是唯一真语义，error/connecting 不再算通过 */
+  expect(open).toBe(true);
+  expect(stateAfter).toBe('connected');
+});
+
+test('跨 context WebRTC 本地回环：offer/answer 建连、首帧快照、对端断开可见', async ({ browser }) => {
+  /* 两个独立 context 互不共享存储/BroadcastChannel，只能走 WebRTC，逼近双设备路径 */
+  const c1 = await browser.newContext({ baseURL: E2E_BASE, storageState: firstRunSeenStorage(E2E_BASE) });
+  const c2 = await browser.newContext({ baseURL: E2E_BASE, storageState: firstRunSeenStorage(E2E_BASE) });
+  const p1 = await c1.newPage();
+  const p2 = await c2.newPage();
+  try {
+    await openApp(p1);
+    await openApp(p2);
+    await drawPoint(p1);   /* 建连前主机已有对象：用于确认首帧快照真的落到了对端 */
+
+    await openCollab(p1);
+    await p1.click('#collabOfferBtn');
+    await expect.poll(() => p1.inputValue('#collabSignalOut'), { timeout: 10000 }).toMatch(/^PLOTPIN-COLLAB:1:O:/);
+    const offer = await p1.inputValue('#collabSignalOut');
+
+    await openCollab(p2);
+    await p2.fill('#collabSignalIn', offer);
+    await p2.click('#collabAcceptBtn');
+    await expect.poll(() => p2.inputValue('#collabSignalOut'), { timeout: 10000 }).toMatch(/^PLOTPIN-COLLAB:1:A:/);
+    const answer = await p2.inputValue('#collabSignalOut');
+
+    await p1.fill('#collabSignalIn', answer);
+    await p1.click('#collabAcceptBtn');
+    await waitState(p1, 'connected');
+    await waitState(p2, 'connected');
+
+    /* D2：连接成功提示必须写明直连边界，不能只报「已连接」 */
+    await expect(p1.locator('#toastWrap')).toContainText('仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）');
+
+    /* 跨设备路径的首次快照必须由对端显式确认完整编辑权 */
+    for (const p of [p1, p2]) {
+      await expect(p.locator('#modalFooter button.primary')).toBeVisible({ timeout: 8000 });
+      await p.locator('#modalFooter button.primary').click();
+    }
+    await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 5000 }).toBe(1);
+
+    /* 确认后仍能继续双向同步（不是只吃首帧就断） */
+    await p2.locator('.tool-btn[data-tool="point"]').click();
+    await clickCanvasCenter(p2);
+    await expect.poll(() => p1.evaluate(() => state.objects.length), { timeout: 5000 }).toBe(2);
+
+    /* 对端消失必须离开 connected 且有可见原因。WebRTC 没有信令通道，
+       远端主动断开在本机只能观察为通道丢失（error），不能假装是优雅断线；
+       优雅断线 → disconnected 由本机频道用例覆盖。 */
+    await p1.evaluate(() => collabStopAll());
+    await waitState(p2, 'error');
+    await openCollab(p2);
+    await expect(p2.locator('#collabStatus')).toContainText('跨设备连接已断开');
+    await expect(p2.locator('#collabStatus')).toContainText('重新交换邀请串');
+  } finally {
+    await c1.close();
+    await c2.close();
+  }
+});
+
+test('D2：双方未绑定工程时状态如实提示业务消息被忽略', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  /* openApp 默认绑定 E2E_PROJ；这里显式清空，模拟两个草稿标签 */
+  await page.evaluate(() => { state.meta.projectId = ''; });
+  await p2.evaluate(() => { state.meta.projectId = ''; });
+  const ch = uniqueChannel('e2e-unbound');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await expect(page.locator('#collabStatus')).toContainText('已连接（未绑定工程，业务消息被忽略）');
+  await expect(p2.locator('#collabStatus')).toContainText('已连接（未绑定工程，业务消息被忽略）');
+
+  /* 状态不是嘴上说说：草稿间业务消息确实被忽略 */
+  await closeModal(page);
+  await closeModal(p2);
+  await drawPoint(page);
+  await page.waitForTimeout(800);
+  expect(await p2.evaluate(() => state.objects.length)).toBe(0);
+  await page.evaluate(() => collabStopAll());
 });
 
 test('离线 5 分钟真实浸泡：重连后本地修改不丢', async ({ page, context }) => {
@@ -532,4 +802,59 @@ test('离线 5 分钟真实浸泡：重连后本地修改不丢', async ({ page,
   await page.evaluate(c => collabStartLocal(c), ch);
   await expect.poll(() => p2.evaluate(() => state.objects.some(o => o.id === 'OBJ_SOAK')), { timeout: 8000 }).toBe(true);
   expect(await page.evaluate(() => state.objects.some(o => o.id === 'OBJ_SOAK'))).toBe(true);
+});
+
+test('B2：切工程后旧工程快照不写入新现场', async ({ page, context }) => {
+  const p2 = await context.newPage();
+  await openApp(page);
+  await openApp(p2);
+  const ch = uniqueChannel('e2e-epoch');
+  await startLocal(page, ch);
+  await startLocal(p2, ch);
+  await waitState(page, 'connected');
+  await waitState(p2, 'connected');
+  await closeModal(page);
+  await closeModal(p2);
+
+  /* 先确认双向同步链路可用 */
+  await drawPoint(p2);
+  await expect.poll(() => page.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(1);
+
+  /* 风险窗口：快照在旧工程时已入队（接收节流 200ms 内），尚未落盘就切了工程。
+     停掉节流定时器把「切工程早于落盘」这一窗口固定下来，落盘由切工程后显式触发。 */
+  const oldSnap = await p2.evaluate(() => persistableState());
+  await page.evaluate(raw => {
+    collabLastApplyAt = Date.now();
+    collabQueueApply(raw, 'E2E-PEER');
+    clearTimeout(collabApplyTimer);
+    collabApplyTimer = null;
+  }, oldSnap);
+
+  /* page 真实切到另一个工程（seed 到工程库后走 openProjectById，触发 collab.projectSwitched） */
+  const seeded = await page.evaluate(() => {
+    const raw = persistableState();
+    raw.meta.projectId = 'PRJ_B2_OTHER';
+    raw.meta.name = '另一个工程';
+    raw.objects = [];
+    (raw.floors || []).forEach(f => { f.objects = []; });
+    return raw;
+  });
+  await idb(page, { store: DB.projects, mode: 'readwrite', op: 'put', key: 'proj:PRJ_B2_OTHER', value: seeded });
+  await page.evaluate(() => openProjectById('PRJ_B2_OTHER'));
+  await expect.poll(() => page.evaluate(() => state.meta.projectId), { timeout: 4000 }).toBe('PRJ_B2_OTHER');
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+
+  /* 在途作业落盘：代际令牌不符 → 整包丢弃，错误必须点名「旧工程」而不是静默 */
+  await page.evaluate(() => collabDrainApply());
+  await expect.poll(() => page.evaluate(() => String(window.__collabLastError || '')), { timeout: 6000 }).toContain('旧工程');
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+
+  /* 对端仍停留在旧工程并继续编辑：消息层同样拦住，快照不得写入新现场 */
+  await p2.locator('.tool-btn[data-tool="point"]').click();
+  await clickCanvasCenter(p2);
+  await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(2);
+  await expect.poll(() => page.evaluate(() => String(window.__collabLastError || '')), { timeout: 6000 })
+    .toMatch(/跨工程|其他工程/);
+  expect(await page.evaluate(() => state.objects.length)).toBe(0);
+  expect(await page.evaluate(() => state.meta.projectId)).toBe('PRJ_B2_OTHER');
 });

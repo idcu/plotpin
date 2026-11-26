@@ -233,6 +233,13 @@ function bindPropHistory(box){
   const once=e=>{
     const el=e.target;
     if(!isField(el)||el===propHistoryField||(el.matches&&el.matches('[data-photo-input]'))) return;
+    if(readOnly){
+      e.preventDefault(); e.stopPropagation();
+      if(propHistoryField!==el){ propHistoryField=el; guardWrite(L('属性写入')); }
+      return;
+    }
+    /* C1：X/Y 非法输入不写 state，也不该产生撤销帧（与 N-19「无聊输入不消耗历史」同口径） */
+    if((el.dataset.field==='x'||el.dataset.field==='y')&&!isCoordInput(el)) return;
     propHistoryField=el;
     pushHistory();
   };
@@ -271,7 +278,7 @@ function bindSiteNodeEvents(box){
     setCoord:(i,axis,v)=>{
       const pts=state.site?.shape?.points, n=Number(v);
       if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return false;
-      pts[i][axis==='y'?1:0]=n; return true;
+      pts[i][axis==='y'?1:0]=n; state.site.updatedAt=nowISO(); return true;
     },
     insert:i=>siteInsertNode(i),
     remove:i=>siteRemoveNode(i),
@@ -362,6 +369,19 @@ function renderProps(){
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
       <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L('坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。'))}</div>`;
+  }else if(o.kind==='arc'){
+    /* 描边圆弧：只有圆心/半径/起止角；没有宽高与旋转角，也没有面积与填充 */
+    const sh=o.shape||{};
+    specific=`
+      ${row('圆心 X',num('x',fmt(o.x)))}${row('圆心 Y',num('y',fmt(o.y)))}
+      ${row('半径 (m)',num('shapeR',fmt(sh.r)))}
+      ${row('起始角',num('shapeA0',fmt(Number(sh.a0)||0),1))}
+      ${row('张角 (0–360)',num('shapeSweep',fmt(Math.round(arcSweep(sh)*10)/10),.1))}
+      ${row('弧长',`<b>${fmt(objectLength(o))}</b> m`)}
+      ${row('颜色',`<input type="color" data-style="color" value="${esc(o.style.color||t.color)}">`)}
+      ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
+      ${renderAnnotToggles(o)}
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L('圆弧是描边几何：不参与面积与覆盖率，参与弧长统计与规则近似；张角上限 359.9°，整圆请用「矩形/区域」的圆形。'))}</div>`;
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
@@ -375,6 +395,11 @@ function renderProps(){
     const psh=t.scaleShape||'none';
     const isSymbol=Array.isArray(t.symbol)&&t.symbol.length>0;
     const canScale=psh!=='none'||isSymbol;
+    /* DORI 输入：仅扇形/圆（有水平张角语义）显示；缺省不影响旧工程 */
+    const doriInputs=(psh===SEC||psh===CIR)
+      ?row('水平像素',`<input type="number" min="0" step="1" data-field="propCamResPx" value="${Number(o.props.camResPx)||''}">`)
+        +row('水平张角 (°)',`<input type="number" min="1" max="179" step="1" data-field="propCamFov" value="${Number(o.props.camFov)||''}" placeholder="${psh===SEC?String(t.fov||90):'90'}">`)
+      :'';
     const physHint=isSymbol
       ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('符号图元：填 0 为屏幕固定图标；填图元外接宽度（米）后按真实比例随底图缩放，朝向随朝向角旋转。'))}</div>`
       : canScale
@@ -392,7 +417,8 @@ function renderProps(){
       ${row('照片',`<input type="file" accept="image/*" data-photo-input><button type="button" class="icon-btn danger" data-photo-clear title="${esc(L('移除照片'))}" ${o.props.photoId?'':'disabled'}>×</button>`)}
       ${o.props.photoId?`<div class="span2" style="grid-column:1/-1"><img data-photo-img="${esc(o.props.photoId)}" alt="${esc(L('设备照片'))}" style="max-width:100%;max-height:160px;border-radius:4px;border:1px solid #334155"></div>`:''}
       ${row('图标大小',`<input type="range" min=".5" max="3" step=".05" data-field="iconSize" value="${Number(o.iconSize)||1}"><span class="hint-text">${(Number(o.iconSize)||1).toFixed(2)}×（${esc(L('顶栏还有全局点大小'))}）</span>`)}
-      ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}${physHint}
+      ${canScale?row('物理尺寸(m)',`<input type="number" min="0" step=".1" data-field="phys" value="${fmt(o.phys||0)}">`):''}
+      ${doriInputs}${physHint}
       ${renderAnnotToggles(o)}`;
   }else if(o.kind==='text'){
     specific=`${row('文字',`<input type="text" data-field="text" value="${esc(o.text||'')}">`)}
@@ -412,6 +438,7 @@ function renderProps(){
         <button class="mini" data-action="lower">${esc(L('下移一层'))}</button>
         <button class="mini" data-action="visibility">${esc(L(o.visible?'隐藏':'显示'))}</button>
         <button class="mini" data-action="lock">${esc(L(o.locked?'解锁':'锁定'))}</button>
+        <button class="mini" data-action="publish">${esc(L(isDelivered(o)?'取消交付':'标记交付'))}</button>
         <button class="mini danger" data-action="delete">${esc(L('删除'))}</button>
       </div>
     </div>
@@ -432,6 +459,7 @@ function renderMultiProps(box,objs){
       <button class="mini" id="multiRotateBtn">${esc(L('批量旋转'))}</button>
       <button class="mini" id="multiHideBtn">${esc(L('隐藏'))}</button>
       <button class="mini" id="multiLockBtn">${esc(L('锁定'))}</button>
+      <button class="mini" id="multiPublishBtn">${esc(L('交付'))}</button>
       <button class="mini danger" id="multiDeleteBtn">${esc(L('全部删除'))}</button>
     </div></div>
     <div class="section"><h3>${esc(L('对齐 / 分布'))}</h3>
@@ -464,6 +492,12 @@ function renderMultiProps(box,objs){
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
   $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
   $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
+  /* 批量交付：全选都已交付时整体取消，否则整体标记（一键切换，不额外增加按钮） */
+  $('multiPublishBtn').onclick=()=>{
+    const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn');
+    const all=items.every(isDelivered); pushHistory(); setDelivered(items,!all);
+    commitChange(all?'已取消交付':'已标记交付', items.map(o=>o.id));
+  };
   $('multiDeleteBtn').onclick=deleteSelected;
   box.querySelectorAll('[data-align]').forEach(b=>{
     b.onclick=()=>{
@@ -509,7 +543,15 @@ function bindPropEvents(box,o){
   /* 属性面板所有写路径统一走 commitObjectEdit([id]) 打点：手写 updatedAt 会绕过 stampObjects
      的同毫秒严格递增保护，合并时本地较新修改可能被判旧而被远端覆盖（P1-5）。 */
   const changed=()=>commitObjectEdit([o.id]);
-  box.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>applyField(el,o,changed)));
+  box.querySelectorAll('[data-field]').forEach(el=>{
+    el.addEventListener('input',()=>applyField(el,o,changed));
+    /* C1：半成品输入（"-"、"12."）在输入过程中不重置，失焦仍非法时恢复旧值并标红 */
+    if(el.dataset.field==='x'||el.dataset.field==='y')['blur','change'].forEach(ev=>el.addEventListener(ev,()=>{
+      if(isCoordInput(el)) return;
+      el.value=fmt(o[el.dataset.field]);
+      markFieldInvalid(el);
+    }));
+  });
   /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘（与场地面板共用同一绑定实现） */
   bindAnnotToggleInputs(box,{apply:(key,val)=>setAnnot(o,key,val),changed});
   box.querySelectorAll('[data-style]').forEach(el=>el.addEventListener('input',()=>{
@@ -539,7 +581,13 @@ function bindPropEvents(box,o){
       if(o.points.length<=lineMinNodes(o)) return toast(L('至少保留 {n} 个节点',{n:lineMinNodes(o)}),'warn');
       pushHistory(); removeLineNode(o,i); commitChange('已删除节点',[o.id]);
     },
-    move:(i,dir)=>{ if(moveNodeStep(o,i,dir)){ pushHistory(); commitChange(dir<0?'节点已上移':'节点已下移',[o.id]); } },
+    move:(i,dir)=>{
+      /* M-12：先判可移动再压栈，失败不产生历史 */
+      if(!isPolylineEditable(o)||!Array.isArray(o.points)) return;
+      const to=i+(dir<0?-1:1);
+      if(to<0||to>=o.points.length) return;
+      pushHistory(); moveNodeStep(o,i,dir); commitChange(dir<0?'节点已上移':'节点已下移',[o.id]);
+    },
     changed,
     focusNode:i=>setFocusNode(i===null?null:{id:o.id,index:i})
   });
@@ -550,12 +598,14 @@ function bindPropEvents(box,o){
   box.querySelector('[data-action="lower"]').onclick=()=>reorderSelected(-1);
   box.querySelector('[data-action="visibility"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); };
   box.querySelector('[data-action="lock"]').onclick=()=>{ if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); };
+  box.querySelector('[data-action="publish"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); setDelivered([o],!isDelivered(o)); commitChange(isDelivered(o)?'已标记交付':'已取消交付',[o.id]); };
   $('propAdd')?.addEventListener('click',()=>{
     const k=$('propKey').value.trim(),v=$('propValue').value.trim(); if(!k) return;
-    o.props[k]=v; commitChange(undefined,[o.id]);
+    pushHistory(); o.props[k]=v; commitChange(undefined,[o.id]);
   });
   box.querySelectorAll('[data-prop-del]').forEach(btn=>btn.onclick=()=>{
-    const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; delete o.props[k]; commitChange(undefined,[o.id]);
+    const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; if(k===undefined) return;
+    pushHistory(); delete o.props[k]; commitChange(undefined,[o.id]);
   });
   /* 设备照片：复用内容寻址资产库（与底图同一 storage），照片随撤销栈可达集合保留 */
   box.querySelectorAll('[data-photo-input]').forEach(inp=>inp.addEventListener('change',async()=>{
@@ -565,14 +615,14 @@ function bindPropEvents(box,o){
       const bytes=new Uint8Array(await f.arrayBuffer());
       const id=assetIdFor(bytes);
       await assetPut(id,{bytes,mime:f.type||'image/jpeg'});
-      pushHistory(); o.props=o.props||{}; o.props.photoId=id; commitObjectEdit(); renderProps();
+      pushHistory(); o.props=o.props||{}; o.props.photoId=id; commitObjectEdit([o.id]); renderProps();
       toast('照片已附加','success');
     }catch(e){ toast(L('照片保存失败：{msg}',{msg:e.message}),'error'); }
   }));
   box.querySelectorAll('[data-photo-clear]').forEach(btn=>btn.onclick=()=>{
     if(!isEditable(o)) return toast('对象或图层已锁定','warn');
     if(!o.props.photoId) return;
-    pushHistory(); delete o.props.photoId; commitObjectEdit(); renderProps();
+    pushHistory(); delete o.props.photoId; commitObjectEdit([o.id]); renderProps();
   });
   box.querySelectorAll('[data-photo-img]').forEach(async img=>{
     try{
@@ -601,12 +651,36 @@ function bindNodeRowDrag(box,o){
     dragFrom=Number(g.dataset.nodeGrip);
     g.closest('.node-row')?.classList.add('drag-source');
   }));
-  box.addEventListener('dragend',()=>{ dragFrom=-1; box.querySelectorAll('.node-row').forEach(r=>r.classList.remove('drag-over','drag-source')); },{once:true});
+  /* C1/L-29：#propPanel 在多次渲染间复用，{once:true} 会让监听器逐次累积；改命名 handler 并在重绑前移除 */
+  if(box.__nodeDragEnd) box.removeEventListener('dragend',box.__nodeDragEnd);
+  const endDrag=()=>{ dragFrom=-1; box.querySelectorAll('.node-row').forEach(r=>r.classList.remove('drag-over','drag-source')); };
+  box.__nodeDragEnd=endDrag;
+  box.addEventListener('dragend',endDrag);
+}
+/** C1：坐标输入是否可提交（空串/非有限数不提交；"-"、"12." 等半成品由 validity.badInput 标识） */
+function isCoordInput(el){
+  const raw=String(el.value).trim();
+  return raw!==''&&Number.isFinite(Number(raw));
+}
+/** C1：非法坐标标红 1.5s；恢复显示由调用方决定（半成品输入保留光标） */
+function markFieldInvalid(el){
+  el.classList.add('field-invalid');
+  clearTimeout(el.__invalidTimer);
+  el.__invalidTimer=setTimeout(()=>el.classList.remove('field-invalid'),1500);
 }
 function applyField(el,o,changed){
   const k=el.dataset.field;
   /* 基点坐标允许负值（可在场地外，与拖拽移动同一基准）；尺寸类字段仍非负 */
-  if(k==='x'||k==='y'){ const n=Number(el.value); o[k]=Number.isFinite(n)?n:0; }
+  if(k==='x'||k==='y'){
+    /* C1：空值/非有限数不写 state（旧实现写 0 会把对象静默打到原点） */
+    if(!isCoordInput(el)){
+      if(!(el.validity&&el.validity.badInput)) el.value=fmt(o[k]);
+      markFieldInvalid(el);
+      return;
+    }
+    el.classList.remove('field-invalid');
+    o[k]=Number(el.value);
+  }
   else if(['width','height','angle','strokeWidth','phys'].includes(k)) o[k]=Math.max(0,Number(el.value)||0);
   else if(k==='closed'){
     if(el.checked && o.points.length<3){ el.checked=false; toast('闭合区域至少需要 3 个节点，请先插入节点','warn'); return; }
@@ -621,11 +695,15 @@ function applyField(el,o,changed){
   else if(k==='shapeRx'&&o.shape){ o.shape.rx=Math.max(.05,Number(el.value)||0); }
   else if(k==='shapeRy'&&o.shape){ o.shape.ry=Math.max(.05,Number(el.value)||0); }
   else if(k==='shapeA0'&&o.shape){
-    const sweep=sectorSweep(o.shape);
+    const sweep=o.kind==='arc'?arcSweep(o.shape):sectorSweep(o.shape);
     o.shape.a0=normalizeAngle(Number(el.value)||0); o.shape.a1=o.shape.a0+sweep;
   }
   else if(k==='shapeSweep'&&o.shape){
-    const sweep=Math.min(360,Math.max(1,Number(el.value)||90));
+    /* 圆弧张角上限 359.9°：360 会被清洗侧按"想要圆就画圆"拒收，这里先钳住避免存盘丢对象。
+       空值才回落 90；显式输入 0 对弧抬到 0.1（扇形维持 1° 下限） */
+    const isArc=o.kind==='arc', n=Number(el.value);
+    const v=(String(el.value??'').trim()!==''&&Number.isFinite(n))?n:90;
+    const sweep=isArc?Math.min(359.9,Math.max(.1,v)):Math.min(360,Math.max(1,v));
     o.shape.a1=(Number(o.shape.a0)||0)+sweep;
   }
   else if(k==='shapeSkew'&&o.shape){
@@ -647,6 +725,12 @@ function applyField(el,o,changed){
     const n=Number(el.value);
     if(el.value!==''&&Number.isFinite(n)) o.props.mountHeight=Math.max(0,n); else delete o.props.mountHeight;
   }
+  else if(k==='propCamResPx'||k==='propCamFov'){
+    o.props=o.props||{};
+    const n=Number(el.value);
+    if(el.value!==''&&Number.isFinite(n)&&n>0) o.props[k==='propCamResPx'?'camResPx':'camFov']=k==='propCamResPx'?Math.round(n):Math.min(179,n);
+    else delete o.props[k==='propCamResPx'?'camResPx':'camFov'];
+  }
   else o[k]=el.value;
   if(k==='typeId'){ const t=getType(o.typeId); if(!o.style.color) o.style.color=t.color; }
   changed();
@@ -658,7 +742,11 @@ function rotateSelected(delta){
   pushHistory();
   objs.forEach(o=>{
     if(o.kind==='dimension') return;
-    if(o.kind==='rect'&&areaShapeType(o)===SEC&&o.shape){
+    if(o.kind==='arc'&&o.shape&&o.shape.type===ARC){
+      /* 圆弧：绕圆心转起止角，张角不变（同一对象不产生旋转后失真） */
+      const sweep=arcSweep(o.shape), a0=normalizeAngle((Number(o.shape.a0)||0)+delta);
+      o.shape.a0=a0; o.shape.a1=a0+sweep;
+    }else if(o.kind==='rect'&&areaShapeType(o)===SEC&&o.shape){
       o.shape.a0=normalizeAngle((Number(o.shape.a0)||0)+delta);
       o.shape.a1=(Number(o.shape.a1)||0)+delta;
     }else if(o.points&&o.points.length){
@@ -667,3 +755,5 @@ function rotateSelected(delta){
   });
   commitChange('已旋转选中对象', objs.map(o=>o.id));
 }
+/* core 在切层、载入工程后需要重绘属性面板：走必需钩子，未注册时启动断言直接失败 */
+registerHook('ui.renderProps', renderProps);

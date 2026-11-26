@@ -33,6 +33,12 @@
   .topbar button:disabled{color:#94a3b8;opacity:.5;cursor:not-allowed}
   .topbar button:disabled:hover{background:rgba(255,255,255,.94);color:#94a3b8}
   .topbar select{background:rgba(255,255,255,.94);color:#1f2937;font-weight:600}
+  /* 导出格式含长文案（文字层口径）：限宽省略，避免顶栏横向溢出压住侧栏页签；
+     完整文案保留在 option 文本、下拉展开列表与导出面板中 */
+  #exportKind{max-width:230px;min-width:0;text-overflow:ellipsis}
+  /* 顶栏在 1280 宽下本就横向溢出（既有问题）：侧栏必须压在顶栏之上，
+     否则溢出的 .tb-group 会盖住右侧页签并吞掉点击 */
+  .sidebar{position:relative;z-index:21}
   .site-pick{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0}
   .site-card{text-align:left;border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:#fff;cursor:pointer;line-height:1.5}
   .site-card:hover{border-color:var(--primary);background:var(--primary-soft)}
@@ -105,6 +111,7 @@
   .form-grid{display:grid;grid-template-columns:78px 1fr;gap:7px 8px;align-items:center}
   .form-grid label{color:#475467;font-size:12px}
   .form-grid .span2{grid-column:1/-1}
+  .form-grid input.field-invalid{border-color:#dc2626;background:#fef2f2}
   /* 逐对象「图上标注」开关组：整行铺满，复选框自动换行 */
   .annot-chks{display:flex;flex-wrap:wrap;gap:4px 10px;padding:3px 0}
   .annot-chk{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#475467;white-space:nowrap;cursor:pointer}
@@ -117,9 +124,11 @@
   .batch-row select{min-width:0;max-width:100%}
   .batch-row input[type="number"]{width:92px;min-width:92px}
   .annot-batch-row .hint-text{white-space:nowrap}
+  .annot-batch-row #batchAnnotChks{flex:1 1 100%;padding-top:0}
   /* 触控视口：批次控件至少 44px 高，数值框仍保留 92px 可读宽度 */
   @media(pointer:coarse){
-    .batch-row input,.batch-row select,.batch-row button{min-height:44px}
+    .batch-row input:not([type="checkbox"]),.batch-row select,.batch-row button{min-height:44px}
+    .annot-batch-row .annot-chk{min-height:44px}
   }
   .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 260px)}
   table{border-collapse:collapse;width:100%;font-size:12px}
@@ -137,6 +146,7 @@
   .layer-row .name,.type-row .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .layer-row .sub,.type-row .sub{font-size:11px;color:var(--muted)}
   .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .pill{display:inline-block;padding:0 5px;border-radius:8px;font-size:10px;line-height:16px;color:#166534;background:#dcfce7;vertical-align:1px}
   .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .align-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
   .stat-card{border:1px solid var(--line);border-radius:9px;padding:10px;background:#f8fafc}

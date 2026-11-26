@@ -42,6 +42,8 @@
     const lines=String(text||'').split(/\r?\n/), out=[];
     for(let i=0;i+1<lines.length;i+=2){
       const code=parseInt(lines[i],10), raw=lines[i+1]===undefined?'':lines[i+1];
+      /* E4：组码行不是数字时丢弃该对，避免错位把后续值当组码继续污染结构 */
+      if(!Number.isFinite(code)) continue;
       /* IO-P2-19：组码 1 为文本原值，保留首尾空格；其余组码仍 trim 以便结构比较 */
       out.push([code, code===1?raw:raw.trim()]);
     }
@@ -162,8 +164,77 @@
     if(e.points) e.points=e.points.map(q=>[q[0]*f,q[1]*f]);
     if(Number.isFinite(e.x)) e.x*=f;
     if(Number.isFinite(e.y)) e.y*=f;
+    if(Number.isFinite(e.r)) e.r*=f;
     if(Number.isFinite(e.height)) e.height*=f;
     return e;
+  }
+
+  /* ---- S4：ARC 保真导入 --------------------------------------------------------
+   * 公共模块把 ARC 无条件展平成 24 段 LWPOLYLINE，没有开关。这里在交给公共模块
+   * 之前，按行区间把 ENTITIES 段内的顶层 ARC 记录摘除，其余实体照常解析，再把
+   * ARC 按原值回填为 arc 实体。块定义内的 ARC 不摘除，仍随 INSERT 展开（行为不变）。 */
+  /** 定位 ENTITIES 段内顶层 ARC 记录的行区间 [start,end)（两行一组，含 0/ARC 行） */
+  function arcLineRanges(text){
+    const lines=String(text||'').split(/\r?\n/), out=[];
+    const codeAt=k=>parseInt(lines[k],10);
+    let section='', i=0;
+    while(i+1<lines.length){
+      const code=codeAt(i), val=String(lines[i+1]===undefined?'':lines[i+1]).trim().toUpperCase();
+      if(code===0&&val==='SECTION'){
+        section=codeAt(i+2)===2?String(lines[i+3]===undefined?'':lines[i+3]).trim().toUpperCase():'';
+        i+=4; continue;
+      }
+      if(code===0&&val==='ENDSEC'){ section=''; i+=2; continue; }
+      if(section==='ENTITIES'&&code===0&&val==='ARC'){
+        let j=i+2;
+        while(j+1<lines.length&&codeAt(j)!==0) j+=2;
+        out.push([i,j]);
+        i=j; continue;
+      }
+      i+=2;
+    }
+    return out;
+  }
+  /** 按行区间剔除 ARC 记录；只删指定行，其余行原样保留（行分隔统一为 \n） */
+  function stripArcRanges(text,ranges){
+    const src=String(text||'');
+    if(!ranges||!ranges.length) return src;
+    const lines=src.split(/\r?\n/), drop=new Set();
+    ranges.forEach(([s,e])=>{ for(let k=s;k<e;k++) drop.add(k); });
+    return lines.filter((_,k)=>!drop.has(k)).join('\n');
+  }
+  /** 读取 ENTITIES 段内全部 ARC 记录（原始文件单位，未缩放；缺 51 时按 360 与公共模块一致） */
+  function collectArcs(text){
+    const pairs=dxfPairs(text), out=[];
+    sectionScan(pairs,(typ,p)=>{
+      if(typ!=='ARC') return;
+      const rec=pairs.slice(p+1,nextZero(pairs,p));
+      const num=c=>{ const f=rec.find(x=>x[0]===c); return f?parseFloat(f[1]):NaN; };
+      const a0=num(50), a1=num(51);
+      out.push({
+        type:'ARC', layer:(rec.find(x=>x[0]===8)||[8,'0'])[1]||'0', source:'ARC',
+        x:num(10), y:num(20), r:num(40),
+        a0:Number.isFinite(a0)?a0:0, a1:Number.isFinite(a1)?a1:360
+      });
+    });
+    return out;
+  }
+  /** 退化弧：与公共模块同一公式合成 24 段折线（a0→a1 直接线性插值） */
+  function arcAsPolyline(rec){
+    const N=24, pts=[];
+    for(let k=0;k<=N;k++){
+      const a=(rec.a0+(rec.a1-rec.a0)*k/N)*Math.PI/180;
+      pts.push([rec.x+rec.r*Math.cos(a),rec.y+rec.r*Math.sin(a)]);
+    }
+    return {type:'LWPOLYLINE',layer:rec.layer,closed:false,points:pts,source:'ARC'};
+  }
+  /** 单条 ARC 的落地判定：sweep 归零 → 折线；参数非法 → 丢弃 */
+  function arcEntity(rec){
+    if(!Number.isFinite(rec.x)||!Number.isFinite(rec.y)||!(rec.r>0)) return {drop:true};
+    const sweep=((rec.a1-rec.a0)%360+360)%360;
+    if(!Number.isFinite(sweep)) return {drop:true};
+    if(!(sweep>0)) return {entity:arcAsPolyline(rec),degraded:true};
+    return {entity:{type:'ARC',layer:rec.layer,x:rec.x,y:rec.y,r:rec.r,a0:rec.a0,a1:rec.a0+sweep,source:'ARC'}};
   }
 
   function scaleParsedEntities(entities,f){
@@ -178,27 +249,105 @@
     return entities;
   }
   const baseParse=D.parseDxf;
+  /** E4：缺码/错位会让公共模块用默认 0 补齐（如 LINE 缺 11/21 → 零长线、圆缺 40 → r=0），
+   *  这里按落地类型校验坐标与必需参数，非法实体丢弃并计数，绝不进入 state。 */
+  function entityOk(e){
+    if(!e||typeof e!=='object') return false;
+    if(Array.isArray(e.points)){
+      if(!e.points.every(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1]))) return false;
+      return e.points.some((p,i)=>i>0&&(p[0]!==e.points[0][0]||p[1]!==e.points[0][1]));
+    }
+    if(e.type==='CIRCLE') return Number.isFinite(e.x)&&Number.isFinite(e.y)&&Number.isFinite(e.r)&&e.r>0;
+    if(e.type==='POINT'||e.type==='TEXT') return Number.isFinite(e.x)&&Number.isFinite(e.y);
+    return true;   /* 其它类型交给上层分类，不在适配层判死 */
+  }
   function parseDxf(text,opt){
     const src=String(text||'');
     const meta=inspectDxf(src);
-    if(meta.binary) return {entities:[],unit:1,insUnits:meta.insUnits??0,blockCount:0,inspect:meta,supplemental:0};
-    const parsed=baseParse(src,opt);
+    if(meta.binary) return {entities:[],unit:1,insUnits:meta.insUnits??0,blockCount:0,inspect:meta,supplemental:0,droppedEntities:0};
+    /* S4：keepArcs 时先摘除顶层 ARC 再交给公共模块；摘除后复扫必须为空，
+       否则视为定位失败，整条退回旧折线路径（宁可近似，也不重复落地）。 */
+    const arcs=(opt&&opt.keepArcs&&(meta.entityCounts.ARC||0)>0)?collectArcs(src):[];
+    let parseSrc=src, keepArcs=false;
+    if(arcs.length){
+      const ranges=arcLineRanges(src);
+      if(ranges.length===arcs.length){
+        const stripped=stripArcRanges(src,ranges);
+        keepArcs=collectArcs(stripped).length===0;
+        if(keepArcs) parseSrc=stripped;
+      }
+    }
+    const parsed=baseParse(parseSrc,opt);
     const detected=parsed.unit||1;
-    /* 单位确认：forceUnit 用 $INSUNITS 的完整米换算表把公共模块结果整体缩放到目标单位 */
-    const target=opt&&opt.forceUnit!=null?(UNIT_MAP[opt.forceUnit]?UNIT_MAP[opt.forceUnit].meter:detected):detected;
+    const raw=parsed.entities||[];
+    const kept=raw.filter(entityOk);
+    parsed.droppedEntities=raw.length-kept.length;
+    parsed.entities=kept;
+    /* 单位确认：forceUnit 用 $INSUNITS 的完整米换算表把公共模块结果整体缩放到目标单位；
+       E4：未知 forceUnit 不再静默，记录代码交由导入提示按文件单位处理 */
+    const forced=opt&&opt.forceUnit!=null?UNIT_MAP[opt.forceUnit]:null;
+    parsed.unitFallback=opt&&opt.forceUnit!=null&&!forced?opt.forceUnit:null;
+    const target=forced?forced.meter:detected;
     const f=target/detected;
     if(f!==1) scaleParsedEntities(parsed.entities,f);
     parsed.unit=target;
+    /* 补充解析扫原文即可：ARC 不属于补充类型，摘除与否结果一致 */
     const extra=collectSupplemental(src).map(e=>scaleRaw(e,target));
     if(extra.length) parsed.entities=extra.concat(parsed.entities);
     parsed.inspect=meta;
     parsed.supplemental=extra.length;
+    if(keepArcs){
+      const arcsOut=[];
+      let degraded=0, dropped=0;
+      for(const rec of arcs){
+        const r=arcEntity(rec);
+        if(r.drop){ dropped++; continue; }
+        const e=scaleRaw(r.entity,target);
+        /* 退化后仍重合（a0=a1）的折线按非法实体处理，与旧路径口径一致 */
+        if(Array.isArray(e.points)&&!(e.points.length>1&&e.points.some((p,i)=>i>0&&(p[0]!==e.points[0][0]||p[1]!==e.points[0][1])))){ dropped++; continue; }
+        if(r.degraded) degraded++;
+        arcsOut.push(e);
+      }
+      parsed.entities=parsed.entities.concat(arcsOut);
+      parsed.arcCount=arcsOut.length-degraded;
+      parsed.arcsDegraded=degraded;
+      parsed.droppedEntities+=dropped;
+    }
     return parsed;
   }
 
+  /* E5：保真导出的 ELLIPSE / ARC 写出（公共模块只写 LWPOLYLINE/CIRCLE/POINT/LINE/TEXT），
+     仅在显式选项下插入；默认路径不做任何改写，保证与旧版本逐字节一致 */
+  const baseBuild=D.buildDxf;
+  function buildDxfFid(ents,layers,opt){
+    const ell=ents.filter(e=>e.type==='ELLIPSE');
+    const arcs=ents.filter(e=>e.type==='ARC');
+    if(!ell.length&&!arcs.length) return baseBuild(ents,layers,opt);
+    /* 10/20/11/21 写 mm；40(短长轴比)/41/42(参数) 无量纲，不能乘 1000 */
+    const pr=(c,v)=>c+'\r\n'+v+'\r\n', n=v=>(Math.round(Number(v)*1e6)/1e6).toString();
+    let add='';
+    for(const e of ell){
+      const rx=Number(e.rx),ry=Number(e.ry),mj=Math.max(rx,ry),mn=Math.min(rx,ry);
+      if(!(mj>0)) continue;   /* 退化椭圆不写 NaN 组码 */
+      /* 对象 angle 以度存储；DXF 主轴向量按弧度计算，ry>rx 时主轴换向 +90° */
+      const a=(Number(e.angle)||0)*Math.PI/180+(ry>rx?Math.PI/2:0);
+      add+=pr(0,'ELLIPSE')+pr(8,D.safeLayer(e.layer))+pr(10,n(e.x*1000))+pr(20,n(e.y*1000))+pr(11,n(mj*Math.cos(a)*1000))+pr(21,n(mj*Math.sin(a)*1000))+pr(40,n(mn/mj))+pr(41,0)+pr(42,6.283185);
+    }
+    /* ARC：DXF 角为度、逆时针；对象已按逆时针归一，直接写 10/20/40/50/51（半径也要 ×1000） */
+    for(const e of arcs){
+      const r=Number(e.r), x=Number(e.x), y=Number(e.y), a0=Number(e.a0), a1=Number(e.a1);
+      if(!(r>0)||!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(a0)||!Number.isFinite(a1)) continue;
+      add+=pr(0,'ARC')+pr(8,D.safeLayer(e.layer))+pr(10,n(x*1000))+pr(20,n(y*1000))+pr(40,n(r*1000))+pr(50,n(a0))+pr(51,n(a1));
+    }
+    /* 记录插在 ENTITIES 段末尾：前缀 \r\n 补回被替换串吃掉的分行，add 自身以 \r\n 结尾 */
+    const tail='0\r\nENDSEC\r\n0\r\nEOF';
+    return baseBuild(ents.filter(e=>e.type!=='ELLIPSE'&&e.type!=='ARC'),layers,opt).replace('\r\n'+tail,'\r\n'+add+tail);
+  }
   global.Dxf=Object.assign({},D,{
+    buildDxf:buildDxfFid, build:buildDxfFid,
     parseDxf, parse:parseDxf,
     inspect:inspectDxf, supplementalEntities:collectSupplemental, scaleParsedEntities,
+    arcLineRanges, stripArcRanges, collectArcs, arcEntity,
     unitLabel:code=>(UNIT_MAP[code]||{}).label||('未知单位 '+code),
     unitFactor:code=>(UNIT_MAP[code]||{}).meter||1,
     VERSION_NAMES, CORE_TYPES, SUPPLEMENT_TYPES, UNITS

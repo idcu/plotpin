@@ -34,6 +34,7 @@ r.objects;  // Map<num, { dict, data }>
 - 页面 `mediaBox` 按 `/Parent` 链继承，缺省 `[0,0,612,792]`；坐标单位 PDF 点（1/72 英寸）。
 - 内容流数组按原实现以换行拼接；`contents` 保留每条流解码后的字节与文本。
 - 0.2.0 新增：`/ObjStm` 解包（`parse` 自动执行）、`LZWDecode`（EarlyChange 可调，解码器比字典表提前一条扩宽以匹配标准编码器）、`cmykToRgb`。
+- 0.2.1：`LZWDecode` 与 FlateDecode 同口径受 `maxInflateBytes` 约束，按输出累计超限即中止（防 LZW 解压炸弹）。
 - 既有字段语义不变：`objects` 仍为 `Map<num,{dict,data}>`，`pages[]` 仍是 `{num,dict,mediaBox,contentRefs,contents,contentText}`。
 
 来源：plotpin `js/common/pdf-read.js` 的解析与流解码部分（MIT），内容流到绘图对象的解释保留在上游。

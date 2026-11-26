@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { goldenWritable, refusalReason, writeGolden } from '../../scripts/lib/golden.mjs';
 
 /* N-05：导出口径统一。
    1) 台账（CSV/XLSX）保留全量对象，「显示」列反映有效可见；图纸类（SVG/DXF/PDF）只含有效可见。
@@ -116,9 +118,14 @@ test('N-26：PNG 导出语义 golden（签名 + 尺寸，不锁编码字节）',
   });
   expect(info.sig).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
 
-  const metaPath = new URL('../../tests/golden/plain-scene.png.meta.json', import.meta.url);
-  if (process.env.UPDATE_GOLDEN === '1') {
-    writeFileSync(metaPath, JSON.stringify({ width: info.width, height: info.height }, null, 1) + '\n');
+  const metaPath = fileURLToPath(new URL('../../tests/golden/plain-scene.png.meta.json', import.meta.url));
+  const refuse = refusalReason();
+  if (goldenWritable()) {
+    writeGolden(metaPath, JSON.stringify({ width: info.width, height: info.height }, null, 1) + '\n',
+      'plain-scene.png.meta.json');
+  } else {
+    /* UPDATE_GOLDEN 单独设置不再生效：必须显式 ALLOW_GOLDEN=1（CI 下永不可写） */
+    expect(refuse, refuse).toBe('');
   }
   const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
   expect({ width: info.width, height: info.height }).toEqual({ width: meta.width, height: meta.height });

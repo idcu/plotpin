@@ -1,359 +1,87 @@
-# 图钉 PlotPin 已知问题
+# 已知问题与限制（known-issues）
 
-> 核对于 `8a9314b`（2026-11-08，C 类两项决策落地后的代码 HEAD）。本表来自只读代码审计与仓库内夹具/脚本；标注「可复跑」的条目均已用仓库内命令验证过，未标注「实测」的条目未做运行期复现。数量类指标以 [facts.md](facts.md) 为准。
-> 分类口径：**已修复**=有可复跑判据；**仍存在**=代码路径确证但未修；**已降级为限制**=产品边界或质量取舍，不是缺陷。
-> 新问题的编号与审计报告一一对应，便于后续计划映射：`IO-*`、`CORE-*`、`RT-*` 分别见本地过程材料 `audit-out/audit-io.md`、`audit-out/audit-core.md`、`audit-out/audit-runtime.md`（该目录不入库，不随仓库分发）。
+> **读者**：维护者、发布负责人、要判断“这条能不能算缺陷”的开发者。
+> **回答**：当前仍未解决的问题、明确的产品/技术限制、哪些事尚未验证。
+> **不回答**：历史修复明细见 [known-issues-archive](known-issues-archive.md)；功能口径见 [features](features.md)；实现见 [ARCHITECTURE](ARCHITECTURE.md)。
+> **口径**：按当前代码核对，2026-11-15（11-15 增量线收口后的代码基线 `209117f`）。代码与本文冲突时以代码为准。
+> **证据分级**：**已实测**（仓库内命令可复跑）/ **代码可证**（静态核对，未运行）/ **未验证**（缺设备、语料或外部软件）。未验证项不得写成已通过。
 
-## 1. 已修复（46 条）
+## 1. 当前结论
 
-| 编号 | 原问题 | 修复依据（仓库内可复跑 / 可核对） | 复核结论 |
+- 无未收口的 P1 功能/数据一致性缺陷。
+- 历史修复（A 系列、P0/P1、R 系列、P2 批次、MERGE、NGM）已按主题归档，见 [known-issues-archive](known-issues-archive.md)；编号保持可检索，本文不再维护第二套计数。
+- 剩余问题集中在三类：**外部条件未验证**、**明确的容量/精度取舍**、**少量冻结或延后的技术债**。
+
+## 2. 未验证项（缺条件，不得记 PASS）
+
+| 编号 | 项目 | 缺什么 | 现状 |
 |---|---|---|---|
-| A1 | 旧工程 64 图标到新内置 36 符号的逐图标视觉回归未比对 | `tests/fixtures/legacy-symbols.json` 逐图标路径 SHA-256 + 可折线化断言；`tests/golden/legacy-symbols.svg` 逐字节；`scripts/selftest.mjs` | 已关闭；旧工程靠自身类型表保留图标 |
-| A2 | PDF 输出没有字节级 golden，回归只能靠人看 | `tests/golden/fixed-pages.pdf` 逐字节 + 同输入两次 SHA-256 一致；仅覆盖 PDF 容器层，Canvas JPEG 编码不在判据内 | 已关闭；图纸页仍为位图（见 K3） |
-| A3 | SVG 导入“200 路径 × 单条 5000 字符”最坏组合未做耗时打点 | `scripts/bench.mjs` 最坏可达组合耗时门禁 ≤50 ms；历史上限内实测约 1.058 ms；“200×5000”约 1 MB，被 64 KB 上限快速拒绝 | 已关闭；199 路径是有效上限（元素上限含根节点） |
-| A5 | 规则检查的圆/椭圆/凹多边形采样误差没有 golden 对照 | `scripts/selftest.mjs` 固定期望与容差：圆面积 <2%（40 段）、旋转方形 =100（1e-6）、扇形 <1%、净距 0.01、凹多边形三角化 2500（1e-6） | 已关闭（仅规则页判定；统计页口径另见 RT-P2-14） |
-| A6 | DXF 折线近似与 SVG 图形缺少几何一致性断言 | `symbol-scene` 三符号 DXF 折线逐点/顶点数/闭合与同一轮廓源一致；`scripts/selftest.mjs` | 已关闭；DXF 近似限制见 K4 |
-| P0-4 | 插件沙箱可绕过：Worker 内 `BroadcastChannel` 可加入协作频道、`MessageChannel`/`MessagePort` 可自建端口、`onmessage`/`onerror` 可旁路 token 校验 | `tests/e2e/plugin-sandbox.spec.mjs`：插件内 `BroadcastChannel`/`MessageChannel`/`MessagePort`/`onmessage`/`onerror` 均为 `undefined`，向 `plotpin-collab-*` 发送 0 条，覆写 `onerror` 后异常仍走禁用路径 | 已关闭（N-02）；合法插件契约未承诺端口通道，一律封堵 |
-| P0-1 | PDF 导入的内嵌底图在自动保存后刷新/重开即丢失 | `tests/e2e/pdf-multipage.spec.mjs`「PDF 内嵌底图走资产入库，自动保存 + 刷新后仍在」：导入当场 `assetId=bg…`、无 dataUrl，重开后 `bgImageState=ready`；`scripts/selftest.mjs` 7.1 覆盖 dataUrl 兜底与非当前楼层；解压炸弹用例断言累计阶段即取消 | 已关闭（N-03） |
-| K1 | 离线缓存版本无门禁，旧缓存可能残留 | `scripts/check-sw.mjs` 以提交入库的 `scripts/sw-inputs.sha256`（预缓存输入指纹 + 清单 version）为基线，`scripts/check.mjs` 第 12 步纳入；`check-gates` 场景 6/9 证明会红（场景 10 为 CSS 结构） | 已关闭（N-01）；不再依赖 `git diff HEAD`，干净检出同样有效 |
-| K11 | 文档超出团队自设篇幅 | `scripts/check-discipline.mjs` 13/13 通过；工程文档已拆分 | 已关闭；余量偏小，新增内容需控制 |
-| P0-2 | 协作方“清空场地”被静默应用：不计入变更、不进撤销栈、无提示 | `tests/e2e/collab.spec.mjs`「N-04」：对端清空后 `__collabLastMerge.siteCleared≥1`、撤销栈 +1、状态栏含“对端清空了场地/Ctrl+Z”，Ctrl+Z 恢复场地 | 已关闭（N-04）；双标签真实通道复现 |
-| P0-3 | 场地编辑不进提交/不广播，较旧场地会在合并时复活 | `tests/e2e/collab.spec.mjs`「N-04」：拖点与属性面板输入均实时同步到对端；本地较新清空不被旧快照复活；`scripts/selftest.mjs` 覆盖 null 胜出与同时间戳保留 | 已关闭（N-04） |
-| IO-P1-1 | 导出口径分裂：CSV/XLSX/PDF 含隐藏对象且“显示”列失真；PNG/PDF 烘入草稿/校准 | `tests/e2e/export-scope.spec.mjs`：台账全量 +「显示」列=有效可见，SVG/DXF/PDF 只含可见对象；草稿/校准下 PNG 与 PDF 图纸页字节不变；`scripts/selftest.mjs` 28.4 节 | 已关闭（N-05）；台账表头与字段集不变 |
-| CORE-P1-1 | 批量/属性/显隐/节点增删不更新对象 `updatedAt`，协作合并可能丢弃新修改 | `scripts/selftest.mjs` 28.5 节：指定 id 严格递增、未列出对象不变、无变化幂等；`tests/e2e/collab.spec.mjs`「N-06」拖动+对端属性编辑合并后都保留 | 已关闭（N-06）；几何拖拽原先已直接打点，本轮补齐其余路径 |
-| CORE-P1-2 | PNG/PDF 导出把未完成的绘制草稿、测距/校准线烘入成品图 | `tests/e2e/export-scope.spec.mjs`：设置矩形草稿与两点校准后，PNG dataURL 与 PDF 图纸页 base64 与无瞬态时逐字节一致 | 已关闭（N-05）；导出默认 `includeDraft/includeCalibration=false` |
-| CORE-P1-3 | DXF/PDF/JSON 导入产生重复对象标识或重复编号 | `scripts/selftest.mjs` 28.6 节：同批次重复 id 追加稳定后缀、`a:b`/`a?b` 归并后仍唯一、重名走编号作用域、字段与数量不变；`sanitizeObjects` 跨楼层共享去重集合 | 已关闭（N-07）；审计计数见 `sanitizeReport()` |
-| IO-P1-2 | 表格导入按楼层名匹配，重名时后者覆盖前者，所有行静默落到最后一层，造成错层 | `scripts/selftest.mjs` 28.7 节：重名楼层导入返回 errors 且更新/新增均为空；`tests/e2e/table-batch.spec.mjs`「N-08」弹窗整批拒绝且现有对象与楼层数不变；新增/重命名重名被拒 | 已关闭（N-08）；导入按归一楼层名做唯一精确匹配 |
-| RT-P1-08 | 删除图层/类型只检查当前楼层引用，其它楼层留下悬空引用 | `scripts/selftest.mjs` 28.7 节 `floorRefs` 跨楼层统计；`js/features/ui-panels.js` 删除前检查全部楼层，有引用时确认后迁移到默认图层 / 同类内置类型 | 已关闭（N-08）；拒绝/取消时不做任何修改 |
-| IO-P1-5 | 含 `/cm` 变换的 PDF，文字坐标与贝塞尔曲线未乘变换矩阵，导入后错位/压扁 | `scripts/selftest.mjs` 37c 节：`q 2 0 0 2 0 0 cm` 下曲线中点/终点与文本坐标均为恒等 CTM 的 2 倍；不含 `/cm` 的既有坐标不变 | 已关闭（N-09）；字号未随 CTM 缩放，已在 `docs/features.md` 标注限制 |
-| IO-P1-3 | SVG 导出的对象颜色未做属性转义，非法颜色可逃逸属性 | `scripts/selftest.mjs` 28.8 节：`normalizeExportColor` 白名单与非法值回退；`buildSceneSvg` 注入 `red" onload="alert(1)` 后不含 `onload=` / `red"`；DXF 图层名同步清洗 CR/LF 并保证唯一 | 已关闭（N-10）；符号 path 限定 `M/m` 起始 |
-| IO-P1-4 | JSON 导入先回收“不可达资产”再等待资产转换，转换失败回滚后旧工程资产已被删除 | `scripts/selftest.mjs` 28.9 节：注入 `afterStateLoaded` 抛错后状态/草稿/选中集/旧 `assetId` 均保留且 `assetPrune` 调用 0 次；成功导入后回收恰好 1 次且 keep 集不含旧资产 | 已关闭（N-11）；`openProjectById` 同类路径已由 IO-P1-6 关闭 |
-| IO-P1-6 | 工程库打开 `openProjectById` 先回收再 `afterStateLoaded`，打开阶段失败会误删旧工程资产 | `scripts/selftest.mjs` 28.10 节：注入 `afterStateLoaded` 抛错后状态/草稿/选中集/旧 `assetId` 均保留且 `assetPrune` 调用 0 次；成功打开先加载后回收、回收 1 次且 keep 集不含旧资产 | 已关闭；与 N-11（`627471a`）同一事务语义 |
-| CORE-P1-6 | 一般仿射下圆/椭圆/平行四边形用两条基向量近似，形状失真 | `scripts/selftest.mjs` 39.9 节 34 项断言：SVD 主轴与朝向、剪切面积保真、平行四边形四角一致、对象/场地同参数一致 | 已关闭（N-12）；非相似扇形按面积保真近似并返回 `degraded` |
-| CORE-P1-7 | 扇形跨 0°（或 >180°）时角度归一化不一致，画布/PNG/PDF 与 SVG/DXF 画成补角 | `scripts/selftest.mjs` 39.10 节 10 项断言：350→20 为 30°、20→350 为 330°、起止相等为 360°、SVG 大弧标志为 0 | 已关闭（N-13）；画布/PNG/PDF/SVG/DXF 共用 `sectorArcRange` |
-| CORE-P1-9 | 单对象顶点数无上限；超大折线在多边形面积/包围盒计算中可能抛错，拖垮画布 | `scripts/selftest.mjs` 39.11 节：`SHAPE_POINTS_MAX=10000` 拒绝追加、12 万点列包围盒不爆栈（`pointBounds`） | 已关闭（N-14）；保守上限，极端合法超大点列会被拒绝 |
-| CORE-P1-4 | 捕捉拾取在移动事件里全量扫描对象，无空间索引；万级对象可能明显卡顿 | `scripts/selftest.mjs` 分区 `25b. 捕捉包围盒预筛等价性`（200 个随机指针点 × 4 种对象变体，预筛前后候选集 diffs=0）；`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-22"` 捕捉解析 P95 18.5/14.1 → 3.1~4.0 ms（读数见 [performance.md](performance.md) §4.1.3） | 已关闭（N-22 `556c205`）；单趟 `collectSnap` + AABB 预筛，候选集与全量扫描等价 |
-| CORE-P1-5 | 单击选中会触发静态层重建；大场景连续选择可能掉帧 | `tests/e2e/smoke.spec.mjs:80-89`：画布点选后对象清单行高亮与勾选同步；`node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-23"`：30 次点选静态重建 30 → 0，点选 P95 661.1/710.2 → 20.0/20.9/22.1 ms（见 [performance.md](performance.md) §4.1.4） | 已关闭（N-23 `d44a8e1`）；选中/悬停只叠加动态层；拖拽起止各重建一次静态层（10k 约 0.2 s） |
-| RT-P1-01 | 断线期间修改不排队、不补发，断线后不自动重连 | `tests/e2e/collab.spec.mjs:308`「N-16：断线自动重连补发与楼层增删清空广播」、`:369`「N-16：断线待发队列刷新页面后仍补发」 | 已关闭（N-16 `d093071`）；待发队列落盘 + 本机频道指数退避重连；**WebRTC 无信令通道仍只能手动重连**（产品限制，见 §3 K10 语境） |
-| RT-P1-02 | 楼层新增/删除/清空不广播 | `tests/e2e/collab.spec.mjs:308` 同一 N-16 用例：`floor-add/delete/clear` 显式广播并走 LWW 合并 | 已关闭（N-16 `d093071`）；活动楼层切换仍是每个客户端独立状态（非缺陷） |
-| RT-P1-03 | 冲突提示依赖“新增数量”；无新增时即使覆盖了修改也不显示冲突条数 | `tests/e2e/collab.spec.mjs:409`「N-17：跨工程消息隔离与纯冲突可见」，冲突文案断言在 `:447-454`（`conflicts>0`、含「冲突」、不含「无变化/Ctrl+Z」） | 已关闭（N-17 `877deec`）；`changed` 计入 `conflicts`，纯冲突不会被标成可回滚 |
-| RT-P1-04 | 协作消息不带工程标识，不同工程误用同频道会串数据 | `tests/e2e/collab.spec.mjs:409` 同一 N-17 用例：跨工程消息被丢弃并计数 | 已关闭（N-17 `877deec`）；消息体携带 `pid`。B6 收紧：业务消息必须双方都有 `pid` 且一致，草稿/空 `projectId` 不再放行，仅 `hello`/`hello-ack`/`bye` 兼容旧版 |
-| RT-P1-05 | 插件添加的对象/标注不进撤销栈，用户无法撤销插件写入 | `tests/e2e/plugin-sandbox.spec.mjs:322`「插件写入进入撤销栈：undo 后对象完全移除、redo 恢复」 | 已关闭（N-18 `9cbc25c`）；与手动绘制共用撤销栈 |
-| RT-P1-06 | 插件 2 秒超时只覆盖初始化/单次调用；初始化后的定时器可长期占用 | `tests/e2e/plugin-sandbox.spec.mjs:346`「定时器逃逸：载入后 setInterval 与初始化期捕获的 setTimeout 均失效，主线程仍可用」 | 已关闭（N-18 `9cbc25c`）；loaded 后置 `frozen` 并清空定时器 |
-| RT-P1-07 | 属性面板每次 focusin 都压入历史，输入框来回切换会快速耗尽 20 步撤销栈 | `tests/e2e/history.spec.mjs:202`「N-19：属性面板切换 5 个字段不入栈，拖动后一次撤销回原位；场地面板一致」 | 已关闭（N-19 `3c4e522`）；容器级事件委托，字段首次 `input`/`change` 前压一次快照 |
-| RT-P1-10 | 楼层写入不更新场地时间戳，场地合并使用过旧时间，导致场地“复活”与覆盖顺序错误 | `tests/e2e/collab.spec.mjs:171`「N-04：对端清空场地可见可撤销；场地拖点实时同步；旧快照不复活已清空场地」；`js/features/props.js` 场地编辑走 `commitObjectEdit`（touchFloor） | 已关闭（N-04 `973c83c`）；`mergeFloorWrite` 读取 `site.updatedAt` |
-| CSS-P1-1 | `css/style.css:213` 的 `@media print{` 未闭合（`{` 比 `}` 多 1），其后所有规则被吞进打印媒体查询 | `node scripts/check.mjs --selftest` 第 13 步 CSS 结构：去注释/字符串后花括号配平（修复前差 1，修复后 0）；`node scripts/check-gates.mjs` 场景 10：追加未闭合 `@media` 后 `check.mjs` 退出 1 且命中「CSS 结构未配平」 | 已关闭（`6cdb093`）；打印块于 217 行闭合，块内规则未改；打印版式无 e2e 截图对比（与修复前相同，非本次引入） |
-| CORE-P1-8 | 图片切变手柄在旋转 90° 附近跳变/退化 | `scripts/selftest.mjs` CORE-P1-8 19 条断言：89°/90°/91° 变换有限、顶边沿自身方向位移恰 1 m、底边中点不动、四角点位移 ≤1 m；退化高度返回原变换 | 已关闭（`d58af8b`）；切变改用图片自身底边/法向，分母为图片高度；无指针级 e2e 轨迹断言 |
-| RT-P1-09 | 快照差异不含图层名称与类型表结构变化 | `scripts/selftest.mjs` RT-P1-09 13 条断言：图层/类型增删改、未变不报、场景项后置、旧快照缺表零误报；`tests/e2e/snapshot.spec.mjs` N-21 覆盖 5 类场景项 | 已关闭（`f9a5843`）；旧快照缺 `objectTypes` 时保守跳过类型表对比 |
+| M1 | 移动端 iOS/Android PWA 安装、离线、手势 | 真机 + HTTPS 站点 | 未验证；桌面模拟与同机 HTTP 不能替代 |
+| M2 | Safari 原生导入/下载/沙箱/打印 | macOS + Safari 17+ | 未验证；WebKit on Windows 不作支持目标 |
+| M2-Fx | Firefox 手工流程 | 可复跑的现代 Firefox 环境 | 2026-11-14 用本机 Playwright Firefox（`firefox-1572`）复跑 5 条核心用例：**5 passed / 11.3s**，逐条读数与命令见 [testing](testing.md)§3.4；其余 163 条用例、真实下载保存与打印**未验证**，已知不可用项本轮**无**（仅代表这 5 条未暴露）。**不构成支持承诺**，不进 `npm run ci`、不进默认 e2e |
+| M3 | 真实双设备 WebRTC（局域网/跨网络） | 两台设备；跨网络还需 STUN/TURN | 未验证；2026-11-14 起可在协作面板配置 STUN/TURN（本机键 `plotpin.collab.ice.v1`，默认不记忆），但**跨 NAT 建连与 TURN 鉴权（长期/短期凭据）均未在真实网络验证**；不配中继时仍仅限可直连网络（同一局域网/可直连） |
+| M4 | 英文译文语义质量 | 中英双语评审人 | 未验证；自动化只证明按出现次数的覆盖率（2026-11-14 为 46.45%，缺口 0；旧去重口径 46.7% 已废弃）与无中文残留，不证明译文语义正确 |
+| M5 | 真实 GPU / 低端设备帧率与首屏 | 目标真机 + Performance 录制 | 未验证；本机 Chromium 为 SwiftShader，只能作代理对照 |
+| M6 | 低端设备插件 2 s 超时体验 | 低端 Android 真机 | 未验证；桌面 6× CPU 节流只能标 `PROXY` |
+| M7 | 大尺寸符号在真实 CAD 中的 DXF 观感 | AutoCAD/LibreCAD | 未验证；应用内导出可用不等于 CAD 观感通过 |
+| M8 | 真实图纸快照差异误报率 | 50 组真实 A/B 语料 + 两名评审人 | 未验证；禁止用构造样本补足 |
+| E1 | Excel/WPS 真实打开 CSV/XLSX | Excel 2019+ 或 WPS 11+ | 未验证；不得用文件头魔数代替真实打开 |
+| E2 | GIS 软件对盲区 GeoJSON 绕向的接受度 | QGIS/ArcGIS 实机 | 未验证；RFC 7946 外环逆时针为代码口径 |
+| E3 | 真实 5 万行 XLSX 解析耗时 | 大样本 + 计时环境 | 未验证；只有静态断言与构造样本 |
 
-## 2. 仍存在
+## 3. 仍存在的技术债与风险
 
-### 2.1 P1：功能/数据一致性缺陷（0 条）
+### 3.1 冻结/延后项
 
-原 CSS-P1-1、CORE-P1-8、RT-P1-09 已于 2026-11-08 修复并移入 §1（`6cdb093` / `d58af8b` / `f9a5843`），复跑依据见对应行；本轮无遗留 P1。
+| 编号 | 状态 | 内容 | 影响与边界 |
+|---|---|---|---|
+| R-14 | 部分收口（冻结） | 入站对象的自有键过滤：`settings` 已走白名单，`meta`/`viewport` 仍 `Object.assign` | 异常 JSON 带入的多余键只影响该副本；改动涉及数据边界，留待专门批次 |
+| R-24 | 部分收口 | 沙箱 `getState` 快照有 16 MB 上限、写入类 RPC 参数 2 MB 上限；`props` 键数 / `points` 顶点数上限未做 | 16 MB 是资源保护线，不是设计载荷；自旋仍由 2 s 超时兜底 |
+| NGM-01 | 已关闭（2026-11-24） | 原三处 vendor 补丁后 `moduleDigest` 未重算；补丁已上游化到 ngm-repo 新 tag 并按 0.103.0 重锁 | `scripts/ngm-vendor-digest.json`（62 文件）继续守本地字节；`ngm verify --content` 用 ngm 0.103.0 实测 10/10 ok，原 `--deep` 称谓为其废弃别名 |
+| MERGE-09 | 决定保持现状 | 合并输出只保留显式字段白名单，不携带未知顶层字段 | 无消费未知字段的插件契约；保留会扩大原型污染与陈旧数据面 |
+| CORE-18 | 剩余未改 | `js/core/interaction.js` 仍通过 `render.js` 的 `isVisible` 别名取可见性 | 覆盖率层已下沉为 `model.js` 的 `effectiveVisible`；这处是 core→render 的残留，语义与 `effectiveVisible` 一致 |
+| P2-12 | 已确认不阻塞 | 墓碑上限与对象上限同为 100000（`APP_LIMITS`） | 无需再改 |
 
-### 2.2.1 需人工 / 真机验证（8 条，未验证）
+### 3.2 容量与精度取舍（限制，不是缺陷）
 
-| 编号 | 项目 | 未验证原因 |
-|---|---|---|
-| M1 | 移动端 iOS/Android 安装、离线、手势 | 无真机环境 |
-| M2 | Firefox / Safari 的导入、下载、沙箱、打印 | 仅 Chromium 验证 |
-| M3 | 双设备 WebRTC 直连 | 无双设备环境；未用双标签页冒充 |
-| M4 | 英文译文语义质量 | 未做人工语言评审 |
-| M5 | 低端设备帧率/首屏 | 未做真机或限速实测 |
-| M6 | 插件在低端设备上的 2 秒超时体验 | 只在桌面 Chromium 验证，低端机可能更早触发 |
-| M7 | 大尺寸符号在真实绘图仪/CAD 查看器中的 DXF 观感 | 需用 AutoCAD/LibreCAD 人眼检查，未做 |
-| M8 | 真实图纸的版本差异误报率（含 A4） | 无 50 条人工标注样本 |
-
-### 2.3 P2：改进项（57 条，按主题归并为 14 组）
-
-| 组 | 覆盖审计编号 | 内容摘要 |
-|---|---|---|
-| IO-A | IO-P2-6/7/8/10/11 | 表格往返有损：去空格、布尔误判、形状非法丢几何、按精度量化坐标；长度/面积每行重复计算 |
-| IO-B | IO-P2-1/2/3/4/5/12/13/20 | CSV/TSV 口径：表头未加引号、换行不一致、TSV 引号在 Excel 错列、公式反转义改写 `'=`、角度精度、GeoJSON 绕向、PDF 清单缺列；多页 PDF 取“全文档最大内嵌图”作底图，可能与矢量内容不同页 |
-| IO-C | IO-P2-9/21 | 目标楼层对象数组异常时回退到当前层（静默错层）；XLSX 单表 >5 万行整份导入失败 |
-| IO-D | IO-P2-14/15/16/17/18/19/25/26 | 导出产物边界：PNG 无页脚、DXF 表色忽略、SITE 图层同名冲突、DXF 毫米/文字米制、R12 凸度预检恒为 0、TEXT 去空格、图层名 CR/LF、导出副作用 |
-| IO-E | IO-P2-22/23/24 | 目录损坏被静默吞掉；停车按“图片∪场地”取景；停车生成自写编号，未走编号作用域 |
-| CORE-A | CORE-P2-1/2 | 启动时本机设置无白名单覆盖工程设置（含原型污染风险）；适应窗口未夹取缩放上下限 |
-| CORE-B | CORE-P2-3/4/19 | 活动楼层对象在历史中双份拷贝；快照列表/淘汰全量读入；清空覆盖率后离屏画布不释放 |
-| CORE-C | CORE-P2-5/6/7 | 盲区面积按格统计与多边形面积口径不一致；布点优化前后百分比分母不同；椭圆转矩形丢旋转角 |
-| CORE-D | CORE-P2-8/9/10/11/12 | 重命名非当前楼层不更新时间戳；载入/回滚残留校准点与草稿；重复图层标识不合并；场地标识/标注未按对象规则清洗 |
-| CORE-E | CORE-P2-13/14/15/16/17/18/20 | 选中每帧多算点数组（N-27 已删，见 §2.4）、历史比较函数未用于生产（N-27 保留并归档，见 §2.4）、死分支、核心层硬编码中文、多标签心跳时间未钳制、底图解码静默失败、协作合并无上限 |
-| RT-A | RT-P2-01~06 | 快照键分隔符可被工程名污染、字节按 UTF-8 估算偏低、恢复未校验工程、键序敏感 diff 误报、差异截断 2000 条但文案称“完整”、创建快照的资产化副作用 |
-| RT-B | RT-P2-07~11/20 | 插件清单按字符数而非 UTF-8 字节、直调代码无上限、卸载未清理类型注册、导出器无 read 时的 site 传递待确认、下载无 pending/大小校验、消息/错误处理器未硬化 |
-| RT-C | RT-P2-12~14 | 未配置阈值的类型对漏报间距、多轮廓重叠漏检、统计页与规则页容差口径不同 |
-| RT-D | RT-P2-15~19 | 清单颜色未转义、模态 Esc/遮罩未 resolve、楼层广播注释失真、协作调试全局常驻、入站分块仅接收驱动淘汰 |
-
-#### 2.3.1 P2 三分类 triage（2026-11-08）
-
-口径：**A 真实缺陷可修**=代码路径确证、仓库内可复现/可加断言；**B 仅文档口径**=行为可接受或已在 N-27 收敛，只改文档/文案/注释；**C 需外部条件**=需 Excel/CAD/GIS 实机、真实样本或产品拍板。  
-统计：**A 49 / B 13 / C 4**（合计 66）。本轮只做分类，未改任何 P2 业务代码。
-
-| 分类 | 条目 |
+| 限制 | 说明与边界 |
 |---|---|
-| A（49） | IO-P2-1/2/4/5/7/8/9/11/13/14/15/16/18/19/21/22/23/24/25/26；CORE-P2-1/2/3/4/7/8/9/10/11/12/15/16/17/18/19/20；RT-P2-01/03/04/05/07/08/09/11/13/14/15/16/18 |
-| B（13） | IO-P2-6/10/12；CORE-P2-5/6/13/14；RT-P2-02/06/10/17/19/20 |
-| C（4） | IO-P2-3/17/20；RT-P2-12 |
+| 快照 20 条 / 约 16 MB | UTF-8 字节估算的软上限，超出淘汰最旧、至少保留 1 条；单条超限仍保留；对比最多展示 2000 条差异 |
+| 覆盖率是栅格估算 | 面积用解析公式，命中仍按固定段数采样；v1/v2/v3 数值不可直接比较；盲区面板面积与 GeoJSON 盲格面积口径不同 |
+| 统计 v2 | 越界判定与规则页同口径（场地包围盒 + 容差）；v2 与旧报告数值不可直接比较，仅标注版本不迁移历史报告 |
+| DXF 近似 | 场地独立图层、圆/扇形折线化、不还原填充；R12 凸度按折线拉直；单位毫米而文字按米/度 |
+| DXF 椭圆/圆弧保真（圆弧前向不兼容） | 默认 DXF 与旧版本逐字节一致；保真导出为显式选项：椭圆输出 ELLIPSE、圆弧输出 ARC，部分 CAD 对原生曲线的解释可能不同，不承诺与原生 CAD 的编辑体验一致。圆弧已是独立对象（`kind:'arc'`，纯描边，不参与面积与覆盖率）。**前向不兼容**：旧版不认识该 kind，打开含圆弧工程会丢弃这些弧，且旧版保存一次后弧永久消失；含圆弧工程须统一用 ≥ 当前版本打开。新版自身对结构非法的对象会计入 `dropped` 并在载入横幅显示「对象丢弃 N」；**旧版是否把未知 kind 计入该计数未实测**，不能据此断言旧版会提示 |
+| PDF 图纸页为位图 | 默认 `pdf` 与 `pdf-vector` 的视觉都是位图：文字可选中·可搜索（视觉仍为位图，放大会发虚）仅指 `pdf-vector` 新增的不可见文字层（Type3 空字形 + ToUnicode），图纸页与清单页都带；标签 >300 降到 150 DPI。真实查看器（Edge/Adobe/Foxit/WPS）的选中高亮与打印表现未做自动验证；`pdftotext` 默认模式提取清单页时每个单元格占一行，需 `-layout` 才还原表格行（工具行为，不是产品缺陷） |
+| PDF 多页导入 | 多页 PDF 默认只导第 1 页（与旧版一致）；只有预检里显式选页范围才横向并排导入，所选项按页号升序、第一页锚定原点、页间 1 m。不提供跨页自动拼图/去重叠，页数不设单独上限（受实体与对象总数上限约束）。底图只取所选页中第一页的内嵌图 |
+| PDF 文本编码 | 支持 UTF-16BE/LE BOM、GBK 与 ASCII；纯中文可完整提取，解不开的按条计数并提示“文字 N 条无法解码，已跳过”。**不解析 ToUnicode/CID 字形映射**，使用该映射的 PDF 可能没有文字对象或按字节误解码；真实 CAD 图纸的字体覆盖未做全量样本验证 |
+| 插件隔离非语言级沙箱 | 只承诺能力白名单、2 s 超时与参数上限；仅加载可信插件 |
+| 协作无服务端权威 | 逐对象/楼层 LWW；无认证/授权/审计；二维码约 42 字节；双方都未绑定工程时状态显示「已连接（未绑定工程，业务消息被忽略）」 |
+| `objectBounds` 仍 72 点采样 | 圆/椭圆/扇形未改解析式包围盒；裁剪预筛已用 `objectSnapBounds`，剩余在动态层绘制、框选、统计 |
+| 静态层局部补绘的标签溢出（M6 残留） | 补绘矩形按旧∪新包围盒 + 96 px pad 推导；标签宽于约 192 px 时溢出部分仍可能被擦。只在 dpr=1 headless Chromium、属性面板提交路径验证；dpr=2、拖拽（走整层重建）与真机未实测。P4 的 `measureText` 精确外扩未做 |
+| 文件/对象/表格上限 | 单文件 32 MB、实体 10 万、表格单表 2 万行（>5 万行跳过）、对象总数 10 万；顶点上限只在交互侧校验 |
+| 导入/导出有损边界 | 表格去空格、按精度量化、未知布尔值告警；CSV/TSV 行尾 CRLF；TSV 引号在部分 Excel 中错列 |
 
-分组计数：
+### 3.3 有意行为（不是缺陷）
 
-| 组 | A | B | C | 合计 |
-|---|---|---|---|---|
-| IO-A | 3 | 2 | 0 | 5 |
-| IO-B | 5 | 1 | 2 | 8 |
-| IO-C | 2 | 0 | 0 | 2 |
-| IO-D | 7 | 0 | 1 | 8 |
-| IO-E | 3 | 0 | 0 | 3 |
-| CORE-A | 2 | 0 | 0 | 2 |
-| CORE-B | 3 | 0 | 0 | 3 |
-| CORE-C | 1 | 2 | 0 | 3 |
-| CORE-D | 5 | 0 | 0 | 5 |
-| CORE-E | 5 | 2 | 0 | 7 |
-| RT-A | 4 | 2 | 0 | 6 |
-| RT-B | 4 | 2 | 0 | 6 |
-| RT-C | 2 | 0 | 1 | 3 |
-| RT-D | 3 | 2 | 0 | 5 |
+| 现象 | 为什么保留 |
+|---|---|
+| 启动期 `applyLocalSettings()` 整体替换 `state.settings` | 「载入优先」是产品语义；窗口内改设置会被静默覆盖。测试应先等启动落定（参考 `tests/e2e/i18n-template.spec.mjs` 的 `waitBootSettled()`），不要加启动守卫 |
+| 设置变更不进撤销栈 | 设置不是图纸内容 |
+| CSV/TSV/XLSX 台账保留隐藏对象 | 台账是资产清单；「显示」列按有效可见标注 |
+| 多文件拖拽只取第一个 | 刻意口径，不静默合并 |
+| 合并本地优先 | 离线协作的产品约束；M2 只增加配置差异可见性，不改变优先级 |
+| 删除楼层/清空可撤销、切换楼层不广播 | 活动楼层是各客户端独立状态 |
 
-建议批次（按风险从低到高；影响面为预估，未实测）：
+## 4. 已修复与历史条目
 
-| 批次 | 主题 | 覆盖条目 | 改动面（审计已指出的文件） | 预估影响 / 验证成本 | 风险与前置 |
-|---|---|---|---|---|---|
-| 1 | 文档口径清零 | B 全部 13 条 | `docs/features.md`、`docs/user-guide.md`、`known-issues.md`、代码注释 | 0 运行时代码、0 新断言、产物 0 B | 低；逐条核对措辞，不改行为 |
-| 2 | 表格/CSV 往返与静默数据丢失 | IO-1/2/4/5/7/8/9/13/21 | `io-fields.js`、`io-table.js`、`io-import.js`、`io-export.js` | 4 文件；CSV/TSV/GeoJSON golden 需同步；表格 e2e + selftest | 中高；直接改数据路径，8 类导出 golden 必须全量复跑 |
-| 3 | DXF / PNG 产物一致性 | IO-14/15/16/18/19/26 | `io-export.js`、`js/common/dxf.js`、`persistence.js` 图层名清洗 | 2-3 文件；DXF golden + PNG 语义 golden；预检断言 | 中；DXF 输出变化需 CAD 侧观感仍属 M7 未验证 |
-| 4 | 核心瞬态与边界 | CORE-2/7/9/10/18/19 | `viewport.js`、`geometry.js`、`persistence.js`、`snapshot.js`、`render.js` | 5 文件；纯逻辑断言为主，少量 e2e | 中低；`resetTransientInteractionState` 为新增公共收敛点，需列影响调用方 |
-| 5 | 核心 schema 与安全 | CORE-1/8/11/12/17 | `app.js`、`persistence.js`、`tab-lease.js` | 3 文件；设置白名单/站点清洗/心跳钳制断言 | 中；原型污染与跨工程设置属安全项，需负向用例 |
-| 6 | 快照与协作边界 | RT-01/03/04/05、CORE-20 | `snapshot.js`、`collab.js`、`persistence.js`、`merge.js` | 4 文件；键命名空间、恢复工程校验、稳定序列化断言 | 中高；RT-05 稳定序列化会改变 diff 口径，需同步 golden |
-| 7 | 插件沙箱收口 | RT-07/08/09/11 | `plugins.js` | 1 文件；清单字节数、直调上限、卸载清理、下载校验断言 | 中；安全相关，需 sandbox e2e 复跑 |
-| 8 | 规则/统计口径一致 | RT-13/14 | `rules.js`、`ui-panels.js` | 2 文件；多轮廓重叠与越界容差断言 | 中；会改变规则页结果，需更新既有 e2e 期望 |
-| 9 | 目录/停车/UI 小修 | IO-22/23/24/25、RT-15/16 | `catalog.js`、`parking.js`、`io-export.js`、`ui-panels.js`、`ui-shell.js` | 5 文件；toast/编号作用域/模态 resolve 断言 | 低；范围小但分散 |
-| 10 | 代码卫生与 i18n | CORE-15/16、RT-18 | `geometry.js`、`persistence.js`、核心默认文案、`collab.js` | 4 文件；删死分支、核心中文走 `L()`、调试全局开关 | 中；CORE-16 会变动 i18n 覆盖率基线，需同步 facts |
-| 11 | 性能（无打点不提交） | CORE-3/4、IO-11 | `model.js`、`snapshot.js`、`io-fields.js` | 3 文件；必须补 heapUsed / 帧时打点与 perf-browser 复跑 | 高；历史结构共享与快照索引改动面大，单独成批 |
+- 全部历史修复按模块/主题整理在 [known-issues-archive](known-issues-archive.md)，保留原编号、一句话结论与可核对依据。
+- 归档覆盖：A1/A2/A3/A5/A6、P0-1～P0-4、K1/K11、IO-P1/P2、CORE-P1/P2、RT-P1/P2、CSS-P1、MERGE、NGM、R-09～R-35。
+- 历史条目只用于追溯，不再作为现状依据；若与当前代码冲突，以代码与门禁实测为准。
 
-**批次状态（2026-11-08）**：批次 1（B 全部 13 条）、批次 2（表格/CSV 往返 9 条）、批次 3（DXF/PNG 一致性 6 条）、批次 4（核心瞬态边界 6 条）、批次 5/6（核心 schema/安全与快照/协作 10 条）、批次 7/8（插件沙箱 4 条 + 规则/统计 2 条）、批次 9/10（目录/停车/UI 6 条 + 代码卫生/i18n 3 条）、批次 11（性能打点 3 条）已交付；批次 1 为纯文档口径，结论见 §2.5；批次 2 见 §2.6；批次 3/4 见 §2.7；批次 5/6 见 §2.8；批次 7/8 见 §2.9；批次 9/10 见 §2.10；批次 11 见 §2.11。A 类 49 条至此全部落地。
+## 5. 维护规则
 
-**C 类（4 条）最终状态（2026-11-08）**：
-
-| 编号 | 状态 | 结论 | 提交 / 所需条件 |
-|---|---|---|---|
-| IO-P2-20 | 已决策落地 | 多页 PDF 只导入第 1 页，导入后提示「共 N 页，已导入第 1 页」；底图只取第 1 页实际绘制的内嵌图；不提供多页合并开关 | `dd5f3cb` |
-| RT-P2-12 | 已决策落地 | 未配置间距阈值的类型跳过间距比较，结果面板显示「未配置阈值类型 N 个」；不回退全局阈值、不静默跳过 | `8a9314b` |
-| IO-P2-3 | 未验证 | 需 Windows Excel 实机把含 `=`、引号、换行的单元格导出 CSV/TSV 再打开，核对引号与列数；不得用模拟或推断值替代 | 条件：Excel 实机 + 原始样本文件 |
-| IO-P2-17 | 未验证 | 需 AutoCAD/LibreCAD 打开含 SITE 图层的 DXF，核对 mm 单位与文字米制读数；不得用解析器推断替代 | 条件：CAD 查看器 + 样本文件 |
-
-两条未验证项保持「未验证」，不因长期未验证降级为「已知限制」。
-
-**B 类补充**：CORE-P2-13/14 已在 N-27 收敛（§2.4），RT-P2-20 的 `onmessage/onerror` 已在 N-02 沙箱硬化中封堵；这三条只需在文档/归档口径中标注，不再改代码。
-
-### 2.4 N-27 公共抽象审计归档（9 项）
-
-> 结论只记录当前代码事实；「已收敛」项均可用对应文件行号复跑核对，未收敛项不得改写成「已知限制」。
-
-| 审计项 | 结论 | 依据 / 影响调用方 |
-|---|---|---|
-| `historyValueEqual` 两套比较语义 | 保留（仅自测入口） | 生产路径无调用；`scripts/selftest.mjs:7095-7096` 两条断言直接覆盖，删除即删断言（本段硬边界禁止）。生产快照仍用 `sharedHistoryValue` 的「引用相等 + 变更即复制」 |
-| `mergeStable` 仅此处使用 | 无重复，不改 | `js/common/merge.js:352` 单一定义；调用方 `merge.js:260/346/349`、`js/core/persistence.js:925` |
-| `buildSnapCandidates` 双重分配 | 已收敛（N-22） | `js/core/geometry.js:32` 单趟 `collectSnap`；`collectSnapCandidates`（`:107`）与 `collectSnapEdges`（`:110`）只是按位掩码的薄包装 |
-| `drawSelection` 无用分配 | 已删除 | `js/core/render.js:947` 的 `drawSelection` 原先每帧执行 `objectPoints(o).map(toS)` 且结果未被任何分支使用；现已删除，产物 −36 B，画布像素不变（e2e 109 通过） |
-| `normalizeColor` 分散 | 已收敛（N-10） | 唯一实现 `normalizeExportColor`（`js/features/io-export.js:371`），SVG 图例/对象/文字/标记 4 处调用同源 |
-| 覆盖率口径常量未收敛 | 已收敛（N-20） | `APP_LIMITS.COVERAGE_TARGET_CELLS/MAX_CELLS/CELL_MIN_M/CELL_MAX_M`（`js/core/config.js:42-45`）；`geometry-coverage.js` 全部引用，无重复字面量 |
-| 门禁脚本 CSS/MJS 解析器两套 | 已收敛遍历/JSON 读取（2026-11-10） | `check-discipline.mjs` 不含 CSS/MJS 解析器；`check-ngm.mjs` 的 `walkFiles`/`readJson` 已改用 `scripts/lib/fs-utils.mjs`：共享遍历新增 `exts` / `skipDir` 选项后范围完全等价（`.git`/`node_modules`/`ngm.vendor` 等跳过规则逐条保留），`readJson` 仍保留「缺文件即 fail」的容错语义（薄包装，不改报告方式）；`check-ngm` 输出与改动前一致 |
-| `sanitizeLayers` 多份 | 无重复，不改 | `js/core/persistence.js:1063` 单一定义，`:778` 单一调用 |
-| `objectIndexById` 调用点未统一 | 已统一 | `js/core/model.js:523` 单一定义；5 处调用（`js/core/interaction.js:306/393/681/706`、`js/core/persistence.js:154`） |
-
-### 2.5 B 类文档口径归档（13 条）
-
-> 本表只记录「已收敛/已降级为限制/已确认」的口径结论，不把任何一条写成「已修复」。  
-> 「已降级为限制」表示行为按现状保留并在产品文档写明；「已收敛」表示代码已符合审计建议但本轮未改代码；「未验证」原样保留。
-
-| 编号 | 结论 | 文档落点 / 依据 |
-|---|---|---|
-| IO-P2-6 | 已降级为限制：导入对所有单元格 `trim()`，名称/备注首尾空格不保留；表格往返不是逐字节无损 | [features.md](features.md) §8、[user-guide.md](user-guide.md) 9.2 |
-| IO-P2-10 | 已降级为限制：坐标/宽高按 `settings.precision` 量化（默认 2 位，即 1 cm）；首次往返漂移上界 0.5×10⁻ᵖ | [features.md](features.md) §8/§20、[user-guide.md](user-guide.md) 9.2 |
-| IO-P2-12 | 已降级为限制：PDF 清单列是台账子集（无楼层/备注/更新时间）；多楼层按层分页；打印报告单页不标楼层 | [features.md](features.md) §6、[user-guide.md](user-guide.md) §12 |
-| CORE-P2-5 | 已降级为限制：面板盲区面积=多边形面积×(1-ratio)；GeoJSON 面面积=盲格数×cell²；两者差异上界约 周长×格宽/2，均为栅格口径 | [features.md](features.md) §6、[user-guide.md](user-guide.md) 10.2 |
-| CORE-P2-6 | 已收敛（归档）：`optimizeCameraPlacement` 的 before/after 已与 `analyzeCoverage` 同分母（`res.totalArea`），未改代码 | [geometry-coverage.js](../js/core/geometry-coverage.js) 优化分支 |
-| CORE-P2-13 | 已收敛（归档）：`drawSelection` 的无用 `alloc` 已在 N-27 删除，见 §2.4 对应条目 | [known-issues.md](known-issues.md) §2.4 |
-| CORE-P2-14 | 已归档（仅自测入口）：`historyValueEqual` 生产代码不使用，保留供自测；断言未删除 | [known-issues.md](known-issues.md) §2.4 |
-| RT-P2-02 | 已降级为限制：快照每工程 20 条 / 约 16 MB 是 UTF-8 字节估算的软上限；单条超限仍保留 | [features.md](features.md) §11、[ARCHITECTURE.md](ARCHITECTURE.md) 快照节、[user-guide.md](user-guide.md) §14 |
-| RT-P2-06 | 已降级为限制：对比列表最多展示 2000 条差异；弹窗「完整数据见快照记录」不提供差异导出入口，UI 文案本轮未改 | [features.md](features.md) §11、[user-guide.md](user-guide.md) §14 |
-| RT-P2-10 | 已确认（静态核对）：未声明 `state:read` 时沙箱导出器收到空 `input`，且不传 `site`；运行期用例未覆盖 | [ARCHITECTURE.md](ARCHITECTURE.md) 插件节、[features.md](features.md) §12 |
-| RT-P2-17 | 已说明：`MARK_DIRTY_PROFILES` 五种粒度中 `clear`/`floor` 不广播，其余广播；ARCHITECTURE 已列明，代码注释本轮未改 | [ARCHITECTURE.md](ARCHITECTURE.md) §一次编辑的数据流 |
-| RT-P2-19 | 已降级为限制：协作入站分片 TTL 淘汰仅由“收到新消息”驱动，无空闲定时器，最长残留 30 s | [ARCHITECTURE.md](ARCHITECTURE.md) §协作合并 |
-| RT-P2-20 | 已收敛（归档）：沙箱 Worker 的 `onmessage`/`onerror` 已在 N-02 封堵，见 §1 P0-4；端口通道不在契约内 | [known-issues.md](known-issues.md) §1 P0-4 |
-
-### 2.6 A 类表格/CSV 往返批次（9 条已修复）
-
-> 本表只覆盖批次 2 的 9 条；其余 A 类条目仍在各自批次排期，状态不变；C 类 4 条未动。
-> 「已修复」= 代码已改且断言可复跑；条目内的「未验证」保留在 commit body 与 §2.6 末行，不因修复而降级为已验证。
-
-| 编号 | 状态 | 修复要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| IO-P2-1 | 已修复 | CSV/TSV 表头改走 `DSV.formatRows/quoteCell`，与数据行共用分隔符/引号/公式前缀策略 | `3d936f8` | selftest +1 表头转义断言（3024 通过）；字段表/表头未变 |
-| IO-P2-2 | 已修复 | 台账 CSV/TSV 行尾统一 CRLF；`.gitattributes` 对 golden 标记 `-text` 保字节 | `94bff73`、`75b040c` | selftest +1（3025）；golden csv/tsv 各 +12 B，仅 LF→CRLF，`--ignore-cr-at-eol` 为空 |
-| IO-P2-4 | 已修复 | 公式防护对字面单引号可逆：`''`→`'`，仅危险前缀去引号 | `292dffe` | selftest +2（3027）；`'=SUM(A1)` 往返保持原文；XLSX inlineStr 仍会丢一层（未变） |
-| IO-P2-5 | 已修复 | 角度列改用 `fmt(shape.angle)`，与 X/Y/宽高/长度/面积同精度 | `605d65b` | selftest +1（3028）；golden 仅 3 格 `30/15/0`→`30.00/15.00/0.00`，字段/列序未变 |
-| IO-P2-7 | 已修复 | 布尔改三态：未知「显示/锁定」保留原值并告警，「闭合」仍按否；严格模式行为不变 | `79a8d7e` | selftest +2（3030） |
-| IO-P2-8 | 已修复 | `applyRowShape` 先校验后写入；参数非法时保留原几何并在规划阶段告警 | `bbbfc22` | selftest +2（3032）；B-08 500 行规划 3 ms/应用 8 ms |
-| IO-P2-9 | 已修复 | 目标楼层 `objects` 非数组时规划阶段拒绝该行，不再静默回退当前层 | `a6264b3` | selftest +2（3034） |
-| IO-P2-13 | 已修复 | 盲区 GeoJSON 按 `settings.precision` 取整、去相邻重复点、退化面跳过、外环统一逆时针、index 连续 | `560259c` | selftest +3（3037）；golden 未变（原值已为整数且逆时针） |
-| IO-P2-21 | 已修复 | XLSX 逐表 try/catch，单表超 5 万行只跳过并计数（`skippedSheets`），全部超限仍报错 | `3ea90f8` | selftest +2（3039，多工作表构造）；真实 5 万行解析耗时未测 |
-
-> 真实往返（不只静态断言）：`4d439dc` 新增 selftest 分区「P2 表格真实往返：列集/列序/取值一致」，固定 1F 点/矩形/折线 + 2F 圆走「导出 → `DSV.parseRows` → `rowsToObjectsPlan` → apply」全链路；e2e 新增浏览器内 `delimitedText(',')` → `#fileInput` → 合并回灌并断言字段不漂移。最终 selftest 3048 通过 / 0 失败，e2e 111 用例（110 通过 + 1 条件跳过）。
-> 仍保留的「未验证」：Excel 实机打开/另存往返、GIS 软件绕向校验、真实 5 万行 XLSX 解析耗时、损坏工程 IndexedDB 恢复路径、预览面板非法形状的视觉提示。
-
-### 2.7 批次 3/4：DXF/PNG 一致性与核心瞬态边界（12 条）
-
-> 「已修复」= 本批改了业务代码并有可复跑断言；「已收敛」= 实现早于本批（N-10/N-14/N-15/B-03），本批补齐专项断言或文档口径，不重复改代码。
-
-| 编号 | 状态 | 修复/收敛要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| IO-P2-14 | 已修复 | PNG 补「工程名 · 场地描述」页脚，与 SVG/PDF 共用 `exportFooterText()`；可见性仍走 `drawScene`→`isVisible` | `8c8d7ad` | selftest +2；PNG golden 仅语义（宽高），无逐字节基线 |
-| IO-P2-15 | 已修复 | DXF LAYER 表色改为该层首个导出对象色（最近 ACI），空层回退 `#7c3aed`，SITE 保留 `#16a34a`；实体色不变 | `90ed3ae` | selftest +4；`plain-scene.dxf` 仅 1 字节（62: 8→5），`symbol-scene.dxf` 不变 |
-| IO-P2-16 | 已收敛 | N-10 已实现保留层 SITE 与重名 `_2` 改名；本批补 4 条冲突断言 | `02cf1d4` | selftest +4；业务实体落 SITE_2、场地实体仍在 SITE |
-| IO-P2-18 | 已收敛 | B-03 已统计 VERTEX 42 凸度并在预检文案标注；本批补「有/无凸度」文案断言 | `21f7185` | selftest +2；R12 仍按折线拉直（明确降级） |
-| IO-P2-19 | 已修复 | 组码 1 保留原值（不再 trim），vendor TEXT 去掉尾部 `\s+$` 截断；TEXT/ATTRIB 首尾空格往返保留 | `11d66fa` | selftest +3；文本断言直接读取解析结果 |
-| IO-P2-26 | 已收敛 | N-10 的 `dxfSanitizeName` 已清洗 CR/LF；本批补单独 LF 与 C0 控制字符断言 | `b807efb` | selftest +2；图层名无控制字符 |
-| CORE-P2-2 | 已收敛 | N-14 已把 `fitView()` 夹到 `ZOOM_MIN~ZOOM_MAX`；本批补超大场地下限侧断言 | `fd74f74` | selftest +2；1e9 m 场地 zoom=ZOOM_MIN 且 pan 有限 |
-| CORE-P2-7 | 已修复 | `convertAreaShape` 的 ellipse→rect 保留 `oldAngle`（本地框 2rx×2ry），circle 仍归零 | `7a5d82a` | selftest +4；角度/尺寸/圆归零/平行四边形 |
-| CORE-P2-9 | 已修复 | 新增 `escapeInterrupt()` 与 `handleWindowBlur()`，统一走 `resetTransientInteractionState()`；新增 `keepCoverage/keepGuides` 选项（默认不变） | `64351c5` | selftest +11；中断/切层/撤销/失焦四类退出各自独立断言 |
-| CORE-P2-10 | 已收敛 | N-15 已让快照回滚走 `keepCalib` 复位；本批补覆盖率/框选/仿射草稿清空断言 | `0152823` | selftest +5 |
-| CORE-P2-18 | 已修复 | `drawImage` 抛错置 `bgImageState='error'` 并只 toast 一次，替换底图后可再次提示 | `40542b1` | selftest +3；抛错 ctx 真实触发，toast 计数 1→1 |
-| CORE-P2-19 | 已修复 | 新增 `clearCoverageResult()`，清结果同时 `releaseCoverageLayers()`；替换 5 处直接置 null | `bc59bca` | selftest +7；构建/命中/清空/markDirty 均释放缓存 |
-
-> 本批统一验证：selftest 3097 通过 / 0 失败；e2e 111 用例（110 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 45.3%（缺口 8）；dist 816,632 B / 余量 23,048 B；SW `VERSION=53`。
-> 仍保留的「未验证/限制」：PNG 页脚无逐字节 golden；DXF 多色图层表色只代表首对象；R12 凸度未做圆弧保真；快照不持久化校准点；`visibilitychange` 未单独处理（由 blur 兜底）；覆盖率缓存无 LRU；椭圆→圆仍按面积近似。
-
-### 2.8 批次 5/6：核心 schema/安全与快照/协作（10 条）
-
-| 编号 | 状态 | 修复/收敛要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| CORE-P2-1 | 已修复 | 新增 `SETTINGS_KEYS`（从默认设置派生）、`sanitizeSettings`、`settingsForStorage`；`buildProject` 与启动兜底共用同一清洗；仅无已保存工程时应用本机设置，`__proto__` 等非白名单键不入设置 | `a72318a` | selftest +13；原型污染、白名单、越界夹取、存储视图、启动兜底 |
-| CORE-P2-8 | 已修复 | `commitChange` 增加可选 `floorId`，`renameFloor` 传入被重命名楼层，刷新该层 `updatedAt` | `fc9f04c` | selftest +5；非当前楼层刷新、当前层不误触 |
-| CORE-P2-11 | 已修复 | `sanitizeLayers` 按 id 去重保留首个定义；默认图层补插不变 | `8f2867b` | selftest +3；重复 id 折叠、首个名称生效、默认层唯一 |
-| CORE-P2-12 | 已修复 | `site.id` 统一走 `safeId`；新增 `sanitizeSiteAnnot` 复用 `SITE_ANNOT_SETTING_KEYS`，只保留布尔已知键 | `ee61281` | selftest +5；特殊字符 id、未知键/非布尔丢弃、缺失回落 |
-| CORE-P2-17 | 已修复 | `leaseIngest` 校验 tabId 为非空字符串并截断 64 字符；对端 ts 钳制 `[now−TTL, now+5s]`，非法值回落 now | `309d199` | selftest +5；伪造未来心跳、非字符串 tabId、非法/过期 ts |
-| RT-P2-01 | 已修复 | `snapshotKey`/`snapshotIndexKey` 两段 `encodeURIComponent`；新增 `snapshotProjectPrefix` 统一过滤；`snapshotIdOfKey` 解码 | `7fcabbf` | selftest +6；普通 id 不变、冒号隔离、索引键、后缀还原 |
-| RT-P2-03 | 已修复 | `snapshotProjectData` 改为异步：先深拷贝再在副本上 `ensureObjectPhotoAssets` 并剥离 dataUrl；不再改写实时 state | `c413ea8` | selftest +4；实时对象保留内嵌照片、快照无 dataUrl、B-04 改 await |
-| RT-P2-04 | 已修复 | `restoreSnapshotById` 在归属/schema 校验后增加 `state.meta.projectId===pid` 守卫 | `57c1488` | selftest +1；非当前工程恢复被拒；N-15/CORE-P2-10 补工程绑定 |
-| RT-P2-05 | 已修复 | 快照 `sameJson` 与拖拽 `sameSerializable` 改用 `mergeStable` 稳定序列化 | `b1f7c2f` | selftest +4；键序不同判定相等、真差异仍不等 |
-| CORE-P2-20 | 已修复 | 新增 `assertProjectWithinLimits`，打开工程复用；`mergeProjectJSON` 在输入与合并结果两处复用导入限额 | `2459b59` | selftest +3；超限输入/结果拒绝、拒绝后现场未替换 |
-
-> 本批统一验证：selftest 3146 通过 / 0 失败；e2e 111 用例（110 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 45.15%（缺口 8）；dist 817,873 B / 余量 21,807 B；SW `VERSION=63`；8 种 golden 均未变化。
-> 仍保留的「未验证/限制」：含特殊字符工程 id 的历史快照不迁移（不可见但不误删）；协作合并超限只报错不做部分合并；租约时间钳制依赖本机时钟单调性；合并结果上限校验在构造并集后执行，极端超限输入仍有一次深拷贝开销。
-
-### 2.8.1 P2-15 快照索引原子性（1 条）
-
-| 编号 | 状态 | 修复要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| P2-15 | 已修复 | `snapshotIndexLoad` 在返回前用 `idbAllKeys`（仅键）核对索引与真实记录集合：缺项/幽灵项一律走 `snapshotIndexRebuild` 从记录重建；`snapshotIndexSave` 写失败同样重建并告警，异常中断不再留下半索引 | `69f59c1` | selftest +3：半索引（索引空、记录在）按记录重建；幽灵索引项被剔除；重建后索引与记录逐项一致；旧实现实测 3 条全失败 |
-
-> 开销说明：核对仅枚举键（不反序列化快照 `data`），列表仍是元数据路径；本次未重新采集耗时，`docs/performance.md` 中 N-21 的既有打点数字保持不变。
-
-### 2.8.2 P2-17 DXF 文本控制字符（1 条）
-
-| 编号 | 状态 | 修复要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| P2-17 | 已修复 | vendor `dxf` 的 `escapeText` 由「仅把 `\r?\n` 折成空格」改为把整段 C0/C1 控制字符（NUL、裸 `\r`、`\u001b`、`\u001f`、DEL）折叠为单个空格；DXF 组码值不再含控制字符 | `fdf7f21` | selftest +3：产物剔除结构性 `\r\n` 后无任何控制字符；`A\rB\0C\u001fD\nE` → `A B C D E`；常规文本原样；旧实现 2 条失败 |
-
-> 该改动位于 `ngm.vendor/.../format/dxf`，与 NGM-01 同属「vendor 摘要未重算」风险清单。
-
-### 2.9 批次 7/8：插件沙箱与规则/统计（6 条）
-
-| 编号 | 状态 | 修复/收敛要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| RT-P2-07 | 已修复 | 清单与源码上限由字符数改为 UTF-8 字节，复用 `utf8Length`；`PLUGIN_MANIFEST_MAX_BYTES`/`PLUGIN_CODE_MAX_BYTES` 抽常量，清单导入与直调共用 | `0395043` | selftest +3；70000 中文字符（210000 B）清单被拒、22000 中文字符（66000 B）code 被拒、65536 单字节通过 |
-| RT-P2-08 | 已修复 | `loadPlugin` 直调路径补 64 KB 字节校验，位于任何 Worker/URL 创建之前，旧插件不兼容仍返回原因 | `2920db5` | e2e +1；66008 B code 被拒且 `listPlugins` 为空 |
-| RT-P2-09 | 已修复 | 仍被对象引用的类型在卸载时保留注册；`addType` 允许同 owner 覆盖旧定义，`installType` 同 id 替换；其它插件与可信调用仍不可抢占 | `30ade59` | e2e +1；卸载→同 id 重载成功，类型 1 份、对象引用保留、名称更新 |
-| RT-P2-11 | 已修复 | 下载必须命中调用期 `pending`，否则禁用并给原因；下载字节复用 `APP_LIMITS.IMPORT_FILE_MAX_BYTES`（文本按 `utf8Length`、二进制按视图 `byteLength`），Blob 不再取整个底层 buffer；N-02 逃逸矩阵扩到 10 项（含 onmessageerror/DOM/parent/indexedDB/fetch） | `3199958` | e2e +3；旧 callId 复用下载被拒且 `__dlCount=0`、33 MB 下载被拒、10 项逃逸面 undefined |
-| RT-P2-13 | 已修复 | 新增 `ruleMaxPolygonIntersection`，重叠判定遍历全部轮廓对取最大交面积；贴合容差与 `minArea` 阈值不变 | `bd7d55f` | selftest +2；多轮廓 100 m² 命中、首轮廓无交时旧口径为 0；rules.spec 通过 |
-| RT-P2-14 | 已修复 | 统计越界改与规则页共用 `siteBounds`（无可见场地退回 `worldDims`）与 `ruleTolerance(state.rules.bounds.tolerance,0.05)`；`STATS_ISSUE_VERSION=2`，统计页标题与 PDF 报告标注 v2 | `f746b2f` | selftest +6；0.1 m 越界命中、0.5 容差不报、图片大于场地按场地判、场地隐藏退回、版本=2 |
-
-> 本批统一验证：selftest 3157 通过 / 0 失败；e2e 115 用例（114 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 45.15%（缺口 8）；dist 819,766 B / 余量 19,914 B；SW `VERSION=69`；8 种 golden 均未变化，导出字段未改。
-> 仍保留的「未验证/限制」：下载上限在大消息克隆之后才校验，峰值内存仍受 32 MB 级入站消息影响；同 owner 重载会更新仍在使用中的类型外观；统计 v2 与旧报告数值不可直接比较（仅标注版本，不迁移历史报告）；插件引用 `utf8Length` 依赖脚本加载顺序（`snapshot.js` 在 `plugins.js` 之前）。
-
-### 2.10 批次 9/10：目录/停车/UI 与代码卫生/i18n（9 条）
-
-| 编号 | 状态 | 修复/收敛要点 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| IO-P2-22 | 已修复 | `catalogLoad` 分离 IDB 读取与 schema 校验：损坏记录保留已载入目录、记录 `catalogLoadError` 并在启动后 toast 原因；IDB 不可用不误报损坏 | `4ec211f` | selftest +9（脏 schema/空 items/空记录/IDB 抛错四路径，目录均不被清空） |
-| IO-P2-23 | 已修复 | `parkingSite` 优先 `siteBounds`（场地可见）；仅场地隐藏/缺失时回退 `worldDims`，图片大于场地不再把车位排到场地外 | `d02e8f8` | selftest +3（图片 200×140 vs 场地 100×70、场地隐藏回退、场地偏移 20,30/40×25） |
-| IO-P2-24 | 已修复 | 停车编号改用 `objectNameScopeFor(used,'P'/'A',3,1)` 共享作用域；`used` 在清除前聚合，避开本批墓碑名 | `c994f5b` | selftest +6（P+三位、唯一、P001/A001、清除再生成 P313、总数 312） |
-| IO-P2-25 | 已修复 | `exportJSON` 只改副本时间戳，不再写 `state.meta.updatedAt`；导出键集与取值语义不变 | `1719ce6` | selftest +3（实时时间戳不变、副本为导出时刻、键集与 `persistableState` 一致） |
-| RT-P2-15 | 已修复 | 对象清单类型色 dot 统一走 `normalizeExportColor` + `esc`，脏色值回退 `#666` | `cafc822` | e2e +1（脏色不逃逸 style、`backgroundImage` 为空、合法色保留） |
-| RT-P2-16 | 已修复 | `showConfirm`/`showPrompt` 通过 `openModal` 的 `onClose` 统一结算；Esc/遮罩按取消语义返回，按钮路径不变 | `7afeb45`（e2e/清单）+`61932b2`（源码） | e2e +1（Esc→false、遮罩→null、按钮→true/输入值） |
-| CORE-P2-15 | 已修复 | 删除 3 处恒不可达分支（扇形角度覆盖、活动层补楼层、affine 的 `site.kind!=='image'`）；`geometry-site` 图片/空场地分支保留并说明 | `b33a89a` | selftest +3（缺省角度扇形=整圆、活动层缺失回退首层且不新增楼层）；图片底图无手柄断言仍覆盖保留分支 |
-| CORE-P2-16 | 已修复 | 核心层默认名、撤销提示、面积/周长前缀、快照默认标签与 A/B 差异字段统一走 `L()`，补 23 条 en 词条 | `48fcaf4` | i18n 46.2%（+1.05pp）；selftest +5（英文默认工程名/图层名/场地名/字段名/布尔值） |
-| RT-P2-18 | 已修复 | 5 个 `__collab*` 观测全局仅在 `?debug=1` 下暴露；e2e 统一走调试 URL，原 13 处断言保留 | `73a1b33` | e2e +1（生产 URL 三全局 undefined、调试 URL 可读）；collab 11 passed / 1 skip |
-
-> 本批统一验证：selftest 3186 通过 / 0 失败；e2e 118 用例（117 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 46.2%（缺口 8 / UI 1 / 模板 0，PHRASES 1001 / TEMPLATES 112 / DICT.zh 193）；dist 820,884 B / gzip 255,006 B / 余量 18,796 B；SW `VERSION=78`；8 种 golden 均未变化，导出字段未改。
-> 仍保留的「未验证/限制」：墓碑只持久化 id、不存名称，跨会话无法回填历史墓碑名（未改 schema）；场地隐藏时停车仍有意回退取景框；新工程/图层的默认名在创建时按当时语言落盘，切换语言不会重译历史数据；`features` 层与 `ui-shell.js` 仍有审计未列出的硬编码中文（UI 硬编码门禁 1/20）；协作嵌套弹窗未改（既有行为）。
-
-### 2.11 批次 11：性能打点 3 条 + 修复 2 条
-
-> 批次 11 最初只补真实 Chromium 采集与采样设施（生产代码未改）；随后按内存硬规矩追加修复：CORE-P2-3 `4b800e8`、IO-P2-11 `5eec209`。数据见 [performance.md](performance.md) §4.1.6~§4.1.8，采集环境统一为 1920×1080@DPR1、headless Chromium（SwiftShader）、CDP 强制 GC ×2、`--repeat-each=2`。
-
-| 编号 | 状态 | 结论 | 提交 | 验证依据 |
-|---|---|---|---|---|
-| CORE-P2-3 | **已修复** | `WeakMap` 记忆使 `objects` 与 `floors[active].objects` 共用一个快照容器：10k 对象 × 20 条历史堆增量 19.657 MB → **8.912 MB（−54.7%）**，`pushHistory` 826.1/840.5 ms → **505.2/488.3 ms**，快照对象实例 400,000 → **200,000**；别名结构与切层后撤销/重做保持 | `15bd54f`（打点）、`4b800e8`（修复） | `node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-3" --repeat-each=2`；selftest 74b 21 断言 |
-| CORE-P2-4 | 已收敛（N-21 修复，本批补证） | `listSnapshots` / `pruneSnapshots` 每次仅 1 次 IDB get（P95 0.9/0.6、0.3/0.3 ms），`snapshotRecords` 20 次 get（P95 360.1/349.8 ms）；列表/淘汰不再解析快照 data | `60736c5` | 同上；`idbGetKey` 计数包装，20 条 × 10k 对象 |
-| IO-P2-11 | **已修复** | `buildExportRow` 每行各算一次长度/面积：调用 13,333 → **10,000 次（−25%）**；10k 行构建 P50 18.9/17.4 → 15.6/18.4 ms（差异在机器抖动内）；导出字段与 8 种 golden 逐字节不变 | `987f594`（打点）、`5eec209`（修复） | 同上；`objectLength`/`objectArea` 计数包装；e2e 117 通过 + 1 条件跳过 |
-
-> 批次 11 修复后统一验证：selftest **3207** 通过 / 0 失败（+21 断言）；e2e 118 用例（117 通过 + 1 条件跳过）；check-gates 6/6 + 10/10；check-discipline 13/13；i18n 46.2%（缺口 8 / UI 1 / 模板 0）；dist **821,325 B** / gzip 255,136 B / 余量 **18,355 B**（较批次 11 起点 +441 B）；SW `VERSION=80`；8 种 golden 与导出字段均未变化。
-> 性能用例：`tests/perf/p2-perf.perf.mjs` 3 用例 × 2 次复跑 = 6 passed（13.6 s），数据写入 `test-results/perf-p2.json`（该目录不入库）。
-> 剩余风险：历史 >20 步的长时编辑内存斜率未单独采集；IO-P2-11 的墙钟收益小于本机抖动，保留依据是调用数下降且输出逐字节一致。
-
-### 2.12 vendor 模块摘要未重算（1 条）
-
-| 编号 | 状态 | 内容 | 影响 | 验证依据 |
-|---|---|---|---|---|
-| NGM-01 | 已知风险（部分缓解） | 导入健壮性补丁 `9db0928` 改了 `ngm.vendor/.../format/zip/src/vendor/zip.js` 与 `.../format/pdf/src/core.js`（仅新增可选参数），`fdf7f21` 又改了 `.../format/dxf/src/core.js`（`escapeText` 控制字符清洗），三处 `ngm.lock` 的 `moduleDigest` 均未重算 | **已缓解**：`check-ngm.mjs` 新增 vendor 实际字节校验（`scripts/ngm-vendor-digest.json`，62 个文件），本地任何 vendor 字节漂移都会红并指出文件；**未解决**：`moduleDigest` 算法未公开且本机无 ngm，仍无法重算，CI 启用 `ngm verify --deep` 时这三个模块仍会失败 | 本机实测：篡改 `format/dxf/src/core.js` 1 字节 → 门禁退出 1 并输出「packages/format/dxf 的 vendor 字节与清单不一致：改动 1 / 缺失 0 / 新增 0（src/core.js）」；恢复后绿。锁定的摘要：`packages/format/pdf` = `2a60d5a4…`、`packages/format/zip` = `2c42d43f…`、`packages/format/dxf` = `609fb87b…`（均未重算） |
-
-> 处理方式：启用 `ngm verify --deep` 前，先用 ngm 重新锁定 `packages/format/zip`、`packages/format/pdf` 与 `packages/format/dxf` 并提交新的 `moduleDigest`；修改任何 vendor 文件后必须运行 `node scripts/check-ngm.mjs --update-vendor-digest`。
-
-### 2.13 core 跨层依赖反转：已按方案 A 拆解（2026-11-10）
-
-> 审计 core-kernel P2-18 要求「core 不反向依赖 render/feature」。方案 A 已执行：`effectiveVisible` 下沉到 `model.js`，`render.js` 仅保留 `isVisible` 兼容别名，`geometry-coverage.js` 直接调用 model 层实现。
-
-**现状证据（本机核对）**
-
-| 依赖 | 位置 | 说明 |
-|---|---|---|
-| 覆盖率 → model 层 | `js/core/geometry-coverage.js:45/94/105` 调用 `effectiveVisible(o)` | 定义在 `js/core/model.js:551`，只依赖同文件 `layerOf`；不再引用 `render.js` 的 `isVisible` |
-| 兼容别名 | `js/core/render.js:10` `isVisible(o){ return effectiveVisible(o); }` | 保留旧名与签名；`render.js` 内部与 features 层调用方无需改动 |
-| 其他调用方 | `js/core/render.js:17/173/179/1020`、`js/core/interaction.js:499`、`js/features/rules.js:511`、`js/features/ui-panels.js:428`、`js/features/io-export.js:137`、`js/features/io-fields.js:44` | `isVisible` 与 `effectiveVisible` 语义完全一致；selftest `N05-…同源` 继续守护 |
-| geometry → geometry-site | `js/core/geometry.js:94` 调用 `siteBoundaryPoints`（`js/core/geometry-site.js`） | 同属 core 层，不构成 core→feature 反转，本轮不处理 |
-| render → DOM | `js/core/render.js` 的 `drawDraft`/`finishDraft` 读 `$('lineClosed')` 等 | 渲染层内部行为，非 core 反向依赖，本轮不处理 |
-
-**验证**：`selftest` 新增静态断言「覆盖率不直接调用 `isVisible(`」「`effectiveVisible` 定义在 model 层」，修复前 2 条红、修复后绿；N05 同源断言与全部覆盖率用例保持通过。dist +21 B（模型/别名位置变化），余量见 `facts.md`。
-
-**剩余**：`js/core/interaction.js:499` 仍通过 `isVisible` 访问可见性（render 层别名）。若要彻底消除 core→render，可把它也改成 `effectiveVisible`；本轮只处理审计点名的覆盖率层，避免扩大改动面。
-
-### 2.14 合并语义（data-io P3-09/10/11）：1 条已修，2 条待决策/预算阻塞
-
-| 编号 | 状态 | 位置 | 结论 |
-|---|---|---|---|
-| MERGE-11 | **已修复**（2026-11-10） | `js/common/merge.js:296` | 较新一侧楼层名为空时回退旧名：`(newer && fb.name) || fa.name || fb.name || ''`。空名本就会被重建归一化成 `F<n>`，不再视为有效覆盖；selftest 新增「远端空楼层名回退旧名」断言（先红后绿） |
-| MERGE-09 | 决定保持现状（不视为缺陷） | `js/common/merge.js:82-96` | 合并输出保持显式字段白名单，未知顶层字段不携带：本项目没有消费未知字段的插件契约，保留会扩大原型污染与陈旧数据面；如未来引入工程级插件元数据，再单列白名单与丢弃提示 |
-| MERGE-10 | **已修复**（2026-11-10） | `js/common/merge.js:77-85`、`js/core/persistence.js:476-486` | 图层/类型删除时写入 `kind=layer/type` 墓碑；合并按墓碑裁剪双方并集，统计 `layersDeleted/typesDeleted` 并保留墓碑继续压制旧副本；被删定义的悬空 `layerId/typeId/site.layerId` 由 `mergeProjectJSON` 落地时的 `migrateProject()` 统一迁移到默认图层/同类类型（复用既有清洗，不重复实现）。内置类型与结构兜底 `layer.default` 不参与删除，避免跨工程合并误删公共定义。 |
-
-- **已确认不阻塞**：P2-12（墓碑上限小于对象上限）在当前代码已满足 `TOMBSTONE_MAX = OBJECTS_MAX = 100000`（`js/core/config.js:42/46`），无需再改。
-- **导出 try/catch（P3-04）**：已修复，见 `CHANGELOG.internal.md`（`runExport` 统一同步异常与异步 rejection）。
-
-## 3. 已降级为限制（10 条，不是缺陷）
-
-| 编号 | 限制 | 为什么按限制处理 |
-|---|---|---|
-| K2 | 未引入通用文本测量缓存、通用 Path2D 缓存、图层/对象索引、拾取索引 | A/B 实测收益低于运行噪声，未纳入；仅符号路径按类型有窄缓存例外。性能上限未承诺，大场景卡顿已在 CORE-P1-4/5 单列 |
-| K3 | PDF 图纸页为位图 | PDF 写出器只做栅格页；清单独立分页。界面选项名含“矢量”属文案问题，改名由 UI 任务处理，不影响数据 |
-| K4 | DXF 仅近似：场地独立图层、圆/扇形折线化、不还原填充 | 兼容目标为 CAD 可编辑，不承诺视觉 1:1；已有降级报告 |
-| K5 | 协作二维码约 42 字节 | 内置编码器容量边界；超长改用可粘贴文本，不渲染假二维码 |
-| K6 | 覆盖率是栅格估算，v1/v2/v3 数值不可直接对比 | 口径变更以保证可复现；历史报告需标注口径版本。v3（N-20）起区域面积统一用解析公式，统计/图表/面板/导出同源 |
-| K7 | 规则检查只判几何，不内置规范数值 | 产品明确“不是消防/规范审图”，避免误导 |
-| K8 | 符号 DXF 折线近似；内置 36 个；搜索不支持拼音 | 体积与安全取舍；旧工程靠自身类型表保留图标（A1） |
-| K9 | 插件隔离不是语言级安全沙箱 | 仅承诺能力白名单与超时；已知逃逸单列 P0-4，需按 P0 修复后再收紧 |
-| K10 | 协作按对象/楼层时间取较新，无服务端权威 | 无服务器是产品约束；冲突可见性缺陷单列 RT-P1-03 |
-| K12 | 文件/对象/表格/快照/目录等容量上限 | 浏览器与本机存储的现实边界；数值见 [features.md](features.md) 第 20 节 |
-| K13 | `objectBounds` 对圆/椭圆/扇形仍物化 72 点采样 | 解析式包围盒需新增椭圆/扇形分支，属净增字节；本轮要求字节 ≤0，且 `objectSnapBounds` 的保守外接盒不能替代（会放宽框选/命中范围，属行为变更）。裁剪预筛已改用 `objectSnapBounds`；剩余调用在动态层绘制、框选与统计。解析式改造待有字节余量时单独提交 |
-
-> 说明：A4 已并入 M8（真实误报率未验证），不再单列；K1、K11 已修复，不再列为限制。
+1. 新增问题先判断属于「未验证 / 限制 / 缺陷」；缺陷必须有可复跑判据才算已修复。
+2. 关闭一项时写命令与输出摘要，不通过改文字把未做变成已做。
+3. 新编号接在现有序列后（M 系列接 M9、E 系列接 E4、R 系列接 R-36），不改旧号。
+4. 删除系统性能力时同步登记 [deletions](deletions.md)，由 `check-deletions.mjs` 守。
+5. 文档与代码冲突时按代码改，并在提交说明里指出原文档错在哪。

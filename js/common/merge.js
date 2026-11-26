@@ -16,10 +16,104 @@ function mergeRuleSide(local, incoming){
   if(b&&Object.keys(b).length) return b;
   return {};
 }
-function mergeProjectData(currentRaw, incomingRaw){
+/* -------------------- 配置差异报告（A3） --------------------
+ * 合并结果不变：配置类字段仍「本地优先、远端仅补缺」。本报告只回答「远端哪些配置没有被采纳」，
+ * 供界面显示（此前 stats 没有配置类计数，只剩对象/楼层统计 → 配置被丢时界面显示「无变化」）。
+ * 报告是 mergeProjectData 的第三个返回值，刻意不塞进 stats：§59 对 stats 做整对象深比较。
+ * items 最多保留 MERGE_CONFIG_ITEM_LIMIT 条用于明细，kept/adopted 始终是精确总数。 */
+const MERGE_CONFIG_ITEM_LIMIT=40;
+/* -------------------- 覆盖报告（冲突可见性，只读） --------------------
+ * LWW 胜负规则原样不动；本报告只回答「这次合并里谁的改动被盖住了」，不参与 pick。
+ * dir：local=本端被覆盖（有数据损失，可恢复）；remote=本端胜出、对端版本未采纳（本端无损失）。
+ * 明细只留前 MERGE_OVERWRITE_LIMIT 条（账本/清单用），local/remote 始终是精确总数。
+ * 刻意不塞进 stats：§59 对 stats 做整对象深比较，键集必须保持 11 个。 */
+const MERGE_OVERWRITE_LIMIT=200;
+/** base 为上一轮「双方已一致」的内容签名表（Map 或普通对象，键 o:<floorId>:<id> / s:<floorId>）。
+ *  nextBase 以 base 为底稿复制：只有本轮真正收敛才推进，一侧胜出但对方尚未采纳时保持旧基线——
+ *  否则「本端胜出」会被提前当成已同步，下次对端基于旧版再编辑时真正的丢改动会被漏报。 */
+function mergeOverwriteNew(base){
+  const nextBase=new Map();
+  if(base&&typeof base.forEach==='function') base.forEach((v,k)=>nextBase.set(String(k),v));
+  else if(base&&typeof base==='object') Object.keys(base).forEach(k=>nextBase.set(k,base[k]));
+  return { local:0, remote:0, items:[], truncated:0, nextBase };
+}
+function mergeOverwriteAdd(rep,item){
+  if(rep.items.length<MERGE_OVERWRITE_LIMIT) rep.items.push(item);
+  else rep.truncated++;
+}
+/** 对象名短展示串（账本/清单用；对象可能没有 name） */
+function mergeObjName(o){
+  const n=o&&(o.name||o.label||o.title);
+  return String(n||(o&&o.id)||'').slice(0,80);
+}
+function mergeObjBaseKey(floorId,id){ return 'o:'+floorId+':'+id; }
+function mergeSiteBaseKey(floorId){ return 's:'+floorId; }
+/** B4：只拷自有键并跳过原型链危险键——导入/合并不得借 __proto__ 改写对象模型。
+ *  这里不引 core 的白名单常量（common→core 依赖只允许下调）；合并结果随后仍经 buildProject 白名单清洗。 */
+function assignSafe(target, src){
+  if(!src||typeof src!=='object') return target;
+  for(const k of Object.keys(src)){
+    if(k==='__proto__'||k==='constructor'||k==='prototype') continue;
+    target[k]=src[k];
+  }
+  return target;
+}
+/** 逐键比较：双侧都有且不同 → kept（本地胜）；仅远端有 → adopted；仅本地有或相同 → 不记。
+ *  keys 省略时取两侧键并集；报告里的 items 只留前 N 条明细，kept/adopted 始终精确。 */
+function mergeConfigKeys(a,b,scope,id,report,keys,skip){
+  a=a&&typeof a==='object'?a:{}; b=b&&typeof b==='object'?b:{};
+  for(const k of keys||new Set([...Object.keys(a),...Object.keys(b)])){
+    if(skip&&skip.has(k)) continue;   /* 系统标记/落盘归一字段不是用户配置 */
+    const inA=k in a, inB=k in b;
+    if(!(inA&&inB?JSON.stringify(a[k])!==JSON.stringify(b[k]):inB)) continue;
+    if(inA) report.kept++; else report.adopted++;
+    if(report.items.length<MERGE_CONFIG_ITEM_LIMIT)
+      report.items.push(id?{scope,id,field:k}:{scope,field:k});
+  }
+}
+function mergeConfigReport(A,B){
+  const r={kept:0,adopted:0,items:[]};
+  /* 身份/时间字段不参与配置差异：createdAt 天然不同，updatedAt 已按较新者收敛 */
+  mergeConfigKeys(A.meta,B.meta,'meta',null,r,
+    Object.keys(Object.assign({},A.meta,B.meta)).filter(k=>!['id','projectId','createdAt','updatedAt','titleBlock'].includes(k)));
+  const ta=A.meta&&A.meta.titleBlock, tb=B.meta&&B.meta.titleBlock;
+  if(ta&&typeof ta==='object'&&tb&&typeof tb==='object'){
+    mergeConfigKeys(ta,tb,'titleBlock',null,r,['enabled','frame','scaleBar','legend']);
+    mergeConfigKeys(ta.fields,tb.fields,'titleBlock',null,r,TITLE_BLOCK_FIELDS.map(d=>d.key));
+  }
+  mergeConfigKeys(A.settings,B.settings,'settings',null,r,SETTINGS_KEYS);
+  const ra=A.rules, rb=B.rules;
+  mergeConfigKeys(ra,rb,'rules',null,r,['version','scope']);
+  ['overlap','bounds'].forEach(k=>mergeConfigKeys(ra&&ra[k],rb&&rb[k],'rules',null,r,['enabled','tolerance']));
+  mergeConfigKeys(ra&&ra.spacing,rb&&rb.spacing,'rules',null,r,['enabled']);
+  mergeConfigKeys(ra&&ra.spacing&&ra.spacing.types,rb&&rb.spacing&&rb.spacing.types,'rules.types',null,r);
+  const list=(la0,lb0,scope,skip)=>{
+    const byId=arr=>new Map((Array.isArray(arr)?arr:[]).filter(x=>x&&x.id!=null).map(x=>[String(x.id),x]));
+    const la=byId(la0), lb=byId(lb0);
+    lb.forEach((item,id)=>{
+      if(la.has(id)){ mergeConfigKeys(la.get(id),item,scope,id,r,null,skip); return; }
+      r.adopted++;
+      if(r.items.length<MERGE_CONFIG_ITEM_LIMIT) r.items.push({scope,id,field:'*'});
+    });
+  };
+  list(A.layers,B.layers,'layer');
+  /* builtin 是系统标记；defaultStyle 每次落盘都被持久化归一（补缺省键），不是用户可编辑配置 */
+  list(A.objectTypes,B.objectTypes,'type',new Set(['builtin','defaultStyle']));
+  return r;
+}
+/** 配置差异报告 → 界面附注（含前导「 · 」）；无差异返回空串。协作状态栏与合并提示共用同一拼装。 */
+function mergeConfigText(stats){
+  const c=stats&&stats.config;
+  if(!c) return '';
+  if(c.error) return ` · ${L('配置差异检查失败：{msg}',{msg:c.error})}`;
+  return (c.kept?` · ${L('配置未采纳 {n} 项（本地优先）',{n:c.kept})}`:'')
+    +(c.adopted?` · ${L('配置已补缺 {n} 项',{n:c.adopted})}`:'');
+}
+function mergeProjectData(currentRaw, incomingRaw, base){
   const A = mergeNormalizeSide(currentRaw);
   const B = mergeNormalizeSide(incomingRaw);
   const stats = { added:0, updated:0, deleted:0, conflicts:0, floorsAdded:0, floorMetaUpdated:0, floorsDeleted:0, siteDeleted:0, siteCleared:0, layersDeleted:0, typesDeleted:0 };
+  const overwrites = mergeOverwriteNew(base);
   const tombs = mergeTombstoneMaps(A.tombstones, B.tombstones);
   const floors = new Map();
   const order = [];
@@ -32,13 +126,17 @@ function mergeProjectData(currentRaw, incomingRaw){
     const lastWrite = mergeFloorWrite(fa, fb);
     if (tomb && tomb.deletedAt >= lastWrite) {
       /* 整层删除胜过该层所有较早的编辑；只统计当前工程里确实存在的对象 */
-      if (fa) { stats.deleted += fa.objects.size; stats.floorsDeleted++; }
+      if (fa) {
+        stats.deleted += fa.objects.size; stats.floorsDeleted++;
+        overwrites.local++;
+        mergeOverwriteAdd(overwrites,{scope:'floor',dir:'local',kind:'delete',floorId:id,name:String(fa.name||''),count:fa.objects.size});
+      }
       return;
     }
     if (tomb) tombs.floor.delete(id);
     if (!fa) stats.floorsAdded++;
-    const meta = mergeFloorMeta(fa, fb, stats);
-    const set = mergeFloorObjects(fa, fb, tombs, stats);
+    const meta = mergeFloorMeta(fa, fb, stats, id, overwrites, base);
+    const set = mergeFloorObjects(fa, fb, tombs, stats, id, overwrites, base);
     floors.set(id, {
       id, name:meta.name, updatedAt:meta.updatedAt,
       background:meta.background, site:meta.site, viewport:meta.viewport,
@@ -62,6 +160,16 @@ function mergeProjectData(currentRaw, incomingRaw){
     }
   }
 
+  /* 基线只留结果里仍存在的对象/场地：删除后旧键不再堆积（上限之外的第二道卫生） */
+  if (overwrites.nextBase.size) {
+    const alive = new Set();
+    floors.forEach(f => {
+      f.objects.forEach((_, oid) => alive.add(mergeObjBaseKey(f.id, oid)));
+      if (f.site) alive.add(mergeSiteBaseKey(f.id));
+    });
+    overwrites.nextBase.forEach((_, k) => { if (!alive.has(k)) overwrites.nextBase.delete(k); });
+  }
+
   const activeFloorId = floors.has(A.activeFloorId) ? A.activeFloorId : order[0];
   const active = floors.get(activeFloorId);
   const outFloors = order.map(id => {
@@ -71,10 +179,14 @@ function mergeProjectData(currentRaw, incomingRaw){
     return { id, name:f.name, updatedAt:f.updatedAt || '', background:mergeClone(f.background || {}), site:mergeClone(f.site || null), viewport:mergeClone(f.viewport || {}), objects:objs };
   });
 
-  const meta = Object.assign({}, mergeClone(B.meta || {}), mergeClone(A.meta || {}));
+  const meta = {};
+  assignSafe(meta, mergeClone(B.meta || {}));
+  assignSafe(meta, mergeClone(A.meta || {}));
   const metaTs = mergeLater(A.meta, B.meta);
   if (metaTs) meta.updatedAt = metaTs;
-  const settings = Object.assign({}, mergeClone(B.settings || {}), mergeClone(A.settings || {}));
+  const settings = {};
+  assignSafe(settings, mergeClone(B.settings || {}));
+  assignSafe(settings, mergeClone(A.settings || {}));
   /* MERGE-10：图层/类型墓碑直接删除定义；内置类型与 layer.default 不参与删除（结构与跨工程兜底） */
   const layers = mergePrunedList(A.layers, B.layers, tombs.layer, stats, 'layersDeleted', 'layer.default', false);
   if (!layers.length) {
@@ -103,7 +215,11 @@ function mergeProjectData(currentRaw, incomingRaw){
     activeFloorId,
     tombstones
   };
-  return { project, stats };
+  /* 配置差异报告：只统计「远端未生效/已补缺」，不改变 project；异常时不阻断合并 */
+  let config;
+  try{ config=mergeConfigReport(A,B); }
+  catch(e){ config={kept:0,adopted:0,items:[],error:String(e&&e.message||e)}; }
+  return { project, stats, config, overwrites };
 }
 
 /** 某一侧工程 → 统一的楼层视图；当前楼层数据取顶层 background/objects（与持久化格式一致） */
@@ -242,6 +358,9 @@ function mergeClampTimestamps(raw,nowMs){
   };
   if(raw&&typeof raw==='object'){
     fix(raw.meta);
+    /* R-02：顶层 site 是活动楼层场地的权威副本，必须与 floors[].site 一样参与夹取，
+       否则远端可用未来时间戳让场地永久压制本地编辑。 */
+    fix(raw.site);
     (Array.isArray(raw.objects)?raw.objects:[]).forEach(fix);
     (Array.isArray(raw.floors)?raw.floors:[]).forEach(f=>{
       if(!f||typeof f!=='object') return;
@@ -277,18 +396,22 @@ function mergeSiteFromBackground(bg){
   if (!bg || typeof bg !== 'object') return null;
   return bg.kind && bg.kind !== 'image' && bg.kind !== 'empty' ? bg : null;
 }
-/** 场地 LWW 时间：优先 site.updatedAt（场地独立编辑），否则退回楼层 updatedAt */
+/** 场地 LWW 时间：优先 site.updatedAt（场地独立编辑），字段缺失（旧档）时退回楼层 updatedAt。
+ *  R-02：site.updatedAt 存在但为空串/非法 = 已被时间戳夹取或清洗，视为"无效时间"，
+ *  不得回退到楼层 updatedAt——否则较新的楼层时间会让被判无效的远端场地重新胜出。 */
 function mergeSiteTime(f){
   if (!f) return '';
   const t = f.site && f.site.updatedAt;
-  return typeof t === 'string' && t ? t : f.updatedAt;
+  if (typeof t === 'string' && t) return t;
+  if (f.site && typeof f.site.updatedAt === 'string') return '';
+  return f.updatedAt;
 }
 /** 同名楼层元数据：名称/底图/场地按最后写入较新的一方，视口保持本地。
  *  场地 LWW 的 **null 是有效值**（显式清空）：较新一侧为 null 时必须清空，
  *  不能让 `fa.site || fb.site` 把较旧的场地复活。镜头/场地被远端清空时计入
  *  stats.siteDeleted（存在→不存在）与 stats.siteCleared（远端显式 null 胜出），
  *  供协作撤销栈与横幅判定；stats.floorMetaUpdated 仍只统计「远端覆盖本地」的元数据项。 */
-function mergeFloorMeta(fa, fb, stats){
+function mergeFloorMeta(fa, fb, stats, floorId, rep, base){
   if (!fa) return fb;
   if (!fb) return fa;
   const newer = mergeTime(fb) > mergeTime(fa);
@@ -301,6 +424,19 @@ function mergeFloorMeta(fa, fb, stats){
   if (stats && (nameWon || bgWon || siteLost)) stats.floorMetaUpdated++;
   if (stats && siteLost) stats.siteDeleted++;
   if (stats && siteLost && siteNewer && !fb.site) stats.siteCleared++;
+  /* 场地被远端清空：本端场地内容丢失，报告留快照（清单只读展示，不做对象级恢复）。
+     基线只用于标注「能否证明是并发」；场地签名太长不进条目，收敛时才推进 nextBase。 */
+  if (rep) {
+    const key = mergeSiteBaseKey(floorId);
+    const sa = mergeStable(fa.site || null), sb = mergeStable(fb.site || null);
+    if (siteLost && siteNewer) {
+      rep.local++;
+      mergeOverwriteAdd(rep,{scope:'site',dir:'local',kind:'delete',floorId,name:String(fa.name||''),
+        loserSig:ta,winnerSig:tb,known:!!(base&&base.has&&base.has(key)),snapshot:mergeClone(fa.site)});
+    }
+    if (sa === sb) rep.nextBase.set(key, sa);
+    else if (!site) rep.nextBase.delete(key);
+  }
   return {
     id: fa.id,
     /* MERGE-11：空名不是有效覆盖（重建时会被归一化成 F<n>）；较新侧为空时回退旧名 */
@@ -312,8 +448,9 @@ function mergeFloorMeta(fa, fb, stats){
   };
 }
 
-/** 对象集合合并：并集 + LWW；返回 {objects:Map, order:string[]}，同步累计统计与墓碑剪枝 */
-function mergeFloorObjects(fa, fb, tombs, stats){
+/** 对象集合合并：并集 + LWW；返回 {objects:Map, order:string[]}，同步累计统计与墓碑剪枝。
+ *  base/rep 只用于分类与基线推进，绝不参与 pick。 */
+function mergeFloorObjects(fa, fb, tombs, stats, floorId, rep, base){
   const objects = new Map();
   const order = [];
   const add = (id, o) => { if (!objects.has(id)) { objects.set(id, o); order.push(id); } };
@@ -325,8 +462,25 @@ function mergeFloorObjects(fa, fb, tombs, stats){
     const ob = b.get(id);
     const tomb = tombs.object.get(id);
     if (!oa) return;
+    const key = mergeObjBaseKey(floorId, id);
+    const known = !!(base && base.has && base.has(key));
+    const baseSig = known ? base.get(key) : '';
     if (!ob) {
-      if (tomb && tomb.deletedAt >= mergeTime(oa)) { stats.deleted++; return; }
+      if (tomb && tomb.deletedAt >= mergeTime(oa)) {
+        stats.deleted++;
+        /* 本端编辑 vs 对端删除：本端对象内容丢失，留快照供恢复。
+           基线证明本端未改（内容=基线）时，属正常远端删除，不记账。 */
+        const sig = mergeObjectSig(oa);
+        if (rep) {
+          if (!known || sig !== baseSig) {
+            rep.local++;
+            mergeOverwriteAdd(rep,{scope:'object',dir:'local',kind:'delete',floorId,id,
+              name:mergeObjName(oa),loserSig:sig,known,snapshot:mergeClone(oa)});
+          }
+          rep.nextBase.delete(key);
+        }
+        return;
+      }
       if (tomb) tombs.object.delete(id);
       add(id, oa);
       return;
@@ -334,6 +488,8 @@ function mergeFloorObjects(fa, fb, tombs, stats){
     /* z 只是本地叠放顺序（合并不传播重排），不参与冲突判定与时间戳平局 */
     const ja = mergeObjectSig(oa), jb = mergeObjectSig(ob);
     const conflict = ja !== jb;
+    const localChanged = known && ja !== baseSig;
+    const remoteChanged = known && jb !== baseSig;
     if (conflict) stats.conflicts++;
     let pick = oa;
     if (conflict) {
@@ -342,8 +498,41 @@ function mergeFloorObjects(fa, fb, tombs, stats){
       else if (tb === ta && jb > ja) pick = ob;
       if (pick === ob) stats.updated++;
     }
-    if (tomb && tomb.deletedAt >= mergeTime(pick)) { stats.deleted++; return; }
+    if (tomb && tomb.deletedAt >= mergeTime(pick)) {
+      stats.deleted++;
+      if (rep && (!known || localChanged)) {
+        rep.local++;
+        mergeOverwriteAdd(rep,{scope:'object',dir:'local',kind:'delete',floorId,id,
+          name:mergeObjName(oa),loserSig:ja,known,snapshot:mergeClone(oa)});
+      }
+      if (rep) rep.nextBase.delete(key);
+      return;
+    }
     if (tomb) tombs.object.delete(id);
+    /* 报告只读分类：
+       - 收敛（两侧签名相同）→ 推进基线；
+       - 本端被覆盖（有损失，含旧值快照）；无基线时只能写「原因未知」；
+       - 本端保留（对端版本未采纳，本端无损失；无基线时不记，避免刷新后刷屏）。 */
+    if (rep) {
+      if (ja === jb) rep.nextBase.set(key, ja);
+      else if (pick === ob) {
+        /* 本端整份采纳远端版本 → 两侧内容一致，基线可以推进（否则持续单边远端编辑会被误判成冲突）。
+           本端胜出（pick===oa）时对方尚未采纳，绝不能推进。 */
+        rep.nextBase.set(key, jb);
+        /* 无基线只能证明「本端内容被替换」，不能证明是谁改的；同刻平局多为两侧归一化后的
+           回声（新建对象刚广播回来），此时不宣称损失——喊错比不喊更伤信任。 */
+        if (known ? localChanged : mergeTime(ob) > mergeTime(oa)) {
+          rep.local++;
+          mergeOverwriteAdd(rep,{scope:'object',dir:'local',kind:'update',floorId,id,
+            name:mergeObjName(oa),loserSig:ja,winnerSig:jb,known,both:known&&localChanged&&remoteChanged,
+            snapshot:mergeClone(oa)});
+        }
+      } else if (known && remoteChanged) {
+        rep.remote++;
+        mergeOverwriteAdd(rep,{scope:'object',dir:'remote',kind:'update',floorId,id,
+          name:mergeObjName(ob),loserSig:jb,winnerSig:ja,known,both:localChanged&&remoteChanged});
+      }
+    }
     add(id, pick);
   });
 
@@ -355,6 +544,8 @@ function mergeFloorObjects(fa, fb, tombs, stats){
     if (tomb && tomb.deletedAt >= mergeTime(ob)) { stats.deleted++; return; }
     if (tomb) tombs.object.delete(id);
     stats.added++;
+    /* 本端采纳远端新增后两侧内容一致，基线可以直接推进 */
+    if (rep) rep.nextBase.set(mergeObjBaseKey(floorId, id), mergeObjectSig(ob));
     add(id, ob);
   });
   return { objects, order };
@@ -388,11 +579,12 @@ function mergeCloneObjects(f){
   });
 }
 function mergeClone(v){ return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
-/** 对象内容签名：键序稳定化并忽略 z（本地叠放顺序），避免等价对象误判冲突 */
+/** 对象内容签名：键序稳定化并忽略 z（本地叠放顺序）与 updatedAt（LWW 时间元数据），
+ *  避免等价对象误判冲突或把纯时间戳差异算成内容冲突（B6） */
 function mergeObjectSig(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return mergeStable(o);
   const copy = {};
-  Object.keys(o).forEach(k => { if (k !== 'z') copy[k] = o[k]; });
+  Object.keys(o).forEach(k => { if (k !== 'z' && k !== 'updatedAt') copy[k] = o[k]; });
   return mergeStable(copy);
 }
 /** 内容比较用：键序稳定化，避免等价对象因键序不同被误判为冲突 */

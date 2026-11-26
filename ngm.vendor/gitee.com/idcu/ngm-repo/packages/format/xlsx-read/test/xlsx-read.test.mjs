@@ -123,6 +123,28 @@ test('readSheets handles workbooks without worksheets', async () => {
   assert.deepEqual(await X.readSheets(buf, { allowEmpty: true }), []);
 });
 
+test('skipOversizedSheets skips oversized sheets and reports the count', async () => {
+  const X = createXlsxReader({ Zip, XmlLite });
+  const buf = buildWorkbook([
+    { name: '主表', rows: [['编号', 'X'], ['O1', '1']] },
+    { name: '附表', rows: [['编号', 'X'], ['A', '1'], ['B', '2'], ['C', '3']] }
+  ]);
+  /* 默认仍抛错：跳过是显式选择，不静默丢数据 */
+  await assert.rejects(() => X.readRows(buf, { maxRows: 3 }), /表格行数超过上限/);
+  const rows = await X.readRows(buf, { maxRows: 3, skipOversizedSheets: true });
+  assert.deepEqual(rows, [['编号', 'X'], ['O1', '1']]);
+  assert.equal(rows.skippedSheets, 1);
+});
+
+test('skipOversizedSheets still fails when every sheet is oversized', async () => {
+  const X = createXlsxReader({ Zip, XmlLite });
+  const buf = buildWorkbook([{ name: 'S', rows: [['a'], ['b'], ['c'], ['d']] }]);
+  await assert.rejects(
+    () => X.readRows(buf, { maxRows: 3, skipOversizedSheets: true }),
+    /所有工作表行数均超过上限/
+  );
+});
+
 test('listSheets / parseSheetRows are the shared parsing primitives', async () => {
   const X = createXlsxReader({ Zip, XmlLite });
   const buf = buildWorkbook([{ name: 'S1', rows: [['a']] }]);

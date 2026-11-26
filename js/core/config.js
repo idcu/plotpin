@@ -20,9 +20,16 @@ const EPS = 1e-8;
 const BG_MAX_EDGE = 3000;
 const BG_JPEG_QUALITY = 0.85;
 const BG_RECOMPRESS_LIMIT = 6 * 1024 * 1024;
+/* PDF 图纸页分辨率：默认 220 dpi（150/220/300 三档），像素最长边复用 BG_MAX_EDGE 封顶。
+   清单页尺寸固定，不随该设置变化。 */
+const PDF_DPI_DEFAULT = 220;
+const PDF_DPI_OPTIONS = [150, 220, 300];
 /* 形状类型字面量的唯一来源：几何/渲染/导入导出/属性面板共用，避免同一拼音串在各文件重复书写。
    值即 schema 中的 shape.type / scaleShape 取值，改动会破坏存档兼容。 */
 const CIR = 'circle', ELL = 'ellipse', SEC = 'sector', PARA = 'parallelogram';
+/* 圆弧（描边几何，无面积）：不在 AREA_SHAPE_TYPES 内，也不参与覆盖率；schema 写作 shape.type='arc'。
+   命名与 CIR/ELL/SEC/PARA 同层，避免 'arc' 字面量散落在几何/面板/导入导出各处。 */
+const ARC = 'arc';
 /* 统一的资源边界（缩放/图标倍率/段长标注阈值/底图解码上限/导入限值），避免魔法数字散落各处。
  * 与 vendor 各自的上限分属两层，**刻意不合并**（语义不同、取小者生效）：
  *   - vendor 预解析护栏：`format/dxf` = 20MB 文本 / 50,000 实体；`format/pdf` = 50MB / 300 页 / 20,000 对象 / 单流解压 64MB。
@@ -32,6 +39,15 @@ const APP_LIMITS = Object.freeze({
   ZOOM_MIN: 0.02, ZOOM_MAX: 200,
   ICON_SCALE_MIN: 0.2, ICON_SCALE_MAX: 8,
   SEG_LABEL_MIN_PX: 26, SEG_LABEL_MIN_PX_MIN: 10, SEG_LABEL_MIN_PX_MAX: 60,
+  /* 标签 LOD（仅屏幕 canvas 交互帧）：对象屏幕包围盒高度低于该值时不再绘制标签。
+     取值即标签自身高度——名称 chip 白底为 18 px，面积/周长行与坐标/段长 tag 为 16 px；
+     出处见 docs/engineering.md §6 与 2026-11-15/perf-d3/work/measurements.md。 */
+  LABEL_LOD_NAME_PX: 18, LABEL_LOD_TAG_PX: 16,
+  /* 点符号标签的密度阈值（个 / 百万屏幕像素²）：符号图标屏幕固定 22 px，尺寸规则对它永远失效，
+     因此改为按「可见符号点的屏幕分布密度」判定。标定见 2026-11-15/perf-d3/work/measurements.md：
+     dense 夹具 1:200 实测 1419、1:500 实测 8860、1:1000 实测 35400；取前两档几何中点
+     √(1419×8860)≈3546，圆整为 3600（1:200 保留、1:500 起隐藏）。 */
+  LABEL_LOD_POINT_DENSITY: 3600,
   BG_MAX_EDGE, BG_JPEG_QUALITY, BG_RECOMPRESS_LIMIT,
   BG_MAX_DECODE_PIXELS: 40 * 1000 * 1000,   /* 单张图片解码像素上限（约 40MP），防大图冻结主线程 */
   ASSET_MAX_BYTES: 16 * 1024 * 1024,        /* 单个内容寻址资产（底图/照片）字节上限 */
@@ -41,6 +57,8 @@ const APP_LIMITS = Object.freeze({
   IMPORT_ENTITIES_MAX: 100000,              /* DXF/PDF 实体上限 */
   OBJECTS_MAX: 100000,                      /* 单工程对象上限（含所有楼层） */
   SHAPE_POINTS_MAX: 10000,                  /* 单个折线/多边形对象的顶点上限（防病态点列） */
+  PROPS_KEYS_MAX: 64,                       /* 单对象自定义属性键上限（载入清洗截断并审计） */
+  PROPS_VALUE_MAX: 256,                     /* 自定义属性字符串值长度上限（载入清洗截断并审计） */
   SHEAR_MAX: 50,                            /* 图片切变斜率上限（约 88.9°），避免近 90° 时产生非有限变换 */
   HISTORY_MAX: 20,                          /* 撤销栈深度 */
   TOMBSTONE_MAX: 100000,                    /* 删除墓碑硬上限：与 OBJECTS_MAX 同量级，保证每个已删对象都有墓碑（否则离线合并会复活） */
@@ -49,6 +67,8 @@ const APP_LIMITS = Object.freeze({
   PLUGIN_MANIFEST_MAX_BYTES: 192 * 1024,    /* 插件清单字节上限（UTF-8），解析前先按原文长度拦截 */
   PLUGIN_CODE_MAX_BYTES: 64 * 1024,         /* 插件源码字节上限（UTF-8） */
   PLUGIN_GETSTATE_PER_MIN: 60,              /* 沙箱 getState 每分钟调用上限：每次都会克隆整工程 */
+  PLUGIN_GETSTATE_MAX_BYTES: 16 * 1024 * 1024, /* 沙箱 getState 快照序列化字节上限：超限只拒绝本次调用，不禁用插件 */
+  PLUGIN_RPC_MAX_CHARS: 2 * 1024 * 1024,    /* 沙箱调用参数 JSON 字符上限（Worker 侧发送前拦截，防超大 props/points） */
   PLUGIN_ADD_OBJECTS_PER_MIN: 30,           /* 沙箱 addObjects 每分钟调用上限（单次仍≤500 对象） */
   PLUGIN_ADD_ANNOTATION_PER_MIN: 60,        /* 沙箱 addAnnotation 每分钟调用上限 */
   PLUGIN_RATE_WINDOW_MS: 60 * 1000,         /* 插件限流窗口 */
@@ -59,6 +79,15 @@ const APP_LIMITS = Object.freeze({
   SNAPSHOT_MAX_PER_PROJECT: 20,             /* 每个工程保留的版本快照上限（超出淘汰最旧） */
   SNAPSHOT_MAX_BYTES_PER_PROJECT: 16*1048576 /* 每个工程快照数据总量上限（16MB，超出淘汰最旧；单条超限仍保留） */
 });
+/* DORI 光学判读等级像素密度阈值（px/m）：IEC 62676-4 表 1（基于 Johnson 判据）。
+   侦测 25 / 观察 62.5 / 识别 125 / 辨认 250；覆盖率报告的「最远判读距离」唯一来源。
+   改值等同改变报告口径，须同步 docs/engineering.md 的出处说明。 */
+const DORI_LEVELS = Object.freeze([
+  Object.freeze({key:'detect', name:'侦测', pxPerM:25}),
+  Object.freeze({key:'observe', name:'观察', pxPerM:62.5}),
+  Object.freeze({key:'recognize', name:'识别', pxPerM:125}),
+  Object.freeze({key:'identify', name:'辨认', pxPerM:250})
+]);
 /** 导入限值统一校验：传 {bytes,chars,rows,entities,objects,pixels} 的已知项，返回超限字段列表（空=通过） */
 function importLimitErrors(spec){
   const s=spec||{}, errs=[];
@@ -94,13 +123,42 @@ function ensureVendor(name){
   return v;
 }
 
+/* 层间依赖钩子（片C）：core 不直接引用 features 的符号，需要的行为在此登记、由 features 在自身文件顶层提供。
+ * 必需依赖写进 REQUIRED_HOOKS（缺注册=bug：门禁 9.3 静态配对 + app 启动断言双重拦截）；
+ * 可选特性不进 REQUIRED_HOOKS，调用方用 hookReady() 判断"未启用"，而不是用 typeof 猜"是不是忘了"。
+ * 注册表刻意放在 core 第一个脚本里——不新增文件、不改加载顺序。 */
+const HOOKS=new Map();
+const REQUIRED_HOOKS=Object.freeze([
+  'collab.onLocalChange','collab.broadcastFloor','collab.pendingCandidates','collab.pendingStorageKeys',
+  'ui.refresh','ui.renderProps','ui.staleWriteBanner','ui.toast'
+]);
+/** 注册提供方；重复注册直接抛错（静默覆盖会让"谁提供了什么"失去意义） */
+function registerHook(id,fn){
+  if(typeof fn!=='function') throw new Error('钩子 '+id+' 的提供方不是函数');
+  if(HOOKS.has(id)) throw new Error('钩子重复注册：'+id);
+  HOOKS.set(id,fn);
+}
+/** 调用提供方；未注册返回 undefined（可选特性的"未启用"语义），不抛错 */
+function callHook(id,...args){ const fn=HOOKS.get(id); return fn?fn(...args):undefined; }
+function hookReady(id){ return HOOKS.has(id); }
+/** 必需钩子缺失清单；启动时调用一次，不阻断启动但必须可见 */
+function missingRequiredHooks(){ return REQUIRED_HOOKS.filter(id=>!HOOKS.has(id)); }
+/** 启动断言：装配不完整是 bug，直接抛错而不是让 callHook 静默变成 no-op */
+function assertHooksReady(){
+  const missing=missingRequiredHooks();
+  if(!missing.length) return true;
+  const msg='必需钩子未注册：'+missing.join('、')+'（features 层装配不完整）';
+  try{ console.error(msg); }catch(_){}
+  throw new Error(msg);
+}
+
 /* 点类型的 scaleShape：设置对象“物理尺寸(m)”后按世界坐标渲染（随底图缩放），
  * none=始终屏幕固定图标（纯位置标识）；circle 圆 / square 方 / sector 扇形视场（fov 张角）/ bar 杆 */
 const POINT_SCALE_SHAPES = {none:'仅位置图标', circle:'圆形覆盖', square:'方形区域', sector:'扇形视场', bar:'杆/线段'};
 /* 图元图标白名单：与 render.js drawPoint 的绘制分支一一对应。
  * type.icon 来自可编辑数据（导入 JSON / 插件 / 旧存档），任意字符串不得进入 UI 或导出。 */
 const TYPE_ICONS = Object.freeze(['marker','camera','dome','light','gate','charger','warning','custom','symbol','rect','line','text','dimension']);
-const DEFAULT_ICON_BY_KIND = Object.freeze({point:'custom', rect:'rect', line:'line'});
+const DEFAULT_ICON_BY_KIND = Object.freeze({point:'custom', rect:'rect', line:'line', arc:'line'});
 /** 图标白名单化：未知值回退到 kind 默认值，绝不回传调用方传入的原始字符串 */
 function normalizeIcon(icon, kind){
   const v=String(icon||'');
@@ -132,5 +190,7 @@ const BUILTIN_TYPES = [
   {id:'line.pedestrian', kind:'line', name:'人行线', color:'#16a34a', icon:'line', builtin:true, defaultStyle:{strokeWidth:.10,closed:false}},
   {id:'line.custom', kind:'line', name:'自定义线', color:'#7c3aed', icon:'line', builtin:true, defaultStyle:{strokeWidth:.10,closed:false}},
   {id:'text.builtin', kind:'text', name:'文字', color:'#111827', icon:'text', builtin:true},
-  {id:'dimension.distance', kind:'dimension', name:'尺寸标注', color:'#111827', icon:'dimension', builtin:true}
+  {id:'dimension.distance', kind:'dimension', name:'尺寸标注', color:'#111827', icon:'dimension', builtin:true},
+  /* 圆弧：唯一内置业务类型（插件不扩展 kind:'arc'，见设计 §4.10）。描边几何，无填充、无面积。 */
+  {id:'arc.builtin', kind:'arc', name:'圆弧', color:'#0e7490', icon:'line', builtin:true, defaultStyle:{strokeWidth:.12}}
 ];

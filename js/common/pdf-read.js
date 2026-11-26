@@ -3,7 +3,8 @@
  *  - 对象/xref 扫描、FlateDecode 解压（浏览器 DecompressionStream，zlib/deflate-raw 双兜底）
  *  - 内容流算子：m/l/c/v/y/re/h/S/f/b/q/cm + 文本 BT..ET（Tj/TJ/Tm/Td/Tf）
  *  - 内嵌图像：DCTDecode 直接取 JPEG；FlateDecode 原始像素重组为 PNG（RGB/灰度，PNG 预测器）
- * 不支持：嵌入字体 CID 文本解码（疑似乱码自动丢弃）、CMYK/LZW、压缩对象流（CAD 打印 PDF 通常不涉及）
+ * 文本编码：UTF-16BE/LE BOM → GBK 严格解码 → ASCII 原样；解不开的按条计数并跳过（不再整段丢中文）
+ * 不支持：嵌入字体 ToUnicode/CID 字形映射、CMYK/LZW、压缩对象流（CAD 打印 PDF 通常不涉及）
  * 坐标：PDF 点（1/72 英寸，Y 向上），输出已按 MediaBox 左下角归零，与内部世界坐标朝向一致 */
 (function (global) {
   'use strict';
@@ -72,17 +73,32 @@ function mulCTM(m,cm){
 const ID=[1,0,0,1,0,0];
 function applyCTM(m,p){ return [m[0]*p[0]+m[2]*p[1]+m[4], m[1]*p[0]+m[3]*p[1]+m[5]]; }
 
+/** PDF 字符串字节 → Unicode：BOM 优先，其次 GBK 严格解码；解不开返回 null（由调用方计数并跳过） */
+function decodePdfText(raw){
+  if(!raw) return '';
+  const b=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) b[i]=raw.charCodeAt(i)&0xff;
+  if(b.length>=2&&b[0]===0xFE&&b[1]===0xFF){
+    let s=''; for(let i=2;i+1<b.length;i+=2) s+=String.fromCharCode((b[i]<<8)|b[i+1]);
+    return s;
+  }
+  if(b.length>=2&&b[0]===0xFF&&b[1]===0xFE){
+    let s=''; for(let i=2;i+1<b.length;i+=2) s+=String.fromCharCode(b[i]|(b[i+1]<<8));
+    return s;
+  }
+  if(b.every(c=>c<128)) return raw;
+  try{ return new TextDecoder('gbk',{fatal:true}).decode(b); }
+  catch(_){ return null; }
+}
 function looksLikeCidGarbage(s){
   if(!s) return true;
-  let bad=0,hasAscii=0;
+  let bad=0;
   for(let i=0;i<s.length;i++){
     const c=s.charCodeAt(i);
-    if(c<32&&s[i]!=='\n'&&s[i]!=='\t') bad++;
-    else if(c<127) hasAscii++;
-    else bad++;
+    if((c<32&&s[i]!=='\n'&&s[i]!=='\t'&&s[i]!=='\r')||c===0xFFFD) bad++;
   }
-  /* 几乎全是非拉丁/控制字符，按嵌入 CID 字体无法解码处理 */
-  return s.length>1 && hasAscii/s.length<0.55;
+  /* 控制字符/替换字符超过 10% 才判为不可解码；中文不再因 ASCII 占比低被误杀 */
+  return bad/s.length>0.1;
 }
 
 function interpretContent(str){
@@ -94,6 +110,7 @@ function interpretContent(str){
   let m=ID;
   let sub=null;                 /* {pts:[],closed:false} */
   let cur=null;
+  let badOps=0;                 /* E2：参数缺失/非有限值的算子计数，跳过但不产 NaN 坐标 */
   const tx=p=>applyCTM(m,p);
   const begin=x=>{ if(!sub) sub={pts:[x],closed:false}; };
   const line=x=>{ if(sub) sub.pts.push(x); };
@@ -106,14 +123,16 @@ function interpretContent(str){
     if(tk.t!=='op'){ stack.push(tk); continue; }
     const op=tk.v, nums=()=>{ const a=[]; let k=stack.length;
       while(k>0 && stack[k-1].t==='num'){ a.unshift(stack[k-1].v); k--; } stack.length=k; return a; };
+    /* E2：参数个数不足或含非有限值 → 整条算子跳过并计数，绝不让 NaN 进入坐标 */
+    const take=(n)=>{ const a=nums(); if(a.length<n||a.some(v=>!Number.isFinite(v))){ badOps++; return null; } return a; };
     if(op==='q'){ ctmStack.push(m); }
     else if(op==='Q'){ m=ctmStack.pop()||ID; }
-    else if(op==='cm'){ const a=nums(); m=mulCTM(m,[a[0],a[1],a[2],a[3],a[4],a[5]]); }
+    else if(op==='cm'){ const a=take(6); if(a) m=mulCTM(m,a); }
     else if(op==='BT'){ textCTMs.push(m.slice()); }
-    else if(op==='m'){ const a=nums(); finish(false); cur=tx([a[0],a[1]]); begin(cur); }
-    else if(op==='l'){ const a=nums(); line(tx([a[0],a[1]])); }
+    else if(op==='m'){ const a=take(2); finish(false); cur=a?tx(a):null; if(cur) begin(cur); }
+    else if(op==='l'){ const a=take(2); if(a) line(tx(a)); }
     else if(op==='c'||op==='v'||op==='y'){
-      const a=nums(); let P1,P2,P3;
+      const a=take(op==='c'?6:4); if(!a) continue; let P1,P2,P3;
       /* N-09：控制点先变换到设备空间，插值全程不再与原始用户坐标混用 */
       if(op==='c'){ P1=tx([a[0],a[1]]); P2=tx([a[2],a[3]]); P3=tx([a[4],a[5]]); }
       else if(op==='v'){ P1=cur; P2=tx([a[0],a[1]]); P3=tx([a[2],a[3]]); }
@@ -128,7 +147,7 @@ function interpretContent(str){
       }
       cur=P3;
     }
-    else if(op==='re'){ const a=nums(); finish(false); const [x,y,w,h]=a;
+    else if(op==='re'){ const a=take(4); if(!a) continue; finish(false); const [x,y,w,h]=a;
       const q=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
       sub={pts:q.map(tx),closed:true}; cur=tx([x,y]); }
     else if(op==='h'){ if(sub){ sub.closed=true; cur=sub.pts[0]; } }
@@ -137,7 +156,8 @@ function interpretContent(str){
     else if(op==='n'){ sub=null; }
     /* BT..ET 文本在 collectTJ 中单独扫描，主循环不处理栈上字符串 */
   }
-  const texts=collectTJ(str,textCTMs);
+  const tj=collectTJ(str,textCTMs);
+  const texts=tj.texts;
   /* 去重近重复文本（Tj 与 TJ 可能提取到同一串） */
   const seen=new Set(); const finalTexts=[];
   for(const t of texts){
@@ -153,43 +173,52 @@ function interpretContent(str){
     }
     return {points:out,closed:p.closed,filled:p.filled};
   }).filter(p=>p.points.length>=2);
-  return {paths:finalPaths,texts:finalTexts};
+  return {paths:finalPaths,texts:finalTexts,undecoded:tj.undecoded,badOps:badOps+tj.badOps};
 }
 /* BT..ET 区间提取 Tj/TJ 文本（定位取最近 Tm/Td；N-09：文本原点再乘 BT 时的 CTM） */
 function collectTJ(content,ctms){
-  const out=[];
+  const out=[]; let undecoded=0; let badOps=0;
   const re2=/BT([\s\S]*?)ET/g; let mm, bi=0;
   while((mm=re2.exec(content))){
     const body=mm[1];
     const ctm=ctms&&ctms[bi]?ctms[bi]:ID; bi++;
     let mat=ID, fs=1, dx=0, dy=0;
     const tmM=body.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+Tm/);
-    if(tmM) mat=tmM.slice(1,7).map(Number);
+    if(tmM){ const m6=tmM.slice(1,7).map(Number);
+      /* E2：Tm 任一分量非有限 → 整块跳过并计数，避免 NaN 坐标写进 state */
+      if(m6.some(v=>!Number.isFinite(v))){ badOps++; continue; }
+      mat=m6; }
     const fsM=body.match(/\/[A-Za-z0-9_+\-.]+\s+([-\d.]+)\s+Tf/);
-    if(fsM) fs=parseFloat(fsM[1]);
+    if(fsM){ const v=parseFloat(fsM[1]); if(Number.isFinite(v)&&v>0) fs=v; }
     /* Td/TD 为相对换行/定位，累积到当前文本原点；TD 带前导 -a*h 行距项，简单按后两数处理 */
     let tdm; const tdRe=/(-?[\d.]+)\s+(-?[\d.]+)\s+T[dD]/g;
     while((tdm=tdRe.exec(body))){ dx+=parseFloat(tdm[1]); dy+=parseFloat(tdm[2]); }
-    const parts=[];
+    if(!Number.isFinite(dx)||!Number.isFinite(dy)){ badOps++; continue; }
+    const parts=[]; let gone=0;
     const strRe=/\(((?:[^()\\]|\\.)*)\)\s*Tj|\[([\s\S]*?)\]\s*TJ/g;
     let sm;
     while((sm=strRe.exec(body))){
-      if(sm[1]!==undefined) parts.push(unescapePdfString(sm[1]));
+      let raw='';
+      if(sm[1]!==undefined) raw=unescapePdfString(sm[1]);
       else {
-        const inner=sm[2]; let t='';
+        const inner=sm[2];
         const r3=/\(((?:[^()\\]|\\.)*)\)/g;
           let qm;
-          while((qm=r3.exec(inner))) t+=unescapePdfString(qm[1]);
-        parts.push(t);
+          while((qm=r3.exec(inner))) raw+=unescapePdfString(qm[1]);
       }
+      const dec=decodePdfText(raw);
+      if(dec===null) gone++;
+      else parts.push(dec);
     }
     const text=parts.join('').replace(/\s+/g,' ').trim();
     if(text&&!looksLikeCidGarbage(text)){
       const pos=applyCTM(ctm,[mat[4]+dx,mat[5]+dy]);
+      if(!Number.isFinite(pos[0])||!Number.isFinite(pos[1])){ badOps++; continue; }
       out.push({x:pos[0],y:pos[1],size:fs,text});
     }
+    if(gone||(text&&looksLikeCidGarbage(text))) undecoded++;
   }
-  return out;
+  return {texts:out,undecoded,badOps};
 }
 function unescapePdfString(s){
   return s.replace(/\\([()\\])/g,'$1').replace(/\\n/g,'\n').replace(/\\r/g,'\r').replace(/\\t/g,'\t');
@@ -343,7 +372,7 @@ function layoutPdfPages(pages,opt){
 async function parsePdf(input,opt){
   /* 容器层（对象树/页面/内容流原文）由 @idcu/format-pdf 解析；这里只做绘图语义转换 */
   const parsed=await __pdf.parse(input,{inflate,limits:opt});
-  const merged={paths:[],texts:[],images:[]};
+  const merged={paths:[],texts:[],images:[],textErrors:0,badOps:0};
   const pages=[];
   let firstBox=null;
   pagesInDocumentOrder(parsed).forEach((page,i)=>{
@@ -354,12 +383,14 @@ async function parsePdf(input,opt){
       points:p.points.map(q=>[q[0]-box.x,q[1]-box.y]),closed:p.closed,filled:p.filled}));
     const texts=interp.texts.map(t=>({x:t.x-box.x,y:t.y-box.y,size:t.size,text:t.text}));
     pages.push({pageNo:i+1,num:page.num,width:box.width,height:box.height,
-      origin:[box.x,box.y],paths,texts,imageNums:pageImageNums(page,parsed.objects)});
+      origin:[box.x,box.y],paths,texts,textErrors:interp.undecoded,badOps:interp.badOps,imageNums:pageImageNums(page,parsed.objects)});
     paths.forEach(p=>merged.paths.push(p));
     texts.forEach(t=>merged.texts.push(t));
+    merged.textErrors+=interp.undecoded;
+    merged.badOps+=interp.badOps;
   });
   /* 内嵌图像（每页资源）：收集 /Subtype /Image 对象，选最大者 */
-  const images=[];
+  const images=[]; let imageErrors=0;
   for(const [num,o] of parsed.objects){
     if(!/\/Subtype\s*\/Image/.test(o.dict)||o.data===null) continue;
     const w=dictNumber(o.dict,'Width'), h=dictNumber(o.dict,'Height');
@@ -372,6 +403,7 @@ async function parsePdf(input,opt){
       if(isJpeg){
         const b=binaryToBytes(o.data);
         if(b[0]===0xFF&&b[1]===0xD8) images.push({num,mime:'image/jpeg',bytes:b,width:w,height:h});
+        else imageErrors++;
       }else if(isFlate){
         const cs=dictName(o.dict,'ColorSpace');
         const bpc=dictNumber(o.dict,'BitsPerComponent')||8;
@@ -398,12 +430,13 @@ async function parsePdf(input,opt){
         }
         if(rgb&&rgb.length>=h*w*3) images.push({num,mime:'image/png',bytes:buildPng(w,h,rgb),width:w,height:h});
       }
-    }catch(e){ /* 不支持的图像编码静默跳过 */ }
+    }catch(e){ imageErrors++; /* E2：解码失败计数，由导入报告如实提示 */ }
   }
   images.sort((a,b)=>b.width*b.height-a.width*a.height);
   return {pageWidth:firstBox?.w||0,pageHeight:firstBox?.h||0,
     pageCount:pages.length,pages,
-    paths:merged.paths,texts:merged.texts,images,
+    paths:merged.paths,texts:merged.texts,textErrors:merged.textErrors,badOps:merged.badOps,
+    imageErrors,images,
     unitMeter:PT_TO_METER};
 }
 

@@ -53,7 +53,9 @@ async function gcUsed(cdp) {
   return u.usedSize;
 }
 
-test('B-10 内存：20 条含照片历史相对整份深拷贝下降 ≥50%（真实 Chromium 堆）', async ({ page }) => {
+test('B-10 内存：20 条含照片历史相对整份深拷贝下降 ≥50%（真实 Chromium 堆）', async ({ page, browserName }) => {
+  /* 堆读数走 CDP，仅 Chromium 提供；这是测量通道限制，不是产品差异 */
+  test.skip(browserName !== 'chromium', 'B-10 真实堆测量依赖 CDP 会话，Firefox/WebKit 无对应通道');
   await openApp(page);
   const cdp = await page.context().newCDPSession(page);
 

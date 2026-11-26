@@ -101,6 +101,16 @@ function affineShapeTransform(M,shape,opts){
     if(type===CIR&&im.circle) return {type:CIR,cx:c[0],cy:c[1],r:im.rx,degraded:null};
     return {type:ELL,cx:c[0],cy:c[1],rx:im.rx,ry:im.ry,angle:im.angle,degraded:null};
   }
+  if(type===ARC){
+    /* 圆弧随仿射：圆心精确映射，半径按相似缩放（非相似取 sqrt|det| 近似），起止角整体加旋转量；
+       张角原样保留（不逐角归一，避免 350°→370° 跨 0° 被折成 290°） */
+    const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]), r0=positiveNum(sh.r,50);
+    const exact=lin.isSimilarity&&lin.det>0;
+    const rr=exact?r0*lin.s1:r0*Math.sqrt(Math.abs(lin.det));
+    const sweep=(Number(sh.a1)||0)-(Number(sh.a0)||0);
+    const a0=normalizeAngle((Number(sh.a0)||0)+lin.rotationDeg);
+    return {type:ARC,cx:c[0],cy:c[1],r:Math.max(.05,rr),a0,a1:a0+sweep,degraded:exact?null:'arc-affine'};
+  }
   if(type===SEC){
     const c=mapP([Number(sh.cx)||0,Number(sh.cy)||0]), r0=positiveNum(sh.r,50);
     const exact=lin.isSimilarity&&lin.det>0;
@@ -159,7 +169,7 @@ function migrateObjectsByAffine(objects,M,out){
       o.phys=Math.max(0,(Number(o.phys)||0)*sx);
     }else if(o.kind==='text'){
       o.height=Math.max(.05,(Number(o.height)||2.2)*sx);
-    }else if(o.kind==='rect'){
+    }else if(o.kind==='rect'||o.kind==='arc'){
       if(!o.shape){
         const rad=origAng*Math.PI/180;
         const ex=mapVec([Math.cos(rad),Math.sin(rad)]);
@@ -176,6 +186,9 @@ function migrateObjectsByAffine(objects,M,out){
       }else if(o.shape.type===SEC){
         const r=affineShapeTransform(M,{type:SEC,cx:ox,cy:oy,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
         o.x=r.cx; o.y=r.cy; o.shape={type:SEC,r:r.r,a0:r.a0,a1:r.a1}; note(o,r);
+      }else if(o.shape.type===ARC){
+        const r=affineShapeTransform(M,{type:ARC,cx:ox,cy:oy,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
+        o.x=r.cx; o.y=r.cy; o.shape={type:ARC,r:r.r,a0:r.a0,a1:r.a1}; note(o,r);
       }else if(o.shape.type===PARA){
         const r=affineShapeTransform(M,{type:PARA,x:ox,y:oy,w:o.width,h:o.height,
           skew:o.shape.skew,angle:origAng});

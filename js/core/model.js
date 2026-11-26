@@ -12,6 +12,8 @@ const RULE_TYPE_LIMIT = 200;
 const STATS_ISSUE_VERSION = 2;
 
 let state = createInitialState();
+/* 叠放序版本：对象增删/重排/载入时递增，命中缓存据此失效（P1-04） */
+var zVersion = 0;
 let bgImage = null;
 let bgImageState = 'none';
 let bgImageErrorNotified = false;
@@ -202,6 +204,8 @@ function normalizeRuleConfig(raw){
 /* -------------------- 初始化 / 工程数据 -------------------- */
 /** 设置键白名单（唯一真源）：从默认设置派生，持久化与启动合并共用，避免第二套清单漏键。 */
 const SETTINGS_KEYS=Object.freeze(Object.keys(createInitialState().settings));
+/** 工程 meta 白名单（唯一真源）：默认 meta 键 + 协作绑定键 projectId；导入/合并只接受这些键（B4）。 */
+const META_KEYS=Object.freeze(Object.keys(createInitialState().meta).concat('projectId'));
 /** @returns {ProjectState} 新工程状态 */
 function createInitialState(){
   const now = new Date().toISOString();
@@ -222,6 +226,8 @@ function createInitialState(){
       polarStep:45,      /* 极轴角步长（15/30/45/90） */
       segLabelMinPx:APP_LIMITS.SEG_LABEL_MIN_PX, /* 段长标注最小屏幕像素：过短的段不标，避免拥挤 */
       lang:'zh',         /* 界面语言：zh / en（静态 chrome 文案） */
+      exportOnlyDelivered:false, /* G-03：导出（台账/图纸/打印）只含标记为已交付的对象；JSON/报价始终全量 */
+      pdfDpi:220,        /* L-04：PDF 图纸页分辨率（150/220/300），最长边封顶 3000 px（config.PDF_DPI_OPTIONS） */
       osnap:true },      /* 对象捕捉：端点/中点/圆心 */
     rules: createRuleConfig(), /* C-05 几何规则检查配置：随工程保存 */
     viewport: { zoom:1, panX:0, panY:0 },
@@ -340,6 +346,7 @@ function restackObjects(objects,ids,mode){
   sel.forEach(o=>{ o.updatedAt=stamp; });
   arr.length=0; arr.push(...ordered);
   arr.forEach((o,i)=>{ o.z=i; });
+  bumpZVersion();
   return sel.length;
 }
 /** @template T @param {T} v @returns {T} */
@@ -484,6 +491,19 @@ function createSiteSlot(shape){
 }
 /** 图片底图判定：只有 kind==='image' 的槽才承载栅格 */
 function isImageBackground(bg){ return !!(bg && bg.kind==='image'); }
+/** 应用矢量场地：只更新独立 site 槽，保留图片底图、场地元数据（id/name/layer/visible/locked/annot/style）。
+ *  C-01：从 features/io-import.js 下沉——它只做状态槽写入 + 历史提交 + 取景/工具切换，依赖全是 core，
+ *  原先放在 features 使 core 的落笔（interaction.js 六种场地拖拽）反向依赖导入模块。 */
+function applyVectorSite(kind,shape){
+  pushHistory();
+  const site=state.site||createSiteSlot(shape);
+  site.kind=shape.type||kind;
+  site.shape=deepClone(shape);
+  site.updatedAt=nowISO();
+  if(!state.site) state.site=site;
+  selectedIds.clear();
+  fitView(); commitChange(L('已设置为{name}',{name:L(siteKindName(kind))})); setTool('select');
+}
 /** 场地形状（兼容旧 background 对象） */
 function siteShapeOf(site){ return (site && site.shape) || defaultSiteShape(); }
 /** 场地所属图层（缺失时返回始终可见/未锁定的占位层，避免旧工程无图层字段时报错） */
@@ -500,6 +520,7 @@ function defaultTypeId(kind){
   if (kind === 'point') return 'point.marker';
   if (kind === 'rect') return 'rect.area';
   if (kind === 'dimension') return 'dimension.distance';
+  if (kind === 'arc') return 'arc.builtin';
   return 'line.custom';
 }
 /**
@@ -515,7 +536,8 @@ function baseObject(kind, typeId, patch={}){
     phys:0,   /* 点设备物理尺寸(米，高级)：0=纯位置标识(屏幕固定图标)；>0=按世界比例渲染的覆盖图形 */
     iconSize:1, /* 点设备图标屏幕大小倍率（纯视觉，无物理意义）；与类型默认值、全局倍率连乘 */
     annot:{},   /* 逐对象标注显示开关（点坐标/基点/半径/边长/周长/面积/节点坐标），未显式设置时按类型默认 */
-    shape:null, /* 区域参数形状：circle{r}/ellipse{rx,ry}/sector{r,a0,a1}；null=矩形(用 width/height/angle) */
+    shape:null, /* 参数形状：circle{r}/ellipse{rx,ry}/sector{r,a0,a1}/parallelogram{skew}（区域）；
+                   arc{r,a0,a1}（kind:'arc' 的描边圆弧，圆心即 x/y，无面积语义）；null=矩形(用 width/height/angle) */
     text:'', closed:false, subtype:kind === 'dimension' ? 'distance' : '',
     style:{}, props:{}, visible:true, locked:false, z:state.objects.length,
     createdAt: nowISO(), updatedAt: nowISO()
@@ -555,7 +577,7 @@ function styleVal(o, key, fallback){
   if (t.defaultStyle && t.defaultStyle[key] !== undefined) return t.defaultStyle[key];
   return fallback;
 }
-function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注'})[k] || k; }
+function kindName(k){ return ({point:'点设备',rect:'矩形/区域',line:'线段/折线',text:'文字',dimension:'尺寸标注',arc:'圆弧'})[k] || k; }
 /**
  * 对象索引：id → 对象。供一次操作内多次按 id 查找（拖拽 originals、批量移动/回滚）复用，
  * 把 N 次 `state.objects.find()` 的 O(N²) 扫描收敛为一次 O(N) 建索引（A-15）。
@@ -635,20 +657,23 @@ function pointIconScale(o){
 const ANNOT_KEYS={
   point:['name','coord'],
   rect:['name','base','radius','edge','vertex','perimeter','area'],
-  line:['name','node','edge','perimeter','area']
+  line:['name','node','edge','perimeter','area'],
+  arc:['name','radius','perimeter']
 };
 const ANNOT_LABELS={ name:'编号', coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', vertex:'顶点坐标', perimeter:'周长', area:'面积', node:'节点坐标' };
 /* 默认值：编号标签沿用全局「显示标签」既有观感（开）、区域/闭合折线的面积周长沿用全局开关默认（开）；其余新增标注默认关闭 */
 const ANNOT_DEFAULTS={
   point:{ name:true, coord:false },
   rect:{ name:true, base:false, radius:false, edge:false, vertex:false, perimeter:true, area:true },
-  line:{ name:true, node:false, edge:true, perimeter:true, area:true }
+  line:{ name:true, node:false, edge:true, perimeter:true, area:true },
+  arc:{ name:true, radius:false, perimeter:false }
 };
 /** 该对象（按 kind）支持的标注开关键列表 */
 function annotKeys(kind){ return ANNOT_KEYS[kind]||[]; }
 /** 标注键的面板/提示显示名：同一键在不同类型下语义不同（折线「段长」/区域「边长」，闭合折线节点即「顶点坐标」） */
 function annotLabel(o,key){
   if(key==='edge') return o&&o.kind==='line'?'段长':'边长';
+  if(key==='perimeter'&&o&&o.kind==='arc') return '弧长';
   if(key==='node') return o&&o.closed?'顶点坐标':'节点坐标';
   return ANNOT_LABELS[key]||key;
 }

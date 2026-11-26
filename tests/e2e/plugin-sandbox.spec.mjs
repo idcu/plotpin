@@ -427,6 +427,35 @@ test('插件写入进入撤销栈：undo 后对象完全移除、redo 恢复', a
   await drawPoint(page);
 });
 
+/* C3：配额按全工程累计，非当前楼层占满后插件写入被拒；拒绝时整体不写、不产生历史 */
+test('C3 跨层对象配额：非当前楼层占满后插件写入被拒且现场不变', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    state.floors.push({ id: 'floor.cap', name: '2F', objects: Array.from({ length: APP_LIMITS.OBJECTS_MAX - 1 }, (_, i) => ({ id: 'CAPF' + i })) });
+  });
+  const before = await page.evaluate(() => ({ objs: state.objects.length, past: history.past.length }));
+  const r = await loadPlugin(page, {
+    id: 'cap.quota',
+    apiVersion: '1.0',
+    capabilities: ['state:write'],
+    code: 'PlotPin.addObjects([{kind:"point",x:1,y:1},{kind:"point",x:2,y:2}]);'
+  });
+  /* 初始化期被拒（ok:false）或 active 后调用被拒（ok:true）都属预期，统一等禁用记录给原因 */
+  expect(typeof r.ok).toBe('boolean');
+  const rec = await waitDisabled(page, 'cap.quota');
+  expect(rec.reason).toContain('对象数量超过上限');
+  const after = await page.evaluate(() => ({
+    objs: state.objects.length,
+    past: history.past.length,
+    cap: (state.floors.find(f => f.id === 'floor.cap') || { objects: [] }).objects.length
+  }));
+  expect(after.objs).toBe(before.objs);
+  expect(after.past).toBe(before.past);
+  expect(after.cap).toBe(99999);
+  await page.evaluate(() => { state.floors = state.floors.filter(f => f.id !== 'floor.cap'); });
+  await drawPoint(page);
+});
+
 test('定时器逃逸：载入后 setInterval 与初始化期捕获的 setTimeout 均失效，主线程仍可用', async ({ page }) => {
   await openApp(page);
   const r = await loadPlugin(page, {

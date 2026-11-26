@@ -1,9 +1,11 @@
 /* app.js —— 启动：恢复工程、首屏适配、能力探测与离线缓存注册 */
 /* -------------------- 启动 -------------------- */
 (async function init(){
+  /* 片C：必需钩子缺注册是装配错误，先断言再启动（门禁 9.3 静态配对 + 此处运行期兜底） */
+  assertHooksReady();
   const caps=detectRuntimeCapabilities();
   const loaded=await loadSavedProject();
-  if(loaded&&loaded.state) state=loaded.state;
+  /* 载入路径已在 persistence 内通过 replaceState 换现场（quiet）；此处只消费返回值 */
   showLoadAuditBanner(loaded);
   /* D-09 同工程多标签租约：先注册横幅回调，再开始心跳；不阻塞编辑 */
   onLeaseConflict(info=>{ if(info&&info.active) showLeaseConflictBanner(info); else hideLeaseConflictBanner(); });
@@ -30,9 +32,17 @@
   if(caps.sw){
     try{
       const reg=await navigator.serviceWorker.register('sw.js');
+      /* 安装结果由 SW 用 STATUS 回答：failed>0 表示新缓存不完整、旧版本仍在服务 */
+      navigator.serviceWorker.addEventListener('message',ev=>{
+        const d=ev.data;
+        if(!d||d.type!=='STATUS'||!navigator.serviceWorker.controller) return;
+        toast(d.failed>0
+          ? L('预缓存失败 {n} 项，已保留旧版本',{n:d.failed})
+          : L('新版本可用：刷新页面后生效'),'warn');
+      });
       const notify=()=>{
-        if(!reg.waiting || !navigator.serviceWorker.controller) return;
-        toast(L('新版本可用：刷新页面后生效'),'warn');
+        /* 首次安装也会短暂出现 waiting，此时页面尚无 controller，不应提示「新版本可用」 */
+        if(reg.waiting && navigator.serviceWorker.controller) reg.waiting.postMessage({type:'STATUS'});
       };
       reg.addEventListener('updatefound',()=>{
         const w=reg.installing;

@@ -5,7 +5,7 @@ if (!__geo) throw new Error('geometry.js：缺少 @idcu/core-geometry，请检�
 /* -------------------- 几何工具（委托模块） -------------------- */
 const add=(a,b)=>__geo.vecAdd(a,b);
 const sub=(a,b)=>__geo.vecSub(a,b);
-const mul=(a,s)=>__geo.vecScale(a,s);
+/* 向量运算转发（vecScale 等保留在 __geo，避免重复实现） */
 const dist=(a,b)=>__geo.distance(a,b);
 function rotatePoint(p,c,angDeg){ return __geo.rotatePoint(p,c,angDeg); }
 function polygonArea(points){ return __geo.polygonArea(points); }
@@ -222,6 +222,7 @@ function textCorners(o){
 function objectPoints(o){
   if(o.kind==='rect') return shapeWorldPoints(o);
   if(o.kind==='text') return textCorners(o);
+  if(o.kind==='arc') return arcWorldPoints(o);
   return o.points && o.points.length ? o.points : [[o.x,o.y]];
 }
 function objectCenter(o){
@@ -260,8 +261,18 @@ function objectSnapBounds(o,out){
     if(pointBounds(textCorners(o),out)) return out;
     out.minX=out.maxX=o.x; out.minY=out.maxY=o.y; return out;
   }
+  if(o.kind==='arc'){
+    /* 圆弧：O(1) 保守外接盒（中心 ± r），宁可偏大也不漏捕捉/漏画 */
+    const r=Math.abs(Number(o.shape&&o.shape.r)||0);
+    const cx=Number(o.x)||0, cy=Number(o.y)||0;
+    out.minX=cx-r; out.minY=cy-r; out.maxX=cx+r; out.maxY=cy+r;
+    return out;
+  }
   if(o.kind==='rect'){
-    const tt=areaShapeType(o);
+    if(isPolygonShape(o)){
+      if(pointBounds(polygonShapePoints(o),out)) return out;
+      out.minX=out.maxX=Number(o.x)||0; out.minY=out.maxY=Number(o.y)||0; return out;
+    }    const tt=areaShapeType(o);
     if(tt==='rect'||tt===PARA){
       if(tt==='rect'&&!(o.angle||0)){
         const x=Number(o.x)||0, y=Number(o.y)||0, w=Number(o.width)||0, h=Number(o.height)||0;
@@ -343,7 +354,25 @@ function parallelogramSkew(sh){ return __geo.clampSkew(sh&&sh.skew,PARALLELOGRAM
 function parallelogramPoints(x,y,w,h,skew){ return __geo.parallelogramPoints(x,y,w,h,skew); }
 function areaShapeType(o){
   const t=o&&o.shape&&o.shape.type;
+  if(t===ARC) return ARC;   /* 描边圆弧：独立分流，不并入 AREA_SHAPE_TYPES（无面积/不参与覆盖率） */
   return (t===CIR||t===ELL||t===SEC||t===PARA)?t:'rect';
+}
+/** 是否为多边形形状。areaShapeType 有意不返回 'polygon'：该返回值被渲染/属性/导入导出等
+ *  按 rect 参数（width/height/r/rx/ry）分派的调用点共用，改成 'polygon' 会把缺参扩散到各处；
+ *  因此 polygon 只在明确需要顶点的几何函数内前置分流。 */
+function isPolygonShape(o){ return !!(o&&o.shape&&o.shape.type==='polygon'); }
+/** 多边形形状顶点（世界坐标米）：优先 shape.points，兼容对象级 points。
+ *  逐点数值化并丢弃非有限坐标；是否构成多边形（>=3 点）由调用方按语义判定——
+ *  面积/周长/命中/质心要求 >=3，包围盒对 1–2 个有效点同样成立。 */
+function polygonShapePoints(o){
+  const src=Array.isArray(o&&o.shape&&o.shape.points)?o.shape.points
+    :(Array.isArray(o&&o.points)?o.points:[]);
+  const pts=[];
+  for(const p of src){
+    const x=Number(p&&p[0]), y=Number(p&&p[1]);
+    if(Number.isFinite(x)&&Number.isFinite(y)) pts.push([x,y]);
+  }
+  return pts;
 }
 /** 扇形有效张角（0–360°）；a0/a1 为世界系绝对角度（Y 向上），相等时视为整圆 */
 function sectorSweep(sh){ return __geo.sectorSweep(sh&&sh.a0,sh&&sh.a1); }
@@ -354,8 +383,30 @@ function sectorArcRange(sh){
 }
 /** 扇形弧采样（seg 等分），世界坐标，圆心由调用方给定 */
 function sectorArcPoints(cx,cy,r,a0,sweep,seg=SHAPE_SEGMENTS){ return __geo.sectorArcPoints(cx,cy,r,a0,sweep,seg); }
+/** 圆弧有效张角（0–360°，**不含** 360）：与 sectorSweep 的唯一差异是不把 0 归一为整圆。
+ *  对象层不承载全圆弧（想要圆就画圆），0 视为退化：清洗侧丢弃、导入侧退化为折线。 */
+function arcSweep(sh){
+  const a0=Number(sh&&sh.a0)||0, a1=Number(sh&&sh.a1);
+  if(!Number.isFinite(a1)) return 0;
+  return ((a1-a0)%360+360)%360;
+}
+/** 圆弧采样（世界坐标，seg+1 个点，不含圆心；k=0..seg）。描边几何的顶点唯一来源：
+ *  框选/包围盒用默认 72 段，DXF 默认导出显式传 24 段以复现 vendor 展平。 */
+function arcWorldPoints(o,seg){
+  const sh=(o&&o.shape)||{}, r=Math.max(0,Number(sh.r)||0);
+  const cx=Number(o&&o.x)||0, cy=Number(o&&o.y)||0;
+  const a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+  const n=Math.max(1,Math.min(4096,Math.round(Number(seg)||SHAPE_SEGMENTS)));
+  const pts=[];
+  for(let k=0;k<=n;k++){
+    const a=(a0+sweep*k/n)*Math.PI/180;
+    pts.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);
+  }
+  return pts;
+}
 /** 区域形状 → 闭合世界多边形顶点（扇形首点为圆心）；渲染/包围盒/框选/SVG 共用 */
 function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
+  if(isPolygonShape(o)) return polygonShapePoints(o);   /* 顶点即世界坐标，无需 width/height */
   const tt=areaShapeType(o);
   if(tt==='rect'||tt===PARA) return rectPoints(o);
   const sh=o.shape;
@@ -381,15 +432,21 @@ function shapeWorldPoints(o,seg=SHAPE_SEGMENTS){
  * point/text 无轮廓返回 []。**返回新数组**，调用方可安全修改/序列化（DXF 构造器会就地消费）。
  * 闭合语义由调用方决定：区域恒闭合、折线看 o.closed、面积标注看 subtype。
  */
-function outlineOf(o){
+function outlineOf(o,seg){
   if(!o||typeof o!=='object') return [];
   if(o.kind==='rect') return shapeWorldPoints(o);
+  if(o.kind==='arc') return arcWorldPoints(o,seg);   /* seg 可选：DXF 默认 24、PDF 按弦高自适应 */
   if(o.kind==='line'||o.kind==='dimension') return (o.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
   return [];
 }
 /** 世界坐标命中（米） */
 function shapeHit(o,p){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3&&pointInPolygon(p,ps);   /* 退化多边形不命中，不产生 NaN 判定 */
+  }
   const tt=areaShapeType(o);
+  if(tt===ARC) return false;   /* 描边几何没有"内部"：面积命中恒 false */
   if(tt==='rect'||tt===PARA) return pointInPolygon(p,rectPoints(o));
   const sh=o.shape, dx=p[0]-o.x, dy=p[1]-o.y;
   if(tt===CIR) return Math.hypot(dx,dy)<=(Number(sh.r)||0);
@@ -408,7 +465,12 @@ function shapeHit(o,p){
 }
 /** 面积（㎡），各形状精确公式 */
 function shapeArea(o){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3?Math.abs(polygonArea(ps)):0;   /* 面积取绝对值，与顶点绕向无关 */
+  }
   const tt=areaShapeType(o);
+  if(tt===ARC) return 0;       /* 弧无面积：不参与面积合计与覆盖率 */
   if(tt==='rect'||tt===PARA) return Math.max(0,o.width)*Math.max(0,o.height);
   const sh=o.shape;
   if(tt===CIR){ const r=Number(sh.r)||0; return Math.PI*r*r; }
@@ -418,7 +480,12 @@ function shapeArea(o){
 }
 /** 周长（米）：矩形 2(w+h)；圆 2πr；椭圆 Ramanujan 近似；扇形 2r+弧长（整圆扇=圆） */
 function shapePerimeter(o){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3?polylineLength(ps.concat([ps[0]])):0;
+  }
   const tt=areaShapeType(o);
+  if(tt===ARC) return Math.max(0,Number(o.shape&&o.shape.r)||0)*arcSweep(o.shape)*Math.PI/180;
   if(tt==='rect') return Math.max(0,o.width)*2+Math.max(0,o.height)*2;
   if(tt===PARA){
     /* 错切不改变面积，但斜边长为 h/cos(倾角)：周长 = 2(w + h/cosθ) */
@@ -434,9 +501,43 @@ function shapePerimeter(o){
   /* 整圆扇（360°）两条半径重合，周长仅取弧长 */
   return __geo.sectorPerimeter(r,sweep);
 }
+/** 对象面积（㎡）：区域按 shapeArea，闭合折线与面积标注按多边形；其余为 0。
+ *  统计/报表/属性面板共用，因此落在几何层（core），不再由 features 提供。 */
+function objectArea(o){
+  if(o.kind==='rect') return shapeArea(o);
+  if(o.closed&&o.points.length>=3) return polygonArea(o.points);
+  if(o.kind==='dimension'&&o.subtype==='area') return polygonArea(o.points);
+  return 0;
+}
+/** 圆弧命中判据（世界坐标）：点是否落在角度区间内（端点按弧长容差换算成角度放宽）。
+ *  与半径判据配合使用：|dist-r|<=tol 且本函数为真，才算点中弧线。 */
+function arcContainsAngle(o,p,tolWorld){
+  const sh=(o&&o.shape)||{}, r=Math.max(0,Number(sh.r)||0);
+  const sweep=arcSweep(sh);
+  if(!(r>0)||!(sweep>0)) return false;
+  const a0=Number(sh.a0)||0;
+  const deg=Math.atan2((Number(p&&p[1])||0)-(Number(o.y)||0),(Number(p&&p[0])||0)-(Number(o.x)||0))*180/Math.PI;
+  const rel=((deg-a0)%360+360)%360;
+  const tolDeg=Math.max(0,Number(tolWorld)||0)/r*180/Math.PI;
+  return rel<=sweep+tolDeg || rel>=360-tolDeg;
+}
+/** 对象长度（米）：圆弧取弧长；折线逐段求和，闭合折线补首尾边；不足两点为 0。 */
+function objectLength(o){
+  if(o.kind==='arc'){
+    return Math.max(0,Number(o.shape&&o.shape.r)||0)*arcSweep(o.shape)*Math.PI/180;
+  }
+  if(!o.points||o.points.length<2) return 0;
+  let l=polylineLength(o.points);
+  if(o.closed) l+=dist(o.points.at(-1),o.points[0]);
+  return l;
+}
 /** 标签/变换中心（旋转基准唯一实现）：矩形/平行四边形取四角中心；圆/椭圆/扇形/点/文字锚点即中心 (x,y)。
  *  手柄定位（render.js）与旋转角度换算（interaction.js）必须共用本函数，否则图形绕锚点甩动而手柄画在中心。 */
 function shapeLabelCenter(o){
+  if(isPolygonShape(o)){
+    const ps=polygonShapePoints(o);
+    return ps.length>=3?objectCenter(o):[Number(o.x)||0,Number(o.y)||0];
+  }
   const tt=areaShapeType(o);
   if(tt==='rect'||tt===PARA) return objectCenter(o);
   return [o.x,o.y];
@@ -445,6 +546,7 @@ function shapeLabelCenter(o){
  *  pointRotate 手柄沿 angle 方向摆放，方位角即角度；其余手柄位于 angle+90° 方向，需减 90°。
  *  矩形/平行四边形写回后会反解基点，使视觉中心保持在拖拽开始时的位置（不再绕左下角甩动）。 */
 function rotateShapeByHandle(o,wp,pointRotate){
+  if(isPolygonShape(o)) return;   /* 顶点为世界坐标，旋转手柄对 polygon 无定义，不写锚点/角度 */
   const c=shapeLabelCenter(o);
   let deg=Math.atan2(wp[1]-c[1],wp[0]-c[0])*180/Math.PI;
   if(!pointRotate) deg-=90;
@@ -455,6 +557,19 @@ function rotateShapeByHandle(o,wp,pointRotate){
   const off=tt===PARA?h*Math.tan(parallelogramSkew(o.shape)*Math.PI/180):0;
   const v=rotatePoint([(w+off)/2,h/2],[0,0],o.angle);
   o.x=c[0]-v[0]; o.y=c[1]-v[1];
+}
+/**
+ * 圆弧旋转手柄（拖拽中）：以圆心为轴，用「拖动起点指针方位 → 当前指针方位」的增量旋转圆弧本身，
+ * 起止角整体搬移、张角不变。基线取 drag.original 里的 a0，避免逐帧累加漂移。
+ */
+function rotateArcByHandle(o,orig,startWp,wp){
+  if(!o||!o.shape||o.shape.type!==ARC) return;
+  const base=(orig&&orig.shape&&orig.shape.type===ARC)?orig.shape:o.shape;
+  const cx=Number(o.x)||0, cy=Number(o.y)||0, sweep=arcSweep(base);
+  const bearing=p=>Math.atan2((Number(p&&p[1])||0)-cy,(Number(p&&p[0])||0)-cx)*180/Math.PI;
+  const delta=bearing(wp)-bearing(startWp);
+  const a0=normalizeAngle((Number(base.a0)||0)+delta);
+  o.shape={type:ARC,r:Math.max(.05,Number(base.r)||0),a0,a1:a0+sweep};
 }
 /**
  * 区域形状互换：保持中心（质心）不动，按等面积（矩形/平行四边形/圆/扇形）或外接轴（椭圆）换算参数。

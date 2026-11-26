@@ -7,7 +7,9 @@ $('exportBtn').onclick=()=>{
   if(kind==='png') runExport(()=>exportPNG());
   if(kind==='svg') runExport(()=>exportSVG());
   if(kind==='pdf') runExport(()=>exportPDF());
-  if(kind==='dxf') runExport(()=>exportDXF());
+  if(kind==='pdf-vector') runExport(()=>exportPDFVector());
+  /* E5：保真导出为显式选项，默认关闭；默认分支实体顺序/数值格式/写盘路径不变 */
+  if(kind==='dxf'||kind==='dxf-fidelity') runExport(()=>exportDXF({dxfFidelity:kind!=='dxf'}));
   if(kind==='csv') runExport(()=>exportDelimited(',','csv','text/csv;charset=utf-8'));
   if(kind==='tsv') runExport(()=>exportDelimited('\t','tsv','text/tab-separated-values;charset=utf-8'));
   if(kind==='xlsx') runExport(()=>exportXlsx());
@@ -15,6 +17,7 @@ $('exportBtn').onclick=()=>{
   if(kind==='quote-xlsx') runExport(()=>exportQuote('xlsx'));
   if(kind==='catalog-json') runExport(()=>exportCatalogJSON());
   if(kind==='catalog-delete') deleteCatalog();
+  if(kind==='ledger-tpl') openTemplateDialog();
   if(kind==='labels') runExport(()=>exportLabelSheet());
   if(kind==='title-block') openTitleBlockDialog();
 };
@@ -31,7 +34,12 @@ function runExport(fn){
 function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),800);
 }
-function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_'); }
+/** R-34：导出文件名带分精度时间戳，避免同名文件连续导出时互相覆盖；规则导出另有独立命名 */
+function fileStamp(){
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes());
+}
+function safeName(){ return (state.meta.name||'图纸工程').replace(/[\\/:*?"<>|]/g,'_')+'-'+fileStamp(); }
 /** 图框/标题栏配置弹窗：字段值全部经 normalizeTitleBlock 清洗后再落盘 */
 function openTitleBlockDialog(){
   const tb=normalizeTitleBlock(state.meta&&state.meta.titleBlock);
@@ -143,8 +151,23 @@ async function exportJSON(){
 /** 导出口径唯一源（N-05）：
  *  - 'table'：台账类（CSV/TSV/XLSX）保留全量对象，隐藏状态由「显示」列反映有效可见；
  *  - 'draw' ：图纸类（PNG/SVG/DXF/PDF 图纸页与清单/二维码标签/图例）只输出有效可见对象。
- *  有效可见统一定义在 render.js 的 effectiveVisible（对象 visible 且所属图层 visible）。 */
-function exportScope(o, mode){ return mode==='draw' ? effectiveVisible(o) : true; }
+ *  有效可见统一定义在 render.js 的 effectiveVisible（对象 visible 且所属图层 visible）。
+ *  G-03：settings.exportOnlyDelivered 为真时两类口径都再收窄到「已交付」，JSON/报价不走此口径。 */
+function exportScope(o, mode){
+  if(mode==='draw'&&!effectiveVisible(o)) return false;
+  /* G-03：开启「仅导出已交付」后，台账与图纸都只含 props.publishState==='1' 的对象 */
+  return !((state.settings||{}).exportOnlyDelivered&&!isDelivered(o));
+}
+/** 交付状态唯一判据（props 可选键，缺失=未交付；不新增 schema 字段） */
+function isDelivered(o){ return !!(o&&o.props&&o.props.publishState==='1'); }
+/** 写入/清除交付标记（清除时删键，props 不留空值） */
+function setDelivered(objs,on){ (objs||[]).forEach(o=>{ o.props=o.props||{}; if(on) o.props.publishState='1'; else delete o.props.publishState; }); }
+/** 开启过滤却一个已交付对象都没有时中止导出：不生成空文件 */
+function deliveryGuard(){
+  if(!(state.settings||{}).exportOnlyDelivered||objectRowsAll().length) return true;
+  toast(L('没有已交付对象：请先标记交付，或在设置中关闭「仅导出已交付」'),'warn');
+  return false;
+}
 /** 行渲染器与列定义在 io-fields.js（字段描述表唯一源）；此包装保留既有签名 */
 function objectRows(objs=state.objects,floorName){
   const fname=floorName===undefined?currentFloorName():floorName;
@@ -198,6 +221,7 @@ async function exportQuote(kind){
 }
 /** 分隔文本导出（CSV/TSV） */
 function exportDelimited(delim,ext,mime){
+  if(!deliveryGuard()) return;
   downloadBlob(new Blob([delimitedText(delim)],{type:mime}),safeName()+'.'+ext);
 }
 /* 保留旧单格转义入口（自测与插件可能调用），实现委托公共 DSV */
@@ -205,10 +229,55 @@ function csvCell(v,delim){ return DSV.quoteCell(v,{delimiter:delim,quoteChars:/[
 /** 导出真 .xlsx（原生 OOXML + stored ZIP，Excel/WPS 可直接打开，亦可再次导入往返）。
  * 所有单元格写 `t="inlineStr"`（文本），即使值以 =/@ 开头也不会成为公式，与 CSV 防护互补。 */
 function exportXlsx(){
+  if(!deliveryGuard()) return;
   const table=xlsxExportTable();
   const buf=ensureVendor('Xlsx').build(table, '图纸标注');
   downloadBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),safeName()+'.xlsx');
   toast('XLSX 已导出（可再次导入更新对象属性）','success');
+}
+/* -------------------- G7 台账模板（显式选项，不改默认导出） --------------------
+ * 模板是数据常量：cols 数组即列集合/列序，标题直接取 EXPORT_FIELD_DEFS 的 key。
+ * 内置模板只读、不可被用户覆盖；不写入 state/工程 JSON/localStorage，不改 schema。 */
+const TPL_BUILTIN=[
+  {id:'tpl.ledger',name:'设备台账',cols:['编号','名称','对象类型','业务类型','图层','型号','安装高度','IP','责任人','备注']},
+  {id:'tpl.point',name:'点位清单',cols:['编号','名称','业务类型','图层','X','Y','楼层','备注']}
+];
+function tplParse(s){ return String(s||'').split(/[,，;；\s]+/).map(x=>x.trim()).filter(Boolean); }
+/** 未知列：保存/导出前都调用；空数组=全部可识别（已识别但无值→空单元格） */
+function tplUnknown(cols){
+  const ok=new Set(EXPORT_FIELD_DEFS.map(f=>f.key));
+  return (cols||[]).filter(k=>!ok.has(k));
+}
+/** 纯函数：按模板列导出全楼层表格（空工程只有表头，不产生空数据行） */
+function tplTable(cols){ return [cols,...objectRowsAll().map(r=>cols.map(c=>String(r[c]??'')))]; }
+function tplExport(kind,cols){
+  if(!cols||!cols.length) return {ok:0,r:'empty'};
+  const miss=tplUnknown(cols);
+  if(miss.length) return {ok:0,r:'unknown',missing:miss};
+  if(!deliveryGuard()) return {ok:0,r:'guard'};
+  const csv=kind!=='xlsx',t=tplTable(cols);
+  downloadBlob(new Blob([csv?delimitedFromTable(t,','):ensureVendor('Xlsx').build(t,L('台账'))],
+    {type:csv?'text/csv;charset=utf-8':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
+    safeName()+'-模板.'+(csv?'csv':'xlsx'));
+  toast(L('已导出 {n} 行（模板）',{n:t.length-1}),'success');
+  return {ok:1,rows:t.length-1};
+}
+function tplFail(r){
+  if(!r||r.ok) return;
+  if(r.r==='unknown') toast(L('模板列不存在：{cols}',{cols:r.missing.join('、')}),'error');
+  else if(r.r==='empty') toast(L('模板没有列'),'warn');
+}
+function openTemplateDialog(){
+  const a=TPL_BUILTIN;
+  openModal('台账模板导出',
+    '<label style="display:block;margin:7px 0"><span>'+esc(L('选择模板'))+'</span> <select id="tplPick" style="width:calc(100% - 90px)">'+
+      a.map((t,i)=>'<option value="'+i+'">'+esc(t.name)+'</option>').join('')+'</select></label>'+
+    '<label style="display:block;margin:7px 0"><span>'+esc(L('列（逗号分隔，字段名）'))+'</span><input id="tplCols" style="width:100%"></label>',
+    [{text:L('取消'),click:closeModal},
+     {text:L('导出 CSV'),class:'primary',click:()=>tplFail(tplExport('csv',tplParse($('tplCols').value)))},
+     {text:L('导出 XLSX'),click:()=>tplFail(tplExport('xlsx',tplParse($('tplCols').value)))}]);
+  const fill=()=>{const t=a[Number($('tplPick').value)||0]||a[0]; if(t) $('tplCols').value=t.cols.join(',');};
+  $('tplPick').addEventListener('change',fill); fill();
 }
 /* -------------------- 图框 / 标题栏 / 比例尺 / 图例（B-07） --------------------
  * 默认 enabled:false → 既有 PNG/PDF/SVG 导出路径完全不调用本组函数，产物字节不变。
@@ -368,7 +437,7 @@ function renderToDataURL(scale=2){
   const c=document.createElement('canvas'); c.width=Math.round(cw*scale); c.height=Math.round(ch*scale);
   markSurfaceSize(c,cw,ch);
   const cc=c.getContext('2d'); cc.scale(scale,scale);
-  drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6});
+  drawScene(cc,{zoom:z,panX:margin,panY:margin},cw,ch,{interactive:false,markerScale:1.6,objectFilter:o=>exportScope(o,'draw')});
   /* PNG 补齐与 SVG/PDF 相同的页脚（IO-P2-14）；只画有效可见内容由 drawScene 统一走 isVisible */
   const footer=exportFooterText();
   if(footer){
@@ -519,6 +588,20 @@ function buildSceneSvg(){
       const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
       if(sa||sp){ const ce=shapeLabelCenter(o); markers.push(areaTagSvg(X(ce[0]),Y(ce[1]),shapeArea(o),shapePerimeter(o),sa,sp)); }
       markers.push(annotItemsSvg(o));
+    }else if(o.kind==='arc'){
+      /* S5：SVG 用原生 A 弧（精确，不依赖折线密度）；世界 Y 向上 → 屏幕顺时针，sweep-flag 固定 1 */
+      const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+      if(r>0&&sweep>0){
+        const R=r*ppu, large=sweep>180?1:0;
+        const at=a=>[X(o.x+r*Math.cos(a*Math.PI/180)),Y(o.y+r*Math.sin(a*Math.PI/180))];
+        const p0=at(a0), p1=at(a0+sweep);
+        shapes.push(`<path d="M${p0[0]},${p0[1]} A${R},${R} 0 ${large} 1 ${p1[0]},${p1[1]}" fill="none" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}"/>`);
+        if(o.name&&annotOn(o,'name')){
+          const m=at(a0+sweep/2);
+          markers.push(`<text x="${m[0]}" y="${m[1]-8}" text-anchor="middle" font-size="12" font-weight="bold" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(o.name)}</text>`);
+        }
+      }
+      markers.push(annotItemsSvg(o));
     }else if(o.kind==='line'&&o.points.length){
       /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致） */
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`);
@@ -621,7 +704,8 @@ function siteDxfEntities(){
 }
 /** 纯函数：按当前工程组装 DXF 实体与图层（导出与自测共用；不触发下载）。
  *  对象顶点统一走 outlineOf（A-15），保证 SVG/DXF 顶点源一致。 */
-function dxfEntitiesForExport(){
+function dxfEntitiesForExport(opt){
+  const fx=!!(opt&&opt.dxfFidelity);
   const entities=[];
   /* N-10：图层名在调用侧清洗（不改 vendor）；SITE 保留，清洗后重名追加 _2 后缀 */
   const usedNames=new Set(['SITE']), nameMap=new Map();
@@ -662,7 +746,12 @@ function dxfEntitiesForExport(){
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);
       if(tt===CIR) entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});
+      else if(fx&&tt===ELL) entities.push({type:'ELLIPSE',layer,x:o.x,y:o.y,rx:o.shape.rx,ry:o.shape.ry,angle:o.angle||0});
       else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:true});
+    }else if(o.kind==='arc'){
+      /* S5：保真时写 ARC 实体（角度/半径原值往返）；默认仍按 24 段折线落地，与旧版观感一致 */
+      if(fx) entities.push({type:'ARC',layer,x:o.x,y:o.y,r:o.shape.r,a0:o.shape.a0,a1:o.shape.a1});
+      else entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o,24),closed:false});
     }else if(o.kind==='dimension'&&o.points.length>=2){
       entities.push({type:'LWPOLYLINE',layer,color:'#111827',points:outlineOf(o),closed:o.subtype==='area'});
       const ep=o.points[o.points.length-1], dm=dimensionMeasure(o);
@@ -679,8 +768,8 @@ function dxfEntitiesForExport(){
   const layerDefs=layers.map(l=>Object.assign({color:layerColor.get(l.name)||'#7c3aed'},l));
   return {entities,layers:layerDefs,report};
 }
-function exportDXF(){
-  const {entities,layers,report}=dxfEntitiesForExport();
+function exportDXF(opt){
+  const {entities,layers,report}=dxfEntitiesForExport(opt);
   if(!entities.length) return toast('当前没有可导出的对象','warn');
   downloadBlob(new Blob([ensureVendor('Dxf').buildDxf(entities,layers)],{type:'image/vnd.dxf;charset=utf-8'}),safeName()+'.dxf');
   if(report&&report.degraded){
@@ -700,6 +789,15 @@ function canvasToJpegBase64(canvas,quality=.92){
 }
 /* 清单页版式常量：分页数与渲染共用一份（避免两处各写一套导致页码/总页数不一致） */
 const PDF_LIST_PAGE={W:1240,H:1748,margin:48,rowH:30,headH:40};
+/** 图纸页像素尺寸（纯函数）：A4 横向按 297×210mm 与 dpi 计算，最长边封顶 BG_MAX_EDGE。
+ *  版式仍按 1748×1240 逻辑坐标绘制，导出时整体等比放大，故纸张观感与旧版一致。 */
+function pdfPagePixels(dpi){
+  const d=PDF_DPI_OPTIONS.includes(Number(dpi))?Number(dpi):PDF_DPI_DEFAULT;
+  let W=Math.round(297/25.4*d), H=Math.round(210/25.4*d);
+  const k=BG_MAX_EDGE/Math.max(W,H);
+  if(k<1){ W=Math.round(W*k); H=Math.round(H*k); }
+  return {width:W,height:H,dpi:d};
+}
 function pdfListRowsPerPage(){ return Math.max(1,Math.floor((PDF_LIST_PAGE.H-PDF_LIST_PAGE.margin*2-150)/PDF_LIST_PAGE.rowH)); }
 /** PDF 图纸口径对象（N-05）：图纸页与清单页共用，只看有效可见对象，避免清单含隐藏项而图纸不画 */
 function pdfDrawObjectsFor(row){
@@ -726,21 +824,32 @@ function pdfPagePlan(){
   out.forEach((p,i)=>{ p.pageNo=i+1; p.total=out.length; });
   return out;
 }
+/** PDF 图纸页页脚：工程 · 楼层 · 场地 · 页码（位图页与矢量页共用） */
+function pdfFooter(floorName,pageNo,pageTotal){
+  return state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()
+    +(pageNo?L(' · 第 {n} / {total} 页',{n:pageNo,total:pageTotal}):'');
+}
 async function renderPdfDrawingPage(floorName,pageNo,pageTotal){
-  const W=1748,H=1240;   /* A4 横向 150dpi 像素 */
+  const W0=1748,H0=1240;   /* 逻辑版式：A4 横向（150dpi 基准），字号/边距沿用旧版 */
+  const px=pdfPagePixels((state.settings||{}).pdfDpi), W=px.width, H=px.height;
   const c=document.createElement('canvas'); c.width=W; c.height=H; markSurfaceSize(c,W,H);
   const cc=c.getContext('2d'); cc.fillStyle='#fff'; cc.fillRect(0,0,W,H);
+  cc.setTransform(W/W0,0,0,H/H0,0,0);   /* 只放大位图，不放大版式：打印纸张尺寸不变 */
   const d=worldDims(), margin=36;
-  const z=Math.min((W-margin*2)/d.w,(H-margin*2)/d.h);
-  drawScene(cc,{zoom:z,panX:(W-d.w*z)/2,panY:(H-d.h*z)/2},W,H,{interactive:false,markerScale:1.6});
-  drawTitleBlockOnCanvas(cc,W,H,titleBlockSpec(W,H,z,'pdf'));
+  const z=Math.min((W0-margin*2)/d.w,(H0-margin*2)/d.h);
+  drawScene(cc,{zoom:z,panX:(W0-d.w*z)/2,panY:(H0-d.h*z)/2},W0,H0,{interactive:false,markerScale:1.6,objectFilter:o=>exportScope(o,'draw')});
+  drawTitleBlockOnCanvas(cc,W0,H0,titleBlockSpec(W0,H0,z,'pdf'));
   cc.fillStyle='#666'; cc.font='16px Microsoft YaHei,Arial';
-  const pageTag=pageNo?L(' · 第 {n} / {total} 页',{n:pageNo,total:pageTotal}):'';
-  cc.fillText(state.meta.name+(floorName?' · '+floorName:'')+' · '+siteDescription()+pageTag,margin,H-14);
+  cc.fillText(pdfFooter(floorName,pageNo,pageTotal),margin,H0-14);
   return {width:W,height:H,b64:await canvasToJpegBase64(c)};
 }
-async function renderPdfListPages(floorName,pageNos,pageTotal){
+/** 清单页渲染。默认（不传 opt）只出位图，与旧版逐像素一致；
+ *  opt.texts=true 时额外回填该页的不可见文字层坐标（画布像素→PDF pt 需翻转 y，
+ *  由矢量导出侧换算）。文字层只记录已实际绘制的字符串（含列宽截断后的「…」），
+ *  不在格式层二次拼装，保证「看到的」与「复制的」同源。 */
+async function renderPdfListPages(floorName,pageNos,pageTotal,opt){
   const {W,H,margin,rowH,headH}=PDF_LIST_PAGE;
+  const wantText=!!(opt&&opt.texts);
   const rows=objectRows(pdfDrawObjectsFor(null)), pages=[];
   const per=pdfListRowsPerPage();
   const chunks=[]; for(let i=0;i<rows.length;i+=per) chunks.push(rows.slice(i,i+per));
@@ -748,17 +857,22 @@ async function renderPdfListPages(floorName,pageNos,pageTotal){
   for(let pi=0;pi<chunks.length||rows.length===0;pi++){
     const c=document.createElement('canvas'); c.width=W; c.height=H;
     const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+    /* 文字层按左缘 + 基线落位（a:'l' / b:1），y 在返回前翻转成 PDF 坐标 */
+    const cap=[];
+    const put=(t,x,base,s)=>{ if(wantText) cap.push({t:String(t),x:x,y:H-base,s:s,a:'l',b:1}); };
     g.fillStyle='#111827'; g.font='bold 26px Microsoft YaHei,Arial'; g.textBaseline='alphabetic';
-    g.fillText(state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单'),margin,margin+8);
+    const title=state.meta.name+(floorName?' — '+floorName:'')+' — '+L('对象清单');
+    g.fillText(title,margin,margin+8); put(title,margin,margin+8,26);
     g.font='14px Microsoft YaHei,Arial'; g.fillStyle='#555';
     const pageNo=(pageNos&&pageNos[pi])||pi+1, pageAll=pageTotal||total;
-    g.fillText(L('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',{n:rows.length,page:pageNo,total:pageAll,time:new Date().toLocaleString()}),margin,margin+34);
+    const sub=L('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',{n:rows.length,page:pageNo,total:pageAll,time:new Date().toLocaleString()});
+    g.fillText(sub,margin,margin+34); put(sub,margin,margin+34,14);
     let y=margin+70;
     g.fillStyle='#f1f5f9'; g.fillRect(margin,y,W-margin*2,headH);
     g.strokeStyle='#cbd5e1'; g.lineWidth=1; g.strokeRect(margin,y,W-margin*2,headH);
     g.fillStyle='#111827'; g.font='bold 14px Microsoft YaHei,Arial';
     let x=margin+8;
-    PDF_COLS.forEach(([name,w])=>{ g.fillText(L(name),x,y+26); x+=w; });
+    PDF_COLS.forEach(([name,w])=>{ const label=L(name); g.fillText(label,x,y+26); put(label,x,y+26,14); x+=w; });
     y+=headH;
     const list=chunks[pi]||[];
     g.font='13px Consolas,Microsoft YaHei,Arial';
@@ -768,15 +882,200 @@ async function renderPdfListPages(floorName,pageNos,pageTotal){
       g.fillStyle='#1f2937';
       x=margin+8;
       /* 列布局来自字段表投影；值一律取 objectRows() 的行，不在格式层二次拼装 */
-      PDF_COLS.forEach(([name,w])=>{ let s=String(name==='对象类型'?L(r[name]):(r[name]??'')); if(g.measureText(s).width>w-14) s=s.slice(0,10)+'…'; g.fillText(s,x,y+20); x+=w; });
+      PDF_COLS.forEach(([name,w])=>{
+        let v=String(name==='对象类型'?L(r[name]):(r[name]??''));
+        if(g.measureText(v).width>w-14) v=v.slice(0,10)+'…';
+        g.fillText(v,x,y+20); put(v,x,y+20,13); x+=w;
+      });
       y+=rowH;
     });
-    pages.push({width:W,height:H,b64:await canvasToJpegBase64(c,.9)});
+    const page={width:W,height:H,b64:await canvasToJpegBase64(c,.9)};
+    if(wantText) page.texts=cap;
+    pages.push(page);
     if(rows.length===0) break;
   }
   return pages;
 }
+/** 矢量 PDF 的文字档位 / 退回位图判断（纯函数，导出面板与自测共用）。
+ *  labelCount 为需要逐字栅格化的文字对象数。
+ *  返回 {dpi, reason, fallback}：reason='' 为默认 200 DPI；'labels' 表示标签数
+ *  超过 300 已自动降到 150 DPI；'unsupported' 表示环境缺 CompressionStream，
+ *  只能整页位图（不得产出坏文件）。 */
+function pdfVectorPlan(labelCount){
+  if(typeof CompressionStream!=='function') return {dpi:200,reason:'unsupported',fallback:true};
+  const n=Math.max(0,Number(labelCount)||0);
+  return n>300?{dpi:150,reason:'labels',fallback:false}:{dpi:200,reason:'',fallback:false};
+}
+/** 该对象在 vectorPage 中会写入位图的文字种类（与 put 调用一一对应，供降档计数共用）。
+ *  text=正文、name=对象名、area/perimeter=面积/周长注解、distance/angle=尺寸标注。 */
+function vectorTextKinds(o){
+  if(o.kind==='text') return ['text'];
+  const kinds=[];
+  if(o.kind==='rect'||o.kind==='line'){
+    const closed=o.kind==='rect'||o.closed;
+    if(o.name&&annotOn(o,'name')) kinds.push('name');
+    if(closed&&annotOn(o,'area')) kinds.push('area');
+    if(closed&&annotOn(o,'perimeter')) kinds.push('perimeter');
+  }else if(o.kind==='dimension'){
+    const n=(o.points||[]).length;
+    if(o.subtype==='distance') kinds.push('distance');
+    else if(o.subtype==='area'&&n>=3){ kinds.push('area'); kinds.push('perimeter'); }
+    else if(o.subtype==='angle'&&n>=3) kinds.push('angle');
+  }else if(o.kind==='arc'){
+    if(o.name&&annotOn(o,'name')) kinds.push('name');
+    if(annotOn(o,'radius')) kinds.push('radius');
+    if(annotOn(o,'perimeter')) kinds.push('perimeter');
+  }
+  return kinds;
+}
+/** S5：PDF 矢量弧的折线密度——按弦高误差自适应（不固定 24 段）。
+ *  目标 0.4 pt ≈ A1 打印 0.2 mm（A1 线性放大 595→841 pt 后 1 pt≈0.5 mm）；
+ *  段数 = 单段圆心角 θ（R(1-cos(θ/2))=tol）解出的 ceil(sweep/θ)，上限 512 防单弧点过多。 */
+const ARC_PDF_SAGITTA_PT=.4, ARC_PDF_SEG_MAX=512;
+function arcPdfSegments(o,pf){
+  const sh=(o&&o.shape)||{}, R=Math.max(0,Number(sh.r)||0)*((pf&&pf.k)||1);
+  const sweep=arcSweep(sh)*Math.PI/180;
+  if(!(R>0)||!(sweep>0)) return 2;
+  const ratio=Math.min(1,ARC_PDF_SAGITTA_PT/R);
+  const step=2*Math.acos(1-ratio);
+  const n=step>0?Math.ceil(sweep/step):ARC_PDF_SEG_MAX;
+  return Math.max(2,Math.min(ARC_PDF_SEG_MAX,n));
+}
+/** 跨楼层统计需要栅格化的文字条数：只统计实际导出（exportScope）的对象，与 vectorPage 的 put 同源 */
+function pdfVectorLabelCount(){
+  return (state.floors||[]).reduce((s,f)=>{
+    const objs=((f.id===state.activeFloorId?state.objects:(f.objects||[]))||[]);
+    let n=0;
+    for(const o of objs){ if(exportScope(o,'draw')) n+=vectorTextKinds(o).length; }
+    return s+n;
+  },0);
+}
+/** V-3b2b 单页图纸：底图栅格 + 对象矢量 + 点位/标题栏叠加 + 文字位图 */
+async function vectorPage(floorName,pageNo,pageTotal){
+  const V=window.PdfVec, W0=1748, H0=1240, s=842/W0, d=worldDims(), f=V.fit(d,842,595,36*s), u=s/f.k; /* u: pt→世界米 */
+  const dpi=pdfVectorPlan(pdfVectorLabelCount()).dpi;
+  const vec=[], texts=[];
+  const hex=h=>{ const v=parseInt((h||'').slice(1),16)||0x111827; return [v>>16&255,v>>8&255,v&255].map(x=>x/255); };
+  const stroke=(h,w)=>{ vec.push(['RG'].concat(hex(h)),['w',w]); };
+  const fill=(h,a)=>{ vec.push(['rg'].concat(hex(h).map(x=>x*a+1-a))); };
+  const put=(t,x,y,pt,color)=>texts.push({t:String(t),x,y,s:Math.max(10*s,pt),color:normalizeExportColor(color,'#111827')});
+  state.objects.filter(o=>exportScope(o,'draw')).forEach(o=>{
+    const t=getType(o.typeId), color=normalizeExportColor(o.style.color||t.color,'#111827'), sw=Math.max(.3,styleVal(o,'strokeWidth',.1)*f.k);
+    const tk=vectorTextKinds(o);
+    if(o.kind==='rect'){
+      fill(color,styleVal(o,'fillAlpha',.15)||.15); stroke(color,sw);
+      for(const c of V.path(f,outlineOf(o),true)) vec.push(c); vec.push(['B']);
+    }else if(o.kind==='line'&&o.points.length){
+      stroke(color,sw); if(o.closed) fill(color,.08);
+      for(const c of V.path(f,outlineOf(o),!!o.closed)) vec.push(c); vec.push([o.closed?'B':'S']);
+    }else if(o.kind==='dimension'&&o.points.length>=2){
+      stroke('#111827',1.8*s);
+      for(const c of V.path(f,outlineOf(o),false)) vec.push(c); vec.push(['S']);
+    }else if(o.kind==='arc'){
+      /* S5：弧按弦高误差自适应加密（arcPdfSegments），不固定 24 段 */
+      const r=Math.max(0,Number((o.shape||{}).r)||0);
+      if(r>0&&arcSweep(o.shape)>0){
+        stroke(color,sw);
+        for(const c of V.path(f,arcWorldPoints(o,arcPdfSegments(o,f)),false)) vec.push(c); vec.push(['S']);
+      }
+    }
+    if(tk.includes('text')){ put(o.text||'文字',o.x,o.y,o.height*f.k,color); return; }
+    if(o.kind==='rect'||o.kind==='line'){
+      const closed=o.kind==='rect'||o.closed, ce=closed?shapeLabelCenter(o):o.points[o.points.length>>1];
+      if(tk.includes('name')) put(o.name,ce[0],ce[1]+(closed?30*u:8*u),(o.kind==='rect'?19.2:12)*s,color);
+      if(tk.includes('area')||tk.includes('perimeter')){
+        const area=o.kind==='rect'?shapeArea(o):polygonArea(o.points), per=o.kind==='rect'?shapePerimeter(o):objectLength(o);
+        if(tk.includes('area')) put('面积 '+fmt(area)+' ㎡',ce[0],ce[1]+8*u,12*s,'#1e3a8a');
+        if(tk.includes('perimeter')) put('周长 '+fmt(per)+' m',ce[0],ce[1]-8*u,12*s,'#1e3a8a');
+      }
+    }else if(o.kind==='dimension'){
+      const dm=dimensionMeasure(o), p0=o.points[0], n=o.points.length;
+      if(tk.includes('distance')) put(fmt(dm.length)+' m',(p0[0]+o.points[1][0])/2,(p0[1]+o.points[1][1])/2+12*u,12*s,'#111827');
+      else if(tk.includes('area')&&n>=3){
+        let cx=0,cy=0; for(const p of o.points){ cx+=p[0]; cy+=p[1]; }
+        put('面积 '+fmt(dm.area)+' ㎡',cx/n+10*u,cy/n+8*u,12*s,'#111827');
+        put('周长 '+fmt(dm.perimeter)+' m',cx/n+10*u,cy/n-8*u,12*s,'#111827');
+      }else if(tk.includes('angle')) put(fmt(dm.deg)+'°',p0[0]+30*u,p0[1]+8*u,12*s,'#111827');
+    }else if(o.kind==='arc'){
+      const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+      const at=a=>[o.x+r*Math.cos(a*Math.PI/180),o.y+r*Math.sin(a*Math.PI/180)];
+      const mid=at(a0+sweep/2), end=at(a0+sweep);
+      if(tk.includes('name')) put(o.name,mid[0],mid[1]+8*u,12*s,color);
+      if(tk.includes('radius')) put('R '+fmt(r)+' m',mid[0]+6*u,mid[1]-6*u,12*s,'#1e3a8a');
+      if(tk.includes('perimeter')) put('Σ '+fmt(objectLength(o))+' m',end[0]+9*u,end[1]+9*u,12*s,'#1e3a8a');
+    }
+  });
+  /* 辅助层：底图/场地/网格整页 JPEG；点位/标题栏/页脚整页透明位图（均按页面逻辑版式栅格化） */
+  const {width:W,height:H}=pdfPagePixels((state.settings||{}).pdfDpi);
+  const z=f.k/s, v={zoom:z,panX:f.ox/s-d.minX*z,panY:H0-f.oy/s-d.maxY*z}, toS=p=>w2s(p,v,d);
+  const mk=()=>{ const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d'); g.setTransform(W/W0,0,0,H/H0,0,0); return [c,g]; };
+  const [c1,g1]=mk(); g1.fillStyle='#fff'; g1.fillRect(0,0,W0,H0);
+  drawBackground(g1,v,d,W0,H0,toS); drawSite(g1,v,toS); drawGrid(g1,v,d,W0,H0,toS);
+  drawCoverage(g1,v,d); drawSiteAnnotations(g1,v,toS); drawAxes(g1,v,toS,H0);
+  const [c2,g2]=mk();
+  state.objects.filter(o=>o.kind==='point'&&exportScope(o,'draw')).forEach(o=>drawObject(g2,o,v,toS,1.6,1.6));
+  drawTitleBlockOnCanvas(g2,W0,H0,titleBlockSpec(W0,H0,z,'pdf'));
+  g2.fillStyle='#666'; g2.font='16px Microsoft YaHei,Arial';
+  g2.fillText(pdfFooter(floorName,pageNo,pageTotal),36,H0-14);
+  const dd=g2.getImageData(0,0,W,H).data, rgb=new Uint8Array(W*H*3), alpha=new Uint8Array(W*H);
+  for(let i=0,p=0,q=0;i<dd.length;i+=4,p+=3,q++){ rgb[p]=dd[i]; rgb[p+1]=dd[i+1]; rgb[p+2]=dd[i+2]; alpha[q]=dd[i+3]; }
+  const jpeg=b64b(await canvasToJpegBase64(c1));
+  const imgs=[{w:W,h:H,jpeg},{w:W,h:H,rgb:await V.flate(rgb),alpha:await V.flate(alpha)}];
+  let body=V.image('Im0',0,0,842,595)+'\n'+V.stream(vec);
+  /* 文字位图先于点位叠加层：与画布一致，点位图标/标题栏覆盖在对象标注之上 */
+  for(const it of texts){
+    const bm=await V.textBitmap(it.t,it.s,dpi,it.color), p=V.mapPt(f,it.x,it.y);
+    const wPt=bm.w*72/dpi, hPt=bm.h*72/dpi;
+    body+='\n'+V.image('Im'+imgs.length,p[0]-wPt/2,p[1]-hPt/2,wPt,hPt);
+    imgs.push({w:bm.w,h:bm.h,rgb:await V.flate(bm.rgb),alpha:await V.flate(bm.alpha)});
+  }
+  body+='\n'+V.image('Im1',0,0,842,595);
+  /* 文字层（不可见）：与位图同一 center 坐标，转成页面 pt 交给写入器；位图仍负责视觉 */
+  const pageTexts=texts.map(it=>{ const p=V.mapPt(f,it.x,it.y); return {t:it.t,x:p[0],y:p[1],s:it.s}; });
+  return {body,images:imgs,texts:pageTexts};
+}
+const b64b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function exportPDFVectorNow(){
+  if(!deliveryGuard()) return;
+  try{
+    const V=window.PdfVec, fs=floorSummaries(), plan=pdfPagePlan(), total=plan[0]?plan[0].total:1, pages=[];
+    const one=async(name,id)=>{
+      const dr=plan.find(p=>p.kind==='drawing'&&(id===undefined||p.floorId===id));
+      pages.push(await vectorPage(name,dr&&dr.pageNo,total));
+      for(const p of await renderPdfListPages(name,plan.filter(x=>x.kind==='list'&&(id===undefined||x.floorId===id)).map(x=>x.pageNo),total,{texts:true}))
+        /* 清单页画布是 1240×1748（纵向），MediaBox 必须逐页跟图走，否则整页图被拉伸到 842×595；
+           文字层与图纸页同一套 Type3 + ToUnicode，坐标已由渲染侧翻成页面 pt（左对齐 + 基线落位） */
+        pages.push({body:V.image('Im0',0,0,p.width,p.height),images:[{w:p.width,h:p.height,jpeg:b64b(p.b64)}],w:p.width,h:p.height,texts:p.texts});
+    };
+    if(fs.rows.length<=1) await one(null,undefined);
+    else for(const row of fs.rows) await withFloor(row.id,()=>one(row.name,row.id));
+    /* report 由写入器回填：文字层字符数/字体数与容量不足时的降级原因（不得静默） */
+    const report={};
+    const buf=V.docPages(842,595,pages,{report});
+    downloadBlob(new Blob([buf],{type:'application/pdf'}),safeName()+'.pdf');
+    toast(report.skipped
+      ? L('PDF 已导出（{n} 页）；文字层未写入：{why}',{n:pages.length,why:report.skipped})
+      : L('PDF 已导出（{n} 页，文字可搜 {chars} 字）',{n:pages.length,chars:report.chars||0}),
+      report.skipped?'warn':'success');
+  }catch(e){ toast(L('PDF 生成失败：{msg}',{msg:e.message}),'error'); }
+}
+/** 导出 PDF（矢量）选项：先明示文字口径与当前档位，再按档位导出。
+ *  图纸页与清单页都是「位图视觉 + 不可见文字层」：可选中/搜索/复制，但放大仍发虚。 */
+function exportPDFVector(){
+  const plan=pdfVectorPlan(pdfVectorLabelCount());
+  const tier=plan.reason==='labels'?L('150 DPI（标签数 > 300，自动降档）'):L('200 DPI（默认）');
+  const tail=plan.fallback
+    ?'<p><b>'+esc(L('当前环境不支持压缩流，只能退回整页位图（无文字层）。'))+'</b></p>'
+    :'<p class="hint-text">'+esc(L('本选项输出：底图为位图、对象为矢量、文字带不可见文字层；含图纸页与清单页，两页都带文字层。'))
+      +'<br>'+esc(L('文字层不受清晰度档位影响。'))+'</p>';
+  openModal(L('导出 PDF（矢量）'),
+    '<p><b>'+esc(L('文字可选中·可搜索（视觉仍为位图，放大会发虚）。'))+'</b></p>'
+    +'<p>'+esc(L('文字清晰度：{v}',{v:tier}))+'</p>'+tail,
+    [{text:L('取消'),click:closeModal},
+     {text:L('导出'),class:'primary',click:()=>{closeModal();runExport(()=>plan.fallback?exportPDF():exportPDFVectorNow());}}]);
+}
 async function exportPDF(){
+  if(!deliveryGuard()) return;
   try{
     const fs=floorSummaries();
     const plan=pdfPagePlan();
@@ -829,6 +1128,8 @@ function reportFloorSummaryTableHtml(fs){
         <tr style="font-weight:700;background:#f3f4f6">${cell(esc(L('全楼合计')))}${cell(fs.total.count,1)}${cell(fs.total.counts.point,1)}${cell(fs.total.counts.rect,1)}${cell(fs.total.counts.line,1)}${cell(fmt(fs.total.len)+' m',1)}${cell(fmt(fs.total.area)+' ㎡',1)}</tr>
       </tbody></table>`;
 }
+/** 打印报告清单口径：关闭过滤时与旧行为一致（全部对象），开启时只含已交付 */
+function reportObjects(){ return state.objects.filter(o=>exportScope(o,'table')); }
 /** 单层图纸页（标题含楼层名） */
 function reportFloorPageHtml(name,img){
   const counts={point:0,rect:0,line:0,text:0,dimension:0};
@@ -853,7 +1154,7 @@ $('printBtn').onclick=async()=>{
   try{
     const fs=floorSummaries();
     if(fs.rows.length<=1){
-      const rows=objectRows(), issues=findIssues(), img=renderToDataURL(1.5);
+      const rows=objectRows(reportObjects()), issues=findIssues(), img=renderToDataURL(1.5);
       $('report').innerHTML=`
         <div class="report-page" style="padding:24px;color:#111;font-family:'Microsoft YaHei',Arial,sans-serif">
           <h1 style="margin:0 0 8px">${esc(state.meta.name)} - ${esc(L('图纸标注报告'))}</h1>
@@ -881,7 +1182,7 @@ $('printBtn').onclick=async()=>{
         await withFloor(row.id, ()=>{
           const img=renderToDataURL(1.2);
           pages.push(reportFloorPageHtml(row.name,img));
-          pages.push(reportListPageHtml(objectRows(),row.name+' — '+L('对象清单')));
+          pages.push(reportListPageHtml(objectRows(reportObjects()),row.name+' — '+L('对象清单')));
         });
       }
       $('report').innerHTML=pages.join('');

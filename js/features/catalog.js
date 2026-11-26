@@ -20,6 +20,23 @@ function catalogValidate(r){
   });
   return {schema:CATALOG_SCHEMA,items};
 }
+/* G1：厂商目录 CSV → 目录对象（纯函数；缺必需列返回 null，避免误伤台账 CSV） */
+function catalogFromRows(rows){
+  if(!Array.isArray(rows)||rows.length<2)return null;
+  const head=(rows[0]||[]).map(v=>String(v??'').trim().toLowerCase()),col={};
+  for(const k in CATALOG_CSV_COLS)col[k]=head.findIndex(h=>CATALOG_CSV_COLS[k].some(a=>h===a));
+  if(col.vendor<0||col.model<0||col.price<0)return null;
+  const cell=(r,k)=>col[k]<0?'':String(r[col[k]]??'').trim();
+  const items=rows.slice(1).filter(r=>r&&r.some(v=>String(v??'').trim()!==''))
+    .map(r=>{
+      const it={vendor:cell(r,'vendor'),model:cell(r,'model'),
+        price:Number(formulaUnguard(cell(r,'price')).replace(/[¥￥$,\s，]/g,''))};
+      if(col.category>=0)it.category=cell(r,'category');
+      if(col.unit>=0)it.unit=cell(r,'unit');
+      return it;
+    });
+  return {schema:CATALOG_SCHEMA,items};
+}
 let catalogLoadError='';
 /* IO-P2-22：损坏记录不覆盖已载入目录、也不静默吞掉——保留原因供启动提示（IDB 不可用属降级路径，不算损坏） */
 async function catalogLoad(){

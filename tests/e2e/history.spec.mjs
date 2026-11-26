@@ -83,6 +83,37 @@ test('撤销/重做清理交互瞬态：草稿、覆盖层与捕捉热键不残�
     .toEqual({ draft: null, osnap: null });
 });
 
+/* F3：连按 10 次撤销会叠出 10 条异步收尾；旧一轮不得再刷新 UI / 写回底图。 */
+test('F3：连续 10 次撤销，异步收尾只执行最后一轮，最终状态对应最后一次撤销', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  await openApp(page);
+
+  for (let i = 0; i < 10; i++) await drawPoint(page, i * 8 - 36, (i % 3) * 6);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(10);
+
+  /* 人为放慢照片收尾，制造 10 轮收尾互相取代的窗口；统计「收尾执行次数」。
+     C-01 起 core 不再直调 refreshUI，而是走必需钩子 ui.refresh：探针要包钩子注册的实现，
+     包 window.refreshUI 已经拦不到 core 的调用（断言本身不变，仍是只收尾 1 次）。 */
+  await page.evaluate(() => {
+    window.__tail = 0;
+    const rf = HOOKS.get('ui.refresh') || window.refreshUI;
+    HOOKS.set('ui.refresh', function () { window.__tail++; return rf.apply(this, arguments); });
+    const eo = window.ensureObjectPhotoAssets;
+    window.ensureObjectPhotoAssets = async function (s) {
+      await new Promise(r => setTimeout(r, 120));
+      return eo(s);
+    };
+  });
+
+  for (let i = 0; i < 10; i++) await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(0);
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => ({ objects: state.objects.length, sel: selectedIds.size, tail: window.__tail })))
+    .toEqual({ objects: 0, sel: 0, tail: 1 });
+  expect(errors).toEqual([]);
+});
+
 test('新增楼层：新层绘制对象后刷新，楼层/活动层/对象都保持', async ({ page }) => {
   await openApp(page);
   const before = await page.evaluate(() => state.floors.map(f => f.id));
@@ -112,6 +143,9 @@ test('新增楼层：新层绘制对象后刷新，楼层/活动层/对象都保
   }), { floors: 2, active: added.id, objects: 1, firstObjects: 0 });
 
   await page.reload();
+  /* 启动是异步的（恢复工程 + 目录加载）：先等 state 真正就绪，否则慢内核会在
+     expect.poll 的首次求值就抛「floors[0].objects undefined」，属于等待不足而非数据错误 */
+  await page.waitForFunction(() => typeof state === 'object' && state.floors && state.floors[0] && Array.isArray(state.floors[0].objects));
   await expect.poll(() => page.evaluate(() => ({
     floors: state.floors.length,
     active: state.activeFloorId,

@@ -1,7 +1,18 @@
 /* ui-shell.js —— 通用弹窗/确认/输入/Toast、工程设置 */
+/** V-5 参照版信息：标定不一致必须显示（一致/无底图不额外占行） */
+function revInfoText(){
+  if(!rRef) return '';
+  const c=rRef.calib||{};
+  return rRef.label+(c.mode==='scale'?'\n'+L('标定不一致')+' '+c.am+' → '+c.bm
+    :c.mode==='canvas'?'\n'+L('画布不一致'):'');
+}
+function revInfoHTML(){ return esc(revInfoText()).replace(/\n/g,'<br>'); }
+function revInfoSync(){ const el=$('revInfo'); if(el) el.innerHTML=revInfoHTML(); }
 /* -------------------- 设置弹窗 -------------------- */
-$('settingsBtn').onclick=()=>{
+$('settingsBtn').onclick=async()=>{
+  await PlotPin.ensureLibrary().catch(()=>{});
   const T=I18N.t;
+  revDiff();   /* 打开的瞬间按当前工程重算，不沿用旧结论 */
   openModal(T('settingsTitle'),`
     <div class="form-grid">
       <label>${esc(T('projectName'))}</label><input id="setName" value="${esc(state.meta.name)}">
@@ -9,22 +20,42 @@ $('settingsBtn').onclick=()=>{
       <label>${esc(T('enableSnap'))}</label><input id="setSnap" type="checkbox" ${state.settings.snap?'checked':''}>
       <label>${esc(T('showGrid'))}</label><input id="setGridVisible" type="checkbox" ${state.settings.gridVisible?'checked':''}>
       <label>${esc(T('crosshair'))}</label><input id="setCursor" type="checkbox" ${state.settings.showCursor?'checked':''}>
+      <label>${esc(T('exportOnlyDelivered'))}</label><input id="setExportOnlyDelivered" type="checkbox" ${state.settings.exportOnlyDelivered?'checked':''}>
+      <label>${esc(T('pdfDpi'))}</label><select id="setPdfDpi">${PDF_DPI_OPTIONS.map(d=>'<option value="'+d+'"'+(state.settings.pdfDpi===d?' selected':'')+'>'+d+' dpi</option>').join('')}</select>
       <label>${esc(T('segLabelMinPxSetting'))}</label><input id="setSegLabelMinPx" type="number" min="${APP_LIMITS.SEG_LABEL_MIN_PX_MIN}" max="${APP_LIMITS.SEG_LABEL_MIN_PX_MAX}" step="1" value="${state.settings.segLabelMinPx}" title="${esc(L('屏幕上短于该像素长度的线段不显示段长标注，避免拥挤'))}">
       <label>${esc(T('osnapSetting'))}</label><input id="setOsnap" type="checkbox" ${state.settings.osnap?'checked':''} title="${esc(L('自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）'))}">
       <label>${esc(T('polarSetting'))}</label><input id="setPolar" type="checkbox" ${state.settings.polar?'checked':''} title="${esc(L('逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）'))}">
-      <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="${esc(L('极轴追踪的角度步长'))}">${[15,30,45,90].map(x=>`<option value="${x}" ${Number(state.settings.polarStep)===x?'selected':''}>${x}°</option>`).join('')}</select>
+      <label>${esc(T('polarStepSetting'))}</label><select id="setPolarStep" title="${esc(L('极轴追踪的角度步长'))}">${[15,30,45,90].map(x=>'<option value="'+x+'" '+(Number(state.settings.polarStep)===x?'selected':'')+'>'+x+'°</option>').join('')}</select>
       <label>${esc(T('precisionSetting'))}</label><input id="setPrecision" type="number" min="0" max="6" step="1" value="${state.settings.precision}">
       <label>${esc(T('languageLabel'))}</label><select id="setLang"><option value="zh" ${state.settings.lang!=='en'?'selected':''}>中文</option><option value="en" ${state.settings.lang==='en'?'selected':''}>English</option></select>
       <label>${esc(T('pluginSessionOnly'))}</label><div id="pluginPanel">${pluginPanelHTML()}</div>
+      <label>${esc(T('ghostLayer'))}</label><div class="hint-text" id="ghostPanel">
+        <input type="file" id="ghostFile" accept="image/*,application/pdf" style="display:none">
+        <button type="button" id="ghostPick">${esc(T('ghostPick'))}</button>
+        <button type="button" id="ghostClear">${esc(T('ghostClear'))}</button>
+        <span style="margin-left:8px">${esc(T('ghostOpacity'))}</span>
+        <input type="range" id="ghostOpacity" min="10" max="100" step="5" value="${Math.round((ghostLayer?ghostLayer.opacity:.5)*100)}" style="width:120px">
+      </div>
+      <label>${esc(L('参照版'))}</label><div class="hint-text">
+        <input type="file" id="revFile" accept=".json" hidden>
+        <button type="button" id="revPick">${esc(L('选择 JSON…'))}</button>
+        <button type="button" id="revClearBtn">${esc(L('清除参照版'))}</button>
+        <div id="revInfo">${revInfoHTML()}</div>
+        <div>${esc(T('ghostOpacity'))}
+          <input type="range" id="revOpacity" min="10" max="90" step="5" value="${Math.round(rOp*100)}" style="width:120px"></div>
+        <div><label><input type="checkbox" id="revBlinkChk" ${rBl.on?'checked':''}> ${esc(L('闪烁'))}</label></div>
+      </div>
       <label>${esc(T('runtimeSetting'))}</label><div class="hint-text">${esc(capabilitySummary())}</div>
       <label>${esc(T('siteBgSetting'))}</label><div class="hint-text">${esc(siteDescription())}<br>${esc(T('siteBgHint'))}</div>
     </div>`,[
     {text:T('cancel'),class:'',click:closeModal},{text:T('save'),class:'primary',click:()=>{
       pushHistory();
-      state.meta.name=$('setName').value.trim()||'未命名图纸工程';
+      state.meta.name=$('setName').value.trim()||L('未命名图纸工程');
       state.settings.gridSize=Math.max(.01,Number($('setGrid').value)||1);
       state.settings.snap=$('setSnap').checked; state.settings.gridVisible=$('setGridVisible').checked;
       state.settings.showCursor=$('setCursor').checked;
+      state.settings.exportOnlyDelivered=$('setExportOnlyDelivered').checked;
+      state.settings.pdfDpi=Number($('setPdfDpi').value)||PDF_DPI_DEFAULT;
       const segMin=Number($('setSegLabelMinPx').value);
       state.settings.segLabelMinPx=Math.min(APP_LIMITS.SEG_LABEL_MIN_PX_MAX,Math.max(APP_LIMITS.SEG_LABEL_MIN_PX_MIN,
         Math.round(Number.isFinite(segMin)?segMin:APP_LIMITS.SEG_LABEL_MIN_PX)));
@@ -40,14 +71,40 @@ $('settingsBtn').onclick=()=>{
     }}
   ]);
   bindPluginPanel();
+  /* G-2：幽灵参考层控件——即时生效，不进入 settings/工程/撤销栈 */
+  $('ghostPick').onclick=()=>$('ghostFile').click();
+  $('ghostFile').onchange=async e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(f) await ghostLoadFile(f);
+    e.target.value='';
+  };
+  $('ghostClear').onclick=()=>ghostClear();
+  /* V-5 参照版控件：即时生效，只改运行时变量（不写 settings/工程/撤销栈） */
+  $('revPick').onclick=()=>$('revFile').click();
+  $('revFile').onchange=async e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(f) await revFile(f);
+    e.target.value='';
+    revInfoSync();
+  };
+  $('revClearBtn').onclick=()=>{ revClear(); revInfoSync(); };
+  $('revOpacity').oninput=e=>{ rOp=e.target.value/100; invalidateStatic(); requestRender(); };
+  $('revBlinkChk').onchange=e=>revBlinkSet(e.target.checked);
+  $('ghostOpacity').oninput=e=>{
+    if(!ghostLayer) return;
+    ghostLayer.opacity=Math.max(.1,Math.min(1,Number(e.target.value)/100));
+    invalidateStatic(); requestRender();
+  };
 };
 
-/** D-05 插件面板：列表（id/版本/能力/状态/原因）+ 清单导入 + 卸载；仅会话内，不持久化 */
+/** D-05 / G2 插件面板：会话插件 + 本地插件库；保存不等于启用，刷新后须手动启用 */
 function pluginPanelHTML(){
   const T=I18N.t;
   const st={active:T('pluginStatusActive'),loading:T('pluginStatusLoading'),disabled:T('pluginStatusDisabled'),unloaded:T('pluginStatusUnloaded')};
-  const list=PlotPin.listPlugins();
-  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(st[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||T('pluginNoCapabilities'))+(p.reason?' · '+esc(p.reason):'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'<div class="hint-text">'+esc(T('pluginNoneImported'))+'</div>')+
+  const list=PlotPin.listPlugins(), live=new Set(list.map(p=>p.id));
+  const saved=PlotPin.library.filter(e=>!live.has(e.id));
+  return (list.length?list.map(p=>'<div class="hint-text" style="margin:4px 0">'+esc(p.id)+' · v'+esc(p.apiVersion)+' · '+esc(st[p.status]||p.status)+' · '+esc(p.capabilities.join(', ')||T('pluginNoCapabilities'))+(p.reason?' · '+esc(p.reason):'')+(p.status!=='active'?' <button type="button" data-plugin-enable="'+esc(p.id)+'">'+esc(T('pluginEnable'))+'</button>':'')+' <button type="button" data-plugin-unload="'+esc(p.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'<div class="hint-text">'+esc(T('pluginNoneImported'))+'</div>')+
+    (saved.length?'<div class="hint-text" style="margin-top:6px">'+esc(T('pluginLibrary'))+'</div>'+saved.map(e=>'<div class="hint-text" style="margin:4px 0">'+esc(e.id)+' · '+esc(e.error||T('pluginSavedDisabled'))+' <button type="button" data-plugin-enable="'+esc(e.id)+'">'+esc(T('pluginEnable'))+'</button> <button type="button" data-plugin-del="'+esc(e.id)+'">'+esc(T('pluginUnload'))+'</button></div>').join(''):'')+
     '<button type="button" id="pluginImportBtn">'+esc(T('pluginImportManifest'))+'</button><input type="file" id="pluginFile" accept=".json,application/json" hidden>'+
     '<div class="hint-text">'+esc(T('pluginManifestHint'))+'</div>';
 }
@@ -56,17 +113,29 @@ function bindPluginPanel(){
   const refresh=()=>{ panel.innerHTML=pluginPanelHTML(); bindPluginPanel(); };
   const btn=$('pluginImportBtn'), file=$('pluginFile');
   if(btn&&file) btn.onclick=()=>file.click();
+  panel.onclick=async ev=>{
+    const b=ev.target.closest('[data-plugin-enable],[data-plugin-del]'); if(!b) return;
+    const id=b.getAttribute('data-plugin-enable')||b.getAttribute('data-plugin-del');
+    try{ if(b.hasAttribute('data-plugin-enable')) await PlotPin.enableSaved(id); else await PlotPin.deleteSaved(id); }
+    catch(_){ /* 原因已写入库条目，下面重绘展示 */ }
+    refresh();
+  };
   if(file) file.onchange=async()=>{
     const f=file.files&&file.files[0]; if(!f) return;
-    let raw='';
-    try{ raw=await f.text(); }catch(_){ toast('插件清单读取失败','error'); return; }
-    const r=PlotPin.validatePluginManifest(raw);
-    if(!r.ok){ toast('插件清单被拒：'+r.reason,'error'); file.value=''; return; }
-    if(!confirm('加载插件 '+r.spec.id+' ？\n能力：'+(r.spec.capabilities.join(' / ')||'无'))){ file.value=''; return; }
-    const res=await PlotPin.loadPlugin(r.spec);
-    if(res&&res.ok) toast('插件已加载：'+r.spec.id,'success');
+    try{
+      let raw='';
+      try{ raw=await f.text(); }catch(_){ toast('插件清单读取失败','error'); return; }
+      const r=PlotPin.validatePluginManifest(raw);
+      if(!r.ok){ toast('插件清单被拒：'+r.reason,'error'); file.value=''; return; }
+      if(!confirm('加载插件 '+r.spec.id+' ？\n能力：'+(r.spec.capabilities.join(' / ')||'无'))){ file.value=''; return; }
+      const res=await PlotPin.loadPlugin(r.spec);
+      if(res&&res.ok){
+        toast('插件已加载：'+r.spec.id,'success');
+        try{ await PlotPin.savePlugin(r.spec); }catch(e){ toast(String(e&&e.message||e),'error'); }
+      }
+      refresh();
+    }catch(e){ toast(L('插件清单读取失败')+'：'+(e&&e.message||e),'error'); }
     file.value='';
-    refresh();
   };
   Array.from(panel.querySelectorAll('[data-plugin-unload]')).forEach(b=>{
     b.onclick=()=>{
@@ -75,6 +144,45 @@ function bindPluginPanel(){
       PlotPin.unloadPlugin(id); toast('插件已卸载：'+id); refresh();
     };
   });
+}
+
+/* G3 带宽/存储估算：输入只在弹窗会话内，不写 state/settings/工程 */
+function openBandwidthEstimate(){
+  const T=I18N.t, d=BWD;
+  const sel=(id,k,l,v)=>`<label>${T(k)}</label><select id="${id}">${l.map(x=>'<option value="'+x[0]+'"'+(x[0]===v?' selected':'')+'>'+esc(L(x[1]))+'</option>').join('')}</select>`;
+  const num=(id,k,v,hi)=>`<label>${T(k)}</label><input id="${id}" type="number" min="0" max="${hi}" value="${v}">`;
+  openModal(T('bwTitle'),`<div class="form-grid">
+    ${sel('bwC','bwCodec',BWC,d.codec)}${sel('bwR','bwRes',BWR,d.res)}
+    ${num('bwF','bwFps',d.fps,120)}${sel('bwS','bwStream',BWS,d.stream)}
+    ${num('bwCh','bwChannels',d.channels,10000)}${num('bwD','bwDays',d.days,36500)}
+    ${num('bwH','bwHours',d.hours,24)}${num('bwX','bwRedundancy',d.redundancy,1000)}
+    <div class="hint-text" id="bwOut"></div></div>`,
+    [{text:T('close'),click:closeModal}]);
+  const upd=()=>{const e=bwEst({codec:$('bwC').value,res:$('bwR').value,fps:$('bwF').value,stream:$('bwS').value,
+    channels:$('bwCh').value,days:$('bwD').value,hours:$('bwH').value,redundancy:$('bwX').value});
+    $('bwOut').innerHTML=`<b>${+(e.mbps.toFixed(2))} Mbps/ch · ${+(e.totalMbps.toFixed(2))} Mbps</b><br><b>${+(e.gb.toFixed(2))} GB / ${+(e.gib.toFixed(2))} GiB</b>`;};
+  $('modalBox').querySelectorAll('select,input').forEach(el=>el.addEventListener('input',upd));upd();
+}
+
+/* G4 布线/线缆统计：几何估算（非实测）；当前楼层，输入只在弹窗会话内 */
+function openWiringStats(){
+  const T=I18N.t, d=WGD, F=n=>fmt(n);
+  openModal(T('wireTitle'),`<div class="form-grid">
+    <select id="wrM"><option value="route">${T('wireRoute')}</option><option value="chain">${T('wireChain')}</option></select>
+    <label>${T('wireReserve')}</label><input id="wrR" type="number" value="${d.reserve}">
+    <label>${T('wireBend')}</label><input id="wrB" type="number" value="${d.bend}">
+    <div class="hint-text" id="wrOut" style="white-space:pre-line"></div></div>`,
+    [{text:T('close'),click:closeModal}]);
+  const upd=()=>{
+    const e=wireStats({mode:$('wrM').value,reserve:$('wrR').value,bend:$('wrB').value,objects:state.objects,layers:state.layers});
+    const lines=e.rows.slice(0,100).map(r=>r.name+': '+F(r.len)+' m');
+    if(e.rows.length>100) lines.push('…');
+    if(e.groups.length>1) lines.push(L('图层')+'：'+e.groups.map(g=>g.name+' '+F(g.len)+' m').join('｜'));
+    lines.push(`${T('wireGeom')} ${F(e.geometry)} + ${T('wireReserveLen')} ${F(e.reserveLen)}（${e.ends}×${F(e.reserve)}） + ${T('wireBendLen')} ${F(e.bendLen)} = ${T('wireTotal')} ${F(e.total)} m`);
+    lines.push(T('wireHint'));
+    $('wrOut').textContent=lines.join('\n');
+  };
+  $('modalBox').querySelectorAll('select,input').forEach(el=>el.addEventListener('input',upd));upd();
 }
 
 /* -------------------- 通用弹窗 / Toast -------------------- */
@@ -210,20 +318,24 @@ function openDemoProject(){
   let next;
   try{ next=buildDemoProject(); }
   catch(e){ toast(L('示例工程生成失败')+'：'+((e&&e.message)||e),'error'); return false; }
-  state=next; selectedIds=new Set(); history={past:[],future:[]};
-  afterStateLoaded(); fitView(); scheduleSave();
+  selectedIds=new Set(); history={past:[],future:[]};
+  replaceState(next); fitView(); scheduleSave();
   toast(L('已打开示例工程'),'success');
   return true;
 }
 let rescueText;
 function showLoadAuditBanner(result){
-  const fallback=result.fallback?'已从本地备份恢复':'';
+  const pending=!!(result&&result.source==='collabPending');
+  const srcLabel=pending?'协作待发':(result&&result.source==='rescue'?'救援副本':(result&&result.source==='localStorage'?'本地备份':''));
+  const fallback=pending?L('已恢复离线协作待发的最新改动；重连后会补发')
+    :(result.fallback?(srcLabel?'已从'+srcLabel+'恢复':'已从本地备份恢复'):'');
+  const newer=(!pending&&result.newerThanIdb?'已采用较新草稿，原自动保存仍在本地':'');
   const err=result.audit.level==='error';
   const msgs=(err?result.audit.errors:result.audit.warnings).slice(0,3);
-  if(!err&&!fallback&&!msgs.length) return;
+  if(!err&&!fallback&&!newer&&!msgs.length) return;
   rescueText=result.rescue?result.rescue.text:null;
   setRescueHold(err);
-  const text=[err?'工程加载异常':'',fallback,msgs.join('；')].filter(Boolean).join('：');
+  const text=[err?'工程加载异常':'',fallback,newer,msgs.join('；')].filter(Boolean).join('：');
   const bar=document.createElement('div');
   bar.id='loadBanner'; bar.className='load-banner '+(err?'error':'warn');
   bar.innerHTML='<span>'+esc(text)+'</span>'+(rescueText
@@ -235,8 +347,30 @@ function showLoadAuditBanner(result){
     setRescueHold(false); bar.remove();
   });
 }
-function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }
-function hideLeaseConflictBanner(){ const bar=$('leaseBanner'); if(bar) bar.remove(); }
+/** P0-04：救援模式下新建/打开/导入前必须显式确认；确认即解除救援（未导出的编辑会丢失） */
+async function guardRescueSwitch(){
+  if(!rescueHold) return true;
+  const ok=await showConfirm(L('当前处于救援模式，未落盘编辑将丢失。请先导出救援 JSON；确定继续？'));
+  if(!ok) return false;
+  setRescueHold(false);
+  const bar=$('loadBanner'); if(bar) bar.remove();
+  return true;
+}
+function hideSaveFailureBanner(){ const bar=$('saveBanner'); if(bar) bar.remove(); }function hideLeaseConflictBanner(){ const bar=$('leaseBanner'); if(bar) bar.remove(); }
+/** 片C：core 通过钩子请求"写冲突横幅"，不再直接引用本文件符号 */
+registerHook('ui.staleWriteBanner',showStaleWriteBanner);
+/** H-01 写冲突横幅：库内副本更新，本页已拒绝覆盖；可导出本页版本或重载最新 */
+function showStaleWriteBanner(){
+  let bar=$('staleWriteBanner');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='staleWriteBanner'; bar.className='load-banner warn';
+    bar.innerHTML='<span>'+esc(L('另一标签页正在编辑，已暂停自动保存'))+'</span><button id="staleExportBtn">'+esc(L('export')+' '+L('exportJson'))+'</button><button id="staleReloadBtn">'+esc(L('重新载入'))+'</button>';
+    document.body.insertBefore(bar,document.body.firstChild);
+    $('staleExportBtn').addEventListener('click',()=>{ exportJSON().catch(e=>toast(L('导出失败：{msg}',{msg:e.message}),'error')); });
+    $('staleReloadBtn').addEventListener('click',()=>location.reload());
+  }
+}
 /** D-09 同工程多标签冲突横幅：最后心跳时刻 + 重新载入 / 确认取得租约 */
 function showLeaseConflictBanner(info){
   let bar=$('leaseBanner');
@@ -292,6 +426,8 @@ function toast(msg,type=''){
   const el=document.createElement('div'); el.className='toast '+type; el.textContent=L(msg);
   $('toastWrap').appendChild(el); setTimeout(()=>el.remove(),2600);
 }
+/* 片C：core 的提示走钩子；toast 的 DOM 细节留在 features，core 不再 typeof 探测 */
+registerHook('ui.toast',toast);
 function esc(s){
   return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }

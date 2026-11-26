@@ -127,8 +127,9 @@
    */
   function lzwDecode(bytes, earlyChange, maxBytes) {
     const ec = earlyChange === undefined ? 1 : Number(earlyChange);
-    const limit = Number(maxBytes) > 0 ? Number(maxBytes) : 0;
     const src = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    const limit = Number(maxBytes) > 0 ? Number(maxBytes) : 0;
+    let total = 0;
     let bitPos = 0, codeLen = 9, next = 258, prev = null, dict = [];
     const reset = () => {
       dict = new Array(4096);
@@ -147,7 +148,6 @@
     };
     reset();
     const out = [];
-    let total = 0;
     for (;;) {
       const code = readCode();
       if (code < 0) break;
@@ -156,12 +156,12 @@
       let entry = dict[code];
       if (!entry && code === next && prev) entry = prev.concat(prev[0]);
       if (!entry) break;
-      for (const b of entry) out.push(b);
       /* 输出累计上限：与 FlateDecode 同口径，防止 LZW 解压炸弹（超过即中止，不继续展开） */
       total += entry.length;
       if (limit && total > limit) {
         throw new Error('PDF 内嵌流解压后超过 ' + (limit / 1048576) + 'MB 上限，疑似解压炸弹');
       }
+      for (const b of entry) out.push(b);
       if (prev && next < 4096) dict[next++] = prev.concat(entry[0]);
       prev = entry;
       /* 解码器字典比编码器晚一条：提前一条判断扩宽，保证与 EarlyChange=1 编码器同步 */

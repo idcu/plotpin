@@ -125,6 +125,79 @@
     return { ok: true, spec: { id, name, version, apiVersion: String(m.apiVersion), capabilities: check.caps.slice(), code } };
   }
 
+  /* -------------------- 本地插件库（G2） ----------------------------------
+   * 独立键 plugins:library，只存清单与源码；不存「启用」意图。
+   * 刷新后必须由用户显式启用，loadPlugin 才会创建 Worker。
+   * 启用前用 SHA-256 校验 id/version/apiVersion/能力/源码，不匹配即拒绝。 */
+  const PLUGIN_LIB_KEY = 'plugins:library', PLUGIN_LIB_SCHEMA = 'plotpin.plugins/v1', PLUGIN_LIB_MAX = 20;
+  const pluginLibCache = [];
+  let pluginLibLoaded = false, pluginLibPending = null;
+  /** 库条目规范化：非法条目返回 null（整条丢弃），不抛异常 */
+  function normalizeLibEntry(e) {
+    if (!e || typeof e !== 'object') return null;
+    const v = validatePluginManifest({ schema: 'plotpin.plugin/v1', id: e.id, name: e.name, version: e.version, apiVersion: e.apiVersion, capabilities: e.capabilities, code: e.code });
+    return v.ok && typeof e.hash === 'string' && e.hash.length === 64 ? Object.assign(v.spec, { hash: e.hash }) : null;
+  }
+  async function pluginLibHash(spec) {
+    const subtle = global.crypto && global.crypto.subtle;
+    if (!subtle || !subtle.digest) throw new Error('当前环境不支持完整性校验');
+    const buf = await subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([spec.id, spec.version, spec.apiVersion, spec.capabilities.slice().sort(), spec.code])));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function ensureLibrary() {
+    if (pluginLibLoaded) return Promise.resolve(pluginLibCache);
+    if (!pluginLibPending) pluginLibPending = (async () => {
+      let items = [];
+      try {
+        const rec = await idbGetKey(PLUGIN_LIB_KEY);
+        if (rec && rec.schema === PLUGIN_LIB_SCHEMA && Array.isArray(rec.items)) items = rec.items.map(normalizeLibEntry).filter(Boolean).slice(0, PLUGIN_LIB_MAX);
+      } catch (_) { /* 读失败按空库处理，不影响工程 */ }
+      pluginLibCache.length = 0;
+      pluginLibCache.push(...items);
+      pluginLibLoaded = true;
+      return pluginLibCache;
+    })().finally(() => { pluginLibPending = null; });
+    return pluginLibPending;
+  }
+  /** 保存/更新库条目；入参可为清单或已校验的 spec */
+  async function savePlugin(raw) {
+    const v = validatePluginManifest(raw && raw.schema ? raw : Object.assign({ schema: 'plotpin.plugin/v1' }, raw));
+    if (!v.ok) throw new Error(v.reason);
+    const spec = v.spec, items = await ensureLibrary();
+    const entry = Object.assign({}, spec, { hash: await pluginLibHash(spec) });
+    const i = items.findIndex(x => x.id === spec.id);
+    if (i >= 0) items[i] = entry;
+    else if (items.length >= PLUGIN_LIB_MAX) throw new Error('插件库已满（最多 ' + PLUGIN_LIB_MAX + ' 个）');
+    else items.push(entry);
+    await idbPutKey(PLUGIN_LIB_KEY, { schema: PLUGIN_LIB_SCHEMA, items: pluginLibCache });
+    return entry;
+  }
+  /** 显式启用库条目：先校验完整性再交给既有 loadPlugin（沙箱与超时不变） */
+  async function enableSaved(id) {
+    const items = await ensureLibrary();
+    const e = items.find(x => x.id === String(id));
+    if (!e) throw new Error('插件未保存：' + String(id));
+    const spec = { id: e.id, name: e.name, version: e.version, apiVersion: e.apiVersion, capabilities: e.capabilities.slice(), code: e.code };
+    if (await pluginLibHash(spec) !== e.hash) throw new Error(e.error = '源码校验失败');
+    const prev = sandboxPlugins.get(spec.id);
+    if (prev) unloadPlugin(spec.id);
+    const r = await loadPlugin(spec);
+    if (r && r.ok) delete e.error;
+    else e.error = String(r && r.reason || '加载失败');
+    return r;
+  }
+  /** 删除库条目：只改 plugins:library，不触碰目录/工程键；使用中拒绝 */
+  async function deleteSaved(id) {
+    const key = String(id);
+    if (sandboxPlugins.has(key)) throw new Error('使用中，先卸载');
+    const items = await ensureLibrary();
+    const i = items.findIndex(x => x.id === key);
+    if (i < 0) return false;
+    items.splice(i, 1);
+    await idbPutKey(PLUGIN_LIB_KEY, { schema: PLUGIN_LIB_SCHEMA, items: pluginLibCache });
+    return true;
+  }
+
   /* -------------------- 注册表（旧路径与沙箱共用） ------------------------- */
   function builtinTypes() {
     try { return Array.isArray(BUILTIN_TYPES) ? BUILTIN_TYPES : null; } catch (_) { return null; }
@@ -342,11 +415,14 @@
       'g.clearInterval=function(id){tmi.delete(id);return _ci(id);};',
       'if(typeof _qm==="function")g.queueMicrotask=function(fn){return _qm(function(){if(frozen)return;return fn();});};',
       'var V=', JSON.stringify(PLUGIN_API_VERSION), ',CAPS=', JSON.stringify(rec.caps),
-      ',TOKEN=', JSON.stringify(rec.token), ',T=', String(T), ';',
+      ',TOKEN=', JSON.stringify(rec.token), ',T=', String(T), ',MAXCH=', String(APP_LIMITS.PLUGIN_RPC_MAX_CHARS), ';',
       'var seq=0,pend={},runs={exporter:{},importer:{}},dls=[];',
       'function send(m){m.__pp=1;m.token=TOKEN;post(m);}',
       'function need(c){if(CAPS.indexOf(c)<0)throw new Error("能力未声明："+c);}',
-      'function rpc(method,args){return new Promise(function(ok,no){var id=++seq;pend[id]={ok:ok,no:no};send({type:"rpc",id:id,method:method,args:args||[]});later(function(){if(pend[id]){delete pend[id];no(new Error("插件调用超时（>"+T+"ms）"));}},T);});}',
+      'function rpc(method,args){var a=args||[];',
+      /* R-24：写入类调用在 Worker 侧先按 JSON 字符数拦截，超大 props/points 不进主线程（避免克隆即卡死） */
+      'if(method==="addObjects"||method==="addAnnotation"){var n=0;try{n=JSON.stringify(a).length;}catch(e){n=Infinity;}if(n>+MAXCH)return Promise.reject(new Error("调用参数超过 2 MB 上限"));}',
+      'return new Promise(function(ok,no){var id=++seq;pend[id]={ok:ok,no:no};send({type:"rpc",id:id,method:method,args:a});later(function(){if(pend[id]){delete pend[id];no(new Error("插件调用超时（>"+T+"ms）"));}},T);});}',
       'function toast(msg,level){send({type:"toast",message:String(msg==null?"":msg).slice(0,200),level:String(level||"")});}',
       'function dl(callId,name,data){var base={type:"download",callId:callId,name:String(name||"").slice(0,120)};var p;',
       'if(typeof data==="string"){send(Object.assign({},base,{kind:"text",text:data}));p=Promise.resolve();}',
@@ -428,11 +504,20 @@
       throw e;
     }
   }
-  /** getState RPC：限流 + 能力校验 + 深拷贝快照 */
+  /** getState RPC：限流 + 能力校验 + 深拷贝快照。
+   *  R-24：快照序列化体积设上限，超限只拒绝本次调用（callRejected），不因工程过大而禁用插件。 */
   function pluginGetState(rec) {
     needCap(rec, 'state:read');
     pluginRateLimit(rec, 'getState');
-    return cloneJSON(global.persistableState ? global.persistableState() : appState());
+    const snap = cloneJSON(global.persistableState ? global.persistableState() : appState());
+    const maxBytes = APP_LIMITS.PLUGIN_GETSTATE_MAX_BYTES;
+    const bytes = utf8Length(JSON.stringify(snap));
+    if (bytes > maxBytes) {
+      const e = new Error('getState 快照超过 ' + Math.round(maxBytes / 1048576) + ' MB 上限（当前约 ' + Math.ceil(bytes / 1048576) + ' MB）');
+      e.callRejected = true;
+      throw e;
+    }
+    return snap;
   }
   function pluginAddObjects(rec, list, msg, annotationOnly) {
     pluginRateLimit(rec, annotationOnly ? 'addAnnotation' : 'addObjects');
@@ -458,8 +543,9 @@
     if (!sanitize) throw new Error('主工程清洗函数不可用，拒绝写入');
     const clean = sanitize(raw, layers, types);
     if (!clean.length) throw new Error('没有可添加的有效对象');
-    const objectsMax = typeof APP_LIMITS !== 'undefined' && APP_LIMITS.OBJECTS_MAX ? APP_LIMITS.OBJECTS_MAX : 100000;
-    if (Array.isArray(st.objects) && st.objects.length + clean.length > objectsMax) {
+    /* 配额按全工程累计（含非当前楼层），与导入/打开/协作合并同一判据（C3） */
+    const objectsMax = APP_LIMITS.OBJECTS_MAX;
+    if (countProjectObjects(st) + clean.length > objectsMax) {
       throw new Error('对象数量超过上限 ' + objectsMax);
     }
     /* N-18：插件写入与手动绘制走同一撤销语义——先压历史再改状态，Ctrl+Z 可完全移除。 */
@@ -528,9 +614,9 @@
       ok = false;
       value = undefined;
       replyRpc(rec, d, false, undefined, e && e.message || e);
-      /* B11：限流只拒绝本次调用，不禁用插件；其它异常仍按既有策略禁用 */
+      /* B11：限流只拒绝本次调用，不禁用插件；R-24 的超大快照同理（callRejected）；其它异常仍按既有策略禁用 */
       if (rec.status === 'loading') rec.errors.push(String(e && e.message || e));
-      else if (rec.status === 'active' && !(e && e.rateLimited)) disablePlugin(rec, '插件异常：' + String(e && e.message || e));
+      else if (rec.status === 'active' && !(e && (e.rateLimited || e.callRejected))) disablePlugin(rec, '插件异常：' + String(e && e.message || e));
       return;
     }
     replyRpc(rec, d, ok, value);
@@ -752,6 +838,13 @@
     loadPlugin: loadPlugin,
     unloadPlugin: unloadPlugin,
     listPlugins: listPlugins,
+    ensureLibrary: ensureLibrary,
+    library: pluginLibCache,
+    savePlugin: savePlugin,
+    enableSaved: enableSaved,
+    deleteSaved: deleteSaved,
+    libEntry: normalizeLibEntry,
+    libHash: pluginLibHash,
     registerExporter(def) { return addExporter(def, null); },
     unregisterExporter(id) { return removeExporter(String(id), null); },
     registerImporter(def) { return addImporter(def, null); },

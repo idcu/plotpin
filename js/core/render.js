@@ -9,11 +9,25 @@ function setFocusNode(v){ focusNode=v; requestRender(); }
 /** 兼容旧调用名：等价于 model.js 的 effectiveVisible（保留签名，避免改动既有调用方） */
 function isVisible(o){ return effectiveVisible(o); }
 function isEditable(o){ const l=layerOf(o); return !o.locked && !l.locked; }
+/* 命中序缓存（P1-04）：按 z 升序，取结果时从后往前 = 视觉最上层优先。
+   缓存键 = 对象数 + zVersion；增删/重排/载入由 bumpZVersion 置脏。 */
+let hitOrderCache=null,hitOrderKey='';
+function bumpZVersion(){ zVersion++; hitOrderCache=null; }
+function hitOrderObjects(){
+  const objs=state.objects||[];
+  const key=objs.length+'|'+zVersion;
+  if(hitOrderCache&&hitOrderKey===key) return hitOrderCache;
+  hitOrderKey=key;
+  hitOrderCache=objs.slice().sort((a,b)=>(a.z||0)-(b.z||0));
+  return hitOrderCache;
+}
 function hitObject(p,screenP){
   const tol=8/state.viewport.zoom;
-  for(let i=state.objects.length-1;i>=0;i--){
-    const o=state.objects[i];
-    if(!isVisible(o)) continue;
+  const list=hitOrderObjects();
+  for(let i=list.length-1;i>=0;i--){
+    const o=list[i];
+    /* 锁定对象（或锁定图层）不参与命中：点击/框选都不得选中 */
+    if(!isVisible(o)||!isEditable(o)) continue;
     if(o.kind==='point'){
       const shape=getType(o.typeId).scaleShape||'none';
       if((o.phys||0)>0 && shape!=='none' && hitPhysicalPoint(o,shape,p)) return o;
@@ -21,6 +35,11 @@ function hitObject(p,screenP){
       if(Math.hypot(s[0]-screenP[0],s[1]-screenP[1])<=11*pointIconScale(o)) return o;
     }else if(o.kind==='rect'){
       if(shapeHit(o,p)) return o;
+    }else if(o.kind==='arc'){
+      /* 描边弧：先判半径环带，再判角度区间（端点容差按弧长换算） */
+      const tolArc=Math.max(tol,styleVal(o,'strokeWidth',.1)/2);
+      const r=Math.abs(Number(o.shape&&o.shape.r)||0);
+      if(r>0 && Math.abs(dist(p,[o.x,o.y])-r)<=tolArc && arcContainsAngle(o,p,tolArc)) return o;
     }else if(o.kind==='text'){
       if(pointInPolygon(p,textCorners(o))) return o;
     }else if(o.closed && o.points.length>=3){
@@ -46,7 +65,7 @@ function getHandles(o){
   }else if(o.kind==='text'){
     const a=(o.angle+90)*Math.PI/180, off=28/state.viewport.zoom;
     handles.push({type:'rotate',x:o.x+Math.cos(a)*off,y:o.y+Math.sin(a)*off});
-  }else if(o.kind==='rect'){
+  }else if(o.kind==='rect'||o.kind==='arc'){
     areaShapeHandles(o,handles);
   }else if(o.points){
     o.points.forEach((p,i)=>handles.push({type:'node',index:i,x:p[0],y:p[1]}));
@@ -76,11 +95,11 @@ function areaShapeHandles(o,handles){
     handles.push({type:'shapeHandle',mode:'ry',x:o.x+Math.cos(b)*sh.ry,y:o.y+Math.sin(b)*sh.ry});
     const off=Math.max(.55,30/state.viewport.zoom);
     handles.push({type:'rotate',x:o.x+Math.cos(b)*off,y:o.y+Math.sin(b)*off});
-  }else if(tt===SEC){
+  }else if(tt===SEC||tt===ARC){
     const p=a=>[o.x+sh.r*Math.cos(a*Math.PI/180),o.y+sh.r*Math.sin(a*Math.PI/180)];
-    const a0=Number(sh.a0)||0, mid=a0+sectorSweep(sh)/2;
+    const a0=Number(sh.a0)||0, sweep=tt===ARC?arcSweep(sh):sectorSweep(sh), mid=a0+sweep/2;
     handles.push({type:'shapeHandle',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
-    handles.push({type:'shapeHandle',mode:'edge1',x:p(a0+sectorSweep(sh))[0],y:p(a0+sectorSweep(sh))[1]});
+    handles.push({type:'shapeHandle',mode:'edge1',x:p(a0+sweep)[0],y:p(a0+sweep)[1]});
     handles.push({type:'shapeHandle',mode:'arcR',x:p(mid)[0],y:p(mid)[1]});
   }
 }
@@ -106,10 +125,13 @@ function requestRender(){
  * 只有开始/结束拖拽时改形集合变化，静态层才重建一次（N-23）。
  * 导出 / 打印走「直接全量绘制」路径，保证产物与旧行为一致。 */
 let staticCanvas=null, staticCtx=null, staticKey='', staticRev=0;
+/* R-09：最近一次静态层中各对象的世界包围盒（id → [minX,minY,maxX,maxY]），
+   供属性面板逐键编辑时只重绘受影响区域；整层重建/作废时同步清空。 */
+const staticBounds=new Map();
 /* 内容签名（不含视口缩放/平移）与上一次静态层对应的视口，用于平移时整像素搬移位图 */
 let staticSig='', staticPanX=0, staticPanY=0, staticZoom=0, staticScroll=null;
 /** 显式作废静态层：对象增删改、载入/撤销/重做、覆盖率结果变化时调用 */
-function invalidateStatic(){ staticRev++; staticKey=''; }
+function invalidateStatic(){ staticRev++; staticKey=''; staticBounds.clear(); }
 /**
  * 当前逐帧改形、必须从静态层排除的对象 id（N-23）。
  * - move：越过 2px 阈值后才排除 originals 里的全部对象；
@@ -123,22 +145,58 @@ function staticDragIds(){
   if(drag.type==='node'||drag.type==='rotate'||drag.type==='rect'||drag.type==='shapeHandle') return [drag.id];
   return null;
 }
-/** 静态层内容签名：只随“画什么”变化，不含缩放/平移（平移可整像素搬移位图） */
+/** 当前拖拽是否让场地/底图逐帧变化（R-07）。
+ *  场地手柄改 state.site、图片手柄改 background.transform，二者都会让静态层签名每帧变化；
+ *  把它们从静态层里摘出来、改由动态层每帧绘制，静态层只在拖拽开始/结束时各重建一次。
+ *  返回 '' | 'site' | 'background'。 */
+function staticDragScene(){
+  if(!drag) return '';
+  if(drag.type==='siteHandle') return 'site';
+  if(drag.type==='imageHandle'&&drag.moved) return 'background';
+  return '';
+}
+/** 静态层内容签名：只随“画什么”变化，不含缩放/平移（平移可整像素搬移位图）
+ *  R-07：场地手柄拖拽时形状与取景框都在变，但 syncFramePan 已保证世界→屏幕映射不变，
+ *  位图仍然有效，签名里用固定占位符把这两个逐帧变化项排除，避免每帧重建。 */
 function sceneStaticContentKey(cssW,cssH,d){
   const bg=state.background||{};
   const dyn=staticDragIds();
+  const scene=staticDragScene();
   return [cssW,cssH,dpr||1,staticRev,
-    d.minX,d.minY,d.maxX,d.maxY,
+    scene==='site'?'#drag-frame':[d.minX,d.minY,d.maxX,d.maxY].join(','),
     JSON.stringify(state.settings),
-    JSON.stringify(state.site||null),
-    bg.transform?JSON.stringify(bg.transform):'',
+    scene==='site'?'#drag-site':JSON.stringify(state.site||null),
+    scene==='background'?'#drag-bg':(bg.transform?JSON.stringify(bg.transform):''),
     bg.kind||'',bg.assetId||'',bg.fileName||'',bg.width||0,bg.height||0,
     bg.metersPerPixel||0,
     bgImage?1:0,(bgDataUrl||'').length,
     (state.layers||[]).map(l=>l.visible===false?'0':'1').join(''),
     dyn?dyn.slice().sort().join(','):'',   /* 只跟“正在拖拽改形”有关，与选中集无关 */
-    coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0'
+    lodSelectedSig(),                              /* 选中即豁免 LOD：选中集变化必须重建，否则位图里仍是没有标签的旧对象 */
+    coverageResult?coverageResult.regions.length+'/'+(coverageResult.cameraCount||0):'0',
+    ghostSig(),                                    /* G-1：幽灵参考层参数变化必须重建静态层 */
+    refSig()                                       /* V-5：参照版内容/不透明度/闪烁相位同样必须重建 */
   ].join('|');
+}
+/**
+ * 选中对象里“标签本会被 LOD 藏掉”的 id 签名：并入静态层内容键，
+ * 让选中/取消选中时重建一次，保证「选中对象始终显示全部标签」。
+ * 通常选中集很小；全选等大集合走一次对象索引，避免逐个 find 的 O(N²)。
+ */
+function lodSelectedSig(){
+  const n=selectedIds.size;
+  if(!n) return '';
+  const zoom=Number(state.viewport&&state.viewport.zoom)||1;
+  const idx=n>64?objectIndexById():null;
+  const ids=[];
+  selectedIds.forEach(id=>{
+    const o=idx?idx.get(id):(state.objects||[]).find(x=>x&&x.id===id);
+    if(!o) return;
+    /* 尺寸型对象：小于名称 chip 高度；符号点：当前帧被密度判据隐藏 */
+    if(objectScreenLabelSpan(o,zoom)<APP_LIMITS.LABEL_LOD_NAME_PX
+      ||(isSymbolPoint(o)&&labelLodPointDense)) ids.push(id);
+  });
+  return ids.sort().join(',');
 }
 /** 静态层缓存签名：内容签名 + 视口（缩放必须重建；平移可在整数像素时搬移） */
 function sceneStaticKey(v,cssW,cssH,d){
@@ -158,10 +216,13 @@ function visibleWorldRect(v,d,cssW,cssH,padPx=48){
   const a=s2w([-padPx,-padPx],v,d), b=s2w([cssW+padPx,cssH+padPx],v,d);
   return {minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
 }
-/** 静态层全部内容（不含动态层）；view/strip 决定对象裁剪范围 */
-function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view){
-  drawBackground(sc,v,d,cssW,cssH,toS);
-  drawSite(sc,v,toS);
+/** 静态层全部内容（不含动态层）；view/strip 决定对象裁剪范围。
+ *  skip：拖拽中的底图/场地从静态层排除（R-07），由动态层在主画布最底层先画。 */
+function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view,skip){
+  if(!skip||!skip.bg) drawBackground(sc,v,d,cssW,cssH,toS);
+  if(!skip||!skip.site) drawSite(sc,v,toS);
+  revPaint(sc,v,toS,iconBoost,exportGain,view);   /* V-5：参照版垫底 */
+  if(typeof ghostPaint==='function') ghostPaint(sc,v,toS);   /* G-1：参考层压在底图/场地之上、网格与对象之下 */
   drawGrid(sc,v,d,cssW,cssH,toS);
   drawCoverage(sc,v,d);
   drawSiteAnnotations(sc,v,toS);
@@ -169,9 +230,119 @@ function drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,view
   /* 裁剪预筛用保守 O(1) 包围盒（P2-3）：圆/椭圆/扇形不再逐对象 72 段取样。
      只允许偏大——偏小会漏画；`objectSnapBounds` 的契约正是「绝不偏小」。 */
   const bnd={minX:0,minY:0,maxX:0,maxY:0};
-  state.objects.filter(o=>isVisible(o)&&!(dynSet&&dynSet.has(o.id)))
-    .sort((a,b)=>a.z-b.z)
-    .forEach(o=>{ if(boundsIntersect(objectSnapBounds(o,bnd),view)) drawObject(sc,o,v,toS,iconBoost,exportGain); });
+  /* 整层重建 vs 局部条带/补绘：只有整层重建才重算点符号密度（局部重绘看到的只是一小块） */
+  const whole=visibleWorldRect(v,d,cssW,cssH);
+  const isWhole=!!view&&view.minX===whole.minX&&view.minY===whole.minY
+    &&view.maxX===whole.maxX&&view.maxY===whole.maxY;
+  /* 一次可见性遍历同时完成：裁剪预筛、静态包围盒登记、符号点密度累加（不为密度另开遍历） */
+  let ptN=0, ptX0=Infinity, ptY0=Infinity, ptX1=-Infinity, ptY1=-Infinity;
+  const vis=[];
+  for(const o of hitOrderObjects()){
+    if(!isVisible(o)||(dynSet&&dynSet.has(o.id))) continue;
+    const b=objectSnapBounds(o,bnd);
+    if(!boundsIntersect(b,view)) continue;
+    if(isSymbolPoint(o)){
+      ptN++;
+      const sp=toS([b.minX,b.minY]);
+      if(sp[0]<ptX0) ptX0=sp[0];
+      if(sp[0]>ptX1) ptX1=sp[0];
+      if(sp[1]<ptY0) ptY0=sp[1];
+      if(sp[1]>ptY1) ptY1=sp[1];
+    }
+    staticBounds.set(o.id,[bnd.minX,bnd.minY,bnd.maxX,bnd.maxY]);
+    vis.push(o);
+  }
+  if(isWhole){
+    /* 密度 = 可见符号点数 / 其屏幕包围盒面积（换算为百万像素²）；少于 2 个点无拥挤意义 */
+    const area=Math.max(0,(ptX1-ptX0)*(ptY1-ptY0));
+    labelLodPointDense=ptN>=2&&area>0
+      &&ptN/(area/1e6)>APP_LIMITS.LABEL_LOD_POINT_DENSITY;
+  }
+  /* F2：z 序复用 hitOrderObjects 的缓存（键=对象数+zVersion），每次重建不再对全量对象重排 */
+  for(const o of vis) drawObject(sc,o,v,toS,iconBoost,exportGain);
+}
+/**
+ * P1：局部补绘矩形（纯函数）——旧包围盒 ∪ 新包围盒 → 屏幕矩形 → 外扩 pad → 画布夹取 → 面积阈值。
+ * 每个条目必须同时给出旧、新世界包围盒：新对象没有旧盒（位图里可能残留创建前的像素）、
+ * 已删除/不可见对象没有新盒，都无法推出「需要清理并重画」的完整区域，直接拒绝，由调用方整层重建。
+ * @param {Array<{old:number[],now:number[]}>} boxes 世界包围盒 [minX,minY,maxX,maxY]
+ * @param {function(number[]):number[]} toS 世界→屏幕
+ * @param {number} cssW 画布 CSS 宽
+ * @param {number} cssH 画布 CSS 高
+ * @param {{pad?:number,ratio?:number}} [opt] pad 默认 96px；ratio 默认 0.6（超过即放弃局部补绘）
+ * @returns {{ok:true,rect:number[]}|{ok:false,reason:string}}
+ */
+function patchUnionRect(boxes,toS,cssW,cssH,opt){
+  const pad=opt&&Number.isFinite(opt.pad)?opt.pad:96;
+  const ratio=opt&&Number.isFinite(opt.ratio)?opt.ratio:.6;
+  if(!Array.isArray(boxes)||!boxes.length) return {ok:false,reason:'empty'};
+  if(!(cssW>0)||!(cssH>0)) return {ok:false,reason:'canvas'};
+  const boxOk=b=>Array.isArray(b)&&b.length>=4
+    &&Number.isFinite(b[0])&&Number.isFinite(b[1])&&Number.isFinite(b[2])&&Number.isFinite(b[3]);
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const b of boxes){
+    if(!b||!boxOk(b.old)||!boxOk(b.now)) return {ok:false,reason:'bounds'};
+    for(const w of [b.old,b.now]){
+      const a=toS([w[0],w[1]]), c=toS([w[2],w[3]]);
+      if(!a||!c||!Number.isFinite(a[0])||!Number.isFinite(a[1])
+        ||!Number.isFinite(c[0])||!Number.isFinite(c[1])) return {ok:false,reason:'bounds'};
+      x0=Math.min(x0,a[0],c[0]); x1=Math.max(x1,a[0],c[0]);
+      y0=Math.min(y0,a[1],c[1]); y1=Math.max(y1,a[1],c[1]);
+    }
+  }
+  const px=Math.max(0,Math.floor(x0-pad)), py=Math.max(0,Math.floor(y0-pad));
+  const pw=Math.min(cssW,Math.ceil(x1+pad))-px, ph=Math.min(cssH,Math.ceil(y1+pad))-py;
+  if(!(pw>0)||!(ph>0)) return {ok:false,reason:'offscreen'};
+  if(pw*ph>cssW*cssH*ratio) return {ok:false,reason:'large'};
+  return {ok:true,rect:[px,py,pw,ph]};
+}
+/**
+ * P1：局部补绘的画布操作——裁剪区与清理区**恒等于**同一个矩形。
+ * P3 允许扩大重绘 view（把溢出到矩形内的邻居标签重画），但不得扩大裁剪/清理，
+ * 否则矩形外的旧内容会被带进可见区。
+ * @param {CanvasRenderingContext2D} sc
+ * @param {number[]} rect [x,y,w,h]
+ * @param {function():void} [paint]
+ */
+function applyPatchRect(sc,rect,paint){
+  sc.save(); sc.beginPath(); sc.rect(rect[0],rect[1],rect[2],rect[3]); sc.clip();
+  sc.clearRect(rect[0],rect[1],rect[2],rect[3]);
+  if(paint) paint();
+  sc.restore();
+}
+/** R-09：局部重绘——属性面板逐键编辑时只按受影响对象的屏幕矩形修补静态位图，
+ *  把每次击键的静态层成本从 O(全部对象) 降到 O(矩形内对象)。
+ *  任一前提不成立（位图缺失/视口已变/对象从未绘制过/区域过大/正在拖拽/有覆盖率叠加）
+ *  返回 false，调用方退回 invalidateStatic 整层重建，保证不会画出错误内容。 */
+function patchStaticObjects(ids){
+  if(!staticCanvas||!staticKey||typeof drag!=='undefined'&&drag) return false;
+  const v=state.viewport, k=dpr||1, cssW=wrap.clientWidth, cssH=wrap.clientHeight;
+  if(staticZoom!==v.zoom||staticPanX!==v.panX||staticPanY!==v.panY) return false;
+  if(staticCanvas.width!==Math.max(1,Math.round(cssW*k))||staticCanvas.height!==Math.max(1,Math.round(cssH*k))) return false;
+  const list=ids instanceof Map?Array.from(ids.keys()):Array.from(ids||[]);
+  if(!list.length||list.length>32) return false;
+  const d=worldDims(), toS=p=>w2s(p,v,d), pad=96;
+  const idx=objectIndexById(), boxes=[];
+  for(const id of list){
+    const old=staticBounds.get(id);
+    /* 新对象没有旧包围盒（位图里可能残留创建前的像素）：无法推出需要清理的区域 → 整层重建 */
+    if(!old) return false;
+    const o=idx.get(id);
+    if(!o) return false;
+    const nb=objectSnapBounds(o);
+    boxes.push({old,now:[nb.minX,nb.minY,nb.maxX,nb.maxY]});
+  }
+  /* 旧 ∪ 新：对象移动/放大超出旧盒+pad 时，新位置也必须落在清理并重画的矩形内 */
+  const p=patchUnionRect(boxes,toS,cssW,cssH,{pad});
+  if(!p.ok) return false;
+  const r=p.rect, sc=ensureStaticLayer(cssW,cssH);
+  /* P3：重绘 view 在补绘矩形外再扩 pad，让锚点落在矩形外、标签却溢入矩形的邻居对象一起重画；
+     clip/clearRect 仍严格等于 r（applyPatchRect），矩形外的旧内容不会被带进来。 */
+  const ia=s2w([r[0]-pad,r[1]-pad],v,d), ib=s2w([r[0]+r[2]+pad,r[1]+r[3]+pad],v,d);
+  const view={minX:Math.min(ia[0],ib[0]),maxX:Math.max(ia[0],ib[0]),minY:Math.min(ia[1],ib[1]),maxY:Math.max(ia[1],ib[1])};
+  const iconBoost=Number(state.settings.markerScale)||1;
+  applyPatchRect(sc,r,()=>drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,1,null,view,null));
+  return true;
 }
 /** 动态层待绘对象：按 id 直取、过滤失效引用并按 z 升序（P2-4，取代全量 filter 扫描） */
 function dragDrawObjects(ids,idx){
@@ -188,7 +359,7 @@ function panScrollDelta(v,prevX,prevY,prevZoom,k){
   if(Math.abs(dx-ix)>0.01||Math.abs(dy-iy)>0.01) return null;
   return [ix,iy];
 }
-function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet){
+function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,skip){
   const k=dpr||1, delta=panScrollDelta(v,staticPanX,staticPanY,staticZoom,k);
   if(!delta) return false;
   const ix=delta[0], iy=delta[1];
@@ -212,7 +383,7 @@ function scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet){
     const a=s2w([r[0]-48,r[1]-48],v,d), b=s2w([r[0]+r[2]+48,r[1]+r[3]+48],v,d);
     const strip={minX:Math.min(a[0],b[0]),maxX:Math.max(a[0],b[0]),minY:Math.min(a[1],b[1]),maxY:Math.max(a[1],b[1])};
     sc.save(); sc.beginPath(); sc.rect(r[0],r[1],r[2],r[3]); sc.clip();
-    drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,strip);
+    drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,strip,skip);
     sc.restore();
   });
   return true;
@@ -222,26 +393,36 @@ function drawScene(c,v,cssW,cssH,opt={}){
   const toS=p=>w2s(p,v,d);
   /* 交互帧使用分层缓存；导出/打印（markerScale≠1 或非交互）保持直接全量绘制 */
   const cacheable=!!opt.interactive&&(opt.markerScale===undefined||opt.markerScale===1);
+  labelLodOn=cacheable;   /* 标签 LOD 只作用于屏幕 canvas 交互帧，导出恒带标签 */
   const exportGain=opt.markerScale||1;
   const iconBoost=exportGain*(Number(state.settings.markerScale)||1);
 
   if(cacheable){
     /* 只有逐帧改形的对象从静态层排除；选中但静止的对象留在位图里（N-23） */
     const dyn=staticDragIds(), dynSet=dyn?new Set(dyn):null;
+    /* R-07：拖拽中的场地/底图从静态层摘出，静态位图只在拖拽开始/结束重建 */
+    const scene=staticDragScene();
+    const skip=scene?{bg:true,site:scene==='site'}:null;
     const sig=sceneStaticContentKey(cssW,cssH,d);
-    const key=sig+'|'+v.zoom+'|'+v.panX+'|'+v.panY;
+    /* 场景拖拽期 pan 与取景框同步变化但屏幕映射不变：不参与缓存键，避免误走位图搬移 */
+    const key=scene?(sig+'|'+v.zoom):(sig+'|'+v.zoom+'|'+v.panX+'|'+v.panY);
     if(key!==staticKey){
       const sc=ensureStaticLayer(cssW,cssH);
       const scrolled=staticSig===sig&&staticZoom===v.zoom
-        ?scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet):false;
+        ?scrollStaticLayer(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,skip):false;
       if(!scrolled){
         sc.clearRect(0,0,cssW,cssH);
-        drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,visibleWorldRect(v,d,cssW,cssH));
+        drawStaticContent(sc,v,d,cssW,cssH,toS,iconBoost,exportGain,dynSet,visibleWorldRect(v,d,cssW,cssH),skip);
         staticPanX=v.panX; staticPanY=v.panY;
       }
       staticKey=key; staticSig=sig; staticZoom=v.zoom;
     }
     c.clearRect(0,0,cssW,cssH);
+    /* 静态层已空缺的底图/场地先画在主画布最底层，再由位图覆盖其上（层级与全量绘制一致） */
+    if(scene){
+      drawBackground(c,v,d,cssW,cssH,toS);
+      if(scene==='site') drawSite(c,v,toS);
+    }
     c.drawImage(staticCanvas,0,0,cssW,cssH);
     /* 拖拽中的对象逐帧变化，单独绘制在静态位图之上 */
     if(dynSet){
@@ -264,10 +445,11 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawNodeFocus(c,toS);
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
+    labelLodOn=false;
     return;
   }
 
-  /* 直接绘制（导出 / 打印 / 离屏合成） */
+  /* 直接绘制（导出 / 打印 / 离屏合成）；opt.objectFilter 供导出按交付状态等口径收窄对象集 */
   c.clearRect(0,0,cssW,cssH);
   c.fillStyle='#ffffff'; c.fillRect(0,0,cssW,cssH);
   drawBackground(c,v,d,cssW,cssH,toS);
@@ -276,7 +458,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
   drawCoverage(c,v,d);
   drawSiteAnnotations(c,v,toS);
   drawAxes(c,v,toS,cssH);
-  const visible=state.objects.filter(isVisible).sort((a,b)=>a.z-b.z);
+  const visible=state.objects.filter(opt.objectFilter||isVisible).sort((a,b)=>a.z-b.z);
   const view=visibleWorldRect(v,d,cssW,cssH);
   visible.forEach(o=>{ if(boundsIntersect(objectBounds(o),view)) drawObject(c,o,v,toS,iconBoost,exportGain); });
   if(opt.interactive) drawDiffOverlay(c,v,toS);   /* 差异叠加仅屏幕预览，不进入 PNG/SVG/PDF 导出 */
@@ -295,6 +477,7 @@ function drawScene(c,v,cssW,cssH,opt={}){
     drawDragHud(c,toS);
     drawOsnapMarker(c,toS);
   }
+  labelLodOn=false;
 }
 /**
  * 矢量场地控制点手柄（「场地节点」工具激活时显示）：多边形=各顶点；矩形=四角；
@@ -520,7 +703,7 @@ function drawSite(c,v,toS){
 function noteBgImageError(){
   if(bgImageState==='error'&&bgImageErrorNotified) return false;
   bgImageState='error'; bgImageErrorNotified=true;
-  if(typeof toast==='function') toast('底图绘制失败：图片可能已损坏，请重新导入','warn');
+  callHook('ui.toast','底图绘制失败：图片可能已损坏，请重新导入','warn');
   return true;
 }
 function drawImageBackground(c,v,d,bg){
@@ -709,6 +892,16 @@ function annotationItems(o,opt={}){
     if(annotOn(o,'vertex') && (tt==='rect'||tt===PARA)){
       rectPoints(o).forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     }
+  }else if(o.kind==='arc'){
+    const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
+    const at=a=>[o.x+r*Math.cos(a*Math.PI/180),o.y+r*Math.sin(a*Math.PI/180)];
+    if(annotOn(o,'radius')&&r>0){
+      const m=at(a0+sweep/2); push(m[0],m[1],'R '+fmt(r)+' m',6,6);
+    }
+    if(annotOn(o,'perimeter')&&sweep>0){
+      /* 弧是描边几何：这里标注的是弧长（annotLabel 已把 perimeter 显示为「弧长」） */
+      const e=at(a0+sweep); push(e[0],e[1],'Σ '+fmt(objectLength(o))+' m',9,-9);
+    }
   }else if(o.kind==='line'){
     if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     if(annotOn(o,'edge')){
@@ -721,6 +914,47 @@ function annotationItems(o,opt={}){
   }
   return out;
 }
+/* -------------------- 标签 LOD（仅屏幕 canvas 交互帧） --------------------
+ * 判定输入 = 对象在**当前屏幕**上的包围盒高度（世界 AABB 投影；旋转/斜切已含在 AABB 内）。
+ * 阈值即标签自身高度：名称 chip 白底 18 px（drawLabel 的 y−9…y+9），
+ * 面积/周长行 16 px（drawAreaTag lh=16），坐标/段长 tag 16 px（drawScreenTag h=15+padY）。
+ * 数据出处 2026-11-15/perf-d3/work/measurements.md：1:500 起标签 100% 互相重叠，
+ * 1:1000 时名称 chip 已是对象的 2.3 倍。所以按对象实际屏幕尺寸判定而非固定比例：
+ * 同样 1:1000，16 px 的对象该藏、80 px 的不该藏。
+ * 边界：只在交互帧生效——导出（PNG/SVG/PDF）、命中测试、快照、协作数据一律不走 LOD，
+ * 导出在任何缩放下都带标签；选中对象（含多选）始终显示全部标签，见 lodSelectedSig。
+ * 两套判据各管一类：矩形/折线/圆弧等有世界尺寸的对象走「包围盒高度」；
+ * 点符号（phys=0，图标屏幕固定 22 px，尺寸规则永远失效）走「可见符号点屏幕分布密度」。 */
+let labelLodOn=false, labelLodObject=null, labelLodSpan=0, labelLodZoom=1;
+/** 符号点是否过密（由静态层重建时的可见性遍历累加，见 drawStaticContent） */
+let labelLodPointDense=false;
+const labelLodBox={minX:0,minY:0,maxX:0,maxY:0};
+/** 是否符号点（无物理尺寸的点，图标按屏幕像素固定绘制） */
+function isSymbolPoint(o){ return !!o&&o.kind==='point'&&!((Number(o.phys)||0)>0); }
+/**
+ * 对象能“撑起标签”的屏幕尺寸（px）：
+ * 二维图形取包围盒高度；开放折线取包围盒长边（纯水平线高度为 0，不能作为判据）；
+ * 点符号取图标屏幕高度（drawPoint 半径 r=11k，直径即高度），只用于选中签名，
+ * 标签显隐由密度判据决定。
+ */
+function objectScreenLabelSpan(o,zoom){
+  if(!o) return 0;
+  if(o.kind==='point'){
+    if((o.phys||0)>0) return o.phys*zoom;
+    return 22*pointIconScale(o);
+  }
+  const b=objectSnapBounds(o,labelLodBox);
+  const w=(b.maxX-b.minX)*zoom, h=(b.maxY-b.minY)*zoom;
+  return o.kind==='line'&&!o.closed?Math.max(w,h):h;
+}
+/** 该对象的标签在当前帧是否允许绘制（未选中且不满足判据时不画） */
+function labelLodAllows(o,minPx){
+  if(!labelLodOn||!o) return true;
+  if(selectedIds.has(o.id)) return true;
+  if(isSymbolPoint(o)) return !labelLodPointDense;
+  const span=o===labelLodObject?labelLodSpan:objectScreenLabelSpan(o,labelLodZoom);
+  return span>=minPx;
+}
 /** 段长标注最小屏幕像素（设置可调，默认 APP_LIMITS.SEG_LABEL_MIN_PX） */
 function segLabelMinPx(){
   const v=Number(state.settings&&state.settings.segLabelMinPx);
@@ -730,6 +964,7 @@ function segLabelMinPx(){
 }
 /** 绘制某对象的逐对象标注标签（屏幕固定字号；过短的段自动略去避免拥挤） */
 function drawObjectAnnotations(c,o,toS,v){
+  if(!labelLodAllows(o,APP_LIMITS.LABEL_LOD_TAG_PX)) return;
   annotationItems(o,{selected:selectedIds.has(o.id)}).forEach(it=>{
     if(it.lenWorld && it.lenWorld*v.zoom<segLabelMinPx()) return;
     const s=toS([it.wx,it.wy]);
@@ -738,10 +973,13 @@ function drawObjectAnnotations(c,o,toS,v){
 }
 function drawObject(c,o,v,toS,iconBoost,exportGain){
   const g=exportGain===undefined?iconBoost:exportGain;
+  /* 本对象的 LOD 尺寸只算一次，供名称/面积/段长标注共用 */
+  if(labelLodOn){ labelLodObject=o; labelLodZoom=(v&&Number(v.zoom))||1; labelLodSpan=objectScreenLabelSpan(o,labelLodZoom); }
   const type=getType(o.typeId), color=o.style.color||type.color||'#2563eb';
   if(o.kind==='point') drawPoint(c,o,color,type,toS,iconBoost,v);
   else if(o.kind==='rect') drawRect(c,o,color,toS,v,g);
   else if(o.kind==='line') drawLine(c,o,color,toS,v);
+  else if(o.kind==='arc') drawArc(c,o,color,toS,v);
   else if(o.kind==='text') drawText(c,o,color,toS,v,g);
   else if(o.kind==='dimension') drawDimension(c,o,toS);
   drawObjectAnnotations(c,o,toS,v);
@@ -862,7 +1100,7 @@ function drawRect(c,o,color,toS,v,markerScale){
   if(o.name) drawLabel(c,o,s[0],s[1],color,toS,12*markerScale);
   /* 面积/周长分别由逐对象开关控制（全局「图上显示面积」仅作未配置对象的缺省值） */
   const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-  if(sa||sp) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o),sa,sp);
+  if((sa||sp)&&labelLodAllows(o,APP_LIMITS.LABEL_LOD_TAG_PX)) drawAreaTag(c,s[0],s[1],shapeArea(o),shapePerimeter(o),sa,sp);
 }
 /** 图形中心的面积/周长胶囊（屏幕固定字号，世界图形缩放不影响可读性）；面积与周长可分别关闭 */
 function drawAreaTag(c,cx,cy,area,perimeter,showArea=true,showPerim=true){
@@ -880,6 +1118,21 @@ function drawAreaTag(c,cx,cy,area,perimeter,showArea=true,showPerim=true){
   lines.forEach((t,i)=>c.fillText(t,cx,cy-(lines.length-1)*8+i*16));
   c.restore();
 }
+/** 圆弧：直接用 ctx.arc 精确描边，不采样（导出/SVG 才走采样）。
+ *  世界角逆时针、Y 向上；屏幕 Y 向下，故屏幕角取负且方向反转（anticlockwise=true）。 */
+function drawArc(c,o,color,toS,v){
+  const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), sweep=arcSweep(sh);
+  if(!(r>0)||!(sweep>0)) return;
+  const cs=toS([o.x,o.y]), R=r*v.zoom, a0=Number(sh.a0)||0;
+  const s0=-a0*Math.PI/180, s1=-(a0+sweep)*Math.PI/180;
+  c.save(); c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineCap='round';
+  c.beginPath(); c.arc(cs[0],cs[1],R,s0,s1,true); c.stroke(); c.restore();
+  if(o.name){
+    const m=(a0+sweep/2)*Math.PI/180;
+    const ms=toS([o.x+r*Math.cos(m),o.y+r*Math.sin(m)]);
+    drawLabel(c,o,ms[0],ms[1]-8,color,toS);
+  }
+}
 function drawLine(c,o,color,toS,v){
   if(!o.points.length) return;
   const pts=o.points.map(toS);
@@ -895,7 +1148,7 @@ function drawLine(c,o,color,toS,v){
     const gx=o.points.reduce((s,p)=>s+p[0],0)/o.points.length, gy=o.points.reduce((s,p)=>s+p[1],0)/o.points.length;
     const gs=toS([gx,gy]);
     const sa=annotOn(o,'area'), sp=annotOn(o,'perimeter');
-    const capShown=o.points.length>=3&&(sa||sp);
+    const capShown=o.points.length>=3&&(sa||sp)&&labelLodAllows(o,APP_LIMITS.LABEL_LOD_TAG_PX);
     if(o.name) drawLabel(c,o,gs[0],gs[1]-(capShown?30:0),color,toS);
     if(capShown) drawAreaTag(c,gs[0],gs[1],polygonArea(o.points),objectLength(o),sa,sp);
   }
@@ -961,6 +1214,7 @@ function centroidScreen(ps){ return [ps.reduce((s,p)=>s+p[0],0)/ps.length,ps.red
 function drawLabel(c,o,x,y,color,toS,fontSize=12){
   /* 编号显隐只由逐对象配置决定（全局「显示标签」仅作未配置对象的缺省值，见 annotOn） */
   if(!o.name || !annotOn(o,'name')) return;
+  if(!labelLodAllows(o,APP_LIMITS.LABEL_LOD_NAME_PX)) return;
   c.save(); c.font='bold '+fontSize+'px "Microsoft YaHei",sans-serif'; c.textAlign='center'; c.textBaseline='middle';
   const tw=c.measureText(o.name).width;
   c.fillStyle='rgba(255,255,255,.82)'; c.fillRect(x-tw/2-4,y-9,tw+8,18);

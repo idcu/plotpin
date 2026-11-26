@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 /* check-ngm.mjs —— 消费方公共模块接线自检（零第三方依赖）
  *
- * 断言五件事：
- *   1. ngm.json 的每条依赖 ↔ ngm.lock 的模块条目一一对应，版本一致；
+ * 断言六件事：
+ *   1. ngm.json 的 schemaVersion 为 3、每条依赖 ↔ ngm.lock 的模块条目一一对应，版本一致；
  *   2. ngm.vendor 下的物理模块目录与 lock 一一对应，无未登记模块；
  *   3. 源码/入口里出现的 ngm.vendor 路径都能归到已登记的 subPath；
- *   4. .ngm-version 与 lockfileVersion 2.0.0 存在且格式合理；
- *   5. vendor **实际字节**与仓库内清单 `scripts/ngm-vendor-digest.json` 一致（P2-04）。
+ *   4. .ngm-version 与 lockfileVersion 3.0.0 存在且格式合理；
+ *   5. vendor **实际字节**与仓库内清单 `scripts/ngm-vendor-digest.json` 一致（P2-04）；
+ *   6. lock 条目的 requiredBy 为数组（lock v3 恒写依赖图的直接边）。
  *
- * 第 5 条的边界（必须诚实写明）：lock 的 `moduleDigest` 由 ngm 二进制生成，算法未公开，
- * 本机无 ngm 工具链，**无法重算**。这里改为「对 vendor 实际字节生成仓库内 sha256 清单并逐文件校验」：
- * 任何 vendor 文件被改动/增删都会在本地红并指出具体文件，等价覆盖 `ngm verify --deep` 想发现的问题。
+ * 第 5 条的边界（必须诚实写明）：lock 的 `moduleDigest` 由 ngm 对 commit tree 计算，
+ * `ngm verify --content` 才是来源证明；本机未装 ngm 时，这里用仓库内 sha256 清单兜底：
+ * 任何 vendor 文件被改动/增删都会在本地红并指出具体文件。
  * 清单的 `lockModuleDigest` 字段复制自 ngm.lock：lock 重新锁定而清单未刷新也会红。
  *
  * 用法：
@@ -28,7 +29,8 @@ import { walkFiles as walkFilesShared, readJson as parseJsonFile } from './lib/f
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_SLUG = 'gitee:idcu/ngm-repo';
 const VENDOR_REPO = 'gitee.com/idcu/ngm-repo';
-const LOCKFILE_VERSION = '2.0.0';
+const LOCKFILE_VERSION = '3.0.0';
+const PROJECT_SCHEMA_VERSION = 3;
 const errors = [];
 const warnings = [];
 
@@ -103,6 +105,9 @@ if (!fs.existsSync(versionFile)) {
 }
 
 if (project && lock) {
+  if (project.schemaVersion !== PROJECT_SCHEMA_VERSION) {
+    fail(`ngm.json schemaVersion 应为 ${PROJECT_SCHEMA_VERSION}，实际 ${project.schemaVersion}`);
+  }
   const declared = new Map();
   for (const d of project.dependencies || []) {
     if (d.name !== REPO_SLUG) {
@@ -134,6 +139,9 @@ if (project && lock) {
   if (!lock.dependencies || !Array.isArray(lock.dependencies)) {
     fail('ngm.lock 缺少 dependencies 数组');
   } else {
+    if (lock.version !== 1) {
+      fail(`ngm.lock version 应为 1，实际 ${lock.version}`);
+    }
     if (lock.lockfileVersion !== LOCKFILE_VERSION) {
       fail(`ngm.lock lockfileVersion 应为 ${LOCKFILE_VERSION}，实际 ${lock.lockfileVersion}`);
     }
@@ -156,6 +164,7 @@ if (project && lock) {
       if (!/^sha256:[0-9a-f]{64}$/.test(String(d.moduleDigest))) fail(`${d.subPath} 缺少合法 moduleDigest：${d.moduleDigest}`);
       if (!/^(sha1|sha256):[0-9a-f]{40,64}$/.test(String(d.subtreeOid))) fail(`${d.subPath} 缺少合法 subtreeOid：${d.subtreeOid}`);
       if (d.vendorPath !== VENDOR_REPO) fail(`${d.subPath} 的 vendorPath 应为 ${VENDOR_REPO}，实际 ${d.vendorPath}`);
+      if (!Array.isArray(d.requiredBy)) fail(`${d.subPath} 的 requiredBy 应为数组（lock v3 必写）`);
       locked.set(d.subPath, d);
     }
 
@@ -253,7 +262,7 @@ if (project && lock) {
           if (!declared.has(subPath)) fail(`vendor 摘要清单登记了未声明模块：${subPath}`);
         }
         console.log(`check-ngm: vendor 字节锚定 ${verifiedFiles} 个文件 / ${Object.keys(doc.modules || {}).length} 个模块`
-          + '（moduleDigest 未重算：算法未公开且本机无 ngm 二进制）');
+          + '（moduleDigest 由 ngm verify --content 重放；此处是离线字节兜底）');
       }
     }
 
@@ -353,7 +362,7 @@ if (project && lock) {
        反向扫全仓，保证新增适配层不会漏登记。 */
     const ADAPTER_MARK = /适配层|实现已抽到|实现由公共模块|保留原有.{0,20}全局导出名|适配 @idcu\//;
     const SKIP_SCAN = new Set(['node_modules', 'ngm.vendor', 'scripts', 'test', 'tests',
-      'legacy', 'data', 'dist', 'analysis', '.trae', 'public', 'coverage', '.tmp']);
+      'legacy', 'data', 'dist', 'analysis', '.trae', 'public', 'coverage', '.tmp', 'backup']);
     const adapterFiles = [];
     const scanAdapters = (dir) => {
       for (const name of fs.readdirSync(dir)) {

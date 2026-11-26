@@ -5,6 +5,27 @@
  * 全部落在视野内（最坏情况的静态层重建）。修改本文件会让两组基线同时变化，
  * 必须两侧一起复测，不得只改一侧。
  */
+/* —— 以下为 Node 侧诊断，不会随 installScene 传入 page.evaluate —— */
+import os from 'node:os';
+
+/**
+ * 主机快照：性能门禁失败时打进日志，用来区分「机器忙」与「代码退化」。
+ * 只用 Node 内置模块。注意 Windows 上 os.loadavg() 恒为 [0,0,0]，不能当负载依据，
+ * 因此同时给出逻辑核数、可用并行度与空闲内存作为旁证。
+ */
+export function hostSnapshot() {
+  const cpus = os.cpus();
+  return [
+    `宿主 ${process.platform}/${os.arch()}`,
+    `CPU ${cpus.length} 逻辑核（可用并行 ${os.availableParallelism()}）`,
+    `型号 ${(cpus[0] && cpus[0].model || '未知').trim()}`,
+    `loadavg ${os.loadavg().map(v => v.toFixed(2)).join('/')}（Windows 恒 0）`,
+    `空闲内存 ${(os.freemem() / 1073741824).toFixed(1)}GB`,
+    `本进程 RSS ${(process.memoryUsage().rss / 1048576).toFixed(0)}MB`,
+    `Node ${process.version}`
+  ].join(' / ');
+}
+
 export function installScene(scale) {
   state.background = createEmptyBackground();
   state.site = createSiteSlot({ type: 'rect', w: 2000, h: 1500 });

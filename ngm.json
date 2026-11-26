@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "name": "plotpin",
   "version": "0.2.0",
   "runtime": "node",
@@ -7,61 +7,61 @@
   "dependencies": [
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/core/assets/v0.2.0",
+      "ref": "packages/core/assets/v0.2.1",
       "refType": "tag",
       "path": "packages/core/assets"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/core/geometry/v0.2.0",
+      "ref": "packages/core/geometry/v0.2.1",
       "refType": "tag",
       "path": "packages/core/geometry"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/dsv/v0.3.0",
+      "ref": "packages/format/dsv/v0.3.1",
       "refType": "tag",
       "path": "packages/format/dsv"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/dxf/v0.2.1",
+      "ref": "packages/format/dxf/v0.2.3",
       "refType": "tag",
       "path": "packages/format/dxf"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/pdf/v0.2.0",
+      "ref": "packages/format/pdf/v0.2.1",
       "refType": "tag",
       "path": "packages/format/pdf"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/pdf-image/v0.1.0",
+      "ref": "packages/format/pdf-image/v0.1.1",
       "refType": "tag",
       "path": "packages/format/pdf-image"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/qr/v0.1.0",
+      "ref": "packages/format/qr/v0.1.1",
       "refType": "tag",
       "path": "packages/format/qr"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/xlsx-read/v0.3.1",
+      "ref": "packages/format/xlsx-read/v0.3.2",
       "refType": "tag",
       "path": "packages/format/xlsx-read"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/xml-lite/v0.2.0",
+      "ref": "packages/format/xml-lite/v0.2.1",
       "refType": "tag",
       "path": "packages/format/xml-lite"
     },
     {
       "name": "gitee:idcu/ngm-repo",
-      "ref": "packages/format/zip/v0.2.0",
+      "ref": "packages/format/zip/v0.2.1",
       "refType": "tag",
       "path": "packages/format/zip"
     }
@@ -69,5 +69,8 @@
   "vendor": {
     "mode": "local",
     "linkMode": "copy"
+  },
+  "supplyChain": {
+    "trustPolicy": "no-downgrade"
   }
 }

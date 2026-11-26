@@ -433,6 +433,7 @@ function showTableImportPreview(fileName,plan){
      {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }
 function applyTableImport(plan){
+  if(!guardWrite(L('导入'))) return;
   if(plan.errors&&plan.errors.length){ toast(L('表格导入失败：存在非法行，已整批取消'),'error'); return; }
   const limitErrs=importLimitErrors({objects:countProjectObjects(state)+(plan.creates||[]).length});
   if(limitErrs.length){ toast(L('表格导入失败：{msg}',{msg:importLimitMessage(limitErrs)}),'error'); return; }
@@ -533,7 +534,8 @@ function applyTableImport(plan){
     commitChange(L('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
       {updated,replaced,created}));
   }catch(err){
-    state=materializeHistoryState(backup);
+    /* 导入异常回滚：走统一入口补上叠放缓存/静态层/取景基准与 UI 刷新 */
+    replaceState(materializeHistoryState(backup),{fit:false});
     if(history.past.length) history.past.pop();
     history.future=prevFuture;
     selectedIds.clear();

@@ -1,5 +1,18 @@
 name: CI
 
+# 当前状态：**定义已挂载并实际运行，暂不作发布门禁**。
+# 历史实测（2026-11-13 核查）：CI 运行 60 次均失败（`test` 与两个 `e2e` job 为红），`Perf Nightly` 0 次，
+# `pages-build-deployment` 87 次（`gh api repos/idcu/plotpin/actions/runs`）。
+# 2026-11-14 修掉 `test` job 缺 `npm ci` 的结构性根因；2026-11-15 远端 run 43625493370 中该 job 已转绿。
+# 同 run 的两个 `e2e` job 仍红，根因是 `dist/` 不入库且 job 内不构建：源码入口 3 条 `file-dist` 用例
+# `net::ERR_FILE_NOT_FOUND`，dist 入口 webServer 因 `/index.html` 映射到缺失产物而 20 s 超时。
+# 这不属于产品缺陷——两条入口依赖的都是「构建完成」这一前提，判定与常量一律不放宽；
+# 修复方式：在本文件 `e2e` job 内先构建再跑（见该 job 的构建步骤注释）。
+# 复跑（run 43626940476）：源码入口全绿（175 passed / 1 skipped）；dist 入口 webServer 恢复正常，
+# 171 passed / 4 skipped / 1 failed，失败为 perf-render.spec.mjs:198 像素采样（本地同一 spec 全绿，
+# 原因未定位）。因此 e2e job 仍未全绿，不得据此放宽判定。
+# 决策（D2，2026-11-13）：发布门禁放在本地，Actions 仅作参考，不作为合并阻断。
+# 发布门禁以本地命令为准，逐条清单与期望值见 `docs/release-checklist.md`。
 on:
   push:
   pull_request:
@@ -12,7 +25,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      # 零依赖：无需 npm install
+      # 运行期零依赖，但构建链要 devDependency `terser`（pack-core.mjs 在 build --check 时压缩脚本），
+      # check-gates 也要 node_modules 才能跑完整副本。缺这一步会让本 job 结构性全红。
+      # --ignore-scripts：不执行任何包脚本，安装面只来自 lockfile。
+      - name: 安装构建期依赖（terser 等，不进发行包）
+        run: npm ci --ignore-scripts
       - name: 契约判据（版本三处一致 / i18n 键对齐 / 文件头 / 枚举同源）
         run: node scripts/check-contracts.mjs
       - name: 对外 API 面（PlotPin 顶层键 ↔ contracts/plugin-api.json）
@@ -25,7 +42,7 @@ jobs:
         run: node scripts/bench.mjs
       - name: 单文件发行包校验（源重建 ↔ dist-manifest 登记哈希）
         run: node scripts/build.mjs --check
-      - name: 门禁牙齿自测（正面基线 + 12 种人为破坏）
+      - name: 门禁牙齿自测（正面基线 10 条 + 20 种人为破坏）
         run: node scripts/check-gates.mjs
 
   e2e:
@@ -33,8 +50,26 @@ jobs:
     # 首次在 GitHub runner 上执行时由本 job 的 install 步骤安装。
     # 注意：本地无法验证 runner 上的真实执行（见 docs/engineering.md §3.5），
     # 该 job 的实际耗时/稳定性以 CI 运行记录为准，不得用本地 e2e 结果代替。
-    name: 浏览器 e2e（Chromium）
+    #
+    # 双入口：matrix 两个 job 并行，各自跑**全量** spec（不分组、不挑子集）。
+    # 选择依据：单套 e2e 本地约 3～4 分钟，两套串行会翻倍；matrix 并行把墙钟压回
+    # 一套的时间，且两个 job 互不影响（fail-fast: false，任一侧失败都保留另一侧结果）。
+    # 源码入口用 4173；dist 入口用 4174，避免 serve.mjs 复用另一个入口的服务器。
+    name: 浏览器 e2e（Chromium，${{ matrix.entry }}）
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - entry: 源码入口
+            dist: ''
+            port: '4173'
+          - entry: dist 入口
+            dist: 'dist'
+            port: '4174'
+    env:
+      E2E_ENTRY: ${{ matrix.dist }}
+      E2E_PORT: ${{ matrix.port }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,9 +78,26 @@ jobs:
           cache: npm
       - name: 安装开发期依赖（@playwright/test，不进发行包）
         run: npm ci
+      # `dist/` 被 .gitignore 排除（单文件发行版不入库），所以干净检出上必须先构建，否则：
+      #   - 源码入口的 file-dist.spec（3 条）直接 file:// 打开 dist，全部 ERR_FILE_NOT_FOUND；
+      #   - dist 入口的 serve.mjs 把 /index.html 映射到该产物，404 使 Playwright webServer 20 s 超时。
+      # 这两种红都是「构建前提缺失」，不是产品缺陷；本步骤只补前提，e2e 判定与用例一律不改。
+      - name: 构建单文件发行版（两个 e2e 入口都依赖 dist 产物）
+        run: node scripts/build.mjs
       - name: 安装 Chromium 与系统依赖
         run: npx playwright install --with-deps chromium
-      - name: Playwright 功能 e2e（119+ 用例）
+      # pdf-text-layer.spec 的提取对比依赖 poppler 的 `pdftotext`。runner 默认不带 poppler-utils，
+      # 缺它时该用例会走 spec 里的条件跳过（不是通过），门禁就退化成「看似有门禁其实在跳过」。
+      # 本步骤只补二进制前提：用例、跳过条件、断言一律不改；装不上就让 job 直接红，不做兜底。
+      - name: 安装 poppler（pdftotext，pdf-text-layer.spec 的提取断言依赖）
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
+          pdftotext -v 2>&1 | head -n 1
+      # 含 file-dist.spec（直接打开 dist 的 file:// 绝对路径）与入口无关，两套都会跑。
+      # 注意：`npm run ci` 是离线 Node 门禁，不含浏览器；file:// 用例在 CI 的 e2e job 执行，
+      # 不在 `npm run ci` 里重复跑（原因：npm run ci 不安装/不依赖 Playwright 与 Chromium）。
+      - name: Playwright 功能 e2e（${{ matrix.entry }}，全量 spec）
         run: node scripts/e2e.mjs
 
   vendor-check:
@@ -96,15 +148,20 @@ jobs:
             echo "::error::ngm version mismatch: binary=$got expected=$want"
             exit 1
           fi
-      - name: Verify vendor provenance
+      - name: Verify vendor provenance (content)
         run: |
-          "$RUNNER_TEMP/ngm" verify --deep
+          "$RUNNER_TEMP/ngm" verify --content
+
+      - name: Explain test plan (read-only, no script executed)
+        run: |
+          "$RUNNER_TEMP/ngm" run --explain test
 
   discipline:
-    # 十问看板（方法论 §8）：只回答"这个仓库几档、缺哪一条"，不改任何东西。
+    # 文档纪律 13 问（方法论 §8）：只回答"这个仓库几档、缺哪一条"，不改任何东西。
     # --strict 在低于 L3 时退 1——防止新仓库悄悄从 L0 起步。
+    # runner 未接入（见文件头），本 job 为定义存档；本地等价命令见 docs/release-checklist.md。
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 十问看板
+      - name: 文档纪律 13 问（--strict）
         run: node scripts/check-discipline.mjs --strict

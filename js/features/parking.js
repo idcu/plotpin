@@ -135,17 +135,24 @@ function ensureParkingLayer(){
 }
 
 function applyParkingLayout(){
+  if(!guardWrite(L('生成车位'))) return;
   const res=parkingLayout(parkingOptionsFromInputs());
   if(res.error){ toast(parkingWarningText(res.error),'error'); return; }
   if(!res.stalls.length){ toast(L('没有可生成的车位'),'warn'); return; }
+  const existing=state.layers.find(l=>l.id===PARKING_LAYER);
+  if(existing&&existing.locked){ toast(L('图层已锁定'),'warn'); return; }
+  const clear=!!($('parkingClear')&&$('parkingClear').checked);
+  const replaced=clear?state.objects.filter(o=>o.layerId===PARKING_LAYER).length:0;
+  if(!ensureObjectCapacity(res.stalls.length+res.aisles.length-replaced)) return;
   pushHistory();
   const layer=ensureParkingLayer();
   /* IO-P2-24：清除前先聚合全部已占用编号（含本批将被标记墓碑的停车场对象名），
      再复用统一编号作用域 P/A 取号；避免与墓碑对象在协作合并后重名。 */
   const used=allObjectNames();
-  if($('parkingClear') && $('parkingClear').checked){
+  if(clear){
     state.objects.filter(o=>o.layerId===layer.id).forEach(o=>markTombstone(o.id,'object'));
     state.objects=state.objects.filter(o=>o.layerId!==layer.id);
+    syncActiveFloor();   /* B7：整体替换后立即重建活动楼层别名 */
   }
   const pScope=objectNameScopeFor(used,'P',3,1), aScope=objectNameScopeFor(used,'A',3,1);
   res.stalls.forEach((s,i)=>{

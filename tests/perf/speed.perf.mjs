@@ -435,6 +435,76 @@ test.describe('M2 提速段 · 真实 Chromium 10k 对象', () => {
       expect(data.snapshotList.speedup, '列表相对全量读加速倍数').toBeGreaterThanOrEqual(GATES.n24ListSpeedup);
     }
   });
+
+  test('B3 撤销热路径：10 工程 × 1k 对象下 undo 不再全库扫描', async ({ page }) => {
+    test.setTimeout(180000);
+    await openApp(page);
+    const setup = await page.evaluate(async () => {
+      state = createInitialState();
+      const objs = [];
+      for (let i = 0; i < 1000; i++) objs.push(baseObject('point', 'point.marker', { id: 'B3O' + i, name: 'B3O' + i, x: i, y: i }));
+      state.objects = objs;
+      syncActiveFloor();
+      history = { past: [], future: [] };
+      /* 10 个工程记录 × 1k 对象：改造前 undo 会在这里同步读取并 JSON 解析全部记录 */
+      for (let p = 0; p < 10; p++) {
+        await idbPutKey('proj:B3P' + p, {
+          schema: 1,
+          meta: { projectId: 'B3P' + p, name: 'B3P' + p },
+          objects: objs.map(o => ({ id: o.id + '_P' + p, kind: 'point', type: 'point.marker', x: o.x, y: o.y })),
+          floors: []
+        });
+      }
+      /* 仅被工程记录引用的资产：回收不得误删 */
+      await assetPut('B3_ASSET', { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' });
+      await idbPutKey('proj:B3ASSET', { schema: 1, meta: { projectId: 'B3ASSET', name: 'B3ASSET' }, background: { assetId: 'B3_ASSET' }, objects: [], floors: [] });
+      for (let s = 0; s < 25; s++) { state.objects[s].x += 1; pushHistory(); }
+      return { hist: history.past.length };
+    });
+    const r = await page.evaluate(async () => {
+      const real = idbAllKeys;
+      let calls = 0;
+      idbAllKeys = (...a) => { calls++; return real(...a); };
+      const times = [];
+      for (let i = 0; i < 20; i++) {
+        const t0 = performance.now();
+        undo();
+        times.push(performance.now() - t0);
+        await new Promise(res => setTimeout(res, 0));
+      }
+      idbAllKeys = real;
+      /* 延后回收真实执行：仍被工程记录引用的资产必须保留 */
+      const deleted = await pruneBgAssets();
+      const kept = !!(await assetGet('B3_ASSET'));
+      /* 对照：旧实现每次 undo 都同步跑这套全库扫描，量化它现在被移出热路径的成本 */
+      const scan = [];
+      for (let i = 0; i < 5; i++) {
+        const t0 = performance.now();
+        await assetRefsByNamespace();
+        scan.push(performance.now() - t0);
+      }
+      for (let p = 0; p < 10; p++) await idbDeleteKey('proj:B3P' + p);
+      await idbDeleteKey('proj:B3ASSET');
+      await assetPrune([]);
+      return { calls, times, deleted, kept, scan };
+    });
+    const data = {
+      case: 'B3 撤销热路径 · 10 工程 × 1k 对象',
+      hist: setup.hist,
+      undo: stat(r.times),
+      scanCost: stat(r.scan),
+      syncScanCalls: r.calls,
+      gcDeleted: r.deleted.length,
+      assetKept: r.kept
+    };
+    record(data);
+    expect(setup.hist, '历史帧数（HISTORY_MAX=20）').toBe(20);
+    expect(r.kept, '仅被工程记录引用的资产必须保留').toBe(true);
+    if (!NO_GATE) {
+      expect(r.calls, '单次 undo 不得同步全库扫描').toBe(0);
+      expect(data.undo.p95, 'B3 undo P95').toBeLessThanOrEqual(16);
+    }
+  });
 });
 
 test.afterAll(save);

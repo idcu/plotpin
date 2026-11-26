@@ -3,6 +3,9 @@
 import { test, expect } from '@playwright/test';
 
 test('SW：注册后缓存名带版本，旧缓存被清理，断网仍能打开页面', async ({ page, context }) => {
+  /* 单文件发行版不含 js/、css/ 与 sw.js：预缓存清单是源码多文件入口的产物，
+     dist 模式下这些输入按设计不存在（缓存条目数必然小于 10），本用例只对源码入口有判定意义。 */
+  test.skip(process.env.E2E_ENTRY === 'dist', '单文件发行版无 SW 预缓存输入，SW 用例仅覆盖源码入口');
   await page.goto('/tests/fixtures/sw-test.html');
 
   /* 预置旧版本缓存，再走一次全新安装（install → activate 清理非当前版本 → claim） */
@@ -32,6 +35,21 @@ test('SW：注册后缓存名带版本，旧缓存被清理，断网仍能打开
   expect(cacheInfo.current).toBeTruthy();
   expect(cacheInfo.names).not.toContain('plotpin-v1');
   expect(cacheInfo.entries).toBeGreaterThan(10);
+
+  /* P4-01：STATUS 消息回报本次预缓存计数（成功/失败/总数），失败不清空缓存 */
+  const status = await page.evaluate(() => new Promise(resolve => {
+    navigator.serviceWorker.addEventListener('message', ev => {
+      if (ev.data && ev.data.type === 'STATUS') resolve(ev.data);
+    });
+    navigator.serviceWorker.controller.postMessage({ type: 'STATUS' });
+    setTimeout(() => resolve(null), 3000);
+  }));
+  console.log('[P4-01][sw] ' + JSON.stringify(status));
+  expect(status).toBeTruthy();
+  expect(status.version).toBe(cacheInfo.current.replace('plotpin-v', ''));
+  expect(status.total).toBeGreaterThan(10);
+  expect(status.ok).toBe(status.total);
+  expect(status.failed).toBe(0);
 
   /* 断网后打开业务页：由 SW 缓存回退，页面不白屏 */
   await context.setOffline(true);

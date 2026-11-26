@@ -39,6 +39,7 @@ function pushDraftPoint(points,wp){
   points.push(wp); return true;
 }
 function setTool(tool){
+  if(readOnly&&tool!=='select') return guardWrite(L('该工具'));
   /* 独立「测距」按钮 = 标注工具的 ruler 子模式：复用 dimension 全部交互，仅入口更醒目；
      点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
   if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
@@ -49,7 +50,7 @@ function setTool(tool){
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   syncToolButtons(tool);
   updateToolTitle();
-  refreshUI();
+  callHook('ui.refresh');
   requestRender();
 }
 let lastCanvasHandledAt=0, lastCanvasPointerUpAt=0;
@@ -293,6 +294,7 @@ canvas.addEventListener('pointerdown',e=>{
   if(currentTool==='select'){
     const h=handleAt(wp,sp);
     if(h){
+      if(!guardWrite(L('拖拽'))) return;
       pushHistory();
       drag={type:h.type,handle:h,id:h.object.id,start:wp,original:deepClone(h.object)};
       return;
@@ -302,6 +304,7 @@ canvas.addEventListener('pointerdown',e=>{
       if(isEditable(o)){
         if(e.shiftKey||e.ctrlKey||e.metaKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
         else if(!selectedIds.has(o.id)){ selectedIds.clear(); selectedIds.add(o.id); }
+        if(readOnly){ refreshSelectionUI(); requestRender(); return; }
         drag={type:'move',start:wp,originals:new Map(),moved:false};
         const idx=dragObjectIndex(drag);
         selectedIds.forEach(id=>{ const obj=idx.get(id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
@@ -314,6 +317,7 @@ canvas.addEventListener('pointerdown',e=>{
     rubber={a:sp,b:sp}; refreshSelectionUI(); requestRender(); return;
   }
   if(currentTool==='point'){
+    if(!ensureObjectCapacity(1)) return;
     pushHistory();
     const typeId=$('pointType').value || 'point.marker';
     const ptType=getType(typeId);
@@ -349,6 +353,7 @@ canvas.addEventListener('pointerdown',e=>{
   if(currentTool==='text'){
     showPrompt({title:L('添加文字'),label:L('文字内容'),value:L('标注文字')}).then(text=>{
       if(text===null) return;
+      if(!ensureObjectCapacity(1)) return;
       pushHistory();
       const o=baseObject('text',null,{x:wp[0],y:wp[1],text,height:2.2,style:{color:'#111827'}});
       o.typeId='text.builtin'; if(!state.objectTypes.some(t=>t.id===o.typeId)) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
@@ -401,7 +406,9 @@ canvas.addEventListener('pointermove',e=>{
   if(drag?.type==='rotate'){
     drag.dirty=true;
     const o=state.objects.find(x=>x.id===drag.id); if(!o) return;
-    rotateShapeByHandle(o,wp,drag.handle.kind==='pointRotate');
+    /* 圆弧没有整体朝向，旋转手柄按指针方位增量搬移起止角 */
+    if(o.kind==='arc'&&o.shape&&o.shape.type===ARC) rotateArcByHandle(o,drag.original,drag.start,wp);
+    else rotateShapeByHandle(o,wp,drag.handle.kind==='pointRotate');
     requestRender(); return;
   }
   if(drag?.type==='rect'){
@@ -496,7 +503,7 @@ canvas.addEventListener('pointerup',e=>{
     const rb={minX:min[0],maxX:max[0],minY:min[1],maxY:max[1]};
     if(Math.abs(rubber.b[0]-rubber.a[0])>4||Math.abs(rubber.b[1]-rubber.a[1])>4){
       if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
-      state.objects.forEach(o=>{ if(isVisible(o)&&boundsIntersect(objectBounds(o),rb)) selectedIds.add(o.id); });
+      state.objects.forEach(o=>{ if(isVisible(o)&&isEditable(o)&&boundsIntersect(objectBounds(o),rb)) selectedIds.add(o.id); });
     }
     rubber=null; refreshSelectionUI(); requestRender();
   }
@@ -722,7 +729,7 @@ function cancelActiveDrag(){
     if(d.moved) calibUndo(); else calibUndoStack.pop();
     requestRender(); return true;
   }else return true;
-  if(changed) commitChange(undefined, dragChangedIds(d)); else { updateHistoryButtons(); refreshUI(); requestRender(); }
+  if(changed) commitChange(undefined, dragChangedIds(d)); else { updateHistoryButtons(); callHook('ui.refresh'); requestRender(); }
   return true;
 }
 canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(...pointerScreen(e),e.deltaY<0?1.15:1/1.15); },{passive:false});
@@ -755,6 +762,8 @@ function finishDraft(){
   if(currentTool==='calibrate'){ finishCalibration(); return; }
   if(!draft) return;
   if(draft.kind==='sitePolygon') return finishSiteDraft();
+  /* M-13：变更前校验容量，超限不产生半成品/历史条目 */
+  if(!ensureObjectCapacity(1)){ draft=null; requestRender(); return; }
   if(draft.kind==='rect'){
     const a=draft.start,b=draft.current;
     const x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),h=Math.abs(a[1]-b[1]);
@@ -948,7 +957,15 @@ function refreshCalibStatus(){
   let text=reasons.join('；');
   if(!text&&isCalibTool(currentTool)){
     const p=calibPrecheck(currentTool);
-    if(p.ok&&p.step) text=p.step.label;
+    if(p.ok&&p.step){
+      text=p.step.label;
+      /* G-01：标定中同时显示当前 m/px（本会话应用过比例预设时附来源） */
+      const mpp=isImageBackground(state.background)?Number(state.background.metersPerPixel):0;
+      if(mpp>0){
+        text+=' · '+L('1 px = {mpp} m',{mpp:mppText(mpp)});
+        if(scalePreset) text+=L('（1:{s} @ {d}dpi）',{s:scalePreset.scale,d:scalePreset.dpi});
+      }
+    }
   }
   status.textContent=text;
   status.hidden=!text;
@@ -1035,6 +1052,7 @@ async function finishAffine(){
 
 /* -------------------- 对象操作 -------------------- */
 function deleteSelected(){
+  if(!guardWrite(L('删除'))) return;
   const deletable=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!deletable.length) return toast('没有可删除的选中对象（可能位于锁定图层）','warn');
   showConfirm(`${L('确定删除选中的')} ${deletable.length} ${L('个对象吗？')}`).then(ok=>{
@@ -1043,12 +1061,15 @@ function deleteSelected(){
     const ids=new Set(deletable.map(o=>o.id));
     deletable.forEach(o=>markTombstone(o.id,'object'));
     state.objects=state.objects.filter(o=>!ids.has(o.id));
+    syncActiveFloor();   /* B7：整体替换后立即重建活动楼层别名，不等下一次保存/统计 */
     deletable.forEach(o=>selectedIds.delete(o.id));
     commitChange('已删除对象');
   });
 }
 function duplicateSelected(){
+  if(!guardWrite(L('复制对象'))) return;
   const olds=state.objects.filter(o=>selectedIds.has(o.id)); if(!olds.length) return;
+  if(!ensureObjectCapacity(olds.length)) return;   /* M-13：批量一次校验 */
   pushHistory();
   const fresh=[];
   /* 批量复制：编号作用域一次建立，避免每个副本都全量扫描 state.objects */
@@ -1062,7 +1083,9 @@ function copySelected(){
   if(clipboard.length) toast(L('已复制 {n} 个对象到剪贴板',{n:clipboard.length}));
 }
 function pasteClipboard(){
+  if(!guardWrite(L('粘贴'))) return;
   if(!clipboard.length) return;
+  if(!ensureObjectCapacity(clipboard.length)) return;   /* M-13：按粘贴数量一次校验 */
   pushHistory();
   const fresh=[];
   withObjectNameScope(allObjectNames(), () => clipboard.forEach(o=>{
@@ -1102,7 +1125,8 @@ function helpGlossaryRows(){
     [L('楼层'), L('每层独立底图/场地与对象；图层、类型、工程库与 JSON 跨层共享。')],
     [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
     [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
-    [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')]
+    [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')],
+    [L('低缩放标签'), L('交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。')]
   ];
 }
 function helpExportRows(){
@@ -1110,8 +1134,9 @@ function helpExportRows(){
     [L('JSON 工程'), L('全部楼层、底图与照片，可回导。')],
     [L('PNG 高清图'), L('当前楼层位图快照，放大不保真。')],
     [L('SVG 矢量图'), L('当前楼层矢量图，底图嵌入，可无损缩放。')],
-    [L('PDF 矢量（图纸+清单）'), L('图纸页为位图页；清单独立分页。')],
+    [L('PDF（图纸位图+清单）'), L('图纸页为位图页；清单独立分页。')],
     [L('DXF（CAD 互通）'), L('场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。')],
+    [L('DXF（保真：椭圆+圆弧）'), L('含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。')],
     [L('CSV 表格'), L('全楼层台账；= + - @ 开头加单引号防公式注入。')],
     [L('TSV 表格'), L('同 CSV，制表符分隔；同一公式防护。')],
     [L('Excel (.xlsx)'), L('全楼层台账；单元格按文本写入，无公式。')]
@@ -1183,7 +1208,7 @@ function cycleKeyboardRegion(){
 function escapeInterrupt(){
   if(cancelActiveDrag()) return 'drag';
   resetTransientInteractionState({keepCoverage:true});
-  selectedIds.clear(); setTool('select'); refreshUI(); return 'reset';
+  selectedIds.clear(); setTool('select'); callHook('ui.refresh'); return 'reset';
 }
 /* CORE-P2-9：窗口失焦只结束进行中的交互，保留校准点、参考线与覆盖率叠加 */
 function handleWindowBlur(){
@@ -1202,6 +1227,9 @@ window.addEventListener('keydown',e=>{
   /* 弹窗优先：Esc 在输入框内也能关闭；Tab 在弹窗内循环；其余快捷键不穿透遮罩 */
   if($('modalBackdrop').classList.contains('show')){ modalKeydown(e); return; }
   if(typing) return;
+  /* G5：只读时拦截编辑类快捷键（撤销/重做/复制副本/粘贴/剪切/删除/方向键移动） */
+  const roEdit=(e.ctrlKey||e.metaKey)?['z','y','d','v','x'].includes(e.key.toLowerCase()):['Delete','Backspace','Enter'].includes(e.key)||e.key.startsWith('Arrow');
+  if(readOnly&&roEdit){ e.preventDefault(); return guardWrite(L('编辑快捷键')); }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!e.shiftKey&&(currentTool==='calibrate'||currentTool==='affine')&&calibUndo()) return; e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
@@ -1247,17 +1275,34 @@ window.addEventListener('keyup',e=>{
 
 /* 关闭/刷新页面前强制落盘：IndexedDB 事务尽力触发，localStorage 同步兜底，杜绝最后编辑丢失。
    多标签租约冲突时（另一标签正在编辑）不得写 'current'，否则会覆盖对端草稿；
+   救援模式下（原记录审计为 error）只写救援副本，连 LS_KEY 也不碰，避免覆盖待救援的原始数据。
+   正常模式只在确实有未落盘内容（防抖/重试定时器或在途写）时才写，避免每次关闭都产出一份
+   时间戳更新的空草稿、在加载择优时压过工程库里的完整工程。
    本地兜底草稿仍写入，并复用自动保存的状态提示，返回 false 表示未写 IndexedDB。 */
 function flushBeforeUnload(){
   try{
-    clearTimeout(saveTimer);
+    /* 先记录是否有待保存内容，再清定时器（清完就无法判断是否真的需要落盘） */
+    const pending=!!saveTimer||!!saveRetryTimer||saveInFlight>0;
+    clearTimeout(saveTimer); saveTimer=null;
+    clearTimeout(saveRetryTimer); saveRetryTimer=null;
     const snapshot=persistableState();
-    writeLocalDraft(snapshot);
-    if(leaseSaveBlocked()){
+    const block=saveBlockState();
+    if(block==='rescue'){
+      writeRescueDraft(snapshot);
+      saveStatus('救援模式：仅写救援副本，原记录未被覆盖');
+      return false;
+    }
+    if(block==='lease'){
+      writeLocalDraft(snapshot);
       saveStatus(L('另一标签页正在编辑，已暂停自动保存'));
       return false;
     }
-    idbPut(snapshot).catch(()=>{});
+    /* 没有待保存内容时关闭页面不重复落盘：否则每次关闭都会写出一份"更新时刻更晚"的
+       本地兜底草稿，加载择优（R-04）会让它压过工程库里更旧但完整的工程记录。 */
+    if(!pending) return false;
+    writeLocalDraft(snapshot);
+    /* H-02：卸载同样写 current + proj:<pid>，否则同会话再从工程库打开会读到旧副本 */
+    idbPutCurrentAndProject(snapshot,snapshot.meta&&snapshot.meta.projectId||'').catch(()=>{});
     return true;
   }catch(e){ return false; }
 }

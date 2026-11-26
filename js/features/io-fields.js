@@ -49,7 +49,7 @@ const EXPORT_FIELD_DEFS=[
   /* 合成列：PDF 清单与打印报告共用；CSV/TSV/XLSX 不输出（列头与旧版完全一致） */
   {key:'参数',table:false,get:c=>exportParamText(c)}
 ];
-const EXPORT_FIELD_BY_KEY=new Map(EXPORT_FIELD_DEFS.map(f=>[f.key,f]));
+/* EXPORT_FIELD_DEFS 是字段唯一源；按 key 取值直接用 find（调用点极少，不建索引） */
 /** 完整表格列（CSV/TSV/XLSX 表头，顺序即字段表顺序；兼容旧全局名） */
 const TABLE_COLUMNS=EXPORT_FIELD_DEFS.filter(f=>f.table).map(f=>f.key);
 /** 设备台账字段（导出与导入共用；key=中文列名，value=props 键） */
@@ -65,6 +65,10 @@ function exportShapeSummary(o){
     else if(tt===CIR){ w=h=2*sh.r; }
     else if(tt===ELL){ w=2*sh.rx; h=2*sh.ry; }
     else { w=h=2*sh.r; param=fmt(Number(sh.a0)||0)+','+fmt(Number(sh.a1)||0); }
+  }else if(o.kind==='arc'){
+    /* 描边圆弧：宽高取外接盒直径；参数沿用扇形的 a0,a1 口径（便于与区域形状对照） */
+    const sh=o.shape||{}, a0=Number(sh.a0)||0;
+    label='圆弧'; w=h=2*Math.max(0,Number(sh.r)||0); param=fmt(a0)+','+fmt(a0+arcSweep(sh));
   }
   return {w,h,angle,label,param};
 }
@@ -108,6 +112,8 @@ const QUOTE_FIELD_DEFS=[
   {key:'厂商',p:1,get:r=>r.vendor},{key:'名称',get:r=>r.model},{key:'数量',get:r=>r.qty},
   {key:'单价',p:1,get:r=>r.item?r.item.price:''},{key:'小计',p:1,get:r=>r.amount===undefined?'':r.amount}
 ];
+/* G1：厂商目录 CSV 列别名（字段映射归本文件；缺厂商/型号/单价任一列不识别） */
+const CATALOG_CSV_COLS={vendor:['厂商','vendor'],model:['型号','model'],price:['单价','price'],category:['分类','category'],unit:['单位','unit']};
 /** 跨楼层 BOM 聚合（唯一实现）：返回行对象与「型号跨厂商重名且未填厂商」清单 */
 function quoteAggregate(cat){
   const g=new Map(),idx=new Map(),byModel=new Map(),ambiguous=new Set();
@@ -158,6 +164,41 @@ const BLIND_SPOT_FIELDS=[
   {key:'regionId',get:(r)=>r.regionId},
   {key:'index',get:(r,i)=>i+1}
 ];
+/* G3 带宽/存储估算：字段与系数为经验值（非标准），UI 明示可按实际设备改写 */
+const BWC=[['h264','H.264',1],['h265','H.265',.6],['mjpeg','MJPEG',4]];
+const BWR=[['1080p',4],['720p',2],['4MP',6],['8MP',10]];
+const BWS=[['main','主码流',1],['sub','子码流',.3]];
+const BWD={codec:'h264',res:'1080p',fps:25,stream:'main',channels:8,days:30,hours:24,redundancy:10};
+/** 输入夹取到区间；空/非有限按 0，0 天=0，超大值与负数不产生 NaN/Infinity/负容量 */
+function bwN(v,lo,hi){const n=Number(v);return Number.isFinite(n)?Math.min(hi,Math.max(lo,n)):0}
+/** 纯函数：码率=基准(分辨率)×编码系数×帧率/25×码流系数；容量并列十进制 GB 与 2^30 GiB */
+function bwEst(o={}){
+  const pick=(l,id)=>l.find(x=>x[0]===id)||l[0];
+  const c=pick(BWC,o.codec),r=pick(BWR,o.res),s=pick(BWS,o.stream);
+  const g=(v,k,hi)=>bwN(v===undefined?BWD[k]:v,0,hi);
+  const fps=bwN(o.fps===undefined?BWD.fps:o.fps,1,120),ch=g(o.channels,'channels',10000),days=g(o.days,'days',36500),hours=g(o.hours,'hours',24),red=g(o.redundancy,'redundancy',1000);
+  const mbps=r[1]*c[2]*fps/25*s[2],total=mbps*ch,bytes=total*1e6/8*3600*hours*days*(1+red/100);
+  return {codec:c,res:r,stream:s,fps,channels:ch,days,hours,redundancy:red,mbps,totalMbps:total,gb:bytes/1e9,gib:bytes/1073741824};
+}
+/* G4 布线/线缆统计：几何估算（非实测布线），当前楼层对象；预留/弯曲为用户可改参数 */
+const WGD={reserve:.5,bend:10};
+/** 纯函数：折线逐段 objectLength / 设备图元中心两点直线；总计=几何+端数×预留+几何×弯曲% */
+function wireStats(o={}){
+  const mode=o.mode==='chain'?'chain':'route', reserve=bwN(o.reserve??WGD.reserve,0,1e6), bend=bwN(o.bend??WGD.bend,0,1000);
+  const objs=(o.objects||[]).filter(x=>x&&x.kind), layers=o.layers||[], rows=[];
+  const lay=x=>x.layer||((layers.find(l=>l.id===x.layerId)||layers[0]||{}).name||'');
+  const len=v=>v>0&&isFinite(v)?v:0;
+  if(mode==='route') objs.forEach(x=>{ if(x.kind==='line') rows.push({name:x.name||'',layer:lay(x),len:len(objectLength(x))}); });
+  else{
+    const pts=objs.filter(x=>x.kind==='point').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh'));
+    pts.forEach((b,i)=>{ if(!i) return; const a=pts[i-1];
+      rows.push({name:(a.name||'')+'→'+(b.name||''),len:len(dist([a.x,a.y],[b.x,b.y]))}); });
+  }
+  const ends=rows.length?(mode==='chain'?2:rows.length*2):0, geometry=rows.reduce((s,r)=>s+r.len,0);
+  const reserveLen=ends*reserve, bendLen=geometry*bend/100, groups=[];
+  if(mode==='route'){ const g=new Map(); rows.forEach(r=>g.set(r.layer,(g.get(r.layer)||0)+r.len)); g.forEach((v,k)=>groups.push({name:k,len:v})); }
+  return {reserve,bend,rows,groups,ends,geometry,reserveLen,bendLen,total:geometry+reserveLen+bendLen};
+}
 /** 纯函数：盲区 GeoJSON FeatureCollection（不触发下载；口径元数据与旧版一致） */
 function buildBlindSpotGeoJson(cov){
   if(!cov||!cov.regions||!cov.regions.length) return null;

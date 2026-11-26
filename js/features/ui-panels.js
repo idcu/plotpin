@@ -46,6 +46,8 @@ $('dimensionType').addEventListener('change',()=>{ if(currentTool==='dimension')
 $('finishDraftBtn').addEventListener('click',finishDraft);
 $('undoBtn').addEventListener('click',undo);
 $('redoBtn').addEventListener('click',redo);
+$('readOnlyBtn').addEventListener('click',()=>setReadOnly(!isReadOnly()));
+applyReadOnlyUI();
 /* 依赖图片底图的工具统一走状态机：不可用时不切换工具，原因由 #calibStatus 与 toast 同步给出 */
 function startCalibTool(tool){
   const pre=calibPrecheck(tool);
@@ -58,7 +60,11 @@ $('coverageBtn').addEventListener('click',runCoverageAnalysis);
 $('zoomInBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.2));
 $('zoomOutBtn').addEventListener('click',()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1/1.2));
 $('zoomFitBtn').addEventListener('click',fitView);
+let markerScaleHist=false;
+$('markerScaleInput')?.addEventListener('focus',()=>{ markerScaleHist=false; });
 $('markerScaleInput')?.addEventListener('input',e=>{
+  /* M-12：一次编辑会话只压一条历史（首次 input 时压栈，此时 settings 仍是旧值） */
+  if(!markerScaleHist){ pushHistory(); markerScaleHist=true; }
   state.settings.markerScale=Math.min(2.5,Math.max(.5,Number(e.target.value)||1));
   $('markerScaleLabel').textContent=Number(state.settings.markerScale).toFixed(1)+'×';
   scheduleSave(); requestRender();
@@ -79,8 +85,8 @@ function populateSelects(){
   fill($('filterLayer'),state.layers,I18N.t('allLayers'),'');
   fill($('batchLayer'),state.layers,'',state.layers[0]?.id||'');
   const oldKind=$('filterKind').value;
-  const kindLabels=[I18N.t('allObjects'),I18N.t('filterPoint'),I18N.t('filterArea'),I18N.t('filterLine'),I18N.t('filterText'),I18N.t('filterDimension')];
-  $('filterKind').innerHTML=kindLabels.map((x,i)=>`<option value="${i?['','point','rect','line','text','dimension'][i]:''}">${esc(x)}</option>`).join('');
+  const kindLabels=[I18N.t('allObjects'),I18N.t('filterPoint'),I18N.t('filterArea'),I18N.t('filterLine'),I18N.t('filterArc'),I18N.t('filterText'),I18N.t('filterDimension')];
+  $('filterKind').innerHTML=kindLabels.map((x,i)=>`<option value="${i?['','point','rect','line','arc','text','dimension'][i]:''}">${esc(x)}</option>`).join('');
   $('filterKind').value=oldKind;
 }
 
@@ -102,6 +108,7 @@ function syncListSelection(){
     if(!on) all=false;
   });
   const head=$('headSelectChk'); if(head) head.checked=all;
+  renderBatchAnnot();
 }
 /** 选中集变化的最小 UI 刷新：属性面板 + 列表高亮（不重建 10k 行、不刷图层/统计） */
 function refreshSelectionUI(){ renderProps(); syncListSelection(); }
@@ -121,6 +128,14 @@ function filteredObjects(f){
   const ff=f||listFilterState();
   return state.objects.filter(o=>objectMatchesFilter(o,ff));
 }
+/* -------------------- 对象列表 -------------------- */
+let listsRefreshTimer=null;
+/** R-09：逐键编辑时把对象表/图层/统计的整块重绘合并为一次（400ms 尾触发），
+ *  避免 5k 行表格与几何检查在每次击键都重建；画布静态层由 patchStaticObjects 局部修补。 */
+function scheduleListsRefresh(){
+  if(listsRefreshTimer) return;
+  listsRefreshTimer=setTimeout(()=>{ listsRefreshTimer=null; renderList(); renderLayers(); renderStats(); },400);
+}
 function renderList(){
   const rows=filteredObjects(listFilterState());
   $('headSelectChk').checked=rows.length>0&&rows.every(o=>selectedIds.has(o.id));
@@ -134,7 +149,7 @@ function renderList(){
       o.kind==='text'?esc(o.text):(o.kind==='dimension'&&o.subtype==='ruler'?`${o.points.length} ${L('点')} / Σ ${fmt(objectLength(o))}m`:o.subtype||'');
     return `<tr data-id="${esc(o.id)}" class="${selectedIds.has(o.id)?'selected':''} ${o.locked?'locked':''} ${!o.visible?'hidden-row':''}">
       <td><input type="checkbox" data-row-select="${esc(o.id)}" ${selectedIds.has(o.id)?'checked':''}></td>
-      <td>${esc(o.name)}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${dotColor}"></span>${esc(typeDisplayName(t))}</td>
+      <td>${esc(o.name)}${isDelivered(o)?' <span class="pill">'+esc(L('已交付'))+'</span>':''}</td><td>${esc(o.text||o.props.note||'')}</td><td><span class="dot" style="background:${dotColor}"></span>${esc(typeDisplayName(t))}</td>
       <td>${esc(l.name)}</td><td>${fmt(o.x)}</td><td>${fmt(o.y)}</td><td>${param}</td>
       <td><button class="icon-btn" data-toggle-visible="${o.id}" aria-label="${esc(I18N.t('ariaObjVisible')+'：'+o.name)}">${o.visible?'👁':'–'}</button></td>
       <td><button class="icon-btn" data-toggle-lock="${o.id}" aria-label="${esc(I18N.t('ariaObjLock')+'：'+o.name)}">${o.locked?'🔒':'○'}</button></td>
@@ -152,6 +167,7 @@ function renderList(){
   }));
   $('objectTbody').querySelectorAll('[data-toggle-visible]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleVisible); if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); });
   $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); });
+  renderBatchAnnot();
 }
 $('headSelectChk').addEventListener('change',e=>{
   filteredObjects().forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
@@ -169,19 +185,63 @@ $('batchMoveBtn').onclick=()=>{
 };
 $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0);
 $('batchDeleteBtn').onclick=deleteSelected;
-/* 批量标注显隐：复用 annotToggleKeys / annotOn / setAnnot，与属性面板单对象语义一致 */
-function setSelectedAnnot(on){
-  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+/* -------------------- 批量标注显隐（按标识类型勾选） --------------------
+   只列出当前选中可编辑对象**适用**的类型（kind/shape 由 annotToggleKeys 判定），不适用的不渲染；
+   状态仍写 o.annot（与属性面板、画布与导出共用 annotOn/setAnnot），不新增字段；
+   一次勾选只压一条历史，与属性面板单对象语义一致。 */
+const BATCH_ANNOT_ORDER=['name','coord','base','radius','edge','vertex','node','perimeter','area'];
+/** 选中对象并集支持的标注键（固定顺序；空集返回 []） */
+function batchAnnotKeys(items){
+  const has=new Set();
+  (items||[]).forEach(o=>annotToggleKeys(o).forEach(k=>has.add(k)));
+  return BATCH_ANNOT_ORDER.filter(k=>has.has(k));
+}
+/** 键的显示名：折线选中时 edge 叫「段长」，全闭合时 node 叫「顶点坐标」 */
+function batchAnnotLabel(key,items){
+  if(key==='edge') return items.every(o=>o.kind==='line')?'段长':'边长';
+  if(key==='node') return items.every(o=>o.closed)?'顶点坐标':'节点坐标';
+  return annotLabel(null,key);
+}
+/** 批量标注的唯一作用范围：选中且可编辑 */
+function batchAnnotItems(){
+  return state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+}
+/** 键的聚合态：'on' 全开 / 'off' 全关 / 'mixed' 混合（无适用对象时 null） */
+function batchAnnotState(items,key){
+  const sup=items.filter(o=>annotToggleKeys(o).includes(key));
+  if(!sup.length) return null;
+  const on=sup.filter(o=>annotOn(o,key)).length;
+  return on===sup.length?'on':(on?'mixed':'off');
+}
+/** 主复选框（三态）+ 逐项勾选框：选中或状态变化后调用 */
+function renderBatchAnnot(){
+  const box=$('batchAnnotChks'), master=$('batchAnnotAll');
+  if(!box||!master) return;
+  const items=batchAnnotItems(), keys=batchAnnotKeys(items);
+  const states=keys.map(k=>batchAnnotState(items,k));
+  master.disabled=!keys.length;
+  master.checked=!!keys.length&&states.every(s=>s==='on');
+  master.indeterminate=!master.checked&&states.some(s=>s!=='off');
+  if(!keys.length){ box.innerHTML=`<span class="hint-text">${esc(L('先勾选对象'))}</span>`; return; }
+  box.innerHTML=keys.map((k,i)=>
+    `<label class="annot-chk"><input type="checkbox" data-batch-annot="${k}" ${states[i]==='on'?'checked':''}> ${esc(L(batchAnnotLabel(k,items)))}</label>`).join('');
+  box.querySelectorAll('[data-batch-annot]').forEach(el=>{
+    el.indeterminate=states[keys.indexOf(el.dataset.batchAnnot)]==='mixed';
+    el.addEventListener('change',()=>setSelectedAnnot(el.checked,el.dataset.batchAnnot));
+  });
+}
+/** 写入选中的适用对象；key 缺省表示所有适用键（主复选框） */
+function setSelectedAnnot(on,key){
+  const items=batchAnnotItems();
   if(!items.length) return toast('没有可修改标注的选中对象','warn');
   const plan=[];
-  items.forEach(o=>annotToggleKeys(o).forEach(k=>{ if(annotOn(o,k)!==on) plan.push([o,k]); }));
+  items.forEach(o=>annotToggleKeys(o).forEach(k=>{ if((!key||k===key)&&annotOn(o,k)!==on) plan.push([o,k]); }));
   if(!plan.length) return toast('选中对象标注状态未变化','warn');
   pushHistory();
   plan.forEach(([o,k])=>setAnnot(o,k,on));
-  commitChange(on?'已批量显示标注':'已批量隐藏标注', Array.from(new Set(plan.map(([o])=>o.id))));
+  commitChange(key?'已更新图上标注':(on?'已批量显示标注':'已批量隐藏标注'), Array.from(new Set(plan.map(([o])=>o.id))));
 }
-$('batchShowAnnotBtn').onclick=()=>setSelectedAnnot(true);
-$('batchHideAnnotBtn').onclick=()=>setSelectedAnnot(false);
+$('batchAnnotAll').addEventListener('change',()=>{ const on=$('batchAnnotAll').checked; setSelectedAnnot(on); renderBatchAnnot(); });
 
 /* -------------------- 图层 / 类型管理 -------------------- */
 function renderLayers(){
@@ -219,7 +279,7 @@ function renderLayers(){
 }
 function getLayer(id){ return state.layers.find(l=>l.id===id); }
 $('addLayerBtn').onclick=()=>{
-  const name=$('newLayerName').value.trim()||'新图层';
+  const name=$('newLayerName').value.trim()||L('新图层');
   pushHistory(); state.layers.push({id:uid('layer'),name,visible:true,locked:false}); $('newLayerName').value=''; commitChange('已新增图层');
 };
 function renderTypes(){
@@ -277,7 +337,7 @@ $('symFileInput').addEventListener('change',async e=>{
   if(!f) return;
   try{
     const parsed=parseSvgSymbol(await f.text());
-    const name=(f.name||'SVG 图元').replace(/\.svg$/i,'').slice(0,30)||'SVG 图元';
+    const name=(f.name||L('SVG 图元')).replace(/\.svg$/i,'').slice(0,30)||L('SVG 图元');
     pushHistory();
     state.objectTypes.push({id:uid('sym'),kind:'point',name,color:'#7c3aed',icon:'symbol',
       scaleShape:'none',builtin:false,symbol:parsed.paths,symbolViewBox:parsed.vb});
@@ -375,18 +435,6 @@ function areaParamText(o){
   if(tt===PARA) return `${L('平行四边形')} ${fmt(o.width)}×${fmt(o.height)}m / ${L('倾角')} ${Math.round(parallelogramSkew(sh))}°`;
   return `${fmt(o.width)}×${fmt(o.height)} / ${Math.round(o.angle)}°`;
 }
-function objectArea(o){
-  if(o.kind==='rect') return shapeArea(o);
-  if(o.closed&&o.points.length>=3) return polygonArea(o.points);
-  if(o.kind==='dimension'&&o.subtype==='area') return polygonArea(o.points);
-  return 0;
-}
-function objectLength(o){
-  if(!o.points||o.points.length<2) return 0;
-  let l=polylineLength(o.points);
-  if(o.closed) l+=dist(o.points.at(-1),o.points[0]);
-  return l;
-}
 /** RT-P2-14：统计页越界与规则页共用场地包围盒和容差；无可见场地时退回图片/世界取景框 */
 function issueBoundsFrame(){
   const site=state.site;
@@ -444,7 +492,7 @@ function findIssues(){
   return issues;
 }
 function renderStats(){
-  const counts={point:0,rect:0,line:0,text:0,dimension:0};
+  const counts={point:0,rect:0,line:0,arc:0,text:0,dimension:0};
   state.objects.forEach(o=>counts[o.kind]++);
   const area=state.objects.reduce((s,o)=>s+objectArea(o),0);
   const len=state.objects.reduce((s,o)=>s+objectLength(o),0);
@@ -455,17 +503,18 @@ function renderStats(){
       <div class="stat-card">${esc(L('点设备'))}<b>${counts.point}</b></div>
       <div class="stat-card">${esc(L('矩形/区域'))}<b>${counts.rect}</b></div>
       <div class="stat-card">${esc(L('线段/折线'))}<b>${counts.line}</b></div>
+      <div class="stat-card">${esc(L('圆弧'))}<b>${counts.arc}</b></div>
       <div class="stat-card">${esc(L('文字'))}<b>${counts.text}</b></div>
       <div class="stat-card">${esc(L('标注总长'))}<b>${fmt(len)} m</b></div>
       <div class="stat-card">${esc(L('区域总面积'))}<b>${fmt(area)} ㎡</b></div>
     </div>
     ${fs.rows.length>1?`<div class="section" style="margin-top:10px"><h3>${esc(L('楼层汇总'))}</h3>
       <table class="floor-sum-table"><thead><tr>
-        <th>${esc(L('楼层'))}</th><th>${esc(L('对象'))}</th><th>${esc(L('点设备'))}</th><th>${esc(L('区域'))}</th><th>${esc(L('折线'))}</th><th>${esc(L('总长'))}</th><th>${esc(L('总面积'))}</th>
+        <th>${esc(L('楼层'))}</th><th>${esc(L('对象'))}</th><th>${esc(L('点设备'))}</th><th>${esc(L('区域'))}</th><th>${esc(L('折线'))}</th><th>${esc(L('圆弧'))}</th><th>${esc(L('总长'))}</th><th>${esc(L('总面积'))}</th>
       </tr></thead><tbody>
         ${fs.rows.map(r=>`<tr data-floor-sum="${esc(r.id)}" class="${r.active?'active':''}" title="${esc(L('点击切换到该楼层'))}">
-          <td>${esc(r.name)}${r.active?' ★':''}</td><td>${r.count}</td><td>${r.counts.point}</td><td>${r.counts.rect}</td><td>${r.counts.line}</td><td>${fmt(r.len)} m</td><td>${fmt(r.area)} ㎡</td></tr>`).join('')}
-        <tr class="total"><td>${esc(L('全楼合计'))}</td><td>${fs.total.count}</td><td>${fs.total.counts.point}</td><td>${fs.total.counts.rect}</td><td>${fs.total.counts.line}</td><td>${fmt(fs.total.len)} m</td><td>${fmt(fs.total.area)} ㎡</td></tr>
+          <td>${esc(r.name)}${r.active?' ★':''}</td><td>${r.count}</td><td>${r.counts.point}</td><td>${r.counts.rect}</td><td>${r.counts.line}</td><td>${r.counts.arc}</td><td>${fmt(r.len)} m</td><td>${fmt(r.area)} ㎡</td></tr>`).join('')}
+        <tr class="total"><td>${esc(L('全楼合计'))}</td><td>${fs.total.count}</td><td>${fs.total.counts.point}</td><td>${fs.total.counts.rect}</td><td>${fs.total.counts.line}</td><td>${fs.total.counts.arc}</td><td>${fmt(fs.total.len)} m</td><td>${fmt(fs.total.area)} ㎡</td></tr>
       </tbody></table>
       <p class="hint-text">${esc(L('点击楼层行可切换；汇总覆盖全部楼层。'))}</p></div>`:''}
     <div class="section" style="margin-top:10px"><h3>${esc(L('工程信息'))}</h3><div class="kv-list">
@@ -474,7 +523,11 @@ function renderStats(){
       <span>${esc(L('对象总数'))}</span><b>${state.objects.length}</b><span>${esc(L('最近更新'))}</span><b>${new Date(state.meta.updatedAt).toLocaleString()}</b>
     </div></div>
     <div class="section"><h3>${esc(L('几何检查'))} v${STATS_ISSUE_VERSION}</h3>${issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(''):`<div class="ok-banner">${esc(L('未发现明显的零尺寸、自相交或越界问题。'))}</div>`}</div>
-    <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>`;
+    <div class="section"><h3>${esc(L('本地存储'))}</h3><div id="storageBox"><div class="hint-text">${esc(L('统计中…'))}</div></div></div>
+    <div class="section"><h3>${esc(I18N.t('bwTitle'))}</h3><button type="button" id="bwOpen">${esc(I18N.t('bwTitle'))}…</button></div>
+    <div class="section"><h3>${esc(I18N.t('wireTitle'))}</h3><button type="button" id="wireOpen">${esc(I18N.t('wireTitle'))}…</button></div>`;
+  const bwBtn=$('bwOpen'); if(bwBtn) bwBtn.onclick=openBandwidthEstimate;
+  const wireBtn=$('wireOpen'); if(wireBtn) wireBtn.onclick=openWiringStats;
   $('statsPanel').querySelectorAll('tr[data-floor-sum]').forEach(tr=>{
     tr.onclick=async()=>{
       const id=tr.dataset.floorSum;
@@ -531,18 +584,27 @@ function runCoverageAnalysis(){
     <div>${esc(L('区域/闭合折线：'))}<b>${res.regions.length}</b> ${esc(L('个'))} ｜ ${esc(L('合计覆盖'))} <b>${pct(res.ratio)}</b></div>
     <div>${esc(L('覆盖面积'))} <b>${fmt(res.totalCovered)}</b> m² ｜ ${esc(L('盲区'))} <b>${fmt(res.totalBlind)}</b> m² ｜ ${esc(L('总面积'))} <b>${fmt(res.totalArea)}</b> m²</div>
     <div style="margin-top:6px"><b>${esc(L('统计口径 v3'))}</b>：${esc(L('固定目标'))} <b>${res.targetCells}</b> ${esc(L('格，按可见区域面积分配（实际'))} <b>${res.gridCells}</b> ${esc(L('格），格边'))} <b>${fmt(cellMin)}–${fmt(cellMax)}</b> m</div>
+    ${res.spec.degraded?`<div class="hint-text" style="color:#b45309"><b>${esc(L('覆盖率已降级：格边放大 {n} 倍以控制在格数上限内',{n:res.spec.degradedFactor}))}</b></div>`:''}
     <div class="hint-text">${esc(L('统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。'))}</div>
     <div class="hint-text">${esc(L('镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。'))}</div>
   </div>`;
   const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">
     <span style="font-weight:600">${esc(r.name)}</span>
     <span>${esc(L('覆盖'))} <b>${pct(r.ratio)}</b> ｜ ${fmt(r.coveredArea)}/${fmt(r.area)} m² ｜ ${esc(L('盲区'))} ${fmt(r.blindArea)} m²</span></div>`).join('');
+  /* DORI 最远判读距离：与 selftest 同一函数（doriRows → doriMaxDistance），不另立公式 */
+  const dori=state.objects.filter(o=>effectiveVisible(o)).map(doriRows).filter(Boolean);
+  const doriBlock=dori.length?`<div style="margin-top:12px"><b>${esc(L('DORI 最远判读距离'))}</b>
+    <div class="hint-text">${esc(L('按水平像素与张角估算；阈值见 IEC 62676-4（25/62.5/125/250 px/m）。'))}</div>
+    <div class="scroll"><table><thead><tr><th>${esc(L('名称'))}</th><th>${esc(L('水平像素'))}</th><th>${esc(L('水平张角'))}</th>${DORI_LEVELS.map(l=>`<th>${esc(L(l.name))}</th>`).join('')}</tr></thead><tbody>${
+      dori.map(d=>{const ok=d.resPx&&d.fov;return `<tr><td>${esc(d.name)}</td><td>${d.resPx||esc(L('未填'))}</td><td>${d.fov?d.fov+'°':esc(L('未填'))}</td>${
+        d.levels.map(m=>`<td>${ok?fmt(m)+' m':esc(L('未填'))}</td>`).join('')}</tr>`}).join('')
+    }</tbody></table></div></div>`:'';
   const legend=`<div style="display:flex;gap:16px;font-size:12px;color:#475569;margin-top:12px">
     <span><i style="display:inline-block;width:11px;height:11px;background:rgba(34,197,94,.5);border:1px solid #16a34a;border-radius:2px;vertical-align:-1px"></i> ${esc(L('已覆盖'))}</span>
     <span><i style="display:inline-block;width:11px;height:11px;background:rgba(239,68,68,.5);border:1px solid #dc2626;border-radius:2px;vertical-align:-1px"></i> ${esc(L('盲区'))}</span>
     <span style="color:#94a3b8">${esc(L('栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比'))}</span></div>`;
-  const body=res.regions.length? head+rows+legend
-    : head+`<div class="hint-text" style="padding:8px 0">${esc(L('当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。'))}</div>`;
+  const body=res.regions.length? head+rows+doriBlock+legend
+    : head+doriBlock+`<div class="hint-text" style="padding:8px 0">${esc(L('当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。'))}</div>`;
   openModal(L('视场覆盖率分析'), body, [
     {text:L('布点优化…'),class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
     {text:L('导出盲区 GeoJSON'),class:'',click:exportBlindSpotsGeoJson},
@@ -596,7 +658,12 @@ function refreshUI(){
   if(msEl) msEl.value=String(Number(state.settings.markerScale)||1);
   const msLbl=$('markerScaleLabel');
   if(msLbl) msLbl.textContent=(Number(state.settings.markerScale)||1).toFixed(1)+'×';
-  renderProps(); renderList(); renderLayers(); renderTypes(); renderSymbolPanel(); renderStats(); updateZoomLabel();
+  renderProps(); renderList(); renderLayers(); renderTypes(); renderSymbolPanel(); renderStats(); cRender(); updateZoomLabel();
+  /* C2：撤销/重做会整状态替换，规则配置控件需按 state.rules 重建，避免面板显示旧值 */
+  if($('ruleConfig')) renderRuleConfig();
   updateHistoryButtons();
   refreshCalibStatus();
 }
+/* core 的三处刷新（切工具 / 取消拖拽 / Esc 中断）只认这个钩子：未注册时启动断言直接失败，
+   而不是让 callHook 静默变成 no-op —— 刷新是同步复合动作，不能改成异步或延迟。 */
+registerHook('ui.refresh', refreshUI);

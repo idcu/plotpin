@@ -8,15 +8,41 @@
  * 堆读数经 CDP HeapProfiler.collectGarbage 强制 GC 两次后取 Runtime.getHeapUsage usedSize。
  * 注意：SwiftShader 光栅化读数不代表真实 GPU 表现，只用于同机前后对比。
  */
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { installScene } from './fixture.mjs';
+import { installScene, hostSnapshot } from './fixture.mjs';
 
 const OUT_DIR = join(process.cwd(), 'test-results');
 const REPORT_FILE = join(OUT_DIR, 'perf-render.json');
 const SIZES = [2000, 5000, 10000];
 const results = [];
+const NO_GATE = process.env.PERF_NO_GATE === '1';
+
+/* 性能门禁：2026-11-14 本机两轮实测 P95 取较大值，再留 1.3–2 倍余量（明细见 backup/A4a/CHANGES.md）。
+ * 取舍口径：只按「噪声上界 × 1.5 左右」定阈值，不允许为了好过放大到数百毫秒；
+ * p95 落在计时分辨率下界（0.0ms）的热点给绝对下限值，不适用倍数口径。
+ * --no-gate / PERF_NO_GATE=1 只采数不判定。 */
+const GATES = {
+  2000: {
+    staticRebuild: 125, staticRebuildShapes: 250, panFrame: 10, zoomFrame: 110,
+    staticKeyCost: 0.5, staticKeyCostBigSite: 0.8, objectIndexById: 0.4,
+    dragMoveRebuildIndex: 0.4, dragMoveCachedIndex: 0.2, dragFrame: 10,
+    dragSelectScanAll: 0.6, dragSelectById: 0.2, findIssues1000pt: 2, heapUsedMB: 8
+  },
+  5000: {
+    staticRebuild: 280, staticRebuildShapes: 190, panFrame: 12, zoomFrame: 270,
+    staticKeyCost: 0.5, staticKeyCostBigSite: 0.8, objectIndexById: 1.2,
+    dragMoveRebuildIndex: 1, dragMoveCachedIndex: 0.2, dragFrame: 8,
+    dragSelectScanAll: 2.2, dragSelectById: 0.2, heapUsedMB: 12
+  },
+  10000: {
+    staticRebuild: 450, staticRebuildShapes: 220, panFrame: 13, zoomFrame: 450,
+    staticKeyCost: 0.5, staticKeyCostBigSite: 0.8, objectIndexById: 2.2,
+    dragMoveRebuildIndex: 2, dragMoveCachedIndex: 0.2, dragFrame: 8,
+    dragSelectScanAll: 1.8, dragSelectById: 0.2, heapUsedMB: 19
+  }
+};
 
 function round(v, n = 2) { return v === null || v === undefined ? null : Number(v.toFixed(n)); }
 function pct(arr, p) {
@@ -44,11 +70,34 @@ function save() {
     platform: process.platform,
     node: process.version,
     env: { viewport: '1920x1080', dpr: 1, headless: true, raster: 'SwiftShader', forcedGC: 'CDP HeapProfiler.collectGarbage ×2' },
+    thresholds: GATES,
+    gateEnabled: !NO_GATE,
     cases: results
   }, null, 2), 'utf8');
   console.log('\n[render] 报告已写入 ' + REPORT_FILE + '（' + results.length + ' 组用例）');
 }
 
+/** 对本轮 size 的实测值做绝对判据；任一超限即让用例失败（不再只打日志）。 */
+function gate(size, cases) {
+  if (NO_GATE) return;
+  const g = GATES[size];
+  const fails = [];
+  for (const c of cases) {
+    if (c.case === 'heapUsed') {
+      const mb = c.bytes / 1048576;
+      if (mb > g.heapUsedMB) fails.push(`heapUsed：实测 ${round(mb)}MB > 阈值 ${g.heapUsedMB}MB`);
+      continue;
+    }
+    const limit = g[c.case];
+    if (limit === undefined) {
+      fails.push(`缺少阈值：${c.case}（GATES[${size}] 未登记，不能只采数不判定）`);
+      continue;
+    }
+    if (c.ms.p95 > limit) fails.push(`${c.case}：P95 ${c.ms.p95}ms > 阈值 ${limit}ms`);
+  }
+  if (fails.length) console.error(`[render] 门禁失败，主机快照：${hostSnapshot()}`);
+  expect(fails, `渲染性能门禁（${size} 对象）`).toEqual([]);
+}
 async function openApp(page) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof state === 'object');
@@ -73,6 +122,7 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
   for (const size of SIZES) {
     test('对象数 ' + size, async ({ page }) => {
       test.setTimeout(300000);
+      const startIdx = results.length;
       await openApp(page);
       const cdp = await page.context().newCDPSession(page);
       const gcUsed = heapProbe(cdp);
@@ -290,6 +340,7 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
       results.push({ case: 'heapUsed', objects: size, bytes: heapAfter, baseBytes: heapBase, deltaBytes: heapAfter - heapBase });
       console.log('[render] ' + JSON.stringify({ case: 'heapUsed', objects: size, bytes: heapAfter, deltaBytes: heapAfter - heapBase }));
       void meta;
+      gate(size, results.slice(startIdx));
     });
   }
 });
