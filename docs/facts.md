@@ -8,11 +8,11 @@
 
 | 指标 | 2026-11-26 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 837,198 B（817.6 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + 标记层去引号/省略可选闭合标签 |
-| gzip 字节 | 274,436 B（268.0 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 单文件产物字节 | 837,728 B（818.1 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + 标记层去引号/省略可选闭合标签 |
+| gzip 字节 | 274,542 B（268.1 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
-| 体积余量 | 2,482 B（gzip 余量 12,284 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
-| Service Worker 版本 | `VERSION=271` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 1,952 B（gzip 余量 12,178 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| Service Worker 版本 | `VERSION=272` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
@@ -22,7 +22,7 @@
 | selftest 分区 | 176 个 | `node scripts/selftest.mjs --list` | 输出 177 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
 | e2e spec 文件 | 49 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 共 50 个 `.mjs`（49 spec + 1 helper） |
-| e2e 用例 | 190 个（源码 187 通过 + 0 失败 + 3 条件跳过；dist 184 通过 + 0 失败 + 6 跳过） | `node scripts/e2e.mjs` | 2026-11-26 双入口全量实跑（源码 3.8m / dist 3.5m，均 exit 0）；源码跳过为协作 soak（需 `COLLAB_SOAK=1`）与 V-6/V-6b（缺 `pdftotext`），dist 另加 3 条 SW 用例（单文件无 SW 预缓存）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
+| e2e 用例 | 191 个（源码 188 通过 + 0 失败 + 3 条件跳过；dist 185 通过 + 0 失败 + 6 跳过） | `node scripts/e2e.mjs` | 2026-11-26 双入口全量实跑（源码 3.7m / dist 3.4m，均 exit 0）；源码跳过为协作 soak（需 `COLLAB_SOAK=1`）与 V-6/V-6b（缺 `pdftotext`），dist 另加 3 条 SW 用例（单文件无 SW 预缓存）。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check-contracts.mjs` | 规则删空即红 |
 | 插件 API 面 | 31 键 / 31 条清单 / 0 泄漏 / 0 落空 | `node scripts/check-plugin-api.mjs` | 词法器 + fail-closed；API 1.1.0 / 8 项能力 |
 | 耦合基线 | `core→features` 21 条（合计 89 次）/ `common→core` 3 条 / 软调用 13 条（5+2+5+1） | `node -e "const c=require('./contracts/coupling.json');…"`；以文件为准 | 按文件+符号+次数严格相等，只减不增 |

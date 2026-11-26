@@ -134,3 +134,33 @@ test('线段工具：两点落笔自动完成，生成 2 点开放折线，第�
   await page.mouse.click(cx + 150, cy - 80);
   expect(await page.evaluate(() => ({ n: state.objects.length, draftPoints: draft && draft.points.length }))).toEqual({ n: 1, draftPoints: 1 });
 });
+
+test('线段类型与折线类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    state.objectTypes.push({ id: 'line.customseg', kind: 'line', name: '自定义线段', color: '#ff0000', builtin: false });
+    populateSelects();
+    $('lineType').value = 'line.customseg';
+  });
+  await page.locator('.tool-btn[data-tool="segment"]').click();
+  expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
+    .toEqual({ seg: 'line.boundary', line: 'line.customseg' });
+
+  /* 选择模式：指针靠近场地顶点时出现手柄，按下拖动即可改形（无需切「场地节点」） */
+  await page.evaluate(() => {
+    state.site = createSiteSlot({ type: 'polygon', points: [[0, 0], [20, 0], [20, 10], [0, 10]] });
+    commitChange();
+    fitView();
+  });
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  const pt = await page.evaluate(() => {
+    const s = w2s([20, 10]);
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { x: r.left + s[0], y: r.top + s[1] };
+  });
+  await page.mouse.move(pt.x, pt.y);
+  await page.mouse.down();
+  await page.mouse.move(pt.x + 40, pt.y - 20, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => state.site.shape.points[2])).not.toEqual([20, 10]);
+});

@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 线段独立类型下拉；选择模式可直接拖场地顶点
+
+- **Commit Hash**：`待回填`
+- **核心问题**：
+  - 线段工具复用折线的 `lineType` 下拉，切换到线段时继承折线上次类型，用户无法区分两个工具的默认值。
+  - 场地控制点只在 `currentTool==='site-node'` 时绘制/命中；选择工具下拖顶点无任何反应，用户误以为场地不能拖点改形。
+- **核心改动**：
+  - 新增 `#segmentType` 独立下拉（`data-for="segment"`），`populateSelects()` 同步填充；`finishDraft` 按 `draft.segment` 读取对应类型；折线与线段各自记住上次类型，互不继承。
+  - `drawSiteHandles` 在选择工具下也绘制，但仅当指针与顶点屏幕距离 ≤9 px（与命中阈值一致）；`pointerdown` 在对象命中失败后命中场地手柄，走同一 `siteHandle` 拖拽/历史/提交链路。对象仍优先命中，锁定/只读/隐藏场地照旧拒绝。
+- **预算**：dist **837,198 → 837,728 B（+530 B）**；gzip **274,436 → 274,542 B（+106 B）**；余量 **2,482 → 1,952 B**；SW `VERSION=271 → 272`。
+- **验证数据**：
+  - `node scripts/selftest.mjs` **4,576 通过 / 0 失败**；`npm run ci` 退出 0（门禁牙齿 10/10 + 20/20；bench 缓存帧 P95 0.06 ms、静态重建 15.79 ms、heapUsed 27.71 MB）。
+  - 双入口 e2e 全量：源码 **188 passed / 0 failed / 3 skipped**（3.7m），dist **185 passed / 0 failed / 6 skipped**（3.4m）；新增 interaction 用例覆盖「类型互不继承 + 选择模式拖顶点」。
+- **公共抽象清单**：无新增公共函数/常量；复用 `siteHandleAt / resizeSiteByHandle / pickScreenHandle / drawSiteHandles`；线段类型下拉与折线共用 `typesOfKind('line')`。
+- **遗留风险**：余量 1,952 B，下一项改动必须先回收；选择模式手柄只在指针 9 px 内显示，远看不可见；同位置有对象时对象命中优先，需移开对象或切「场地节点」工具。
+
 ## 2026-11-26 · 方案 A：新增「线段」工具（复用 line kind，两点自动完成）
 
 - **Commit Hash**：`待回填`

@@ -314,6 +314,14 @@ canvas.addEventListener('pointerdown',e=>{
       }
       refreshSelectionUI(); requestRender(); return;
     }
+    /* 选择模式下也可直接拖场地顶点：对象命中优先，未命中对象时再判场地手柄 */
+    const sh=(!readOnly&&siteIsVisible(state.site)&&!siteIsLocked(state.site))?siteHandleAt(wp,sp):null;
+    if(sh){
+      if(!guardWrite(L('拖拽'))) return;
+      pushHistory();
+      drag={type:'siteHandle',handle:sh,start:wp,originalShape:deepClone(state.site?.shape)};
+      return;
+    }
     if(!(e.shiftKey||e.ctrlKey||e.metaKey)) selectedIds.clear();
     rubber={a:sp,b:sp}; refreshSelectionUI(); requestRender(); return;
   }
@@ -817,7 +825,7 @@ function finishDraft(){
     if(ps.length<2){ toast('至少需要 2 个点','warn'); return; }
     if(closed&&ps.length<3){ toast('闭合区域至少需要 3 个点','warn'); return; }
     pushHistory();
-    const o=baseObject('line',$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
+    const o=baseObject('line',draft.segment?$('segmentType').value:$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
     commitChange(seg?'已添加线段':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
   }else if(draft.kind==='dimension'){

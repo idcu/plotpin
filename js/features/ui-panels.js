@@ -82,6 +82,7 @@ function populateSelects(){
   fill($('pointType'),typesOfKind('point'),'','point.marker');
   fill($('rectType'),typesOfKind('rect'),'','rect.area');
   fill($('lineType'),typesOfKind('line'),'','line.boundary');
+  fill($('segmentType'),typesOfKind('line'),'','line.boundary');
   fill($('filterLayer'),state.layers,I18N.t('allLayers'),'');
   fill($('batchLayer'),state.layers,'',state.layers[0]?.id||'');
   const oldKind=$('filterKind').value;

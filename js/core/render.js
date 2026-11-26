@@ -485,14 +485,18 @@ function drawScene(c,v,cssW,cssH,opt={}){
  * 橙色方块=移动类控制点（圆心/中心），白色蓝边=几何控制点；拖拽时显示实时世界坐标。
  */
 function drawSiteHandles(c,v,toS){
-  if(currentTool!=='site-node') return;
+  const selectMode=currentTool==='select';
+  if(currentTool!=='site-node'&&!selectMode) return;
   const site=state.site;
   if(!site||!siteIsVisible(site)||siteIsLocked(site)) return;
   const hs=siteHandleList();
   if(!hs.length) return;
   c.save();
   hs.forEach(h=>{
-    const s=toS([h.x,h.y]), isCenter=h.mode==='center';
+    const s=toS([h.x,h.y]);
+    /* 选择模式不常驻手柄：仅在指针靠近顶点时显示，避免与对象选择/框选抢视觉 */
+    if(selectMode&&(!cursorScreen||Math.hypot(s[0]-cursorScreen.x,s[1]-cursorScreen.y)>9)) return;
+    const isCenter=h.mode==='center';
     c.fillStyle=isCenter?'#f59e0b':'#ffffff';
     c.strokeStyle=isCenter?'#b45309':'#2563eb';
     c.lineWidth=1.6;
