@@ -46,6 +46,8 @@ function setTool(tool){
      点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
   if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
   else if(tool==='dimension'&&$('dimensionType').value==='ruler'){ $('dimensionType').value='distance'; }
+  /* 切回工具即恢复默认类型：折线与线段都不记忆上次选择（用户要求；下拉 id 均为 <tool>Type） */
+  if(tool!==currentTool&&(tool==='line'||tool==='segment')) $(tool+'Type').selectedIndex=0;
   currentTool=tool; draft=null; calibPoints=[]; affinePairs=[]; rubber=null; drag=null;
   calibSelection=null; calibUndoStack=[];
   lastCanvasHandledAt=0; lastCanvasPointerUpAt=0;

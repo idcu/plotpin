@@ -146,6 +146,15 @@ test('线段类型与折线类型互不影响；选择模式可直接拖场地�
   expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
     .toEqual({ seg: 'line.boundary', line: 'line.customseg' });
 
+  /* 切回工具恢复默认类型：折线与线段都不记忆上次选择 */
+  await page.evaluate(() => { $('segmentType').value = 'line.customseg'; });
+  await page.locator('.tool-btn[data-tool="line"]').click();
+  expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
+    .toEqual({ seg: 'line.customseg', line: 'line.boundary' });
+  await page.locator('.tool-btn[data-tool="segment"]').click();
+  expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
+    .toEqual({ seg: 'line.boundary', line: 'line.boundary' });
+
   /* 选择模式：指针靠近场地顶点时出现手柄，按下拖动即可改形（无需切「场地节点」） */
   await page.evaluate(() => {
     state.site = createSiteSlot({ type: 'polygon', points: [[0, 0], [20, 0], [20, 10], [0, 10]] });
