@@ -55,7 +55,9 @@ function stripI18nDefaults(html, dict) {
 function minifyHtmlMarkup(html) {
   const hasForm = /<form\b/i.test(html);
   const tagCompact = (tag) => {
-    let t = tag;
+    let t = tag
+      /* stripI18nDefaults 会把与字典相同的值清空；空 title/aria-label/placeholder 与不存在等价 */
+      .replace(/\s(?:title|aria-label|placeholder)=""/g, '');
     if (!hasForm) t = t.replace(/\s+type="(?:text|button)"/gi, '');
     return t.replace(/(\s)([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"'`=<> \t\r\n]+)"/g,
       (m, ws, name, val, off, all) => (all[off + m.length] === '/' || /^http-equiv$/i.test(name)) ? m : `${ws}${name}=${val}`);
@@ -103,7 +105,7 @@ export async function buildStandalone(html, readFile) {  /* 结构缩进在 HTML
     let body = codes.join(';\n');
     /* B-01：terser C（compress + 局部 mangle）。toplevel:false 保留全部顶层全局名，
        避免 plugins.js 按名探测的产品路径失效；不做属性改名、不生成 sourcemap。 */
-    const mini = await minify(body, { ecma: 2020, compress: { passes: 3 }, mangle: { toplevel: false } });
+    const mini = await minify(body, { ecma: 2020, compress: { passes: 3, keep_fargs: false }, mangle: { toplevel: false } });
     if (typeof mini.code !== 'string') throw new Error('terser 未返回压缩结果');
     body = mini.code.replace(/<\/script/gi, '<\\/script');
     try { new vm.Script(body, { filename: 'bundle' }); }

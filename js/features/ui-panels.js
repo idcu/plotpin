@@ -270,7 +270,7 @@ function renderLayers(){
     const target=state.layers.find(x=>x.id!==l.id&&x.id==='layer.default')||state.layers.find(x=>x.id!==l.id);
     if(refs.length){
       const total=refs.reduce((n,r)=>n+r.count,0);
-      const ok=await showConfirm(L('图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？',
+      const ok=await showConfirm(L(TXT_LAYER_DELETE_CONFIRM,
         {layer:l.name,floors:refs.length,count:total,target:target.name}));
       if(!ok) return;
     }
@@ -308,7 +308,7 @@ function renderTypes(){
     if(refs.length&&!target) return toast('该类型仍被对象使用，且没有可迁移的同类内置类型','warn');
     if(refs.length){
       const total=refs.reduce((n,r)=>n+r.count,0);
-      const ok=await showConfirm(L('类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？',
+      const ok=await showConfirm(L(TXT_TYPE_DELETE_CONFIRM,
         {type:typeDisplayName(t),floors:refs.length,count:total,target:typeDisplayName(target)}));
       if(!ok) return;
     }
@@ -586,8 +586,8 @@ function runCoverageAnalysis(){
     <div>${esc(L('覆盖面积'))} <b>${fmt(res.totalCovered)}</b> m² ｜ ${esc(L('盲区'))} <b>${fmt(res.totalBlind)}</b> m² ｜ ${esc(L('总面积'))} <b>${fmt(res.totalArea)}</b> m²</div>
     <div style="margin-top:6px"><b>${esc(L('统计口径 v3'))}</b>：${esc(L('固定目标'))} <b>${res.targetCells}</b> ${esc(L('格，按可见区域面积分配（实际'))} <b>${res.gridCells}</b> ${esc(L('格），格边'))} <b>${fmt(cellMin)}–${fmt(cellMax)}</b> m</div>
     ${res.spec.degraded?`<div class="hint-text" style="color:#b45309"><b>${esc(L('覆盖率已降级：格边放大 {n} 倍以控制在格数上限内',{n:res.spec.degradedFactor}))}</b></div>`:''}
-    <div class="hint-text">${esc(L('统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。'))}</div>
-    <div class="hint-text">${esc(L('镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。'))}</div>
+    <div class="hint-text">${esc(L(TXT_STATS_SCOPE_HINT))}</div>
+    <div class="hint-text">${esc(L(TXT_CAMERA_SCOPE))}</div>
   </div>`;
   const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">
     <span style="font-weight:600">${esc(r.name)}</span>

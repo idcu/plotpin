@@ -1646,7 +1646,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
       id:baseId, name,
       layerId, x, y, angle,
       text:String(raw.text??'').slice(0,500), closed:!!raw.closed,
-      subtype:['ruler','distance','area','angle'].includes(raw.subtype)?raw.subtype:'distance',
+      subtype:['ruler','distance','area','angle','leader'].includes(raw.subtype)?raw.subtype:'distance',
       phys:Math.max(0,finiteNumber(raw.phys,0)),
       visible:raw.visible!==false, locked:!!raw.locked, z:finiteNumber(raw.z,out.length),
       createdAt:typeof raw.createdAt==='string'?raw.createdAt:nowISO(),
@@ -1683,7 +1683,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
     if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)){ audit.dropped=(audit.dropped||0)+1; return; } syncFirstPoint(o); }
     if(kind==='dimension'){
       o.points=points;
-      const minPts=(o.subtype==='distance'||o.subtype==='ruler')?2:3;
+      const minPts=(o.subtype==='distance'||o.subtype==='ruler'||o.subtype==='leader')?2:3;
       if(points.length<minPts){ audit.dropped=(audit.dropped||0)+1; return; }
       syncFirstPoint(o);
     }
@@ -1692,6 +1692,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
       if(raw.style.fillAlpha!==undefined) o.style.fillAlpha=Math.min(1,Math.max(0,finiteNumber(raw.style.fillAlpha,.15)));
       if(raw.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,finiteNumber(raw.style.strokeWidth,.1));
       if(raw.style.arrow) o.style.arrow=1;
+      if(raw.style.cloud) o.style.cloud=1;
     }
     if(raw.props&&typeof raw.props==='object'){
       const entries=Object.entries(raw.props);

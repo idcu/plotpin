@@ -1137,12 +1137,35 @@ function drawArc(c,o,color,toS,v){
     drawLabel(c,o,ms[0],ms[1]-8,color,toS);
   }
 }
+/** 修订云线：折线离散为扇贝点串（世界坐标）。闭合多边形按走向取外侧，开放折线取左侧；
+ *  周长/面积仍按原顶点计算（云线只是视觉样式），Canvas/SVG/PDF/DXF 共用同一份点串。 */
+function cloudPoints(ps,closed){
+  const n=ps.length, segN=closed?n:n-1, out=[];
+  let area=0;
+  if(closed) for(let i=0;i<n;i++){ const a=ps[i], b=ps[(i+1)%n]; area+=a[0]*b[1]-b[0]*a[1]; }
+  const side=closed&&area>0?-1:1;
+  for(let k=0;k<segN;k++){
+    const a=ps[k], b=ps[(k+1)%n], len=dist(a,b);
+    if(!(len>EPS)){ out.push(a); continue; }
+    const dx=(b[0]-a[0])/len, dy=(b[1]-a[1])/len;
+    const m=Math.min(200,Math.max(1,Math.round(len/.8))), R=len/m/2, nx=-dy*side*R, ny=dx*side*R;
+    for(let i=0;i<m;i++){
+      const sx=a[0]+dx*2*R*i, sy=a[1]+dy*2*R*i, mx=sx+dx*R, my=sy+dy*R;
+      for(let j=(i||k)?1:0;j<=4;j++){
+        const f=Math.PI*(1-j/4), co=Math.cos(f)*R, si=Math.sin(f)*R;
+        out.push([mx+dx*co+nx*si, my+dy*co+ny*si]);
+      }
+    }
+  }
+  return out;
+}
 function drawLine(c,o,color,toS,v){
   if(!o.points.length) return;
-  const pts=o.points.map(toS);
+  const cloud=!!(o.style&&o.style.cloud);
+  const pts=(cloud?cloudPoints(o.points,o.closed):o.points).map(toS);
   c.save(); c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineJoin='round'; c.lineCap='round';
   c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
-  if(o.closed){ c.closePath(); c.fillStyle=color; c.globalAlpha=.08; c.fill(); c.globalAlpha=1; }
+  if(o.closed&&!cloud){ c.closePath(); c.fillStyle=color; c.globalAlpha=.08; c.fill(); c.globalAlpha=1; }
   c.stroke(); c.restore();
   /* 箭头线：开放折线末端补实心箭头，屏幕尺寸固定（与尺寸标注箭头一致） */
   if(!o.closed&&o.style&&o.style.arrow&&pts.length>=2){
@@ -1191,6 +1214,16 @@ function drawDimension(c,o,toS){
       drawScreenTag(c,mx+3,my-19,fmt(len)+' m');
     }
     drawScreenTag(c,ps[ps.length-1][0]+9,ps[ps.length-1][1]-9,'Σ '+fmt(total)+' m');
+  }else if(o.subtype==='leader' && ps.length>=2){
+    /* 引线标注：尖端（points[0]）带箭头，文字挂在尾点外侧；文字方向随尾点相对尖端自动左右 */
+    const a=ps[0], b=ps[1], ang=Math.atan2(a[1]-b[1],a[0]-b[0]), sz=8;
+    c.beginPath(); c.moveTo(b[0],b[1]); c.lineTo(a[0],a[1]); c.stroke();
+    c.beginPath(); c.moveTo(a[0],a[1]);
+    c.lineTo(a[0]-sz*Math.cos(ang-.42),a[1]-sz*Math.sin(ang-.42));
+    c.lineTo(a[0]-sz*Math.cos(ang+.42),a[1]-sz*Math.sin(ang+.42));
+    c.closePath(); c.fill();
+    c.textAlign=b[0]>=a[0]?'left':'right'; c.textBaseline='middle';
+    c.fillText(o.text||L('标注文字'),b[0]+(b[0]>=a[0]?6:-6),b[1]);
   }else if(o.subtype==='distance' && ps.length>=2){
     arrowLine(c,ps[0],ps[1]); tick(c,ps[0],ps[1]); tick(c,ps[1],ps[0]);
     labelAtMid(c,ps[0],ps[1],fmt(dist(o.points[0],o.points[1]))+' '+state.settings.unit);

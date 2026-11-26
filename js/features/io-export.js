@@ -53,7 +53,7 @@ function openTitleBlockDialog(){
     '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_scaleBar"'+(tb.scaleBar?' checked':'')+'> '+esc(L('绘制比例尺'))+'</label>'+
     '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_legend"'+(tb.legend?' checked':'')+'> '+esc(L('绘制图例（按可见对象类型/图层）'))+'</label>';
   openModal(L('图框 / 标题栏模板'),
-    '<p class="hint-text">'+esc(L('默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。'))+'</p>'+checks+'<hr>'+inputs,
+    '<p class="hint-text">'+esc(L(TXT_TITLEBLOCK_HINT))+'</p>'+checks+'<hr>'+inputs,
     [{text:L('取消'),click:closeModal},
      {text:I18N.t('save'),class:'primary',click:()=>{
        const fields={};
@@ -99,7 +99,7 @@ function exportLabelSheet(){
 .code{font-family:Consolas,Menlo,monospace;color:#475569;word-break:break-all;font-size:11px}
 @media print{body{margin:8mm}.label{border-style:solid}}</style></head>
 <body><h3>${esc(state.meta.name||L('图纸工程'))} · ${esc(L('设备二维码标签'))}（${esc(L('共'))} ${pts.length} ${esc(L('台'))}）</h3>
-<p style="font-size:12px;color:#475569">${esc(L('扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。'))}</p>
+<p style="font-size:12px;color:#475569">${esc(L(TXT_QR_HINT))}</p>
 <div class="sheet">${cards}</div></body></html>`;
   downloadBlob(new Blob([html],{type:'text/html;charset=utf-8'}),safeName()+'-'+L('设备标签')+'.html');
   toast(L('已导出 {n} 张设备二维码标签（可打印）',{n:pts.length}),'success');
@@ -603,10 +603,11 @@ function buildSceneSvg(){
       }
       markers.push(annotItemsSvg(o));
     }else if(o.kind==='line'&&o.points.length){
-      /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致） */
-      const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`);
-      if(o.closed) pts.push(pts[0]);
-      shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
+      /* 闭合折线点串末尾补回首点，闭合边描边才不缺失（与画布 closePath 一致）；修订云线用扇贝点串且不填充 */
+      const cloud=!!(o.style&&o.style.cloud);
+      const pts=(cloud?cloudPoints(o.points,o.closed):outlineOf(o)).map(p=>`${X(p[0])},${Y(p[1])}`);
+      if(o.closed&&!cloud) pts.push(pts[0]);
+      shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed&&!cloud?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
       /* 箭头线：末端实心三角（屏幕 8px，与画布一致） */
       if(!o.closed&&o.style&&o.style.arrow&&o.points.length>=2){
         const a=o.points[o.points.length-2], b=o.points[o.points.length-1];
@@ -674,6 +675,12 @@ function buildSceneSvg(){
         o.points.forEach(p=>shapes.push(`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="none" stroke="#0891b2" stroke-width="1.5"/>`));
         const ep=o.points[o.points.length-1];
         markers.push(`<text x="${X(ep[0])+6}" y="${Y(ep[1])-6}" text-anchor="start" font-size="12" fill="#0e7490">Σ ${fmt(dm.length)} m</text>`);
+      }
+      if(o.subtype==='leader'){
+        const a=o.points[0], b=o.points[1], ax=X(a[0]), ay=Y(a[1]), bx=X(b[0]), by=Y(b[1]);
+        const ang=Math.atan2(ay-by,ax-bx), sz=8;
+        shapes.push(`<polygon points="${ax},${ay} ${ax-sz*Math.cos(ang-.42)},${ay-sz*Math.sin(ang-.42)} ${ax-sz*Math.cos(ang+.42)},${ay-sz*Math.sin(ang+.42)}" fill="${dcolor}"/>`);
+        markers.push(`<text x="${bx+(bx>=ax?6:-6)}" y="${by+4}" text-anchor="${bx>=ax?'start':'end'}" font-size="12" fill="${dcolor}">${esc(o.text||L('标注文字'))}</text>`);
       }
       if(o.subtype==='distance') markers.push(`<text x="${(X(o.points[0][0])+X(o.points[1][0]))/2}" y="${(Y(o.points[0][1])+Y(o.points[1][1]))/2-8}" text-anchor="middle" font-size="12">${fmt(dm.length)} m</text>`);
       if(o.subtype==='area'&&o.points.length>=3){
@@ -748,7 +755,8 @@ function dxfEntitiesForExport(opt){
         report.symbolPoints++;
       }
     }else if(o.kind==='line'){
-      entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:!!o.closed});
+      /* 修订云线：扇贝点串落成折线（CAD 里仍是可编辑 LWPOLYLINE，视觉效果与原样不同） */
+      entities.push({type:'LWPOLYLINE',layer,color,points:o.style&&o.style.cloud?cloudPoints(o.points,o.closed):outlineOf(o),closed:!!o.closed});
       /* 箭头线：末端三角按世界尺寸落地，保证 DXF 往返仍是可编辑折线 */
       if(!o.closed&&o.style&&o.style.arrow&&o.points.length>=2){
         const a=o.points[o.points.length-2], b=o.points[o.points.length-1];
@@ -774,8 +782,18 @@ function dxfEntitiesForExport(opt){
       const label=o.subtype==='ruler'?'Σ '+fmt(dm.length)+' m'
         :o.subtype==='distance'?fmt(dm.length)+' m'
         :o.subtype==='area'?fmt(dm.area)+' m2'
+        :o.subtype==='leader'?(o.text||L('标注文字'))
         :fmt(dm.deg)+' deg';
       entities.push({type:'TEXT',layer,color:'#111827',x:ep[0],y:ep[1],text:label,height:.7});
+      /* 引线箭头：与箭头线同一世界尺寸口径，往返仍是可编辑折线 */
+      if(o.subtype==='leader'){
+        const a=o.points[0], b=o.points[1], ang=Math.atan2(a[1]-b[1],a[0]-b[0]), sz=Math.max(.4,styleVal(o,'strokeWidth',.1)*6);
+        entities.push({type:'LWPOLYLINE',layer,color:'#111827',closed:true,points:[
+          a,
+          [a[0]-sz*Math.cos(ang-.42),a[1]-sz*Math.sin(ang-.42)],
+          [a[0]-sz*Math.cos(ang+.42),a[1]-sz*Math.sin(ang+.42)]
+        ]});
+      }
     }else if(o.kind==='text'){
       entities.push({type:'TEXT',layer,color:o.style.color||'#111827',x:o.x,y:o.y,text:o.text||'文字',height:o.height||1});
     }
@@ -937,6 +955,7 @@ function vectorTextKinds(o){
     if(o.subtype==='distance') kinds.push('distance');
     else if(o.subtype==='area'&&n>=3){ kinds.push('area'); kinds.push('perimeter'); }
     else if(o.subtype==='angle'&&n>=3) kinds.push('angle');
+    else if(o.subtype==='leader'&&n>=2) kinds.push('leader');
   }else if(o.kind==='arc'){
     if(o.name&&annotOn(o,'name')) kinds.push('name');
     if(annotOn(o,'radius')) kinds.push('radius');
@@ -982,8 +1001,9 @@ async function vectorPage(floorName,pageNo,pageTotal){
       fill(color,styleVal(o,'fillAlpha',.15)||.15); stroke(color,sw);
       for(const c of V.path(f,outlineOf(o),true)) vec.push(c); vec.push(['B']);
     }else if(o.kind==='line'&&o.points.length){
-      stroke(color,sw); if(o.closed) fill(color,.08);
-      for(const c of V.path(f,outlineOf(o),!!o.closed)) vec.push(c); vec.push([o.closed?'B':'S']);
+      const cloud=!!(o.style&&o.style.cloud);
+      stroke(color,sw); if(o.closed&&!cloud) fill(color,.08);
+      for(const c of V.path(f,cloud?cloudPoints(o.points,o.closed):outlineOf(o),!!o.closed)) vec.push(c); vec.push([o.closed?'B':'S']);
     }else if(o.kind==='dimension'&&o.points.length>=2){
       stroke('#111827',1.8*s);
       for(const c of V.path(f,outlineOf(o),false)) vec.push(c); vec.push(['S']);
@@ -1012,6 +1032,7 @@ async function vectorPage(floorName,pageNo,pageTotal){
         put('面积 '+fmt(dm.area)+' ㎡',cx/n+10*u,cy/n+8*u,12*s,'#111827');
         put('周长 '+fmt(dm.perimeter)+' m',cx/n+10*u,cy/n-8*u,12*s,'#111827');
       }else if(tk.includes('angle')) put(fmt(dm.deg)+'°',p0[0]+30*u,p0[1]+8*u,12*s,'#111827');
+      else if(tk.includes('leader')){ const b=o.points[1]; put(o.text||L('标注文字'),b[0]+(b[0]>=p0[0]?6*u:-6*u),b[1]+4*u,12*s,'#111827'); }
     }else if(o.kind==='arc'){
       const sh=o.shape||{}, r=Math.max(0,Number(sh.r)||0), a0=Number(sh.a0)||0, sweep=arcSweep(sh);
       const at=a=>[o.x+r*Math.cos(a*Math.PI/180),o.y+r*Math.sin(a*Math.PI/180)];

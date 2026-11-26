@@ -10,8 +10,8 @@ function tableImportColumns(){ return TABLE_COLUMNS.concat(TABLE_IMPORT_EXTRA_CO
 /* 区域形状 / 标注子类型：表格中文 ↔ 模型枚举（导出导入共用同一映射） */
 const AREA_SHAPE_LABELS={rect:'矩形',circle:'圆形',ellipse:'椭圆',sector:'扇形',parallelogram:'平行四边形'};
 const AREA_SHAPE_BY_LABEL={'矩形':'rect','圆形':CIR,'椭圆':ELL,'扇形':SEC,'平行四边形':PARA};
-const DIM_SUB_LABELS={ruler:'测距',distance:'两点距离',area:'面积',angle:'角度'};
-const DIM_SUB_BY_LABEL={'测距':'ruler','两点距离':'distance','距离':'distance','面积':'area','角度':'angle'};
+const DIM_SUB_LABELS={ruler:'测距',distance:'两点距离',area:'面积',angle:'角度',leader:'引线'};
+const DIM_SUB_BY_LABEL={'测距':'ruler','两点距离':'distance','距离':'distance','面积':'area','角度':'angle','引线':'leader'};
 /* 节点坐标文本：节点间用分号、XY 间用逗号，如 "0,0;3.5,-2;10,4"（CSV 中整格自动加引号）；
    解析宽容逗号/空格/斜杠/竖线等分隔，支持负坐标 */
 function formatNodeCoords(points){

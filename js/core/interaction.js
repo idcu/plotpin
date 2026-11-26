@@ -9,30 +9,35 @@ function syncToolButtons(tool){
       if(b.dataset.tool==='dimension') on=$('dimensionType').value!=='ruler';
     }
     b.classList.toggle('active',on);
-    if(b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed',on?'true':'false');
+    b.setAttribute('aria-pressed',on?'true':'false');
   });
 }
 const TOOL_TITLES={
   select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
-  rect:L('区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消'),line:L(TXT_POLYLINE_HINT),
+  rect:L(TXT_RECT_HINT),line:L(TXT_POLYLINE_HINT),
   segment:L('线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
   arrow:L('箭头：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
   arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
-  calibrate:L('比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用'),
+  calibrate:L(TXT_CALIB_HINT),
   affine:L(TXT_AFFINE_HINT),
   'site-rect':L('绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消'),
   'site-circle':L('绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消'),
   'site-ellipse':L('绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消'),
   'site-sector':L('绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消'),
-  'site-parallelogram':L('绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）'),
+  'site-parallelogram':L(TXT_SITE_PARA_HINT),
   'site-polygon':L('绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消'),
   'site-node':L(TXT_SITE_NODE_HINT),
   'image-transform':L(TXT_IMAGE_TRANSFORM_HINT),
   'guide':L(TXT_GUIDE_HINT)
 };
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
-function updateToolTitle(){ $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||''); }
+function updateToolTitle(){
+  $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||'');
+  /* 按钮 title / aria-pressed 与 HUD 提示同源（启动与语言切换都走这里），HTML 不再存一份 */
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{const t=TOOL_TITLES[b.dataset.tool]; if(t) b.title=L(t);});
+  syncToolButtons(currentTool);
+}
 /** 草稿顶点入列：达到 SHAPE_POINTS_MAX 后拒绝并提示，避免病态点列拖垮包围盒/渲染 */
 function pushDraftPoint(points,wp){
   if(points.length>=APP_LIMITS.SHAPE_POINTS_MAX){
@@ -341,6 +346,7 @@ canvas.addEventListener('pointerdown',e=>{
   }
   if(currentTool==='rect'){
     const shape=$('areaShape')?.value||'rect';
+    /* 「仅描边」在落笔时写 fillAlpha:0，后续可在属性面板改回填充 */
     const draftKind={rect:'rect',circle:'areaCircle',ellipse:'areaEllipse',sector:'areaSector',parallelogram:'areaParallelogram'}[shape]||'rect';
     if(draft && draft.kind===draftKind){
       draft.current=wp; draft.pending=false; finishDraft();
@@ -369,8 +375,8 @@ canvas.addEventListener('pointerdown',e=>{
     const subtype=$('dimensionType').value;
     if(!draft){ draft={kind:'dimension',subtype,points:[wp],current:wp}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
-    /* distance/angle 点数够了自动结束；ruler（测距链）与 area 手动 Enter/双击结束 */
-    if((subtype==='distance'&&draft.points.length>=2)||(subtype==='angle'&&draft.points.length>=3)) finishDraft();
+    /* distance/angle/leader 点数够了自动结束；ruler（测距链）与 area 手动 Enter/双击结束 */
+    if(((subtype==='distance'||subtype==='leader')&&draft.points.length>=2)||(subtype==='angle'&&draft.points.length>=3)) finishDraft();
     else requestRender();
     return;
   }
@@ -788,12 +794,13 @@ function finishDraft(){
   if(draft.kind==='sitePolygon') return finishSiteDraft();
   /* M-13：变更前校验容量，超限不产生半成品/历史条目 */
   if(!ensureObjectCapacity(1)){ draft=null; requestRender(); return; }
+  const fill=$('areaNoFill')?.checked?{fillAlpha:0}:{};
   if(draft.kind==='rect'){
     const a=draft.start,b=draft.current;
     const x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),h=Math.abs(a[1]-b[1]);
     if(w>=.08&&h>=.08){
       pushHistory();
-      const o=baseObject('rect',draft.typeId||$('rectType').value,{x,y,width:w,height:h});
+      const o=baseObject('rect',draft.typeId||$('rectType').value,{x,y,width:w,height:h,style:fill});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加区域'); switchTab('props');
     }
   }else if(draft.kind==='areaParallelogram'){
@@ -802,14 +809,14 @@ function finishDraft(){
     if(w>=.08&&hh>=.08){
       pushHistory();
       const o=baseObject('rect',draft.typeId||$('rectType').value,
-        {x,y,width:w,height:hh,shape:{type:PARA,skew:PARALLELOGRAM_DEFAULT_SKEW}});
+        {x,y,width:w,height:hh,shape:{type:PARA,skew:PARALLELOGRAM_DEFAULT_SKEW},style:fill});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加平行四边形区域'); switchTab('props');
     }
   }else if(draft.kind==='areaCircle'){
     const r=dist(draft.start,draft.current);
     if(r>=.08){
       pushHistory();
-      const o=baseObject('rect',draft.typeId||$('rectType').value,{x:draft.start[0],y:draft.start[1],shape:{type:CIR,r}});
+      const o=baseObject('rect',draft.typeId||$('rectType').value,{x:draft.start[0],y:draft.start[1],shape:{type:CIR,r},style:fill});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加圆形区域'); switchTab('props');
     }
   }else if(draft.kind==='areaEllipse'){
@@ -818,7 +825,7 @@ function finishDraft(){
     if(w>=.08&&h>=.08){
       pushHistory();
       const o=baseObject('rect',draft.typeId||$('rectType').value,
-        {x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,shape:{type:ELL,rx:w/2,ry:h/2}});
+        {x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,shape:{type:ELL,rx:w/2,ry:h/2},style:fill});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加椭圆区域'); switchTab('props');
     }
   }else if(draft.kind==='areaSector'){
@@ -826,7 +833,7 @@ function finishDraft(){
     if(r>=.08){
       pushHistory();
       const o=baseObject('rect',draft.typeId||$('rectType').value,
-        {x:draft.start[0],y:draft.start[1],shape:{type:SEC,r,a0,a1}});
+        {x:draft.start[0],y:draft.start[1],shape:{type:SEC,r,a0,a1},style:fill});
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange('已添加扇形区域'); switchTab('props');
     }
   }else if(draft.kind==='line'){
@@ -839,6 +846,8 @@ function finishDraft(){
     pushHistory();
     const o=baseObject('line',draft.segment?$('segmentType').value:$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
     if(arw) o.style.arrow=1;
+    /* 修订云线：仅折线工具可勾选（线段/箭头不参与） */
+    if(!seg&&!arw&&$('lineCloud').checked) o.style.cloud=1;
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
     commitChange(seg?'已添加线段':arw?'已添加箭头':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
   }else if(draft.kind==='arcDraft'){
@@ -861,11 +870,14 @@ function finishDraft(){
     const okCount=(draft.subtype==='distance'&&ps.length>=2)
       ||(draft.subtype==='angle'&&ps.length>=3)
       ||(draft.subtype==='area'&&ps.length>=3)
+      ||(draft.subtype==='leader'&&ps.length>=2)
       ||(draft.subtype==='ruler'&&ps.length>=2);
     if(okCount){
       pushHistory();
       const o=baseObject('dimension',null,{subtype:draft.subtype,points:ps,x:ps[0][0],y:ps[0][1],
         style:{color:draft.subtype==='ruler'?'#0d9488':'#111827'}});
+      /* 引线标注：文字即对象内容，默认占位可在属性面板直接改 */
+      if(draft.subtype==='leader') o.text=L('标注文字');
       o.name=(draft.subtype==='ruler'?'测':'D')+String(state.objects.length+1).padStart(4,'0');
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
       commitChange(draft.subtype==='ruler'?'已添加测距':'已添加尺寸标注'); switchTab('props');
@@ -879,24 +891,24 @@ async function finishSiteDraft(){
   if(!d){ setTool('select'); return; }
   if(d.kind==='siteRect'){
     const shape=rectShapeFromCorners(d.start,d.current);
-    if(shape.w<.5||shape.h<.5){ toast('场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸','warn'); setTool('select'); requestRender(); return; }
+    if(shape.w<.5||shape.h<.5){ toast(TXT_SITE_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite('rect',shape);
   }else if(d.kind==='siteParallelogram'){
     const a=d.start,b=d.current;
     const x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),hh=Math.abs(a[1]-b[1]);
-    if(w<.5||hh<.5){ toast('场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸','warn'); setTool('select'); requestRender(); return; }
+    if(w<.5||hh<.5){ toast(TXT_SITE_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite(PARA,{type:PARA,x,y,w,h:hh,skew:PARALLELOGRAM_DEFAULT_SKEW});
   }else if(d.kind==='siteCircle'){
     const r=dist(d.start,d.current);
-    if(r<.5){ toast('半径过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
+    if(r<.5){ toast(TXT_RADIUS_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite(CIR,circleShapeFrom(d.start,r));
   }else if(d.kind==='siteEllipse'){
     const shape=ellipseShapeFromCorners(d.start,d.current);
-    if(shape.rx*2<.5||shape.ry*2<.5){ toast('场地过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
+    if(shape.rx*2<.5||shape.ry*2<.5){ toast(TXT_RADIUS_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite(ELL,shape);
   }else if(d.kind==='siteSector'){
     const r=dist(d.start,d.current);
-    if(r<.5){ toast('半径过小（不足 0.5m），可在底图弹窗中直接输入半径','warn'); setTool('select'); requestRender(); return; }
+    if(r<.5){ toast(TXT_RADIUS_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
     const v=await showPrompt({title:L('扇形场地角度'),label:L('起始角, 张角（度，用逗号分隔），例如 0,90'),value:'0,90'});
     if(v===null){ setTool('select'); return; }
     const m=v.split(/[,，\s]+/).map(Number);
@@ -1150,7 +1162,7 @@ function helpShortcutRows(){
     [L('双击线段 / 双击节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
     [L('Shift（画线/标注/拖节点时）'),L('约束为水平/垂直线（正交）')],
     [L('Shift（拖矩形/椭圆/扇形时）'),L('正方形 / 正圆 / 45°方位吸附')],
-    [L('对象捕捉'),L('自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪')],
+    [L('对象捕捉'),L(TXT_OSNAP_HINT)],
     ['Tab / Shift+Tab',L(TXT_SNAP_CYCLE_HINT)],
     ['F6',L('在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）')],
     [L('空格 + 拖拽'),L('临时平移画布')],
@@ -1168,7 +1180,7 @@ function helpGlossaryRows(){
     [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
     [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
     [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')],
-    [L('低缩放标签'), L('交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。')]
+    [L('低缩放标签'), L(TXT_LOD_HINT)]
   ];
 }
 function helpExportRows(){
@@ -1178,7 +1190,7 @@ function helpExportRows(){
     [L('SVG 矢量图'), L('当前楼层矢量图，底图嵌入，可无损缩放。')],
     [L('PDF（图纸位图+清单）'), L('图纸页为位图页；清单独立分页。')],
     [L('DXF（CAD 互通）'), L('场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。')],
-    [L('DXF（保真：椭圆+圆弧）'), L('含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。')],
+    [L('DXF（保真：椭圆+圆弧）'), L(TXT_ARC_COMPAT_HINT)],
     [L('CSV 表格'), L('全楼层台账；= + - @ 开头加单引号防公式注入。')],
     [L('TSV 表格'), L('同 CSV，制表符分隔；同一公式防护。')],
     [L('Excel (.xlsx)'), L('全楼层台账；单元格按文本写入，无公式。')]

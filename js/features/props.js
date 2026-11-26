@@ -378,7 +378,7 @@ function renderProps(){
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
-      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L('坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。'))}</div>`;
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L(TXT_AREA_COORD_HINT))}</div>`;
   }else if(o.kind==='arc'){
     /* 描边圆弧：只有圆心/半径/起止角；没有宽高与旋转角，也没有面积与填充 */
     const sh=o.shape||{};
@@ -395,6 +395,7 @@ function renderProps(){
   }else if(o.kind==='line'||o.kind==='dimension'){
     specific=`
       ${o.kind==='line'?row('闭合',`<input type="checkbox" data-field="closed" ${o.closed?'checked':''}>`):''}
+      ${o.kind==='dimension'&&o.subtype==='leader'?row('文字',`<input type="text" data-field="text" value="${esc(o.text||'')}">`):''}
       ${row('颜色',`<input type="color" data-style="color" value="${esc(o.style.color||(o.kind==='dimension'?'#111827':t.color))}">`)}
       ${o.kind==='line'?row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`):''}
       ${o.closed?row('面积',`<b>${fmt(polygonArea(o.points))}</b> ㎡`):''}
@@ -414,7 +415,7 @@ function renderProps(){
       ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('符号图元：填 0 为屏幕固定图标；填图元外接宽度（米）后按真实比例随底图缩放，朝向随朝向角旋转。'))}</div>`
       : canScale
         ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh===SEC?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh===SEC?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
-        : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。'))}</div>`;
+        : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L(TXT_POINT_TYPE_HINT))}</div>`;
     const ci=currentCatalog?currentCatalog.items:[];
     const vendors=Array.from(new Set(ci.map(it=>it.vendor)));
     const catList=ci.length?`<datalist id="catModels">${ci.map(it=>`<option value="${esc(it.model)}">`).join('')}</datalist><datalist id="catVendors">${vendors.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`:'';

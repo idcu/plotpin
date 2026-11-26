@@ -74,21 +74,21 @@
 
 <div class="app-shell">
   <aside class="tool-rail" role="toolbar" aria-label="绘图工具" data-i18n-aria-label="ariaTools">
-    <button class="tool-btn active" data-tool="select" aria-pressed="true"><span class="ico">↖</span><span data-i18n="select">选择</span></button>
-    <button class="tool-btn" data-tool="pan" aria-pressed="false"><span class="ico">✥</span><span data-i18n="pan">平移</span></button>
+    <button class="tool-btn active" data-tool="select"><span class="ico">↖</span><span data-i18n="select">选择</span></button>
+    <button class="tool-btn" data-tool="pan"><span class="ico">✥</span><span data-i18n="pan">平移</span></button>
     <div class="rail-sep"></div>
-    <button class="tool-btn" data-tool="point" aria-pressed="false"><span class="ico">●</span><span data-i18n="point">点设备</span></button>
-    <button class="tool-btn" data-tool="rect" aria-pressed="false"><span class="ico">▭</span><span data-i18n="area">区域</span></button>
-    <button class="tool-btn" data-tool="line" aria-pressed="false"><span class="ico">╱</span><span data-i18n="line">折线</span></button>
-    <button class="tool-btn" data-tool="segment" aria-pressed="false"><span class="ico">—</span><span data-i18n="segment">线段</span></button>
-    <button class="tool-btn" data-tool="arrow" aria-pressed="false"><span class="ico">➤</span><span data-i18n="arrow">箭头</span></button>
-    <button class="tool-btn" data-tool="arc" aria-pressed="false"><span class="ico">◯</span><span data-i18n="circleArc">圆/弧</span></button>
-    <button class="tool-btn" data-tool="text" aria-pressed="false"><span class="ico">T</span><span data-i18n="text">文字</span></button>
-    <button class="tool-btn" data-tool="ruler" title="测距：沿路径逐点单击，双击结束（右键/Esc 取消）；实时显示每段长度与累计总长" aria-pressed="false"><span class="ico">📏</span><span data-i18n="ruler">测距</span></button>
-    <button class="tool-btn" data-tool="dimension" aria-pressed="false"><span class="ico">⌁</span><span data-i18n="dimension">标注</span></button>
-    <button class="tool-btn" data-tool="site-node" title="场地节点：拖拽画布上的控制点调整矢量场地形状，或在属性面板精确输入坐标/参数" aria-pressed="false"><span class="ico">⊗</span><span data-i18n="siteNode">场地节点</span></button>
-    <button class="tool-btn" data-tool="image-transform" title="图片变换：拖拽手柄平移/旋转/等比缩放/切变图片（只改图片，不移动任何标注对象；图片角点可吸附场地边角）" aria-describedby="calibStatus" aria-pressed="false"><span class="ico">🖼</span><span data-i18n="imageXform">图片变换</span></button>
-    <button class="tool-btn" data-tool="guide" title="参考线：两次点击定义无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部" aria-pressed="false"><span class="ico">╱</span><span data-i18n="guide">参考线</span></button>
+    <button class="tool-btn" data-tool="point"><span class="ico">●</span><span data-i18n="point">点设备</span></button>
+    <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span data-i18n="area">区域</span></button>
+    <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span data-i18n="line">折线</span></button>
+    <button class="tool-btn" data-tool="segment"><span class="ico">—</span><span data-i18n="segment">线段</span></button>
+    <button class="tool-btn" data-tool="arrow"><span class="ico">➤</span><span data-i18n="arrow">箭头</span></button>
+    <button class="tool-btn" data-tool="arc"><span class="ico">◯</span><span data-i18n="circleArc">圆/弧</span></button>
+    <button class="tool-btn" data-tool="text"><span class="ico">T</span><span data-i18n="text">文字</span></button>
+    <button class="tool-btn" data-tool="ruler"><span class="ico">📏</span><span data-i18n="ruler">测距</span></button>
+    <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span data-i18n="dimension">标注</span></button>
+    <button class="tool-btn" data-tool="site-node"><span class="ico">⊗</span><span data-i18n="siteNode">场地节点</span></button>
+    <button class="tool-btn" data-tool="image-transform" aria-describedby="calibStatus"><span class="ico">🖼</span><span data-i18n="imageXform">图片变换</span></button>
+    <button class="tool-btn" data-tool="guide"><span class="ico">╱</span><span data-i18n="guide">参考线</span></button>
     <div class="rail-sep"></div>
     <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注" data-i18n="finish">完成</button>
   </aside>
@@ -109,12 +109,14 @@
             <option value="sector" data-i18n="shapeSector">扇形</option>
             <option value="parallelogram" data-i18n="shapeParallelogram">平行四边形</option>
           </select>
+          <label><input type="checkbox" id="areaNoFill"><span data-i18n="areaNoFill">仅描边</span></label>
           <span data-i18n="typeLabel">类型</span>
           <select id="rectType" aria-label="区域类型"></select>
         </span>
         <span data-for="line"><span data-i18n="typeLabel">类型</span>
           <select id="lineType" aria-label="折线类型"></select>
           <label><input type="checkbox" id="lineClosed"><span data-i18n="closedArea">闭合区域</span></label>
+          <label><input type="checkbox" id="lineCloud"><span data-i18n="revCloud">修订云线</span></label>
         </span>
         <span data-for="segment"><span data-i18n="typeLabel">类型</span>
           <select id="segmentType" aria-label="线段类型"></select>
@@ -129,6 +131,7 @@
             <option value="ruler" data-i18n="dimRuler">测距（多点总长）</option>
             <option value="area" data-i18n="dimArea">面积</option>
             <option value="angle" data-i18n="dimAngle">角度</option>
+            <option value="leader" data-i18n="dimLeader">引线标注</option>
           </select>
         </span>
       </span>

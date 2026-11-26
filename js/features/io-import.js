@@ -56,7 +56,7 @@ async function importJsonFile(f){
       replaceState(prevState,{fit:false}); requestRender();
     }
     const msg=String(err&&err.message||'');
-    if(msg==='SCHEMA') toast('JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）','error');
+    if(msg==='SCHEMA') toast(TXT_BAD_JSON_HINT,'error');
     else if(msg.startsWith('超限：')) toast(L('工程导入失败：{msg}',{msg:msg.slice(3)}),'error');
     else toast(L('工程导入失败（已回滚）：{msg}',{msg}),'error');
   }
@@ -106,7 +106,7 @@ async function handleImportFile(f){
     const imp=PlotPin.findImporter(ext);
     if(imp) return importViaPlugin(imp,f);
   }
-  toast(L('不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）',{ext:(ext||'未知')}),'error');
+  toast(L(TXT_UNSUPPORTED_FILE,{ext:(ext||'未知')}),'error');
 }
 
 /* -------------------- DWG 兼容入口（不内置 DWG 内核，只做识别与转换指引） -------------------- */
@@ -230,7 +230,7 @@ async function importDxfFile(f){
       '<label style="display:flex;gap:6px;align-items:flex-start;margin:8px 0;line-height:1.6">'+
         '<input type="checkbox" id="dxfKeepArcs" style="margin-top:3px">'+
         '<span>'+esc(L('保留圆弧（ARC {n} 条）：写入圆弧对象；旧版 PlotPin 打开该工程会丢弃这些圆弧',{n:meta.entityCounts.ARC}))+'</span></label>'+
-      '<p class="hint-text">'+esc(L('不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。'))+'</p>'
+      '<p class="hint-text">'+esc(L(TXT_ARC_IMPORT_HINT))+'</p>'
       :'')+
     '<p class="hint-text">'+esc(L(TXT_REF_LAYER_HINT))+'</p>',
     [{text:L('取消'),click:closeModal},
@@ -313,7 +313,7 @@ function applyDxfImport(fileName,text,meta,opts){
     const lines=dxfFidelityLines(meta,parsed).filter(l=>!l.startsWith('单位：'));
     const extra=' · '+(counts.arc?counts.arc+' 圆弧 · ':'')+L('单位')+' '+Dxf.unitLabel(unitCode)+(opts.reference?' · '+L('落点 只读参考层（已锁定）'):'')+
       (lines.length?' · '+lines.join(' · '):'');
-    commitChange(L('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
+    commitChange(L(TXT_DXF_IMPORTED,
       {line:counts.line,rect:counts.rect,point:counts.point,text:counts.text,extra}));
     if(meta&&meta.r12Bulge) toast('提示：该 DXF 含 '+meta.r12Bulge+' 段 R12 多段线凸度（VERTEX 42），当前按折线导入，弧段会被拉直','warn');
     if(parsed.unitFallback!=null) toast(L('单位 {code} 未知，已按文件单位导入（$INSUNITS={ins}）',{code:parsed.unitFallback,ins:meta&&meta.insUnits!=null?meta.insUnits:'无'}),'warn');
@@ -493,7 +493,7 @@ function pdfPagePicker(pdf){
     '<table class="hint-text" style="width:100%;margin:6px 0"><thead><tr><th>'+esc(L('页'))+'</th><th>'+esc(L('尺寸'))+
       '</th><th>'+esc(L('图形'))+'</th><th>'+esc(L('内嵌图'))+'</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div id="pdfPickSummary" class="hint-text"></div>'+
-    '<p class="hint-text">'+esc(L('多页按所选页升序横向并排，所选的第一个页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，便于区分来源页。底图只取所选页中第 1 页的内嵌图。',{gap:PDF_PAGE_GAP_M}))+'</p>';
+    '<p class="hint-text">'+esc(L(TXT_PDF_MULTIPAGE_HINT,{gap:PDF_PAGE_GAP_M}))+'</p>';
   return new Promise(resolve=>{
     let settled=false;
     const finish=v=>{ if(settled) return; settled=true; resolve(v); };
@@ -562,7 +562,7 @@ async function importPdfPages(f,pdf,pages){
     if(img){
       const r=await pdfApplyImageBackground(f,img,anchor.width,k);
       bgNote=r.note;
-      if(!r.stored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');
+      if(!r.stored) toast(TXT_PDF_STORAGE_HINT,'warn');
     }
     /* 无底图时按并排总宽/最高页扩张场地，保证 fitView 覆盖所有页 */
     const totalW=placements.reduce((m,a)=>Math.max(m,a.xM+a.wM),0);
@@ -584,7 +584,7 @@ async function importPdfPages(f,pdf,pages){
     if(badOps) toast(L('已跳过 {n} 个非法绘制操作',{n:badOps}),'warn');
     if(pdf.imageErrors) toast(L('{n} 张内嵌图无法解码，已跳过',{n:pdf.imageErrors}),'warn');
     const hints=pdfScaleHints(pages.flatMap(p=>p.texts||[]));
-    if(hints.length) toast(L('检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）',{a:hints[0],more:hints.length>1?L('、1:{b}',{b:hints[1]}):''}),'warn');
+    if(hints.length) toast(L(TXT_DRAWING_SCALE_HINT,{a:hints[0],more:hints.length>1?L('、1:{b}',{b:hints[1]}):''}),'warn');
     fitView();
   }catch(e){
     replaceState(materializeHistoryState(backup),{fit:false});
@@ -625,7 +625,7 @@ async function importPdfFile(f){
     if(!img&&pdf.images.length===1) img=pdf.images[0];
   }
   if(!pagePaths.length && !pageTexts.length && !img){
-    return toast('PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）','error');
+    return toast(TXT_PDF_EMPTY_HINT,'error');
   }
   const pdfErrs=importLimitErrors({entities:pagePaths.length+pageTexts.length});
   if(pdfErrs.length) return toast(L('PDF 导入失败：{msg}',{msg:importLimitMessage(pdfErrs)}),'error');
@@ -660,9 +660,9 @@ async function importPdfFile(f){
   if(pageTextErrors) toast(L('文字 {n} 条无法解码，已跳过',{n:pageTextErrors}),'warn');
   if(pageBadOps) toast(L('已跳过 {n} 个非法绘制操作',{n:pageBadOps}),'warn');
   if(imageErrors) toast(L('{n} 张内嵌图无法解码，已跳过',{n:imageErrors}),'warn');
-  if(!bgStored) toast('浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存','warn');
+  if(!bgStored) toast(TXT_PDF_STORAGE_HINT,'warn');
   const scaleHints=pdfScaleHints(pageTexts);
-  if(scaleHints.length) toast(L('检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）',{a:scaleHints[0],more:scaleHints.length>1?L('、1:{b}',{b:scaleHints[1]}):''}),'warn');
+  if(scaleHints.length) toast(L(TXT_DRAWING_SCALE_HINT,{a:scaleHints[0],more:scaleHints.length>1?L('、1:{b}',{b:scaleHints[1]}):''}),'warn');
   }catch(e){
     replaceState(materializeHistoryState(backup),{fit:false});
     if(history.past.length) history.past.pop();

@@ -147,6 +147,57 @@ test('线段工具：两点落笔自动完成，生成 2 点开放折线，第�
   expect(arrow).toEqual({ kind: 'line', points: 2, closed: false, arrow: 1, kept: 1, draft: null });
 });
 
+test('仅描边区域、修订云线、引线标注：落笔即生效且清洗后保留', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+
+  /* 区域「仅描边」：落笔 fillAlpha=0（仍可选中与导出） */
+  await page.locator('.tool-btn[data-tool="rect"]').click();
+  await page.locator('#areaNoFill').check();
+  await page.mouse.click(cx - 130, cy - 90);
+  await page.mouse.click(cx - 50, cy - 30);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  expect(await page.evaluate(() => ({ kind: state.objects[0].kind, fill: state.objects[0].style.fillAlpha })))
+    .toEqual({ kind: 'rect', fill: 0 });
+  await page.locator('#areaNoFill').uncheck();
+
+  /* 修订云线：折线 + style.cloud；扇贝点串多于原顶点，清洗后标记保留 */
+  const box2 = await page.locator('#canvas').boundingBox();
+  const cx2 = box2.x + box2.width / 2, cy2 = box2.y + box2.height / 2;
+  await page.locator('.tool-btn[data-tool="line"]').click();
+  await page.locator('#lineCloud').check();
+  await page.locator('#lineClosed').check();
+  await page.mouse.click(cx2 + 30, cy2 - 70);
+  await page.mouse.click(cx2 + 150, cy2 - 70);
+  await page.mouse.dblclick(cx2 + 150, cy2 + 20);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const cloud = await page.evaluate(() => {
+    const o = state.objects[1];
+    const clean = sanitizeObjects([JSON.parse(JSON.stringify(o))], state.layers, state.objectTypes, new Set(), new Set(), null)[0];
+    return { kind: o.kind, closed: !!o.closed, cloud: o.style.cloud, kept: clean && clean.style.cloud, pts: cloudPoints(o.points, o.closed).length };
+  });
+  expect(cloud).toEqual({ kind: 'line', closed: true, cloud: 1, kept: 1, pts: cloud.pts });
+  expect(cloud.pts).toBeGreaterThan(3);
+  await page.locator('#lineCloud').uncheck();
+  await page.locator('#lineClosed').uncheck();
+
+  /* 引线标注：两点自动完成，默认文字可编辑，subtype 经清洗保留 */
+  const box3 = await page.locator('#canvas').boundingBox();
+  const cx3 = box3.x + box3.width / 2, cy3 = box3.y + box3.height / 2;
+  await page.locator('.tool-btn[data-tool="dimension"]').click();
+  await page.selectOption('#dimensionType', 'leader');
+  await page.mouse.click(cx3 - 170, cy3 + 40);
+  await page.mouse.click(cx3 - 60, cy3 + 100);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(3);
+  const leader = await page.evaluate(() => {
+    const o = state.objects[2];
+    const clean = sanitizeObjects([JSON.parse(JSON.stringify(o))], state.layers, state.objectTypes, new Set(), new Set(), null)[0];
+    return { kind: o.kind, subtype: o.subtype, points: o.points.length, text: o.text, want: L('标注文字'), kept: clean && clean.subtype, draft: draft };
+  });
+  expect(leader).toEqual({ kind: 'dimension', subtype: 'leader', points: 2, text: leader.want, want: leader.want, kept: 'leader', draft: null });
+});
+
 test('线段类型与折线类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {

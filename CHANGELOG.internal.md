@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 新增「仅描边 / 修订云线 / 引线标注」，并再回收 4,408 B 抵消增量
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - **仅描边**：区域工具新增 `#areaNoFill` 复选框；落笔时给区域对象写 `style.fillAlpha=0`（矩形/圆/椭圆/扇形/平行四边形五条创建路径共用 `finishDraft` 里的同一个 `fill` 值），画布与 SVG/PDF 导出均不填充，属性面板可改回。
+  - **修订云线**：折线工具新增 `#lineCloud` 复选框，落笔写 `style.cloud=1`；`render.js` 新增纯函数 `cloudPoints(points, closed)`（闭合多边形按走向取外侧、开放折线取左侧，扇贝点串），Canvas/SVG/PDF 矢量共用；DXF 落成同点 `LWPOLYLINE`；`sanitizeObjects` 白名单保留 `style.cloud`。
+  - **引线标注**：`dimension` 新增 `subtype='leader'`（2 点，`points[0]`=箭头目标、`points[1]`=文字挂点，文字存 `text`）；第二点自动完成；画布/SVG/DXF/PDF 矢量均输出单箭头与文字（左右自动对齐）；属性面板新增 `文字` 输入框；CSV「名称」列即文字、「标注类型」列显示「引线」；对象清洗白名单新增 `leader` 并按 2 点下限放行。
+  - **体积回收**（抵消增量后净减 1,316 B）：i18n 中 18+13 组「界面提示与字典键同句」的长文案提取为 `TXT_*` 公共常量（两处共用一份字符串）；打包期删除 `stripI18nDefaults` 产生的空 `title`/`aria-label`/`placeholder`；工具按钮 title 改由 `updateToolTitle()` 从 `TOOL_TITLES` 运行时写入（HTML 不再存 4 份 title）；`aria-pressed` 全部由 `syncToolButtons()` 启动时写入；terser `keep_fargs:false`；删除 i18n 内 4 条冗余字典项（两处同表重复键、一处被后项覆盖的死键、一处与「半径过小」同义的旧键）。
+- **预算**（逐步实测）：dist **838,573 → 835,620 B**（仅回收，−2,953）→ **838,712 B**（三项工具 +3,092）→ **837,257 B**（二次回收 −1,455）；gzip **274,062 → 272,918 → 273,879 → 273,471 B**；余量 **1,107 → 4,060 → 968 → 2,423 B**；SW `VERSION=282 → 283`。
+- **验证数据**：
+  - `npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；selftest 4,576 通过 / 0 失败；bench 缓存帧 P50 0.06 / P95 0.08 ms、静态重建 15.99 ms、heapUsed 23.1 MB、覆盖率 7.3 ms；dist 确定性二次构建一致）。
+  - e2e 全量：**193 用例，190 passed / 0 failed / 3 skipped**（3.8m，exit 0）。新增用例覆盖：区域 `fillAlpha=0`、云线 `style.cloud=1` 且 `cloudPoints` 点数 > 原顶点、清洗后标记保留、引线两点自动完成 + 默认文字 + `subtype` 清洗保留。
+  - i18n **47.41% = 870 / 1,835**，缺口 1，UI 硬编码 18（长文案提取后界面侧不再产生字面量，分子分母同时下降）。
+- **公共抽象清单**：
+  - `js/common/i18n.js` 的 `TXT_*` 文案常量由 15 个增至 46 个（本次 18 + 二次 13），界面提示与字典键共用同一份字符串；已有 `TXT_*` 用法不变。
+  - `js/core/render.js` 新增 `cloudPoints()`：Canvas/SVG/PDF/DXF 四条导出路径共用的云线点串唯一实现。
+  - 新增 i18n 键 `areaNoFill` / `revCloud` / `dimLeader`（zh/en 同键集）；`DIM_SUB_LABELS` / `DIM_SUB_BY_LABEL` 增加 `leader` 双向映射。
+- **遗留风险**：余量 2,423 B 仍在强警告区，下一次功能改动前必须先回收；云线 DXF 为扇贝点串折线（几何保留、观感不同）；引线在旧版会按 `distance` 载入（箭头/文字保留，子类型语义丢失且保存后不可逆）；旧版清洗丢弃 `style.cloud`（退化为普通折线）。均已写入 known-issues。
+
 ## 2026-11-26 · 新增「箭头」工具（line + style.arrow，画布/SVG/DXF 带箭头）
 
 - **Commit Hash**：`待回填`

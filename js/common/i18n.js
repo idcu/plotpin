@@ -20,6 +20,38 @@ const TXT_REF_LAYER_HINT='参考层导入后整层锁定；需编辑时可在图
 const TXT_TABLE_AUTO_HINT='长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。';
 const TXT_BINARY_DXF_HINT='该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入';
 const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）';
+/* 界面提示与字典键共用同一份字符串：同一句在产物里只存一份（体积预算按原始字节计） */
+const TXT_POINT_TYPE_HINT='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
+const TXT_CALIB_HINT='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
+const TXT_LOD_HINT='交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。';
+const TXT_FLOOR_HINT='每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。';
+const TXT_OFFLINE_MERGE_HINT='离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。';
+const TXT_STATS_SCOPE_HINT='统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。';
+const TXT_CAMERA_SCOPE='镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。';
+const TXT_DXF_IMPORTED='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
+const TXT_UNSUPPORTED_FILE='不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）';
+const TXT_MERGE_DONE='合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}';
+const TXT_LAYER_DELETE_CONFIRM='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
+const TXT_TYPE_DELETE_CONFIRM='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
+const TXT_PDF_MULTIPAGE_HINT='多页按所选页升序横向并排，所选的第一个页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，便于区分来源页。底图只取所选页中第 1 页的内嵌图。';
+const TXT_RESTORE_HINT='恢复 = 一次新编辑（可 Ctrl+Z 撤销）；对端采纳前可能仍显示旧版本。旧值引用的底图/照片可能已被回收。';
+const TXT_CONNECT_STEPS='三步建连：① 主机生成邀请；② 客机粘贴邀请并生成应答；③ 主机粘贴应答完成连接。邀请串含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。';
+const TXT_PEER_SNAPSHOT_CONFIRM='对端已连接并推送工程快照。确认后对方拥有本工程完整编辑权：可覆盖、删除、清空对象与楼层、修改配置。是否应用并继续同步？';
+const TXT_PDF_EMPTY_HINT='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）';
+const TXT_RELAY_HINT='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。';
+const TXT_AREA_COORD_HINT='坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。';
+const TXT_RECT_HINT='区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消';
+const TXT_SITE_PARA_HINT='绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）';
+const TXT_OSNAP_HINT='自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪';
+const TXT_ARC_COMPAT_HINT='含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。';
+const TXT_ARC_IMPORT_HINT='不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。';
+const TXT_QR_HINT='扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。';
+const TXT_TITLEBLOCK_HINT='默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。';
+const TXT_PDF_STORAGE_HINT='浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存';
+const TXT_BAD_JSON_HINT='JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）';
+const TXT_DRAWING_SCALE_HINT='检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）';
+const TXT_RADIUS_SMALL_HINT='半径过小（不足 0.5m），可在底图弹窗中直接输入半径';
+const TXT_SITE_SMALL_HINT='场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸';
 (function (global) {
   'use strict';
   const DICT = {
@@ -78,7 +110,8 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       kindLabel: '类别', nameLabel: '名称', colorLabel: '颜色', iconLabel: '图标',
       scaleShapeLabel: '尺寸图形', iconSizeLabel: '图标大小', addType: '新增类型', importSvg: '导入 SVG 图元…',
       shapeRect: '矩形', shapeCircle: '圆形', shapeEllipse: '椭圆', shapeSector: '扇形', shapeParallelogram: '平行四边形',
-      dimDistance: '两点距离', dimRuler: '测距（多点总长）', dimArea: '面积', dimAngle: '角度',
+      areaNoFill: '仅描边', revCloud: '修订云线',
+      dimDistance: '两点距离', dimRuler: '测距（多点总长）', dimArea: '面积', dimAngle: '角度', dimLeader: '引线标注',
       /* 设置面板 */
       projectName: '工程名称', gridSpacing: '网格间距', enableSnap: '启用捕捉', showGrid: '显示网格',
       crosshair: '十字准星/坐标', segLabelMinPxSetting: '段长标注最小像素',
@@ -166,7 +199,8 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       kindLabel: 'Category', nameLabel: 'Name', colorLabel: 'Color', iconLabel: 'Icon',
       scaleShapeLabel: 'Sized shape', iconSizeLabel: 'Icon size', addType: 'Add type', importSvg: 'Import SVG symbol…',
       shapeRect: 'Rectangle', shapeCircle: 'Circle', shapeEllipse: 'Ellipse', shapeSector: 'Sector', shapeParallelogram: 'Parallelogram',
-      dimDistance: 'Two-point distance', dimRuler: 'Measure (total length)', dimArea: 'Area', dimAngle: 'Angle',
+      areaNoFill: 'Outline only', revCloud: 'Revision cloud',
+      dimDistance: 'Two-point distance', dimRuler: 'Measure (total length)', dimArea: 'Area', dimAngle: 'Angle', dimLeader: 'Leader label',
       projectName: 'Project name', gridSpacing: 'Grid spacing', enableSnap: 'Enable snapping', showGrid: 'Show grid',
       crosshair: 'Crosshair / coordinates', segLabelMinPxSetting: 'Min segment label (px)',
       exportOnlyDelivered: 'Export delivered only', pdfDpi: 'PDF drawing DPI',
@@ -243,9 +277,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Base is the lower-left corner and rotation center; parallelogram area = base × height, skew changes only the slanted edge.',
     '圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；':
       'The circle/ellipse/sector center is the shape base (marked ⊕ on canvas); moving the shape moves the base.',
-    '坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。':
+    [TXT_AREA_COORD_HINT]:
       'Coordinates are world coordinates in metres and may be negative; areas stay true-to-scale. For triangles/arbitrary polygons use the Polyline tool with Closed area.',
-    '该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。':
+    [TXT_POINT_TYPE_HINT]:
       'This type is a fixed-screen position marker. For scale-true coverage, use a circle/square/sector/bar point type under Layers/Types.',
     [TXT_SITE_EDIT_HINT]:
       'Edit the coordinates/parameters below to adjust the site, or use the Site nodes tool to drag handles on canvas. Coordinates are world metres and may be negative.',
@@ -293,7 +327,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Select: click objects or drag a selection box; drawing/dragging snaps to endpoints, midpoints and centers (toggle in Settings)',
     '平移：拖拽移动画布':'Pan: drag to move the canvas',
     '点设备：单击放置（自动捕捉特征点，设置可关）':'Point: click to place (auto-snaps to feature points; toggle in Settings)',
-    '区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消':
+    [TXT_RECT_HINT]:
       'Area: choose a shape above and drag; Shift makes a square/circle or snaps sectors to 45°; Esc cancels',
     [TXT_POLYLINE_HINT]:
       'Polyline: click point by point, double-click to finish; Shift constrains to horizontal/vertical; right-click/Esc cancels (enable Closed for triangles/polygons)',
@@ -308,7 +342,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
     [TXT_IMAGE_TRANSFORM_HINT]:
       'Image transform: orange center = move, blue dot = rotate, bottom-right = uniform scale, top-edge midpoint = shear; affects the image only (objects stay put); image corners snap to site corners',
-    '比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用':
+    [TXT_CALIB_HINT]:
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     [TXT_AFFINE_HINT]:
       'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); red/green control points are draggable, Delete removes, Ctrl+Z undoes, press Enter or ✓ to solve, right-click/Esc cancels',
@@ -320,7 +354,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Draw ellipse site: drag the bounding box (Shift = circle), release to finish, Esc cancels',
     '绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消':
       'Draw sector site: Shift snaps the radius to 45°; enter start/end angles after release; Esc cancels',
-    '绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）':
+    [TXT_SITE_PARA_HINT]:
       'Draw parallelogram site: drag base × height; it is created with a default 30° skew (editable in Site properties)',
     '绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消':
       'Draw polygon site: click along the boundary, double-click/Enter or ✓ closes it, Esc cancels',
@@ -354,7 +388,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
     '低缩放标签':'Labels at low zoom',
-    '交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。':
+    [TXT_LOD_HINT]:
       'At low zoom the interactive view hides name/area/segment labels by on-screen object size, and point-symbol labels by density; selected objects always show every label. Exports are unaffected and always include labels.',
     '栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。':
       'Raster image (PNG/JPG/WebP). Calibrate pixels to metres first; affects image objects only.',
@@ -382,7 +416,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。':
       'Site in standalone SITE layer; millimetre coordinates stay editable.',
     'DXF（保真：椭圆+圆弧）':'DXF (fidelity: ellipse + arc)',
-    '含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。':
+    [TXT_ARC_COMPAT_HINT]:
       'Open projects containing arcs with this version or newer; older builds discard arcs, and one save in an older build loses them for good.',
     '全楼层台账；= + - @ 开头加单引号防公式注入。':
       'All-floor ledger; leading apostrophe guards = + - @ formula injection.',
@@ -394,7 +428,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '切换':'Switch', '重命名':'Rename', '打开':'Open', '关闭':'Close', '层':'floors', '对象':'objects', '个':'',
     '楼层 / 多底图':'Floors / Base maps', '当前楼层：':'Current floor: ',
     '新增楼层（空白场地）':'Add floor (blank site)',
-    '每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。':
+    [TXT_FLOOR_HINT]:
       'Each floor has its own base map/site and objects; the canvas shows only the current floor. Layers and types are shared, and the project library/JSON keep all floors.',
     '楼层名称':'Floor name',
     '重命名楼层':'Rename floor',
@@ -410,7 +444,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '把当前图纸另存到工程库':'Save current drawing to library', '合并他人工程…':'Merge another project…',
     '工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。':
       'Auto-save: once linked, every change syncs to the library; deleting a project does not affect exported JSON files.',
-    '离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。':
+    [TXT_OFFLINE_MERGE_HINT]:
       'Offline collaboration: each side edits, then use Merge another project to pick the other side’s JSON; objects merge by update time (newest wins), and deletions are synced.',
     '另存到工程库':'Save to library', '未命名图纸工程':'Untitled drawing project', '已存入工程库':'Saved to the library',
     '冲突':'conflicts',
@@ -450,9 +484,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已覆盖':'Covered', '栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比':
       'Grid estimate; coverage = sampled cells covered by any field of view inside the area',
     '统计口径 v3':'Coverage spec v3', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
-    '统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。':
+    [TXT_STATS_SCOPE_HINT]:
       'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors no longer approximated by sampled polygons), shared with the stats panel and reports. Legacy v1/v2 report values are not directly comparable.',
-    '镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。':
+    [TXT_CAMERA_SCOPE]:
       'Lens spec: sweep from type fov (default 90°, clamped 10–360°, 360° = omnidirectional); effective range from point physical size phys(m): sector radius=phys, circle/square=phys/2; markers without phys are excluded. Hidden objects and hidden layers are excluded from the denominator.',
     '当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。':'No areas to analyze: draw an Area or a closed Polyline first.',
     '视场覆盖率分析':'Field-of-view coverage', '布点优化…':'Placement optimization…', '导出盲区 GeoJSON':'Export blind spots GeoJSON',
@@ -502,8 +536,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '没有可修改的选中对象':'No editable selection', '没有可移动的选中对象':'No movable selection',
     '已新建工程':'New project created', '工程已导入':'Project imported', '设置已保存':'Settings saved',
     '已插入节点':'Node inserted', '已删除节点':'Node deleted',
-    '半径过小（不足 0.5m），可在底图弹窗中直接输入半径':'Radius too small (under 0.5 m); enter it in the Base/Site dialog',
-    '场地过小（不足 0.5m），可在底图弹窗中直接输入半径':'Site too small (under 0.5 m); enter radii in the Base/Site dialog',
+    [TXT_RADIUS_SMALL_HINT]:'Radius too small (under 0.5 m); enter it in the Base/Site dialog',
     '多边形场地至少需要 3 个顶点':'A polygon site needs at least 3 vertices',
     '仿射校准仅适用于图片底图':'Affine calibration applies to image base maps only',
     '请先导入图片底图':'Import an image base map first', '已完成仿射校准':'Affine calibration complete',
@@ -665,11 +698,11 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     'PDF 解析失败：{msg}': 'PDF parse failed: {msg}',
     '底图读取失败：{msg}': 'Base map read failed: {msg}',
     '照片保存失败：{msg}': 'Photo save failed: {msg}',
-    'DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}':
+    [TXT_DXF_IMPORTED]:
       'DXF imported: {line} lines / {rect} circles / {point} points / {text} texts{extra}',
     '保留圆弧（ARC {n} 条）：写入圆弧对象；旧版 PlotPin 打开该工程会丢弃这些圆弧':
       'Keep arcs ({n} ARC): write arc objects; older PlotPin versions will drop them when opening this project',
-    '不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。':
+    [TXT_ARC_IMPORT_HINT]:
       'Leave unchecked to import as 24-segment polylines (same as before, opens in any version). Arcs are stroke-only geometry and do not count toward area or coverage.',
     'PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}':
       'PDF imported: {line} lines / {area} areas / {text} texts{notes}',
@@ -681,7 +714,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     'PDF 已导出：图纸 1 页 + 清单 {n} 页': 'PDF exported: 1 drawing page + {n} list pages',
     '多楼层 PDF 已导出：{floors} 层 / {pages} 页': 'Multi-floor PDF exported: {floors} floors / {pages} pages',
     'PDF 生成失败：{msg}': 'PDF generation failed: {msg}',
-    '不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）':
+    [TXT_UNSUPPORTED_FILE]:
       'Unsupported file type: .{ext} (supported: JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)',
     /* 「前缀：+ 动态值」家族：模板化后不再拼句子，英文整句可命中字典 */
     '发送失败：{msg}': 'Send failed: {msg}',
@@ -726,7 +759,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '冲突 {n}': 'Conflicts: {n}',
     '已同步：{detail}': 'Synced: {detail}',
     '已同步：{detail} · 可按 Ctrl+Z 回滚': 'Synced: {detail} · Ctrl+Z to roll back',
-    '合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}':
+    [TXT_MERGE_DONE]:
       'Merge complete: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{extra}{conflict}',
     '；冲突 {n} 项按较新版本保留': '; {n} conflicts kept by the newer version',
     '配置未采纳 {n} 项（本地优先）': '{n} config changes not applied (local wins)',
@@ -777,9 +810,9 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '参照版加载失败：{msg}': 'reference load failed: {msg}',
     /* 片2 协作安全默认 / 导入与图层类型的整句缺口 */
     '已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表': 'Skipped {n} sheets with more than 50,000 rows; only usable worksheets were imported',
-    '图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？':
+    [TXT_LAYER_DELETE_CONFIRM]:
       'Layer "{layer}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
-    '类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？':
+    [TXT_TYPE_DELETE_CONFIRM]:
       'Type "{type}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
     /* M1 多页 PDF 导入（含占位） */
     '检测到多页 PDF（共 {n} 页）。默认只导入第 1 页；选择页范围才会走多页导入。':
@@ -788,13 +821,12 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Page numbers must be within 1–{n}, and the start must not exceed the end',
     '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
       '{n} page(s) selected · {e} shapes · {o} / {max} objects after import',
-    '多页按所选页升序横向并排，所选的第一个页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，便于区分来源页。底图只取所选页中第 1 页的内嵌图。':
+    [TXT_PDF_MULTIPAGE_HINT]:
       'Pages are placed side by side in ascending order with the first page at the origin and a {gap} m gap; each page\'s objects go to a "PDF page i" layer so the source page stays traceable. Only the first selected page\'s embedded image is used as the base map.',
     '共 {total} 页，已导入第 {list} 页（横向并排，间距 {gap} m）':
       '{total} page(s); imported page(s) {list} (side by side, {gap} m gap)',
     '第 {list} 页没有可导入的图形，已跳过':
-      'Page(s) {list} contained no importable shapes and were skipped',
-    'PDF 导入失败（已回滚）：{msg}':'PDF import failed (rolled back): {msg}'
+      'Page(s) {list} contained no importable shapes and were skipped'
   };
   /** {name} 插值（不做 HTML 转义；写入 DOM/属性前由调用方走 esc，SVG 由导出层走 esc） */
   function fillTemplate(text, params) {
@@ -827,7 +859,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '图纸比例与 DPI 必须为正数':'Drawing scale and DPI must be positive numbers',
     '将覆盖当前标定：1 px = {old} m → {mpp} m（1:{s} @ {d}dpi）。确定应用？':'This will overwrite the current calibration: 1 px = {old} m → {mpp} m (1:{s} @ {d}dpi). Apply?',
     '图纸比例已应用':'Drawing scale applied',
-    '检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）':'Drawing scale 1:{a}{more} detected (hint only; calibration is unchanged)',
+    [TXT_DRAWING_SCALE_HINT]:'Drawing scale 1:{a}{more} detected (hint only; calibration is unchanged)',
     '、1:{b}':', 1:{b}',
     '水平像素':'Horizontal pixels', '水平张角 (°)':'Horizontal FOV (°)', '水平张角':'Horizontal FOV',
     '未填':'Not set', '侦测':'Detect', '观察':'Observe', '识别':'Recognize', '辨认':'Identify',
@@ -837,7 +869,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '场地按米绘制，无需校准':'The site is drawn in metres; calibration is not required',
     '图片变换仅适用于图片底图':'Image transform only applies to image base maps',
     '未知的校准工具':'Unknown calibration tool',
-    '捕捉：自动（全部类型）':'Snap: Auto (all types)', '已取消仿射校准':'Affine calibration cancelled',
+    '已取消仿射校准':'Affine calibration cancelled',
     '已取消测距':'Measure cancelled', '已取消当前绘制':'Drawing cancelled',
     '已记录参考线起点，再点一次确定方向':'Guide start recorded; click again to set direction',
     '已添加参考线':'Guide added', '已添加点设备':'Point added', '场地节点已更新':'Site node updated',
@@ -848,7 +880,6 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '闭合区域至少需要 3 个节点，请先插入节点':'A closed area needs at least 3 nodes; insert nodes first',
     '请填写类型名称':'Enter a type name', '已新增类型':'Type added', '已删除类型':'Type deleted',
     '工程已导入':'Project imported',
-    'JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）':'Invalid JSON project (expected a PlotPin v1 project file)',
     'XLSX 中没有可导入的工作表':'The XLSX has no importable worksheet',
     'DXF 中未找到支持的实体（线/多段线/圆/弧/椭圆/样条/块参照/点/文字）':'No supported DXF entities found (LINE/polyline/circle/arc/ellipse/spline/block/point/text)',
     '请选择图片文件（PNG/JPG/WebP/BMP/GIF/SVG）':'Choose an image file (PNG/JPG/WebP/BMP/GIF/SVG)',
@@ -865,7 +896,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '（Tab 切换，循环回自动）':' (Tab to cycle back to Auto)',
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '◈ 捕捉：':'◈ Snap: ', '◈ 捕捉：自动':'◈ Snap: Auto',
     '设备标签':'device labels', '设备二维码标签':'Device QR labels', '台':'units', '图纸工程':'Drawing project',
-    '扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。':
+    [TXT_QR_HINT]:
       'Scan to get PLOTPIN:ID; search this ID in the project to locate the device. Generated offline by PlotPin with no external resources.',
     '图纸标注报告':'Drawing annotation report', '生成时间：':'Generated: ', '统计摘要':'Summary',
     '统计摘要（全部楼层）':'Summary (all floors)', '正在生成多楼层报告…':'Generating multi-floor report…',
@@ -982,7 +1013,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '双方都改过':'both changed', '无法证明并发':'concurrency unproven',
     '本机时钟不晚于删除时间，已拒绝恢复（否则下次同步会被删除盖回）':
       'Local clock is not later than the deletion time; restore refused (the next sync would delete it again)',
-    '恢复 = 一次新编辑（可 Ctrl+Z 撤销）；对端采纳前可能仍显示旧版本。旧值引用的底图/照片可能已被回收。':
+    [TXT_RESTORE_HINT]:
       'Restore is a new edit (Ctrl+Z to undo); the peer may still show the old version until it syncs. Base-map/photo assets referenced by the old value may already have been reclaimed.',
     '{n} 个对象':'{n} object(s)',
     '邀请串':'Invite string',
@@ -991,7 +1022,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
 
 
     '跨设备邀请（WebRTC）':'Cross-device invite (WebRTC)',
-    '三步建连：① 主机生成邀请；② 客机粘贴邀请并生成应答；③ 主机粘贴应答完成连接。邀请串含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。':
+    [TXT_CONNECT_STEPS]:
       'Three steps: (1) host creates invite; (2) guest pastes it and creates an answer; (3) host pastes the answer to connect. The invite contains local network addresses; share only with trusted collaborators. Connected peers can edit this project.',
     '应用邀请 / 生成应答':'Apply invite / create answer',
     '复制本机邀请串':'Copy local invite string',
@@ -1008,7 +1039,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '启用图框、标题栏、比例尺与图例':'Enable frame, title block, scale bar and legend',
     '绘制图框边框':'Draw frame border', '绘制比例尺':'Draw scale bar',
     '绘制图例（按可见对象类型/图层）':'Draw legend (visible types / layers)',
-    '默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。':
+    [TXT_TITLEBLOCK_HINT]:
       'Off by default; when off the export is identical to the previous version. Empty date = export date, empty scale = auto 1:N by current zoom.',
     '图框模板已保存':'Title block saved',
     '工程名':'Project name', '图号':'Drawing no.', '比例':'Scale', '日期':'Date', '版本':'Version',
@@ -1018,7 +1049,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已取消比例尺校准':'Scale calibration cancelled',
     '已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点':'Two control points set: drag to adjust, Enter to apply, Delete to remove the selected point',
     '图片已变换':'Image transformed',
-    '场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸':'Site too small (< 0.5 m); enter dimensions in the base-map dialog',
+    [TXT_SITE_SMALL_HINT]:'Site too small (< 0.5 m); enter dimensions in the base-map dialog',
     '比例尺校准仅适用于图片底图':'Scale calibration only applies to image base maps',
     '仿射校准至少需要 2 个对应点':'Affine calibration needs at least 2 point pairs',
     'IndexedDB 不可用：已降级为 localStorage 自动保存（容量有限，建议定期导出 JSON）':
@@ -1034,7 +1065,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '报价表已导出（沿用上次单价快照）':'Quote table exported (reused previous price snapshot)',
     '删除目录？BOM 降级为名称/数量。':'Delete the catalog? BOMs fall back to name/quantity.',
     '检测到 DWG 文件版本：':'DWG file version detected: ',
-    'JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）':
+    [TXT_BAD_JSON_HINT]:
       'Invalid JSON project (expected a v1 project exported by PlotPin)',
     [TXT_BINARY_DXF_HINT]:
       'This DXF is binary (AutoCAD Binary DXF) and cannot be parsed in the browser; save it as ASCII DXF in CAD first',
@@ -1106,10 +1137,10 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     /* 片2 协作安全默认 + 其余整句缺口 */
     '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list is rebuilt from records in real time',
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
-    '对端已连接并推送工程快照。确认后对方拥有本工程完整编辑权：可覆盖、删除、清空对象与楼层、修改配置。是否应用并继续同步？':'The peer connected and sent a project snapshot. After confirming, it has full edit rights to this project: it can overwrite, delete or clear objects and floors, and change settings. Apply and continue syncing?',
+    [TXT_PEER_SNAPSHOT_CONFIRM]:'The peer connected and sent a project snapshot. After confirming, it has full edit rights to this project: it can overwrite, delete or clear objects and floors, and change settings. Apply and continue syncing?',
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
-    'PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）':'No usable graphics found on PDF page 1 (only page 1 is imported; pages are not merged; a scanned image may lack embedded graphics or use unsupported compression)',
-    '浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存':'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
+    [TXT_PDF_EMPTY_HINT]:'No usable graphics found on PDF page 1 (only page 1 is imported; pages are not merged; a scanned image may lack embedded graphics or use unsupported compression)',
+    [TXT_PDF_STORAGE_HINT]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
     '该类型仍被对象使用，且没有可迁移的同类内置类型':'This type is still used by objects, and there is no migratable built-in type of the same kind',
     '评论':'Comment', '编辑评论':'Edit comment',
     '评论不能为空':'Comment required', '先选中一个对象':'Select one object',
@@ -1126,7 +1157,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    '默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。':'Direct connections are used by default. One server per line: URL | username | credential; STUN needs only the URL, and multiple URLs are comma-separated. Credentials are stored in plain text in this browser and never enter invite strings, collaboration messages or project files.',
+    [TXT_RELAY_HINT]:'Direct connections are used by default. One server per line: URL | username | credential; STUN needs only the URL, and multiple URLs are comma-separated. Credentials are stored in plain text in this browser and never enter invite strings, collaboration messages or project files.',
     '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',
