@@ -76,13 +76,16 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 
 ### 2.4 terser 局部 mangle、HTML 标记与 i18n 默认文案压缩（已接入）
 
-`pack-core.mjs` 合并出单脚本后交给 terser：`ecma: 2020` + `compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。
+`pack-core.mjs` 合并出单脚本后交给 terser：`ecma: 2020` + `compress: { passes: 3, keep_fargs: false, pure_getters: true, unsafe: true }` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。
 
 - 保留顶层名是产品约束：`plugins.js` 按名探测 `state / toast / scheduleSave / commitChange` 等全局；全量改名会让插件路径失效。
 - 不启用 `compress.toplevel`：它会把未被静态引用的顶层声明当死代码删除（实测 dist 入口 40+ 用例 `ReferenceError`），与「顶层名全保留」的约束冲突。
+- `unsafe` 只做本仓库可证明等价的替换（`new Error`→`Error`、`String(x)`→`""+x`、`new RegExp(字面量)`→`RegExp`、常量折叠）；不替换 `Number.isFinite`、不改布尔比较。接入前后逐条比对产物，并用 selftest + 双入口 e2e 回归。
 - HTML 标记层在最后做等价压缩：无 `<form>` 时去掉默认 `type="text"` / `type="button"`；标签内可省略引号的属性去引号；`option/th/tr/thead/tbody/tfoot` 的可选闭合标签按 HTML5 规则省略；`script` / `style` / 注释整段跳过，外链校验在压缩之前完成。
-- i18n 默认文案去重（2026-11-26）：发行包里，`data-i18n` 节点的文本、以及 `data-i18n-title` / `data-i18n-aria-label` / `data-i18n-placeholder` 对应的 `title` / `aria-label` / `placeholder` 值，**与 `DICT.zh` 逐字相同**时删除，启动时由 `I18N.apply` 从字典重新填充；源文件保持可读。实测 dist −2,730 B。代价：JS 未执行前这些标签/ARIA 为空（应用本身也依赖 JS）；值不一致时原样保留，不做模糊匹配。
+- i18n 属性名缩写（2026-11-27）：`data-i18n` / `-title` / `-aria-label` / `-placeholder` 在源与发行包统一为 `data-x` / `data-xt` / `data-xa` / `data-xp`，154 处共省约 1 KB；`I18N.apply`、`check-contracts` 与 `pack-core` 使用同一组名字。
+- i18n 默认文案去重（2026-11-26）：发行包里，`data-x` 节点的文本、以及 `data-xt` / `data-xa` / `data-xp` 对应的 `title` / `aria-label` / `placeholder` 值，**与 `DICT.zh` 逐字相同**时删除，启动时由 `I18N.apply` 从字典重新填充；源文件保持可读。实测 dist −2,730 B。代价：JS 未执行前这些标签/ARIA 为空（应用本身也依赖 JS）；值不一致时原样保留，不做模糊匹配。
 - 不采用「i18n 四张表重编码为前缀共享字符串」：实测 dist **+9,212 B**（对象字面量里 ASCII 键可省引号，已比带分隔符的表更紧凑），已回滚。
+- 不采用「i18n 五张表压成 HTML 扁平数据块」：实测 dist **+2,473 B**（terser 已去掉表字面量的引号/空白并合并重复键，扁平串的 2 B 分隔符反而更贵），已回滚。
 - 代价：构建耗时增加、生产栈帧变短名、对未文档化全局名的隐式依赖会静默失效。
 - 变更 terser 版本或配置会让产物 SHA256 漂移，进而使 `build --check` 与 SW 版本抖动；升级必须同批重跑构建、双入口 e2e 与 SW 校验。
 
@@ -244,7 +247,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | `bench.mjs` | 绝对阈值在本机负载/Node 版本变化时会漂移；不同机器结果不可直接比较，只能看是否越线 |
 | `build.mjs --check` | 不校验“产物可双击打开/运行正确”，只校验可复现、哈希、体积、CSP 结构与登记一致 |
 | `badge.mjs --check` | 只校验“断言数/计数锚点一致”，不校验断言本身是否有效 |
-| `i18n-scan.mjs` | 覆盖率 **47.41% = 870 / 1,835**（按出现次数，另 1 条缺口计入分母）；全仓未走翻译入口 **964**，`UI 硬编码 18` 只是其中子集（三个数的范围与分母见 §4.6）。旧口径按唯一 value 去重曾报 46.7%，偏高；只扫静态字面量，不证明译文语义正确，动态拼接可能漏扫 |
+| `i18n-scan.mjs` | 覆盖率 **47.58% = 876 / 1,841**（按出现次数，另 1 条缺口计入分母）；全仓未走翻译入口 **964**，`UI 硬编码 18` 只是其中子集（三个数的范围与分母见 §4.6）。旧口径按唯一 value 去重曾报 46.7%，偏高；只扫静态字面量，不证明译文语义正确，动态拼接可能漏扫 |
 | 状态写入口（9.1） | 只抓 `state = …`；`state.x = …`、`Object.assign(state, …)`、别名赋值不在判据内 |
 | 耦合计数（9.2/9.4） | 只认全仓唯一顶层声明；局部同名、对象键、1–2 字符标识符、`globalThis[…]` 动态访问会漏；`required` 软调用仍是真实依赖 |
 | 钩子配对（9.3） | 保证“提供方/调用点成对”，不保证钩子实现体不反向依赖其他层 |
@@ -260,12 +263,13 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 #### 覆盖率与缺口（翻译入口口径）
 
 - 扫描 37 个业务脚本（`js/**/*.js`，排除字典文件 `js/common/i18n.js`）；注释与标识符不计，同一句中文在 N 处出现就计 N 次。
-- `字面量出现次数` **1,835**：含 CJK 的全部出现次数，即覆盖率的分母。
-- `走翻译入口` **871**：字面量位于 `L(...)` / `I18N.p/fmt(...)` 第一实参，或 `toast / commitChange / openModal / showConfirm / collabNotifyThrottled` 的文案实参；逐次判定，不做“同值取或”。
-  - `已字典化` **870**：走入口且 key 在 `I18N.phrases` 或 `I18N.templates`，即覆盖率的分子。
+- `字面量出现次数` **1,841**：含 CJK 的全部出现次数，即覆盖率的分母。
+- `走翻译入口` **877**：字面量位于 `L(...)` / `I18N.p/fmt(...)` 第一实参，或 `toast / commitChange / openModal / showConfirm / collabNotifyThrottled` 的文案实参；逐次判定，不做“同值取或”。
+  - `已字典化` **876**：走入口且 key 在 `I18N.phrases` 或 `I18N.templates`，即覆盖率的分子。
   - `缺口` **1**：走入口但字典未收录（英文界面会回退中文）。当前唯一一条是 `js/features/collab.js` 的拼接片段 `' 等 {n} 项'`，不是整句文案，按缺口计入但可接受。含 `${...}` 的复合模板壳不计缺口。
-- **覆盖率 = 870 / 1,835 = 47.41%**；分母 = 已字典化 870 + 缺口 1 + 未走入口硬编码 964，三者按出现次数互斥。门槛 ≥40%，缺口 ≤10（当前 1）。
+- **覆盖率 = 876 / 1,841 = 47.58%**；分母 = 已字典化 876 + 缺口 1 + 未走入口硬编码 964，三者按出现次数互斥。门槛 ≥40%，缺口 ≤10（当前 1）。
 - 复用长文案（`js/common/i18n.js` 顶部的 `TXT_*` 常量）时，界面侧只剩标识符、不再产生字面量，分子与分母同时下降；覆盖率会小幅波动，不代表文案质量变化。
+- 发行包把 `data-i18n*` 缩写为 `data-x*`（HTML 属性名层面，扫描只看 JS 字面量，不影响本节口径）。
 
 #### UI 硬编码 18 vs 全部硬编码 964（范围不同）
 
@@ -281,7 +285,7 @@ Node + canvas 桩，**只证明相对退化，不代表真机体验**。阈值�
 | 约定 | 判据 |
 |---|---|
 | 版本号三处一致 | `package.json.version` = `ngm.json.version` = `PlotPin.version` |
-| i18n 键对齐 | `zh`/`en` 同键集；`index.html` 的 `data-i18n*` 键都有译文 |
+| i18n 键对齐 | `zh`/`en` 同键集；`index.html` 的 `data-x` / `data-xt` / `data-xa` / `data-xp`（`data-i18n*` 的发行版缩写）键都有译文 |
 | 文件头唯一 | 每个 `js/**/*.js` 恰好一行 `/* 文件名.js —— 职责 */` |
 | 枚举同源 | `POINT_SCALE_SHAPES` 的键集 = `TYPE_SHAPES` |
 

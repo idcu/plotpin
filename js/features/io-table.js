@@ -428,7 +428,7 @@ function showTableImportPreview(fileName,plan){
     '<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>';
   openModal(L('表格导入预览：{name}',{name:fileName}),
     countLine+
-    '<p class="hint-text">'+esc(L(TXT_TABLE_IMPORT_HINT))+'<b>'+esc(L(TXT_TABLE_AUTO_HINT))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
+    '<p class="hint-text">'+esc(L(TX_TIMP))+'<b>'+esc(L(TX_TAUTO))+'</b>'+esc(L('建议导入前先导出 JSON 备份。'))+'</p>'+warnHtml,
     [{text:L('取消'),click:closeModal},
      {text:L('合并导入'),class:'primary',click:()=>{closeModal();applyTableImport(plan);}}]);
 }

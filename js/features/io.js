@@ -21,7 +21,7 @@ $('newBtn').onclick=async()=>{
    先二次确认并 pushHistory，清空可用 Ctrl+Z 整体撤销 */
 $('clearFloorBtn').onclick=()=>{
   const n=(state.objects||[]).length;
-  const msg=L(TXT_CLEAR_FLOOR_CONFIRM,{n});
+  const msg=L(TX_CLR,{n});
   showConfirm(msg).then(ok=>{
     if(!ok) return;
     pushHistory();
@@ -60,7 +60,7 @@ function openFloorManager(){
     `<div class="proj-current">${esc(L('当前楼层：'))}<b>${esc(currentFloorName())}</b>　${esc(L('共'))} ${floors.length} ${esc(L('层'))} · ${total} ${esc(L('个对象'))}</div>
      <div style="margin:8px 0"><button class="primary" id="floorAdd">＋ ${esc(L('新增楼层（空白场地）'))}</button></div>
      <div class="proj-list">${rows}</div>
-     <p class="hint-text">${esc(L(TXT_FLOOR_HINT))}</p>`,
+     <p class="hint-text">${esc(L(TX_FLOOR))}</p>`,
     [{text:L('关闭'),click:closeModal}]);
   $('floorAdd').onclick=async()=>{
     const v=await showPrompt({title:L('新增楼层'),label:L('楼层名称'),value:'F'+(floors.length+1)});
@@ -117,7 +117,7 @@ async function openProjectLibrary(){
      </div>
      <div class="proj-list">${safeHTML(rows)}</div>
      <p class="hint-text">${L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。')}<br>
-       ${L(TXT_OFFLINE_MERGE_HINT)}</p>`,
+       ${L(TX_OMERGE)}</p>`,
     [{text:L('关闭'),click:closeModal}]);
   $('projSaveAs').onclick=async()=>{
     const v=await showPrompt({title:L('另存到工程库'),label:L('工程名称'),value:state.meta.name||L('未命名图纸工程')});
@@ -150,7 +150,7 @@ async function openProjectLibrary(){
         /* A3：配置差异必须可见；报告异常也不阻断合并，只提示 */
         const configNote=mergeConfigText(stats);
         const extra=(stats.layersDeleted||stats.typesDeleted)?' · '+L('图层')+' -'+stats.layersDeleted+' · '+L('类型')+' -'+stats.typesDeleted:'';
-        toast(L(TXT_MERGE_DONE,
+        toast(L(TX_MERGE,
           {added:stats.added,updated:stats.updated,deleted:stats.deleted,floorsAdded:stats.floorsAdded,extra:extra+configNote,conflict}),
           (changed||configNote)?(cfg.kept||cfg.error?'warn':'success'):'warn');
       }catch(e){ toast(L('合并失败：{msg}',{msg:e.message}),'error'); }

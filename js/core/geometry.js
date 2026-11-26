@@ -439,6 +439,37 @@ function outlineOf(o,seg){
   if(o.kind==='line'||o.kind==='dimension') return (o.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
   return [];
 }
+/** 折线等距偏移（纯函数）：正值=闭合多边形向外 / 开放折线向左；斜接（miter）连接，
+ *  平行/退化段回退到平移点。返回新点列；不足 2 点返回 []。 */
+function offsetPolyline(ps,closed,d){
+  const n=ps.length; if(n<2) return [];
+  let area=0;
+  if(closed) for(let i=0;i<n;i++){ const a=ps[i],b=ps[(i+1)%n]; area+=a[0]*b[1]-b[0]*a[1]; }
+  const side=closed?(area>0?-1:1):1;
+  const segs=[], cnt=closed?n:n-1;
+  for(let i=0;i<cnt;i++){
+    const a=ps[i], b=ps[(i+1)%n];
+    const dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1;
+    const nx=-dy/L*side*d, ny=dx/L*side*d;
+    segs.push({a:[a[0]+nx,a[1]+ny],b:[b[0]+nx,b[1]+ny]});
+  }
+  const hit=(s1,s2)=>{
+    const r=[s1.b[0]-s1.a[0],s1.b[1]-s1.a[1]], s=[s2.b[0]-s2.a[0],s2.b[1]-s2.a[1]];
+    const den=r[0]*s[1]-r[1]*s[0];
+    if(Math.abs(den)<1e-9) return null;
+    const q=[s2.a[0]-s1.a[0],s2.a[1]-s1.a[1]], t=(q[0]*s[1]-q[1]*s[0])/den;
+    return [s1.a[0]+r[0]*t,s1.a[1]+r[1]*t];
+  };
+  const out=[];
+  if(!closed){
+    out.push(segs[0].a);
+    for(let i=1;i<segs.length;i++) out.push(hit(segs[i-1],segs[i])||segs[i-1].b);
+    out.push(segs[segs.length-1].b);
+  }else{
+    for(let i=0;i<segs.length;i++) out.push(hit(segs[(i+segs.length-1)%segs.length],segs[i])||segs[i].a);
+  }
+  return out;
+}
 /** 世界坐标命中（米） */
 function shapeHit(o,p){
   if(isPolygonShape(o)){

@@ -176,8 +176,8 @@ function sitePropsHTML(site, mode){
       <label>${esc(L('锁定'))}</label><div><input type="checkbox" data-site-meta="locked" ${site.locked?'checked':''}></div>
     </div>`;
   const hint=tool
-    ?TXT_SITE_DRAG_HINT
-    :TXT_SITE_EDIT_HINT;
+    ?TX_SDRAG
+    :TX_SEDIT;
   return `<div class="section"><h3>${esc(L(heading))} <span class="hint-text">${esc(L(siteKindName(site.kind||sh.type)))}</span></h3>
     ${siteMeta}
     <div class="form-grid">${params}</div>
@@ -378,7 +378,7 @@ function renderProps(){
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
-      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L(TXT_AREA_COORD_HINT))}</div>`;
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L(TX_ACOORD))}</div>`;
   }else if(o.kind==='arc'){
     /* 描边圆弧：只有圆心/半径/起止角；没有宽高与旋转角，也没有面积与填充 */
     const sh=o.shape||{};
@@ -415,7 +415,7 @@ function renderProps(){
       ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('符号图元：填 0 为屏幕固定图标；填图元外接宽度（米）后按真实比例随底图缩放，朝向随朝向角旋转。'))}</div>`
       : canScale
         ? `<div class="hint-text span2" style="grid-column:1/-1">${esc(L('该类型按「'))}${esc(L(POINT_SCALE_SHAPES[psh]))}${esc(L('」渲染：填 0 为纯位置图标；填'))}${esc(L(psh==='bar'?'杆长':psh===SEC?'视场半径':'直径'))}${esc(L('（米）后随底图真实比例缩放'))}${psh===SEC?esc(L('，张角 '))+(''+(t.fov||90))+esc(L('°，朝向随朝向角')):''}</div>`
-        : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L(TXT_POINT_TYPE_HINT))}</div>`;
+        : `<div class="hint-text span2" style="grid-column:1/-1">${esc(L(TX_PTYPE))}</div>`;
     const ci=currentCatalog?currentCatalog.items:[];
     const vendors=Array.from(new Set(ci.map(it=>it.vendor)));
     const catList=ci.length?`<datalist id="catModels">${ci.map(it=>`<option value="${esc(it.model)}">`).join('')}</datalist><datalist id="catVendors">${vendors.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`:'';

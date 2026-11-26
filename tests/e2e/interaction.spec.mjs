@@ -198,6 +198,100 @@ test('仅描边区域、修订云线、引线标注：落笔即生效且清洗�
   expect(leader).toEqual({ kind: 'dimension', subtype: 'leader', points: 2, text: leader.want, want: leader.want, kept: 'leader', draft: null });
 });
 
+test('半径标注：点选圆落成带 R 文字的引线', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.locator('.tool-btn[data-tool="arc"]').click();
+  await page.selectOption('#arcMode', 'circle');
+  await page.mouse.click(cx, cy);
+  await page.mouse.click(cx + 70, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await page.locator('.tool-btn[data-tool="dimension"]').click();
+  await page.selectOption('#dimensionType', 'radius');
+  await page.mouse.click(cx, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const r = await page.evaluate(() => {
+    const o = state.objects[1];
+    return { kind: o.kind, subtype: o.subtype, points: o.points.length, text: o.text, draft: draft };
+  });
+  expect(r.kind).toBe('dimension');
+  expect(r.subtype).toBe('leader');
+  expect(r.points).toBe(2);
+  expect(r.text.startsWith('R ')).toBe(true);
+  expect(r.draft).toBe(null);
+});
+
+test('镜像：选中点后两点定轴，生成对称副本且原对象不动', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.locator('.tool-btn[data-tool="point"]').click();
+  await page.mouse.click(cx, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  await page.mouse.click(cx, cy);
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+  await page.locator('.tool-btn[data-tool="mirror"]').click();
+  await page.mouse.click(cx - 60, cy - 80);
+  await page.mouse.click(cx - 60, cy + 80);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const ui = await page.evaluate(() => ({ n: state.objects.length, selected: selectedIds.size, draft: draft }));
+  expect(ui).toEqual({ n: 2, selected: 1, draft: null });
+  /* 两次点击的落点会被网格吸附，改用已知世界轴直接验证反射公式：x'=-x, y'=y */
+  const m = await page.evaluate(() => {
+    state.objects.pop();
+    selectedIds = new Set([state.objects[0].id]);
+    const a = state.objects[0];
+    mirrorSelected([0, 0], [0, 10]);
+    const b = state.objects[1];
+    return { x0: a.x, y0: a.y, x1: b.x, y1: b.y };
+  });
+  expect(m.x1).toBeCloseTo(-m.x0, 6);
+  expect(m.y1).toBeCloseTo(m.y0, 6);
+});
+
+test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.locator('.tool-btn[data-tool="point"]').click();
+  await page.mouse.click(cx - 60, cy - 40);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  await page.mouse.click(cx - 60, cy - 40);
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+  await page.evaluate(() => switchTab('list'));
+  await page.click('#batchArrayBtn');
+  await page.fill('#promptInput', '2,2,10,10');
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(4);
+  const arr = await page.evaluate(() => state.objects.map(o => [o.x, o.y].map(v => Math.round(v * 100) / 100)));
+  expect(new Set(arr.map(p => p.join(','))).size).toBe(4);
+
+  /* 偏移：先画一条水平线段，选中后偏移 1m；新线应与原线平行且相距 1m */
+  await page.locator('.tool-btn[data-tool="segment"]').click();
+  await page.mouse.click(cx - 100, cy + 60);
+  await page.mouse.click(cx + 100, cy + 60);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(5);
+  await page.locator('.tool-btn[data-tool="select"]').click();
+  await page.mouse.click(cx, cy + 60);
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+  await page.evaluate(() => switchTab('list'));
+  await page.click('#batchOffsetBtn');
+  await page.fill('#promptInput', '1');
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(6);
+  const off = await page.evaluate(() => {
+    const lines = state.objects.filter(o => o.kind === 'line');
+    const a = lines[0].points, b = lines[1].points;
+    return { n: lines.length, dy: Math.abs(b[0][1] - a[0][1]), dx: Math.abs(b[0][0] - a[0][0]) };
+  });
+  expect(off.n).toBe(2);
+  expect(off.dy).toBeCloseTo(1, 6);
+  expect(off.dx).toBeCloseTo(0, 6);
+});
+
 test('线段类型与折线类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {

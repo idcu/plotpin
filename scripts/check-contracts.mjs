@@ -7,7 +7,7 @@
  *
  * 逐条：
  *   1. 版本号三处一致（package.json / ngm.json / PlotPin.version）
- *   2. i18n 键对齐（zh ↔ en 同键集；index.html 的 data-i18n* 键都有译文）
+ *   2. i18n 键对齐（zh ↔ en 同键集；index.html 的 data-x* 键都有译文）
  *   3. 文件头唯一且与文件名一致（每个 js 脚本恰好一行）
  *   4. 枚举同源（契约里列出的两处集合必须相等）
  *
@@ -121,7 +121,7 @@ function check(root) {
 
     const htmlFile = join(root, contract.i18n.html);
     const html = readFileSync(htmlFile, 'utf8');
-    const keys = new Set([...html.matchAll(/data-i18n(?:-[a-z-]+)?="([^"]+)"/g)].map(m => m[1]));
+    const keys = new Set([...html.matchAll(/data-x(?:[tap])?="([^"]+)"/g)].map(m => m[1]));
     readings++;
     const unkeyed = [...keys].filter(k => !zh.has(k));
     if (unkeyed.length) violations.push('index.html 引用了字典里没有的键：' + unkeyed.join(', '));
@@ -216,7 +216,7 @@ function selftest() {
     write('ngm.json', JSON.stringify({ version: '1.0.0' }));
     write('js/features/plugins.js', '/* plugins.js —— x */\nconst PlotPin = { version: \'0.9.0\' };\n');
     write('js/common/i18n.js', '(function (g) { g.I18N = { dict: { zh: { a: \'A\' }, en: {} } }; })(this)\n');
-    write('index.html', '<button data-i18n="nope">x</button>\n');
+    write('index.html', '<button data-x="nope">x</button>\n');
     write('js/dup.js', '/* dup.js —— 第一行 */\n/* dup.js —— 第二行 */\n');
     write('js/nohead.js', 'const x = 1;\n');
     write('js/a.js', 'const A = { p: 1, q: 2 };\n');
@@ -227,7 +227,7 @@ function selftest() {
     const want = [
       ['版本号不一致', /版本号不一致/],
       ['en 缺键', /en 缺少键/],
-      ['html 未登记键', /data-i18n|字典里没有的键/],
+      ['html 未登记键', /字典里没有的键/],
       ['重复文件头', /2 行文件头/],
       ['缺文件头', /缺文件头/],
       ['枚举不同源', /不同源/]

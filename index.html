@@ -20,139 +20,142 @@
 <header class="topbar">
   <div class="brand">📌 图钉<span class="brand-en">PlotPin</span></div>
   <div class="tb-group">
-    <button id="newBtn" title="新建工程" data-i18n="new">新建</button>
-    <button id="projBtn" title="把当前工程存入工程库，或打开/管理本机多个工程" data-i18n="projects">📁 工程库</button>
-    <button id="floorBtn" title="多楼层 / 多底图：每层独立底图与对象，可切换、重命名、删除" data-i18n="floors">🏢 楼层</button>
-    <button id="importBtn" title="导入 JSON / DXF / CSV·TSV·XLSX；也可直接拖拽文件到画布" data-i18n="import">导入</button>
-    <select id="exportKind" title="选择导出格式" aria-label="选择导出格式" data-i18n-aria-label="ariaExport">
-      <option value="json" data-i18n="exportJson">JSON 工程</option>
-      <option value="png" data-i18n="exportPng">PNG 高清图</option>
-      <option value="svg" data-i18n="exportSvg">SVG 矢量图</option>
-      <option value="pdf" data-i18n="exportPdf">PDF（图纸位图+清单）</option>
-      <option value="pdf-vector" data-i18n="exportPdfVector">PDF（矢量）· 文字可选中·可搜索（视觉仍为位图，放大会发虚）</option>
-      <option value="dxf" data-i18n="exportDxf">DXF（CAD 互通）</option>
-      <option value="dxf-fidelity" data-i18n="exportDxfFidelity" title="默认 DXF 与旧版本逐字节一致；保真导出为显式选项，椭圆输出为 ELLIPSE、圆弧输出为 ARC；部分 CAD 对原生曲线的解释可能不同，不承诺与原生 CAD 的编辑体验一致。">DXF（保真：椭圆+圆弧）</option>
-      <option value="csv" data-i18n="exportCsv">CSV 表格</option>
-      <option value="tsv" data-i18n="exportTsv">TSV 表格</option>
-      <option value="xlsx" data-i18n="exportXlsx">Excel (.xlsx)</option>
-      <option value="ledger-tpl" data-i18n="exportLedgerTpl">台账模板导出…</option>
+    <button id="newBtn" title="新建工程" data-x="new">新建</button>
+    <button id="projBtn" title="把当前工程存入工程库，或打开/管理本机多个工程" data-x="projects">📁 工程库</button>
+    <button id="floorBtn" title="多楼层 / 多底图：每层独立底图与对象，可切换、重命名、删除" data-x="floors">🏢 楼层</button>
+    <button id="importBtn" title="导入 JSON / DXF / CSV·TSV·XLSX；也可直接拖拽文件到画布" data-x="import">导入</button>
+    <select id="exportKind" title="选择导出格式" aria-label="选择导出格式" data-xa="ariaExport">
+      <option value="json" data-x="exportJson">JSON 工程</option>
+      <option value="png" data-x="exportPng">PNG 高清图</option>
+      <option value="svg" data-x="exportSvg">SVG 矢量图</option>
+      <option value="pdf" data-x="exportPdf">PDF（图纸位图+清单）</option>
+      <option value="pdf-vector" data-x="exportPdfVector">PDF（矢量）· 文字可选中·可搜索（视觉仍为位图，放大会发虚）</option>
+      <option value="dxf" data-x="exportDxf">DXF（CAD 互通）</option>
+      <option value="dxf-fidelity" data-x="exportDxfFidelity" title="默认与旧版一致；保真导出椭圆/圆弧为原生曲线">DXF（保真：椭圆+圆弧）</option>
+      <option value="csv" data-x="exportCsv">CSV 表格</option>
+      <option value="tsv" data-x="exportTsv">TSV 表格</option>
+      <option value="xlsx" data-x="exportXlsx">Excel (.xlsx)</option>
+      <option value="ledger-tpl" data-x="exportLedgerTpl">台账模板导出…</option>
       <option value="quote-csv">CSV 报价表</option>
       <option value="quote-xlsx">Excel 报价表</option>
       <option value="catalog-json">导出目录</option>
       <option value="catalog-delete">删除目录</option>
-      <option value="labels" data-i18n="exportLabels">设备二维码标签 (HTML)</option>
-      <option value="title-block" data-i18n="exportTitleBlock">图框模板…</option>
+      <option value="labels" data-x="exportLabels">设备二维码标签 (HTML)</option>
+      <option value="title-block" data-x="exportTitleBlock">图框模板…</option>
     </select>
-    <button id="exportBtn" class="primary" data-i18n="export">导出</button>
-    <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）" data-i18n="print">打印/PDF</button>
+    <button id="exportBtn" class="primary" data-x="export">导出</button>
+    <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）" data-x="print">打印/PDF</button>
   </div>
   <div class="tb-group">
-    <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制矢量场地" data-i18n="baseSite">底图/场地</button>
-    <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素" aria-describedby="calibStatus" data-i18n="scaleBtn">比例尺</button>
-    <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）" aria-describedby="calibStatus" data-i18n="affineBtn">仿射校准</button>
+    <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制矢量场地" data-x="baseSite">底图/场地</button>
+    <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素" aria-describedby="calibStatus" data-x="scaleBtn">比例尺</button>
+    <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）" aria-describedby="calibStatus" data-x="affineBtn">仿射校准</button>
     <span id="calibStatus" class="hint-text" role="status" aria-live="polite" hidden></span>
-    <button id="coverageBtn" title="统计摄像头/球机等点设备的视场对区域与闭合折线的覆盖率，并高亮盲区" data-i18n="coverageBtn">覆盖率分析</button>
-    <button id="parkingBtn" title="按当前场地范围自动排布双面停车位与通道，并检查通道净宽" data-i18n="parkingBtn">停车规划</button>
-    <button id="collabBtn" title="本机多标签页或跨设备 WebRTC 实时协作，无需服务器" data-i18n="collabBtn">协作</button><span id="collabBadge" style="display:none;margin-left:-2px;padding:0 5px;border-radius:9px;background:#c62828;color:#fff;font-size:10px;line-height:16px"></span>
-    <button id="sidebarToggle" title="在窄屏显示/隐藏属性面板" aria-label="显示或隐藏属性面板" data-i18n-aria-label="ariaSidebar" data-i18n="panelToggle">☰ 面板</button>
-    <button id="settingsBtn" title="工程名称、网格、捕捉、精度等设置" data-i18n="settings">设置</button>
-    <button id="clearFloorBtn" class="danger" title="清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销" data-i18n-title="clearAllTitle" data-i18n="clearAll">清空</button>
+    <button id="coverageBtn" title="统计摄像头/球机等点设备的视场对区域与闭合折线的覆盖率，并高亮盲区" data-x="coverageBtn">覆盖率分析</button>
+    <button id="parkingBtn" title="按当前场地范围自动排布双面停车位与通道，并检查通道净宽" data-x="parkingBtn">停车规划</button>
+    <button id="collabBtn" title="本机多标签页或跨设备 WebRTC 实时协作，无需服务器" data-x="collabBtn">协作</button><span id="collabBadge" style="display:none;margin-left:-2px;padding:0 5px;border-radius:9px;background:#c62828;color:#fff;font-size:10px;line-height:16px"></span>
+    <button id="sidebarToggle" title="在窄屏显示/隐藏属性面板" aria-label="显示或隐藏属性面板" data-xa="ariaSidebar" data-x="panelToggle">☰ 面板</button>
+    <button id="settingsBtn" title="工程名称、网格、捕捉、精度等设置" data-x="settings">设置</button>
+    <button id="clearFloorBtn" class="danger" title="清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销" data-xt="clearAllTitle" data-x="clearAll">清空</button>
   </div>
   <div class="tb-group">
-    <button id="undoBtn" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)" data-i18n-aria-label="ariaUndo">↶</button>
-    <button id="redoBtn" title="重做 (Ctrl+Y)" aria-label="重做 (Ctrl+Y)" data-i18n-aria-label="ariaRedo">↷</button>
+    <button id="undoBtn" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)" data-xa="ariaUndo">↶</button>
+    <button id="redoBtn" title="重做 (Ctrl+Y)" aria-label="重做 (Ctrl+Y)" data-xa="ariaRedo">↷</button>
     <button id="readOnlyBtn" title="本地只读：仅锁本端编辑，对端仍可改本工程">只读</button>
-    <button id="zoomOutBtn" title="缩小" aria-label="缩小" data-i18n-aria-label="ariaZoomOut">−</button>
-    <button id="zoomFitBtn" title="适应窗口显示整张场地" aria-label="适应窗口显示整张场地" data-i18n-aria-label="ariaZoomFit" data-i18n="fitBtn">适应</button>
-    <button id="zoomInBtn" title="放大" aria-label="放大" data-i18n-aria-label="ariaZoomIn">＋</button>
-    <label title="点设备图标显示大小（仅屏幕醒目程度，不代表实际尺寸/比例）" style="color:#cbd5e1;display:flex;align-items:center;gap:4px"><span data-i18n="pointSize">点大小</span>
-      <input type="range" id="markerScaleInput" min="0.5" max="2.5" step="0.1" value="1" style="width:74px" aria-label="点设备图标显示大小" data-i18n-aria-label="ariaMarkerScale"><span id="markerScaleLabel" style="width:32px;color:#e2e8f0">1.0×</span>
+    <button id="zoomOutBtn" title="缩小" aria-label="缩小" data-xa="ariaZoomOut">−</button>
+    <button id="zoomFitBtn" title="适应窗口显示整张场地" aria-label="适应窗口显示整张场地" data-xa="ariaZoomFit" data-x="fitBtn">适应</button>
+    <button id="zoomInBtn" title="放大" aria-label="放大" data-xa="ariaZoomIn">＋</button>
+    <label title="点设备图标显示大小（仅屏幕醒目程度，不代表实际尺寸/比例）" style="color:#cbd5e1;display:flex;align-items:center;gap:4px"><span data-x="pointSize">点大小</span>
+      <input type="range" id="markerScaleInput" min="0.5" max="2.5" step="0.1" value="1" style="width:74px" aria-label="点设备图标显示大小" data-xa="ariaMarkerScale"><span id="markerScaleLabel" style="width:32px;color:#e2e8f0">1.0×</span>
     </label>
   </div>
-  <div class="save-state" id="saveState" data-i18n="saveUnsaved">未保存</div>
+  <div class="save-state" id="saveState" data-x="saveUnsaved">未保存</div>
 </header>
 
 <div class="app-shell">
-  <aside class="tool-rail" role="toolbar" aria-label="绘图工具" data-i18n-aria-label="ariaTools">
-    <button class="tool-btn active" data-tool="select"><span class="ico">↖</span><span data-i18n="select">选择</span></button>
-    <button class="tool-btn" data-tool="pan"><span class="ico">✥</span><span data-i18n="pan">平移</span></button>
+  <aside class="tool-rail" role="toolbar" aria-label="绘图工具" data-xa="ariaTools">
+    <button class="tool-btn active" data-tool="select"><span class="ico">↖</span><span data-x="select">选择</span></button>
+    <button class="tool-btn" data-tool="pan"><span class="ico">✥</span><span data-x="pan">平移</span></button>
     <div class="rail-sep"></div>
-    <button class="tool-btn" data-tool="point"><span class="ico">●</span><span data-i18n="point">点设备</span></button>
-    <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span data-i18n="area">区域</span></button>
-    <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span data-i18n="line">折线</span></button>
-    <button class="tool-btn" data-tool="segment"><span class="ico">—</span><span data-i18n="segment">线段</span></button>
-    <button class="tool-btn" data-tool="arrow"><span class="ico">➤</span><span data-i18n="arrow">箭头</span></button>
-    <button class="tool-btn" data-tool="arc"><span class="ico">◯</span><span data-i18n="circleArc">圆/弧</span></button>
-    <button class="tool-btn" data-tool="text"><span class="ico">T</span><span data-i18n="text">文字</span></button>
-    <button class="tool-btn" data-tool="ruler"><span class="ico">📏</span><span data-i18n="ruler">测距</span></button>
-    <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span data-i18n="dimension">标注</span></button>
-    <button class="tool-btn" data-tool="site-node"><span class="ico">⊗</span><span data-i18n="siteNode">场地节点</span></button>
-    <button class="tool-btn" data-tool="image-transform" aria-describedby="calibStatus"><span class="ico">🖼</span><span data-i18n="imageXform">图片变换</span></button>
-    <button class="tool-btn" data-tool="guide"><span class="ico">╱</span><span data-i18n="guide">参考线</span></button>
+    <button class="tool-btn" data-tool="point"><span class="ico">●</span><span data-x="point">点设备</span></button>
+    <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span data-x="area">区域</span></button>
+    <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span data-x="line">折线</span></button>
+    <button class="tool-btn" data-tool="segment"><span class="ico">—</span><span data-x="segment">线段</span></button>
+    <button class="tool-btn" data-tool="arrow"><span class="ico">➤</span><span data-x="arrow">箭头</span></button>
+    <button class="tool-btn" data-tool="arc"><span class="ico">◯</span><span data-x="circleArc">圆/弧</span></button>
+    <button class="tool-btn" data-tool="text"><span class="ico">T</span><span data-x="text">文字</span></button>
+    <button class="tool-btn" data-tool="ruler"><span class="ico">📏</span><span data-x="ruler">测距</span></button>
+    <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span data-x="dimension">标注</span></button>
+    <button class="tool-btn" data-tool="site-node"><span class="ico">⊗</span><span data-x="siteNode">场地节点</span></button>
+    <button class="tool-btn" data-tool="image-transform" aria-describedby="calibStatus"><span class="ico">🖼</span><span data-x="imageXform">图片变换</span></button>
+    <button class="tool-btn" data-tool="guide"><span class="ico">╱</span><span data-x="guide">参考线</span></button>
+    <button class="tool-btn" data-tool="mirror"><span class="ico">⇋</span><span data-x="mirror">镜像</span></button>
     <div class="rail-sep"></div>
-    <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注" data-i18n="finish">完成</button>
+    <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注" data-x="finish">完成</button>
   </aside>
 
   <main class="canvas-wrap" id="canvasWrap">
-    <canvas id="canvas" role="application" tabindex="0" aria-label="绘图画布：使用左侧工具在此绘制和选择对象" data-i18n-aria-label="ariaCanvas"></canvas>
+    <canvas id="canvas" role="application" tabindex="0" aria-label="绘图画布：使用左侧工具在此绘制和选择对象" data-xa="ariaCanvas"></canvas>
     <div class="hud hud-top">
       <span id="toolTitle">选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）</span>
       <span class="tool-options">
-        <span data-for="point"><span data-i18n="typeLabel">类型</span>
+        <span data-for="point"><span data-x="typeLabel">类型</span>
           <select id="pointType" aria-label="点设备类型"></select>
         </span>
-        <span data-for="rect"><span data-i18n="shapeLabel">形状</span>
+        <span data-for="rect"><span data-x="shapeLabel">形状</span>
           <select id="areaShape" title="区域形状（世界坐标，按实际比例）" aria-label="区域形状">
-            <option value="rect" data-i18n="shapeRect">矩形</option>
-            <option value="circle" data-i18n="shapeCircle">圆形</option>
-            <option value="ellipse" data-i18n="shapeEllipse">椭圆</option>
-            <option value="sector" data-i18n="shapeSector">扇形</option>
-            <option value="parallelogram" data-i18n="shapeParallelogram">平行四边形</option>
+            <option value="rect" data-x="shapeRect">矩形</option>
+            <option value="circle" data-x="shapeCircle">圆形</option>
+            <option value="ellipse" data-x="shapeEllipse">椭圆</option>
+            <option value="sector" data-x="shapeSector">扇形</option>
+            <option value="parallelogram" data-x="shapeParallelogram">平行四边形</option>
           </select>
-          <label><input type="checkbox" id="areaNoFill"><span data-i18n="areaNoFill">仅描边</span></label>
-          <span data-i18n="typeLabel">类型</span>
+          <label><input type="checkbox" id="areaNoFill"><span data-x="areaNoFill">仅描边</span></label>
+          <span data-x="typeLabel">类型</span>
           <select id="rectType" aria-label="区域类型"></select>
         </span>
-        <span data-for="line"><span data-i18n="typeLabel">类型</span>
+        <span data-for="line"><span data-x="typeLabel">类型</span>
           <select id="lineType" aria-label="折线类型"></select>
-          <label><input type="checkbox" id="lineClosed"><span data-i18n="closedArea">闭合区域</span></label>
-          <label><input type="checkbox" id="lineCloud"><span data-i18n="revCloud">修订云线</span></label>
+          <label><input type="checkbox" id="lineClosed"><span data-x="closedArea">闭合区域</span></label>
+          <label><input type="checkbox" id="lineCloud"><span data-x="revCloud">修订云线</span></label>
         </span>
-        <span data-for="segment"><span data-i18n="typeLabel">类型</span>
+        <span data-for="segment"><span data-x="typeLabel">类型</span>
           <select id="segmentType" aria-label="线段类型"></select>
         </span>
         <span data-for="arc"><select id="arcMode" aria-label="圆或圆弧">
-          <option value="circle" data-i18n="shapeCircle">圆形</option>
-          <option value="arc" data-i18n="filterArc">圆弧</option>
+          <option value="circle" data-x="shapeCircle">圆形</option>
+          <option value="arc" data-x="filterArc">圆弧</option>
         </select></span>
-        <span data-for="dimension"><span data-i18n="typeLabel">类型</span>
+        <span data-for="dimension"><span data-x="typeLabel">类型</span>
           <select id="dimensionType" aria-label="标注类型">
-            <option value="distance" data-i18n="dimDistance">两点距离</option>
-            <option value="ruler" data-i18n="dimRuler">测距（多点总长）</option>
-            <option value="area" data-i18n="dimArea">面积</option>
-            <option value="angle" data-i18n="dimAngle">角度</option>
-            <option value="leader" data-i18n="dimLeader">引线标注</option>
+            <option value="distance" data-x="dimDistance">两点距离</option>
+            <option value="ruler" data-x="dimRuler">测距（多点总长）</option>
+            <option value="area" data-x="dimArea">面积</option>
+            <option value="angle" data-x="dimAngle">角度</option>
+            <option value="leader" data-x="dimLeader">引线标注</option>
+            <option value="radius" data-x="dimRadius">半径标注</option>
+            <option value="diameter" data-x="dimDiameter">直径标注</option>
           </select>
         </span>
       </span>
     </div>
     <div class="hud hud-bottom">
       <span class="coord" id="coordText">鼠标：-, -</span>
-      <span class="hint" id="hintText" data-i18n="hintText">滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉类型；可拖拽文件到画布导入；按 ? 查看全部快捷键</span>
+      <span class="hint" id="hintText" data-x="hintText">滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉类型；可拖拽文件到画布导入；按 ? 查看全部快捷键</span>
       <span class="osnap-chip" id="osnapChip" title="Tab / Shift+Tab 循环切换捕捉类型；点击恢复自动" hidden></span>
       <span class="zoom-label" id="zoomLabel">100%</span>
     </div>
   </main>
 
   <aside class="sidebar">
-    <div class="side-tabs" role="tablist" aria-label="侧栏页签" data-i18n-aria-label="ariaTabs">
-      <button class="side-tab active" id="tabBtn-props" data-tab="props" role="tab" aria-selected="true" aria-controls="tab-props" tabindex="0" data-i18n="tabProps">属性</button>
-      <button class="side-tab" id="tabBtn-list" data-tab="list" role="tab" aria-selected="false" aria-controls="tab-list" tabindex="-1" data-i18n="tabList">清单</button>
-      <button class="side-tab" id="tabBtn-layers" data-tab="layers" role="tab" aria-selected="false" aria-controls="tab-layers" tabindex="-1" data-i18n="tabLayers">图层/类型</button>
-      <button class="side-tab" id="tabBtn-symbols" data-tab="symbols" role="tab" aria-selected="false" aria-controls="tab-symbols" tabindex="-1" data-i18n="tabSymbols">符号库</button>
-      <button class="side-tab" id="tabBtn-stats" data-tab="stats" role="tab" aria-selected="false" aria-controls="tab-stats" tabindex="-1" data-i18n="tabStats">统计</button>
-      <button class="side-tab" id="tabBtn-rules" data-tab="rules" role="tab" aria-selected="false" aria-controls="tab-rules" tabindex="-1" data-i18n="tabRules">规则</button>
-      <button class="side-tab" id="tabBtn-comments" data-tab="comments" role="tab" aria-selected="false" aria-controls="tab-comments" tabindex="-1" data-i18n="tabComments">批注</button>
+    <div class="side-tabs" role="tablist" aria-label="侧栏页签" data-xa="ariaTabs">
+      <button class="side-tab active" id="tabBtn-props" data-tab="props" role="tab" aria-selected="true" aria-controls="tab-props" tabindex="0" data-x="tabProps">属性</button>
+      <button class="side-tab" id="tabBtn-list" data-tab="list" role="tab" aria-selected="false" aria-controls="tab-list" tabindex="-1" data-x="tabList">清单</button>
+      <button class="side-tab" id="tabBtn-layers" data-tab="layers" role="tab" aria-selected="false" aria-controls="tab-layers" tabindex="-1" data-x="tabLayers">图层/类型</button>
+      <button class="side-tab" id="tabBtn-symbols" data-tab="symbols" role="tab" aria-selected="false" aria-controls="tab-symbols" tabindex="-1" data-x="tabSymbols">符号库</button>
+      <button class="side-tab" id="tabBtn-stats" data-tab="stats" role="tab" aria-selected="false" aria-controls="tab-stats" tabindex="-1" data-x="tabStats">统计</button>
+      <button class="side-tab" id="tabBtn-rules" data-tab="rules" role="tab" aria-selected="false" aria-controls="tab-rules" tabindex="-1" data-x="tabRules">规则</button>
+      <button class="side-tab" id="tabBtn-comments" data-tab="comments" role="tab" aria-selected="false" aria-controls="tab-comments" tabindex="-1" data-x="tabComments">批注</button>
     </div>
 
     <section class="tab-pane active" id="tab-props" role="tabpanel" aria-labelledby="tabBtn-props">
@@ -162,32 +165,34 @@
     <section class="tab-pane" id="tab-list" role="tabpanel" aria-labelledby="tabBtn-list">
       <div class="section">
         <div class="filter-row">
-          <input id="filterText" placeholder="搜索编号/名称/备注" aria-label="搜索编号/名称/备注" data-i18n-placeholder="searchPlaceholder" data-i18n-aria-label="searchPlaceholder">
-          <select id="filterKind" aria-label="按类型筛选"><option value="" data-i18n="allObjects">全部对象</option></select>
-          <select id="filterLayer" aria-label="按图层筛选"><option value="" data-i18n="allLayers">全部图层</option></select>
+          <input id="filterText" placeholder="搜索编号/名称/备注" aria-label="搜索编号/名称/备注" data-xp="searchPlaceholder" data-xa="searchPlaceholder">
+          <select id="filterKind" aria-label="按类型筛选"><option value="" data-x="allObjects">全部对象</option></select>
+          <select id="filterLayer" aria-label="按图层筛选"><option value="" data-x="allLayers">全部图层</option></select>
         </div>
         <div class="batch-row">
-          <select id="batchLayer" title="批量移动到图层" aria-label="批量移动到图层" data-i18n-aria-label="ariaBatchLayer"></select>
-          <button class="mini" id="batchLayerBtn" data-i18n="batchChangeLayer">改图层</button>
-          <input id="batchDx" type="number" step="0.1" value="0" title="X 平移" aria-label="X 方向平移距离" data-i18n-aria-label="ariaBatchDx">
-          <input id="batchDy" type="number" step="0.1" value="0" title="Y 平移" aria-label="Y 方向平移距离" data-i18n-aria-label="ariaBatchDy">
-          <button class="mini" id="batchMoveBtn" data-i18n="batchMove">平移</button>
-          <input id="batchAngle" type="number" step="1" value="0" title="旋转角度" aria-label="旋转角度" data-i18n-aria-label="ariaBatchAngle">
-          <button class="mini" id="batchRotateBtn" data-i18n="batchRotate">旋转</button>
-          <button class="mini danger" id="batchDeleteBtn" data-i18n="batchDelete">删除</button>
+          <select id="batchLayer" title="批量移动到图层" aria-label="批量移动到图层" data-xa="ariaBatchLayer"></select>
+          <button class="mini" id="batchLayerBtn" data-x="batchChangeLayer">改图层</button>
+          <input id="batchDx" type="number" step="0.1" value="0" title="X 平移" aria-label="X 方向平移距离" data-xa="ariaBatchDx">
+          <input id="batchDy" type="number" step="0.1" value="0" title="Y 平移" aria-label="Y 方向平移距离" data-xa="ariaBatchDy">
+          <button class="mini" id="batchMoveBtn" data-x="batchMove">平移</button>
+          <input id="batchAngle" type="number" step="1" value="0" title="旋转角度" aria-label="旋转角度" data-xa="ariaBatchAngle">
+          <button class="mini" id="batchRotateBtn" data-x="batchRotate">旋转</button>
+          <button class="mini" id="batchArrayBtn" data-x="batchArray">阵列</button>
+          <button class="mini" id="batchOffsetBtn" data-x="batchOffset">偏移</button>
+          <button class="mini danger" id="batchDeleteBtn" data-x="batchDelete">删除</button>
         </div>
         <div class="batch-row annot-batch-row">
-          <span class="hint-text" data-i18n="batchAnnotLabel">图上标注</span>
-          <label class="annot-chk"><input type="checkbox" id="batchAnnotAll"> <span data-i18n="batchAnnotAll">全选/全不选</span></label>
+          <span class="hint-text" data-x="batchAnnotLabel">图上标注</span>
+          <label class="annot-chk"><input type="checkbox" id="batchAnnotAll"> <span data-x="batchAnnotAll">全选/全不选</span></label>
           <div class="annot-chks" id="batchAnnotChks"></div>
         </div>
-        <label class="hint-text"><input type="checkbox" id="selectAllChk"><span data-i18n="selectAll">全选当前筛选结果</span></label>
+        <label class="hint-text"><input type="checkbox" id="selectAllChk"><span data-x="selectAll">全选当前筛选结果</span></label>
       </div>
       <div class="table-wrap">
         <table id="objectTable">
           <thead><tr>
             <th><input type="checkbox" id="headSelectChk" aria-label="全选当前筛选结果"></th>
-            <th data-i18n="thId">编号</th><th data-i18n="thName">名称</th><th data-i18n="thType">类型</th><th data-i18n="thLayer">图层</th><th>X</th><th>Y</th><th data-i18n="thParam">参数</th><th data-i18n="thVisible">显隐</th><th data-i18n="thLock">锁</th>
+            <th data-x="thId">编号</th><th data-x="thName">名称</th><th data-x="thType">类型</th><th data-x="thLayer">图层</th><th>X</th><th>Y</th><th data-x="thParam">参数</th><th data-x="thVisible">显隐</th><th data-x="thLock">锁</th>
           </tr></thead>
           <tbody id="objectTbody"></tbody>
         </table>
@@ -196,39 +201,39 @@
 
     <section class="tab-pane" id="tab-layers" role="tabpanel" aria-labelledby="tabBtn-layers">
       <div class="section">
-        <h3 data-i18n="layersHeading">图层</h3>
+        <h3 data-x="layersHeading">图层</h3>
         <div id="layerList"></div>
         <div class="form-grid" style="margin-top:8px">
-          <input id="newLayerName" placeholder="新图层名称" class="span2" aria-label="新图层名称" data-i18n-placeholder="newLayerPlaceholder" data-i18n-aria-label="newLayerPlaceholder">
-          <button class="primary span2" id="addLayerBtn" data-i18n="addLayer">新增图层</button>
+          <input id="newLayerName" placeholder="新图层名称" class="span2" aria-label="新图层名称" data-xp="newLayerPlaceholder" data-xa="newLayerPlaceholder">
+          <button class="primary span2" id="addLayerBtn" data-x="addLayer">新增图层</button>
         </div>
       </div>
       <div class="section">
-        <h3 data-i18n="typesHeading">类型管理</h3>
+        <h3 data-x="typesHeading">类型管理</h3>
         <div id="typeList"></div>
-        <h3 style="margin-top:14px" data-i18n="addTypeHeading">新增自定义类型</h3>
+        <h3 style="margin-top:14px" data-x="addTypeHeading">新增自定义类型</h3>
         <div class="form-grid">
-          <label data-i18n="kindLabel">类别</label><select id="newTypeKind" aria-label="类别"><option value="point" data-i18n="filterPoint">点设备</option><option value="rect" data-i18n="filterArea">矩形/区域</option><option value="line" data-i18n="filterLine">线段/折线</option></select>
-          <label data-i18n="nameLabel">名称</label><input id="newTypeName" placeholder="例如：烟感、货位、警戒线" data-i18n-placeholder="typeNamePlaceholder">
-          <label data-i18n="colorLabel">颜色</label><input type="color" id="newTypeColor" value="#7c3aed">
-          <label data-icon-row="point" data-i18n="iconLabel">图标</label>
+          <label data-x="kindLabel">类别</label><select id="newTypeKind" aria-label="类别"><option value="point" data-x="filterPoint">点设备</option><option value="rect" data-x="filterArea">矩形/区域</option><option value="line" data-x="filterLine">线段/折线</option></select>
+          <label data-x="nameLabel">名称</label><input id="newTypeName" placeholder="例如：烟感、货位、警戒线" data-xp="typeNamePlaceholder">
+          <label data-x="colorLabel">颜色</label><input type="color" id="newTypeColor" value="#7c3aed">
+          <label data-icon-row="point" data-x="iconLabel">图标</label>
           <select data-icon-row="point" id="newTypeIcon">
-            <option value="marker" data-i18n="iconDot">圆点</option><option value="camera" data-i18n="iconCamera">摄像头</option><option value="dome" data-i18n="iconDome">球机</option>
-            <option value="light" data-i18n="iconLight">路灯</option><option value="gate" data-i18n="iconGate">道闸</option><option value="charger" data-i18n="iconCharger">充电桩</option>
-            <option value="warning" data-i18n="iconWarning">警示</option><option value="custom" data-i18n="iconCustom">菱形</option>
+            <option value="marker" data-x="iconDot">圆点</option><option value="camera" data-x="iconCamera">摄像头</option><option value="dome" data-x="iconDome">球机</option>
+            <option value="light" data-x="iconLight">路灯</option><option value="gate" data-x="iconGate">道闸</option><option value="charger" data-x="iconCharger">充电桩</option>
+            <option value="warning" data-x="iconWarning">警示</option><option value="custom" data-x="iconCustom">菱形</option>
           </select>
-          <label title="点设备设置“物理尺寸(m)”后按世界比例渲染的图形；仅点设备类型生效" data-i18n="scaleShapeLabel">尺寸图形</label>
+          <label title="点设备设置“物理尺寸(m)”后按世界比例渲染的图形；仅点设备类型生效" data-x="scaleShapeLabel">尺寸图形</label>
           <select id="newTypeShape" title="点设备设置物理尺寸后渲染的图形">
-            <option value="none" data-i18n="scaleNone">仅位置图标（不缩放）</option>
-            <option value="circle" data-i18n="scaleCircle">圆形覆盖区</option>
-            <option value="square" data-i18n="scaleSquare">方形区域</option>
-            <option value="sector" selected data-i18n="scaleSector">扇形视场（如摄像头）</option>
-            <option value="bar" data-i18n="scaleBar">杆/线段（如道闸）</option>
+            <option value="none" data-x="scaleNone">仅位置图标（不缩放）</option>
+            <option value="circle" data-x="scaleCircle">圆形覆盖区</option>
+            <option value="square" data-x="scaleSquare">方形区域</option>
+            <option value="sector" selected data-x="scaleSector">扇形视场（如摄像头）</option>
+            <option value="bar" data-x="scaleBar">杆/线段（如道闸）</option>
           </select>
-          <label title="该类型点设备的默认图标屏幕大小倍率（仅显示醒目程度，非实际尺寸）" data-icon-row="point" data-i18n="iconSizeLabel">图标大小</label>
+          <label title="该类型点设备的默认图标屏幕大小倍率（仅显示醒目程度，非实际尺寸）" data-icon-row="point" data-x="iconSizeLabel">图标大小</label>
           <input type="number" min="0.5" max="5" step="0.1" value="1" id="newTypeIconSize" data-icon-row="point" title="默认图标大小（屏幕倍率）">
-          <button class="primary span2" id="addTypeBtn" data-i18n="addType">新增类型</button>
-          <button class="span2" id="importSymBtn" title="导入自定义 SVG 图元：提取 path/circle/rect/polygon/line/polyline，自动进入类型列表" data-i18n="importSvg">导入 SVG 图元…</button>
+          <button class="primary span2" id="addTypeBtn" data-x="addType">新增类型</button>
+          <button class="span2" id="importSymBtn" title="导入自定义 SVG 图元：提取 path/circle/rect/polygon/line/polyline，自动进入类型列表" data-x="importSvg">导入 SVG 图元…</button>
           <input type="file" id="symFileInput" accept=".svg,image/svg+xml" style="display:none">
         </div>
       </div>
@@ -236,39 +241,39 @@
 
     <section class="tab-pane" id="tab-symbols" role="tabpanel" aria-labelledby="tabBtn-symbols">
       <div class="section">
-        <h3><span data-i18n="tabSymbols">符号库</span> <span id="symbolCount" class="hint-text"></span></h3>
+        <h3><span data-x="tabSymbols">符号库</span> <span id="symbolCount" class="hint-text"></span></h3>
         <div class="filter-row">
-          <input id="symbolSearch" placeholder="搜索名称或别名，如 烟感 / NVR / 道闸" aria-label="搜索符号名称或别名" data-i18n-placeholder="symbolSearchPlaceholder" data-i18n-aria-label="symbolSearchAria">
-          <select id="symbolCat" aria-label="按符号分类筛选" data-i18n-aria-label="symbolCategoryAria"><option value="" data-i18n="symbolAllCategories">全部分类</option></select>
+          <input id="symbolSearch" placeholder="搜索名称或别名，如 烟感 / NVR / 道闸" aria-label="搜索符号名称或别名" data-xp="symbolSearchPlaceholder" data-xa="symbolSearchAria">
+          <select id="symbolCat" aria-label="按符号分类筛选" data-xa="symbolCategoryAria"><option value="" data-x="symbolAllCategories">全部分类</option></select>
         </div>
         <div class="form-grid" style="margin-top:6px">
-          <label title="放置时的初始旋转角（可在属性面板继续调整）" data-i18n="symbolAngleLabel" data-i18n-title="symbolAngleTitle">旋转角 (°)</label>
-          <input id="symbolAngle" type="number" step="1" value="0" aria-label="符号放置旋转角" data-i18n-aria-label="symbolAngleAria">
-          <label title="0=屏幕固定图标；填图元外接宽度（米）后按真实比例渲染" data-i18n="symbolPhysLabel" data-i18n-title="symbolPhysTitle">真实尺寸 (m)</label>
-          <input id="symbolPhys" type="number" min="0" step="0.1" value="0" aria-label="符号真实尺寸（米）" data-i18n-aria-label="symbolPhysAria">
+          <label title="放置时的初始旋转角（可在属性面板继续调整）" data-x="symbolAngleLabel" data-xt="symbolAngleTitle">旋转角 (°)</label>
+          <input id="symbolAngle" type="number" step="1" value="0" aria-label="符号放置旋转角" data-xa="symbolAngleAria">
+          <label title="0=屏幕固定图标；填图元外接宽度（米）后按真实比例渲染" data-x="symbolPhysLabel" data-xt="symbolPhysTitle">真实尺寸 (m)</label>
+          <input id="symbolPhys" type="number" min="0" step="0.1" value="0" aria-label="符号真实尺寸（米）" data-xa="symbolPhysAria">
         </div>
         <div id="symbolGrid" class="symbol-grid"></div>
-        <div class="hint-text" style="margin-top:6px" data-i18n="symbolPlaceHint">点击符号即切换到「点设备」工具，再点击画布放置；旋转角与真实尺寸可在属性面板继续调整。</div>
+        <div class="hint-text" style="margin-top:6px" data-x="symbolPlaceHint">点击符号即切换到「点设备」工具，再点击画布放置；旋转角与真实尺寸可在属性面板继续调整。</div>
       </div>
       <div class="section">
-        <h3 data-i18n="symbolCustomHeading">自有符号</h3>
+        <h3 data-x="symbolCustomHeading">自有符号</h3>
         <div class="batch-row">
-          <button class="mini" id="symbolImportSvgBtn" title="导入 SVG：经安全清洗（禁脚本/事件/外链，限元素与字节）" data-i18n="symbolImportSvg" data-i18n-title="symbolImportSvgTitle">导入 SVG…</button>
-          <button class="mini" id="symbolExportJsonBtn" title="仅导出当前工程的自定义符号" data-i18n="symbolExportJson" data-i18n-title="symbolExportJsonTitle">导出 JSON</button>
-          <button class="mini" id="symbolImportJsonBtn" title="导入自定义符号 JSON，仅写入当前工程" data-i18n="symbolImportJson" data-i18n-title="symbolImportJsonTitle">导入 JSON</button>
+          <button class="mini" id="symbolImportSvgBtn" title="导入 SVG：经安全清洗（禁脚本/事件/外链，限元素与字节）" data-x="symbolImportSvg" data-xt="symbolImportSvgTitle">导入 SVG…</button>
+          <button class="mini" id="symbolExportJsonBtn" title="仅导出当前工程的自定义符号" data-x="symbolExportJson" data-xt="symbolExportJsonTitle">导出 JSON</button>
+          <button class="mini" id="symbolImportJsonBtn" title="导入自定义符号 JSON，仅写入当前工程" data-x="symbolImportJson" data-xt="symbolImportJsonTitle">导入 JSON</button>
         </div>
         <input type="file" id="symbolJsonInput" accept=".json,application/json" style="display:none">
-        <div class="hint-text" style="margin-top:6px" data-i18n="symbolCustomHint">自定义符号保存在当前工程命名空间；导入只影响当前工程，不影响其他工程。</div>
+        <div class="hint-text" style="margin-top:6px" data-x="symbolCustomHint">自定义符号保存在当前工程命名空间；导入只影响当前工程，不影响其他工程。</div>
       </div>
     </section>
 
     <section class="tab-pane" id="tab-comments" role="tabpanel" aria-labelledby="tabBtn-comments">
       <div class="section">
-        <div class="hint-text" data-i18n="commentsLocalOnly">评论不随协作同步，仅本机可见</div>
+        <div class="hint-text" data-x="commentsLocalOnly">评论不随协作同步，仅本机可见</div>
         <div class="hint-text" id="commentsReadOnly" hidden></div>
         <div class="batch-row">
-          <input id="commentText" placeholder="写评论…" aria-label="写评论" data-i18n-placeholder="commentPlaceholder" data-i18n-aria-label="commentPlaceholder">
-          <button class="primary mini" id="addCommentBtn" data-i18n="addComment">添加</button>
+          <input id="commentText" placeholder="写评论…" aria-label="写评论" data-xp="commentPlaceholder" data-xa="commentPlaceholder">
+          <button class="primary mini" id="addCommentBtn" data-x="addComment">添加</button>
         </div>
         <div id="commentList"></div>
       </div>
@@ -280,15 +285,15 @@
 
     <section class="tab-pane" id="tab-rules" role="tabpanel" aria-labelledby="tabBtn-rules">
       <div class="section">
-        <h3 data-i18n="rulesHeading">几何规则检查</h3>
+        <h3 data-x="rulesHeading">几何规则检查</h3>
         <div id="ruleConfig"></div>
       </div>
       <div class="section">
-        <h3><span data-i18n="rulesViolationsHeading">违规清单</span><span id="ruleCount" class="hint-text"></span></h3>
+        <h3><span data-x="rulesViolationsHeading">违规清单</span><span id="ruleCount" class="hint-text"></span></h3>
         <div class="batch-row">
-          <button class="primary mini" id="runRulesBtn" data-i18n="rulesRun">运行检查</button>
-          <button class="mini" id="exportRulesBtn" data-i18n="rulesExport">导出 CSV</button>
-          <button class="mini" id="clearRulesBtn" data-i18n="rulesClear">清空结果</button>
+          <button class="primary mini" id="runRulesBtn" data-x="rulesRun">运行检查</button>
+          <button class="mini" id="exportRulesBtn" data-x="rulesExport">导出 CSV</button>
+          <button class="mini" id="clearRulesBtn" data-x="rulesClear">清空结果</button>
         </div>
         <div id="ruleResults"></div>
       </div>

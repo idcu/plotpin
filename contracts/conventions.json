@@ -13,7 +13,7 @@
   "i18n": {
     "source": "js/common/i18n.js",
     "html": "index.html",
-    "为什么": "zh / en 必须同键集，且 index.html 里每个 data-i18n* 键都要有译文——缺一个就露出键名"
+    "为什么": "zh / en 必须同键集，且 index.html 里每个 data-x* 键都要有译文——缺一个就露出键名"
   },
   "headers": {
     "root": "js",

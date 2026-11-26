@@ -185,6 +185,81 @@ $('batchMoveBtn').onclick=()=>{
   }); commitChange('已批量平移', items.map(o=>o.id));
 };
 $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0);
+/* 阵列：选中对象按「行,列,行距X,列距Y」复制；包含原位（1,1），只新增其余位置 */
+$('batchArrayBtn').onclick=async()=>{
+  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+  if(!items.length) return toast(L('先勾选对象'),'warn');
+  const v=await showPrompt({title:I18N.t('batchArray'),label:I18N.t('arrayHint'),value:'2,2,5,5'});
+  if(v===null) return;
+  const [r,c,dx,dy]=v.split(/[,，\s]+/).map(Number);
+  if(!(r>=1&&c>=1&&r*c>1&&r*c<=1000&&Number.isFinite(dx)&&Number.isFinite(dy))) return toast(I18N.t('badParam'),'warn');
+  const add=items.length*(r*c-1);
+  if(!ensureObjectCapacity(add)) return;
+  pushHistory();
+  const fresh=[];
+  withObjectNameScope(allObjectNames(),()=>items.forEach(o=>{
+    for(let i=0;i<r;i++)for(let j=0;j<c;j++){
+      if(!i&&!j) continue;
+      const n=deepClone(o); n.id=uid('OBJ'); n.name=nextObjectId(); n.z=state.objects.length;
+      const ox=j*dx, oy=i*dy;
+      n.x+=ox; n.y+=oy;
+      if(n.points) n.points=n.points.map(p=>[p[0]+ox,p[1]+oy]);
+      if(n.shape&&Array.isArray(n.shape.points)) n.shape.points=n.shape.points.map(p=>[p[0]+ox,p[1]+oy]);
+      if(o.kind==='line'||o.kind==='dimension') syncFirstPoint(n);
+      state.objects.push(n); fresh.push(n.id);
+    }
+  }));
+  selectedIds=new Set(fresh);
+  commitChange(I18N.t('arrayDone'),fresh);
+};
+/** 偏移单个对象：折线/多边形按 miter 平行偏移，区域参数形状按半径/宽高扩展；
+ *  不支持点/文字/标注，返回 null。正距离=闭合区域向外、开放折线向左。 */
+function offsetObject(o,d){
+  const n=deepClone(o);
+  if(o.kind==='line'&&o.points.length>=2){
+    n.points=offsetPolyline(o.points,!!o.closed,d);
+    if(n.points.length<2) return null;
+    syncFirstPoint(n); return n;
+  }
+  if(o.kind==='rect'){
+    if(o.shape&&o.shape.type==='polygon'){
+      const ps=offsetPolyline(polygonShapePoints(o),true,d);
+      if(ps.length<3) return null;
+      /* 多边形区域没有可持久化的参数形状，偏移结果落成闭合折线（面积/覆盖率口径不变） */
+      return baseObject('line','line.boundary',{points:ps,closed:true,x:ps[0][0],y:ps[0][1],
+        layerId:o.layerId,style:deepClone(o.style||{})});
+    }
+    const tt=areaShapeType(o), sh=n.shape;
+    if(tt===CIR||tt===SEC) sh.r=Math.max(.02,(Number(sh.r)||0)+d);
+    else if(tt===ELL){ sh.rx=Math.max(.02,(Number(sh.rx)||0)+d); sh.ry=Math.max(.02,(Number(sh.ry)||0)+d); }
+    else{
+      n.width=Math.max(.02,(Number(n.width)||0)+2*d);
+      n.height=Math.max(.02,(Number(n.height)||0)+2*d);
+      const a=(n.angle||0)*Math.PI/180;
+      n.x-=d*(Math.cos(a)-Math.sin(a)); n.y-=d*(Math.sin(a)+Math.cos(a));
+    }
+    return n;
+  }
+  if(o.kind==='arc'&&o.shape){ n.shape.r=Math.max(.02,(Number(n.shape.r)||0)+d); return n; }
+  return null;
+}
+$('batchOffsetBtn').onclick=async()=>{
+  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+  if(!items.length) return toast(L('先勾选对象'),'warn');
+  const v=await showPrompt({title:I18N.t('batchOffset'),label:I18N.t('offsetHint'),value:'1'});
+  if(v===null) return;
+  const d=Number(v);
+  if(!(d>0&&Number.isFinite(d))) return toast(I18N.t('badParam'),'warn');
+  const clones=items.map(o=>offsetObject(o,d)).filter(Boolean);
+  if(!clones.length) return toast(L('没有可修改的选中对象'),'warn');
+  if(!ensureObjectCapacity(clones.length)) return;
+  pushHistory();
+  withObjectNameScope(allObjectNames(),()=>clones.forEach(n=>{
+    n.id=uid('OBJ'); n.name=nextObjectId(); n.z=state.objects.length; state.objects.push(n);
+  }));
+  selectedIds=new Set(clones.map(n=>n.id));
+  commitChange(I18N.t('opDone'),clones.map(n=>n.id));
+};
 $('batchDeleteBtn').onclick=deleteSelected;
 /* -------------------- 批量标注显隐（按标识类型勾选） --------------------
    只列出当前选中可编辑对象**适用**的类型（kind/shape 由 annotToggleKeys 判定），不适用的不渲染；
@@ -270,7 +345,7 @@ function renderLayers(){
     const target=state.layers.find(x=>x.id!==l.id&&x.id==='layer.default')||state.layers.find(x=>x.id!==l.id);
     if(refs.length){
       const total=refs.reduce((n,r)=>n+r.count,0);
-      const ok=await showConfirm(L(TXT_LAYER_DELETE_CONFIRM,
+      const ok=await showConfirm(L(TX_LDEL,
         {layer:l.name,floors:refs.length,count:total,target:target.name}));
       if(!ok) return;
     }
@@ -308,7 +383,7 @@ function renderTypes(){
     if(refs.length&&!target) return toast('该类型仍被对象使用，且没有可迁移的同类内置类型','warn');
     if(refs.length){
       const total=refs.reduce((n,r)=>n+r.count,0);
-      const ok=await showConfirm(L(TXT_TYPE_DELETE_CONFIRM,
+      const ok=await showConfirm(L(TX_TDEL,
         {type:typeDisplayName(t),floors:refs.length,count:total,target:typeDisplayName(target)}));
       if(!ok) return;
     }
@@ -586,8 +661,8 @@ function runCoverageAnalysis(){
     <div>${esc(L('覆盖面积'))} <b>${fmt(res.totalCovered)}</b> m² ｜ ${esc(L('盲区'))} <b>${fmt(res.totalBlind)}</b> m² ｜ ${esc(L('总面积'))} <b>${fmt(res.totalArea)}</b> m²</div>
     <div style="margin-top:6px"><b>${esc(L('统计口径 v3'))}</b>：${esc(L('固定目标'))} <b>${res.targetCells}</b> ${esc(L('格，按可见区域面积分配（实际'))} <b>${res.gridCells}</b> ${esc(L('格），格边'))} <b>${fmt(cellMin)}–${fmt(cellMax)}</b> m</div>
     ${res.spec.degraded?`<div class="hint-text" style="color:#b45309"><b>${esc(L('覆盖率已降级：格边放大 {n} 倍以控制在格数上限内',{n:res.spec.degradedFactor}))}</b></div>`:''}
-    <div class="hint-text">${esc(L(TXT_STATS_SCOPE_HINT))}</div>
-    <div class="hint-text">${esc(L(TXT_CAMERA_SCOPE))}</div>
+    <div class="hint-text">${esc(L(TX_STATS))}</div>
+    <div class="hint-text">${esc(L(TX_LENS))}</div>
   </div>`;
   const rows=res.regions.map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid #eef2f7">
     <span style="font-weight:600">${esc(r.name)}</span>

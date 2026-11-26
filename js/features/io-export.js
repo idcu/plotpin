@@ -53,7 +53,7 @@ function openTitleBlockDialog(){
     '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_scaleBar"'+(tb.scaleBar?' checked':'')+'> '+esc(L('绘制比例尺'))+'</label>'+
     '<label style="display:block;margin:4px 0"><input type="checkbox" id="tb_legend"'+(tb.legend?' checked':'')+'> '+esc(L('绘制图例（按可见对象类型/图层）'))+'</label>';
   openModal(L('图框 / 标题栏模板'),
-    '<p class="hint-text">'+esc(L(TXT_TITLEBLOCK_HINT))+'</p>'+checks+'<hr>'+inputs,
+    '<p class="hint-text">'+esc(L(TX_TB))+'</p>'+checks+'<hr>'+inputs,
     [{text:L('取消'),click:closeModal},
      {text:I18N.t('save'),class:'primary',click:()=>{
        const fields={};
@@ -99,7 +99,7 @@ function exportLabelSheet(){
 .code{font-family:Consolas,Menlo,monospace;color:#475569;word-break:break-all;font-size:11px}
 @media print{body{margin:8mm}.label{border-style:solid}}</style></head>
 <body><h3>${esc(state.meta.name||L('图纸工程'))} · ${esc(L('设备二维码标签'))}（${esc(L('共'))} ${pts.length} ${esc(L('台'))}）</h3>
-<p style="font-size:12px;color:#475569">${esc(L(TXT_QR_HINT))}</p>
+<p style="font-size:12px;color:#475569">${esc(L(TX_QR))}</p>
 <div class="sheet">${cards}</div></body></html>`;
   downloadBlob(new Blob([html],{type:'text/html;charset=utf-8'}),safeName()+'-'+L('设备标签')+'.html');
   toast(L('已导出 {n} 张设备二维码标签（可打印）',{n:pts.length}),'success');

@@ -402,7 +402,7 @@ function openCollabConflictsPanel(){
   const rows=all.slice(0,COLLAB_LEDGER_SHOW);
   const body=rows.length
     ? rows.map((r,i)=>collabConflictRowHtml(r,i)).join('')
-      +`<div class="hint-text" style="margin-top:8px">${L(TXT_RESTORE_HINT)}</div>`
+      +`<div class="hint-text" style="margin-top:8px">${L(TX_REST)}</div>`
       +`<div class="form-actions"><button id="collabConflictClear">${L('清除记录')}</button></div>`
     : `<div class="hint-text">${L('尚无可恢复的冲突记录')}</div>`;
   openModal(L('冲突清单'),body,[{text:L('关闭'),click:closeModal}]);
@@ -1133,7 +1133,7 @@ function collabAnnounceRights(){
 function collabAskRtcTrust(){
   if(collabRtcAskOpen) return;
   collabRtcAskOpen=true;
-  showConfirm(L(TXT_PEER_SNAPSHOT_CONFIRM))
+  showConfirm(L(TX_PEER))
     .then(ok=>{
       collabRtcAskOpen=false;
       if(!ok){
@@ -1403,7 +1403,7 @@ function openCollabPanel(){
        <button id="collabStopBtn">${L('断开')}</button></div>
      </div>
      <div class="section"><h3>${L('跨设备邀请（WebRTC）')}</h3>
-       <div class="hint-text">${L(TXT_CONNECT_STEPS)}</div>
+       <div class="hint-text">${L(TX_STEPS)}</div>
        <div class="form-actions">
          <button id="collabOfferBtn">${L('生成邀请（主机）')}</button>
          <button id="collabAcceptBtn">${L('应用邀请 / 生成应答')}</button>
@@ -1416,7 +1416,7 @@ function openCollabPanel(){
        <div id="collabInviteQr" style="margin-top:8px"></div>
      </div>
      <div class="section"><h3>${L('中继服务器（可选：跨 NAT 才需要）')}</h3>
-       <div class="hint-text">${L(TXT_RELAY_HINT)}</div>
+       <div class="hint-text">${L(TX_RELAY)}</div>
        <div class="form-grid" style="margin-top:6px">
          <label>${L('中继配置')}</label><textarea id="collabIceIn" rows="3" placeholder="turn:turn.example.com:3478 | user | pass" style="width:100%;font-family:Consolas,monospace;font-size:11px"></textarea>
        </div>

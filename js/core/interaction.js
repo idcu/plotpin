@@ -14,22 +14,23 @@ function syncToolButtons(tool){
 }
 const TOOL_TITLES={
   select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
-  rect:L(TXT_RECT_HINT),line:L(TXT_POLYLINE_HINT),
+  rect:L(TX_RECT),line:L(TX_POLY),
   segment:L('线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
   arrow:L('箭头：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
   arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
-  calibrate:L(TXT_CALIB_HINT),
-  affine:L(TXT_AFFINE_HINT),
+  calibrate:L(TX_CALIB),
+  affine:L(TX_AFF),
   'site-rect':L('绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消'),
   'site-circle':L('绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消'),
   'site-ellipse':L('绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消'),
   'site-sector':L('绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消'),
-  'site-parallelogram':L(TXT_SITE_PARA_HINT),
+  'site-parallelogram':L(TX_SPARA),
   'site-polygon':L('绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消'),
-  'site-node':L(TXT_SITE_NODE_HINT),
-  'image-transform':L(TXT_IMAGE_TRANSFORM_HINT),
-  'guide':L(TXT_GUIDE_HINT)
+  'site-node':L(TX_SNODE),
+  'image-transform':L(TX_IMG),
+  'guide':L(TX_GUIDE),
+  'mirror':L('镜像：选中后点两点定义轴')
 };
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
 function updateToolTitle(){
@@ -373,12 +374,33 @@ canvas.addEventListener('pointerdown',e=>{
   }
   if(currentTool==='dimension'){
     const subtype=$('dimensionType').value;
+    /* 半径/直径：点选圆或圆弧，落成带 R/D 文字的引线（复用 leader 的渲染与导出） */
+    if(subtype==='radius'||subtype==='diameter'){
+      const hit=hitObject(wp,sp), sh=(hit&&hit.shape)||{};
+      const circle=hit&&(hit.kind==='arc'||(hit.kind==='rect'&&areaShapeType(hit)===CIR));
+      const r=circle?Math.abs(Number(sh.r)||0):0;
+      if(!(r>0)) return callHook('ui.toast',I18N.t('pickCircle'),'warn');
+      if(!ensureObjectCapacity(1)) return;
+      const ang=Math.PI/4, r2=r+Math.max(.8,r*.5);
+      const tip=[hit.x+r*Math.cos(ang),hit.y+r*Math.sin(ang)], tail=[hit.x+r2*Math.cos(ang),hit.y+r2*Math.sin(ang)];
+      pushHistory();
+      const o=baseObject('dimension',null,{subtype:'leader',points:[tip,tail],x:tip[0],y:tip[1],style:{color:'#111827'}});
+      o.text=(subtype==='radius'?'R ':'D ')+fmt(subtype==='radius'?r:r*2)+' '+state.settings.unit;
+      o.name='D'+String(state.objects.length+1).padStart(4,'0');
+      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
+      commitChange(L('已添加尺寸标注')); return;
+    }
     if(!draft){ draft={kind:'dimension',subtype,points:[wp],current:wp}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
     /* distance/angle/leader 点数够了自动结束；ruler（测距链）与 area 手动 Enter/双击结束 */
     if(((subtype==='distance'||subtype==='leader')&&draft.points.length>=2)||(subtype==='angle'&&draft.points.length>=3)) finishDraft();
     else requestRender();
     return;
+  }
+  if(currentTool==='mirror'){
+    if(!state.objects.some(o=>selectedIds.has(o.id)&&isEditable(o))) return callHook('ui.toast',L('先勾选对象'),'warn');
+    if(!draft){ draft={kind:'mirror',points:[wp],current:wp}; requestRender(); return; }
+    const a=draft.points[0]; draft=null; requestRender(); mirrorSelected(a,wp); return;
   }
   if(currentTool==='text'){
     showPrompt({title:L('添加文字'),label:L('文字内容'),value:L('标注文字')}).then(text=>{
@@ -891,24 +913,24 @@ async function finishSiteDraft(){
   if(!d){ setTool('select'); return; }
   if(d.kind==='siteRect'){
     const shape=rectShapeFromCorners(d.start,d.current);
-    if(shape.w<.5||shape.h<.5){ toast(TXT_SITE_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
+    if(shape.w<.5||shape.h<.5){ toast(TX_SSMALL,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite('rect',shape);
   }else if(d.kind==='siteParallelogram'){
     const a=d.start,b=d.current;
     const x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),hh=Math.abs(a[1]-b[1]);
-    if(w<.5||hh<.5){ toast(TXT_SITE_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
+    if(w<.5||hh<.5){ toast(TX_SSMALL,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite(PARA,{type:PARA,x,y,w,h:hh,skew:PARALLELOGRAM_DEFAULT_SKEW});
   }else if(d.kind==='siteCircle'){
     const r=dist(d.start,d.current);
-    if(r<.5){ toast(TXT_RADIUS_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
+    if(r<.5){ toast(TX_RSMALL,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite(CIR,circleShapeFrom(d.start,r));
   }else if(d.kind==='siteEllipse'){
     const shape=ellipseShapeFromCorners(d.start,d.current);
-    if(shape.rx*2<.5||shape.ry*2<.5){ toast(TXT_RADIUS_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
+    if(shape.rx*2<.5||shape.ry*2<.5){ toast(TX_RSMALL,'warn'); setTool('select'); requestRender(); return; }
     applyVectorSite(ELL,shape);
   }else if(d.kind==='siteSector'){
     const r=dist(d.start,d.current);
-    if(r<.5){ toast(TXT_RADIUS_SMALL_HINT,'warn'); setTool('select'); requestRender(); return; }
+    if(r<.5){ toast(TX_RSMALL,'warn'); setTool('select'); requestRender(); return; }
     const v=await showPrompt({title:L('扇形场地角度'),label:L('起始角, 张角（度，用逗号分隔），例如 0,90'),value:'0,90'});
     if(v===null){ setTool('select'); return; }
     const m=v.split(/[,，\s]+/).map(Number);
@@ -1132,6 +1154,43 @@ function duplicateSelected(){
   }));
   selectedIds=new Set(fresh); commitChange('已复制对象', fresh);
 }
+/** 选中对象按 a→b 轴生成镜像副本：位置/顶点/角度镜像，文字保持正向；
+ *  平行四边形没有可承载任意轴镜像的参数化，副本落成同四角的闭合折线（几何精确）。 */
+function mirrorSelected(a,b){
+  const objs=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+  if(!objs.length) return;
+  const dx=b[0]-a[0], dy=b[1]-a[1], dd=dx*dx+dy*dy;
+  if(Math.hypot(dx,dy)<.01) return callHook('ui.toast',I18N.t('badParam'),'warn');
+  if(!ensureObjectCapacity(objs.length)) return;
+  const alpha=Math.atan2(dy,dx)*180/Math.PI;
+  const mir=p=>{ const vx=p[0]-a[0],vy=p[1]-a[1],k=(vx*dx+vy*dy)/dd; return [a[0]+2*k*dx-vx,a[1]+2*k*dy-vy]; };
+  pushHistory();
+  const fresh=[];
+  withObjectNameScope(allObjectNames(),()=>objs.forEach(o=>{
+    /* 平行四边形没有可承载任意轴镜像的参数化，镜像结果落成同四角的闭合折线（几何精确） */
+    const flat=o.kind==='rect'&&o.shape&&o.shape.type===PARA;
+    const n=flat
+      ? baseObject('line','line.boundary',{points:rectPoints(o),closed:true,x:0,y:0,layerId:o.layerId,style:deepClone(o.style||{})})
+      : deepClone(o);
+    n.id=uid('OBJ'); n.name=nextObjectId(); n.z=state.objects.length;
+    const q=mir([o.x,o.y]); n.x=q[0]; n.y=q[1];
+    if(n.points&&n.points.length) n.points=n.points.map(mir);
+    if(n.shape&&Array.isArray(n.shape.points)) n.shape.points=n.shape.points.map(mir);
+    const sh=n.shape||{};
+    if(n.kind==='arc'&&sh.type===ARC){
+      const sw=arcSweep(sh); sh.a0=normalizeAngle(2*alpha-sh.a1); sh.a1=sh.a0+sw;
+    }else if(n.kind==='rect'&&sh.type===SEC){
+      const a0=sh.a0,a1=sh.a1;
+      sh.a0=normalizeAngle(2*alpha-a1); sh.a1=normalizeAngle(2*alpha-a0);
+    }else if(n.kind==='point'||(n.kind==='rect'&&sh.type!==SEC)){
+      n.angle=normalizeAngle(2*alpha-(n.angle||0));
+    }
+    if(n.kind==='line'||n.kind==='dimension') syncFirstPoint(n);
+    state.objects.push(n); fresh.push(n.id);
+  }));
+  selectedIds=new Set(fresh);
+  commitChange(I18N.t('opDone'),fresh);
+}
 function copySelected(){
   clipboard=state.objects.filter(o=>selectedIds.has(o.id)).map(o=>deepClone(o));
   if(clipboard.length) toast(L('已复制 {n} 个对象到剪贴板',{n:clipboard.length}));
@@ -1162,8 +1221,8 @@ function helpShortcutRows(){
     [L('双击线段 / 双击节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
     [L('Shift（画线/标注/拖节点时）'),L('约束为水平/垂直线（正交）')],
     [L('Shift（拖矩形/椭圆/扇形时）'),L('正方形 / 正圆 / 45°方位吸附')],
-    [L('对象捕捉'),L(TXT_OSNAP_HINT)],
-    ['Tab / Shift+Tab',L(TXT_SNAP_CYCLE_HINT)],
+    [L('对象捕捉'),L(TX_OSNAP)],
+    ['Tab / Shift+Tab',L(TX_SNAPC)],
     ['F6',L('在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）')],
     [L('空格 + 拖拽'),L('临时平移画布')],
     [L('方向键'),L('移动选中对象（Shift ×10 倍步距）')],['F',L('适应窗口（显示整张场地）')],
@@ -1180,7 +1239,7 @@ function helpGlossaryRows(){
     [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
     [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
     [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')],
-    [L('低缩放标签'), L(TXT_LOD_HINT)]
+    [L('低缩放标签'), L(TX_LOD)]
   ];
 }
 function helpExportRows(){
@@ -1190,7 +1249,7 @@ function helpExportRows(){
     [L('SVG 矢量图'), L('当前楼层矢量图，底图嵌入，可无损缩放。')],
     [L('PDF（图纸位图+清单）'), L('图纸页为位图页；清单独立分页。')],
     [L('DXF（CAD 互通）'), L('场地为独立 SITE 图层；毫米坐标可在 CAD 编辑。')],
-    [L('DXF（保真：椭圆+圆弧）'), L(TXT_ARC_COMPAT_HINT)],
+    [L('DXF（保真：椭圆+圆弧）'), L(TX_ARC)],
     [L('CSV 表格'), L('全楼层台账；= + - @ 开头加单引号防公式注入。')],
     [L('TSV 表格'), L('同 CSV，制表符分隔；同一公式防护。')],
     [L('Excel (.xlsx)'), L('全楼层台账；单元格按文本写入，无公式。')]
