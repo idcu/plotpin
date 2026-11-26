@@ -4,6 +4,25 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 场地顶点编辑：抓手排序接线 + 锁定语义补齐
+
+- **Commit Hash**：`待回填`
+- **核心问题**（浏览器实测复现）：
+  - 多边形场地属性面板渲染了 ⠿ 抓手和「拖 ⠿ 或 ↑↓ 调整顺序」提示，但 `bindNodeRowDrag` 只对 `kind==='line'` 绑定，场地抓手拖拽落到 drop 前就早退——用户拖了完全无反应（真实 Chromium：4 个顶点、`history.past` 0，顺序不变；同操作折线对象正常）。
+  - 锁定场地只在画布拖点路径被 `resizeByHandle` 拦住，属性面板的顶点坐标、＋/×、↑↓ 仍可写；实测 `state.site.locked=true` 时输入 X 仍改点并涨历史，与锁定对象语义不一致。
+- **核心改动**：
+  - `bindNodeRowDrag(box, spec)` 泛化为 `spec.move(from,to)` 契约，折线与场地共用；无抓手时不再挂 `dragend`（避免每次渲染净增无用监听，原 C1 监听器测试仍绿）。
+  - 新增 `siteMoveNodeTo(from,to)`；`siteMoveNode` 改为薄包装，抓手与 ↑↓ 同源，越界/原地不产生历史。
+  - 锁定/所属图层锁定时：数值输入与节点坐标输入禁用、抓手与增删按钮不渲染；`applySiteField / setCoord / siteInsertNode / siteRemoveNode / siteMoveNodeTo` 全部拒绝写入；「锁定」复选框与名称/图层/显示仍可操作，便于解锁。
+  - 勾选锁定或切换图层后立即 `renderProps()`，可编辑态即时刷新（与对象面板锁定后全量刷新的观感一致）。
+- **预算**：dist **839,020 → 839,596 B（+576 B）**；gzip **274,047 → 274,184 B（+137 B）**；余量 **660 → 84 B**（硬上限内，但已进入 <6,000 B 强警告区）；SW `VERSION=268 → 269`，53 个预缓存输入。
+- **验证数据**：
+  - `node scripts/selftest.mjs`：**4,576 通过 / 0 失败**（+9：抓手排序生效、锁定后参数/增删/排序拒绝、锁定开关可用）。
+  - `node scripts/e2e.mjs`：全量源码入口 **186 passed / 0 failed / 3 skipped**（4.1m，exit 0）；新增 `ui-hardening` 用例覆盖真实 HTML5 抓手拖拽与锁定态。
+  - `npm run ci` 退出 0：13 步门禁全绿；bench 缓存帧 P95 0.07 ms、静态重建 16.76 ms、heapUsed 26.66 MB、大场地覆盖率 14.9 ms；门禁牙齿 10/10 + 20/20。
+- **公共抽象清单**：`bindNodeRowDrag` 由「折线专用」改为 `{move(from,to)}` 通用契约（折线、场地多边形共用）；新增 `siteMoveNodeTo` 作为顶点排序唯一实现，`siteMoveNode` 保留为方向包装。无新增公共 API/常量。
+- **遗留风险**：raw 余量仅 **84 B**，下一次任何业务改动前必须先做实测回收或砍口径，否则构建会直接触硬限；dist 入口 e2e 本轮未跑；P1-6（一般仿射下圆/椭圆/平行四边形迁移失真）仍未修，与本次顶点编辑无关。
+
 ## 2026-11-26 · 合并 origin/main（77 提交）并重放 P3-20 PDF 导入事务化
 
 - **Commit Hash**：`待回填`（合并提交；本地父 `3159257` × 远端父 `8428c9e`）

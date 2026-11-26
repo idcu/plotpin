@@ -139,15 +139,16 @@ function sitePropsHTML(site, mode){
   /* 兼容旧调用：显式传入旧图片底图对象时仍给出图片属性 */
   if(site.kind==='image') return imagePropsHTML(site, heading);
   const sh=siteShapeOf(site);
+  const locked=siteIsLocked(site);
   const fv=(v,fb=0)=>{ const n=Number(v); return fmt(Number.isFinite(n)?n:fb); };
-  const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-site-field="${field}" value="${val}">`;
+  const num=(field,val,step=.1)=>`<input type="number" step="${step}" data-site-field="${field}" value="${val}" ${locked?'disabled':''}>`;
   const row=(label,inner)=>`<label>${esc(L(label))}</label><div>${inner}</div>`;
   let params='';
   if(sh.type==='polygon'){
     const pts=sh.points||[];
     /* 与折线/闭合区域共用节点编辑器：同一套 data-node-* DOM 与增删/排序/坐标输入契约 */
     params=renderNodeEditor({kind:'site',closed:true,points:pts},{
-      points:pts, canEdit:true, min:3, nodeLabel:'顶点', hintUnit:'个顶点',
+      points:pts, canEdit:!locked, min:3, nodeLabel:'顶点', hintUnit:'个顶点',
       shapeName:'场地多边形', hint:'画布上双击边插入顶点、双击顶点删除'
     });
   }else if(sh.type===CIR){
@@ -219,6 +220,9 @@ function renderSiteProps(box, mode){
   const img=isImageBackground(state.background)?imagePropsHTML(state.background, L('图片底图')):'';
   box.innerHTML=img+sitePropsHTML(state.site, mode||'default');
   bindSiteNodeEvents(box);
+  /* 锁定场地与锁定对象同语义：几何输入不可编辑，但名称/图层/显示/锁定本身仍可操作（便于解锁） */
+  if(state.site&&siteIsLocked(state.site))
+    box.querySelectorAll('[data-site-field],[data-node-axis]').forEach(el=>{ el.disabled=true; });
 }
 
 /* N-19：属性面板撤销入栈改为容器级委托，场地与对象共用同一实现。
@@ -268,6 +272,8 @@ function bindSiteNodeEvents(box){
       else if(key==='name') state.site.name=String(el.value||'场地').slice(0,40);
       state.site.updatedAt=nowISO();
       changed();
+      /* 锁定状态或所属图层变化会改变可编辑性：立即重绘，几何输入同步禁用/恢复 */
+      if(key==='locked'||key==='layerId') renderProps();
     });
   });
   /* 场地标注开关写回 state.settings 原键（不发对象 annot）；与对象面板共用同一绑定实现 */
@@ -276,6 +282,7 @@ function bindSiteNodeEvents(box){
   bindNodeEditorEvents(box,{
     points:()=>state.site?.shape?.points,
     setCoord:(i,axis,v)=>{
+      if(siteIsLocked(state.site)) return false;
       const pts=state.site?.shape?.points, n=Number(v);
       if(!pts||i<0||i>=pts.length||!Number.isFinite(n)) return false;
       pts[i][axis==='y'?1:0]=n; state.site.updatedAt=nowISO(); return true;
@@ -285,13 +292,15 @@ function bindSiteNodeEvents(box){
     move:(i,dir)=>siteMoveNode(i,dir),
     changed
   });
+  /* 场地顶点与折线节点共用抓手拖拽排序；锁定场地不绑定，锁定态也不会渲染抓手 */
+  bindNodeRowDrag(box,{move:(from,to)=>siteMoveNodeTo(from,to)});
   /* 图片底图属性面板的入口按钮：复用顶部同名按钮的处理逻辑 */
   const openB=box.querySelector('#siteOpenBtn'); if(openB) openB.onclick=()=>openSitePicker();
   const calB=box.querySelector('#siteCalibBtn'); if(calB) calB.onclick=()=>$('calibBtn').click();
   const affB=box.querySelector('#siteAffineBtn'); if(affB) affB.onclick=()=>$('affineBtn').click();
 }
 function applySiteField(field,v){
-  const sh=state.site?.shape; if(!sh) return false;
+  const sh=state.site?.shape; if(!sh||siteIsLocked(state.site)) return false;
   const n=Number(v); if(!Number.isFinite(n)) return false;
   if(field==='a0') sh.a0=normalizeAngle(n);
   else if(field==='angle') sh.angle=normalizeAngle(n);
@@ -303,25 +312,26 @@ function applySiteField(field,v){
 }
 /* 场地多边形顶点增删排序（闭合环；操作后同步取景框并提交） */
 function siteInsertNode(at){
-  const pts=state.site?.shape?.points; if(!pts) return;
+  const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
   const a=pts[at], c=pts[(at+1)%pts.length];
   pushHistory();
   pts.splice(Math.min(at+1,pts.length),0,[(a[0]+c[0])/2,(a[1]+c[1])/2]);
   state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已插入场地顶点');
 }
 function siteRemoveNode(i){
-  const pts=state.site?.shape?.points; if(!pts) return;
+  const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
   if(pts.length<=3) return toast('多边形场地至少保留 3 个顶点','warn');
   pushHistory(); pts.splice(i,1); state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已删除场地顶点');
 }
-function siteMoveNode(i,dir){
-  const pts=state.site?.shape?.points; if(!pts) return;
-  const to=i+(dir<0?-1:1);
-  if(to<0||to>=pts.length) return;
+/** 顶点移动到指定下标（抓手拖拽与 ↑↓ 共用；越界/未移动不产生历史） */
+function siteMoveNodeTo(from,to){
+  const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
+  if(!(from>=0)||from>=pts.length||!(to>=0)||to>=pts.length||from===to) return;
   pushHistory();
-  const p=pts.splice(i,1)[0]; pts.splice(to,0,p);
+  const p=pts.splice(from,1)[0]; pts.splice(to,0,p);
   state.site.updatedAt=nowISO(); syncFramePan(); commitChange('场地顶点顺序已调整');
 }
+function siteMoveNode(i,dir){ siteMoveNodeTo(i,i+(dir<0?-1:1)); }
 function renderProps(){
   const box=$('propPanel');
   bindPropHistory(box);
@@ -591,7 +601,9 @@ function bindPropEvents(box,o){
     changed,
     focusNode:i=>setFocusNode(i===null?null:{id:o.id,index:i})
   });
-  bindNodeRowDrag(box,o);
+  if(o.kind==='line') bindNodeRowDrag(box,{move:(from,to)=>{
+    pushHistory(); moveNode(o,from,to); commitChange('节点顺序已调整');
+  }});
   box.querySelector('[data-action="duplicate"]').onclick=()=>duplicateSelected();
   box.querySelector('[data-action="delete"]').onclick=()=>deleteSelected();
   box.querySelector('[data-action="raise"]').onclick=()=>reorderSelected(1);
@@ -632,9 +644,14 @@ function bindPropEvents(box,o){
   });
   if(!isEditable(o)) box.querySelectorAll('input,select,textarea,button:not(.danger)').forEach(el=>{ el.disabled=true; });
 }
-/** 节点行 HTML5 拖拽排序：仅抓手可拖，落到目标行=移动到该位置 */
-function bindNodeRowDrag(box,o){
-  if(o.kind!=='line') return;
+/** 节点行 HTML5 拖拽排序：仅抓手可拖，落到目标行=移动到该位置。
+ *  spec={move(from,to)}：由调用方负责 pushHistory/写状态/提交；未提供 move 时不绑定，
+ *  业务折线与场地多边形共用这一实现（此前只给 line 绑、场地抓手拖了没反应）。 */
+function bindNodeRowDrag(box,spec){
+  const move=spec&&spec.move;
+  if(typeof move!=='function') return;
+  /* 无抓手（锁定/非折线/非多边形）时不挂 dragend，避免每次渲染净增无用监听 */
+  if(!box.querySelector('[data-node-grip]')) return;
   let dragFrom=-1;
   box.querySelectorAll('.node-row').forEach(row=>{
     row.addEventListener('dragover',e=>{ e.preventDefault(); row.classList.add('drag-over'); });
@@ -643,8 +660,7 @@ function bindNodeRowDrag(box,o){
       e.preventDefault(); row.classList.remove('drag-over');
       const to=Number(row.dataset.nodeRow);
       if(dragFrom<0||to===dragFrom) return;
-      pushHistory();
-      moveNode(o,dragFrom,to); commitChange('节点顺序已调整');
+      move(dragFrom,to);
     });
   });
   box.querySelectorAll('[data-node-grip]').forEach(g=>g.addEventListener('dragstart',()=>{

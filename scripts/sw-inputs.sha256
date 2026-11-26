@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=268
+version=269
 3123e72fb5f38b6ccd6f91e485e796f7302725669740dae96f14421933255168  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 dc4056970c30b77da2708144eae1fea43fc262f268684e02d72116d3fa23f806  index.html
@@ -39,7 +39,7 @@ d1b47f4719da3449f15d9983ba128bb67cd9a93da460ebc7a03f9840c215d501  js/features/io
 1bfff101011d427c9d20665373711a55a339bcf24fef19afa9435772b3447df2  js/features/io.js
 0c8aaa4a0b70d1eecfb81e9e61d7cd63957ac3b7896eba684737fc5f6fe31829  js/features/parking.js
 396dc86f82e667183d6ff1dc83ede038426218a7737cd0b449970abeee0c7e70  js/features/plugins.js
-0b3f8212fe0944412e09b80db28d8650a6231fd75466b484d058549b23efcc99  js/features/props.js
+fbc5e7bffee237ef1b86b67a7a3c0f4af73100c471e7076ce35570cf8b8e7be2  js/features/props.js
 ddb79b9fa61fff7e553113e7f3eabe9c5f5a0cff0434f6ac3c512a0941d5f2e1  js/features/rules.js
 ff5542b25eb7e7d99d93541899357ee1cec31ef0b52f4f8238bcf0ef4b2dacbd  js/features/snapshot-ui.js
 8c0feac7c64abe58ed89a88097edc0d343c73ed1b49e18baf1c88c47b4959040  js/features/ui-panels.js
@@ -55,4 +55,4 @@ a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/git
 1be284fb8b54201feef446fb0ad41e59f794f9ca8499eb122c290d49886451c4  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-9b588933cd35f05c3363050fd64bdbe678187e7fb9f61a9c0a1a76bb90d0c4ae  sw.js
+be0dd65982c9c70bf54ebd4c6a2dbff2fa2542a99050087f5d15067cfd97e064  sw.js

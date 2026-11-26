@@ -100,3 +100,30 @@ test('C1：属性面板连续渲染 20 次，dragend 监听器净增不超过 1 
   expect(d.add).toBe(20);
   expect(d.add - d.remove).toBe(1);
 });
+
+/* 场地多边形顶点：抓手拖拽排序此前只给折线绑定，场地抓手拖了无反应；锁定场地仍可改顶点。 */
+test('场地顶点：抓手拖拽排序生效，锁定后几何入口禁用且锁定开关可用', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    state.site = createSiteSlot({ type: 'polygon', points: [[0, 0], [20, 0], [20, 10], [0, 10]] });
+    commitChange();
+    fitView();
+    renderProps();
+  });
+  await expect(page.locator('#propPanel [data-node-grip="0"]')).toBeVisible();
+  const hist = await page.evaluate(() => history.past.length);
+  await page.locator('#propPanel [data-node-grip="0"]').dragTo(page.locator('#propPanel [data-node-row="2"]'));
+  await expect.poll(() => page.evaluate(() => state.site.shape.points.map(p => p[0]))).toEqual([20, 20, 0, 0]);
+  expect(await page.evaluate(() => history.past.length)).toBe(hist + 1);
+
+  /* 勾选锁定：写入即重绘，坐标输入禁用、增删按钮消失，但锁定复选框本身仍可取消 */
+  await page.locator('#propPanel [data-site-meta="locked"]').check();
+  await expect.poll(() => page.evaluate(() => !!state.site.locked)).toBe(true);
+  await expect(page.locator('#propPanel [data-node-axis="x"]').first()).toBeDisabled();
+  expect(await page.locator('#propPanel [data-node-add]').count()).toBe(0);
+  await expect(page.locator('#propPanel [data-site-meta="locked"]')).toBeEnabled();
+  const histLocked = await page.evaluate(() => history.past.length);
+  await page.evaluate(() => { siteInsertNode(0); siteMoveNodeTo(0, 1); });
+  await expect.poll(() => page.evaluate(() => state.site.shape.points.length)).toBe(4);
+  expect(await page.evaluate(() => history.past.length)).toBe(histLocked);
+});

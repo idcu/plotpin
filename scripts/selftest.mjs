@@ -244,7 +244,7 @@ code += `\n;globalThis.__api = {
   niceStep, snapPoint, gridDisplayStep,
   siteHandleList, siteHandleAt, resizeSiteByHandle, siteHandlesOf, siteHandleDragTo, pickScreenHandle,
   siteLayerOf, siteIsVisible, siteIsLocked, renderNodeEditor, layerOptionsHTML,
-  sitePropsHTML, imagePropsHTML,
+  sitePropsHTML, imagePropsHTML, applySiteField, siteInsertNode, siteRemoveNode, siteMoveNode, siteMoveNodeTo,
   drawObject, drawLabel, drawAreaTag, drawScreenTag, surfaceCssSize, markSurfaceSize,
   invalidateStatic, visibleWorldRect, sceneStaticKey, sceneStaticContentKey, panScrollDelta, dragDrawObjects,
   patchUnionRect, applyPatchRect,
@@ -5103,6 +5103,7 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
   const hp=api.sitePropsHTML({kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]}},'default');
   ok('场地属性-多边形顶点行数', (hp.match(/data-node-row=/g)||[]).length===4);
   ok('场地属性-多边形含插入/删除顶点', hp.includes('data-node-add=') && hp.includes('data-node-del='));
+  ok('场地属性-多边形抓手可拖排序', hp.includes('data-node-grip="0"'));
   ok('场地属性-多边形复用对象节点编辑器', hp.includes('data-node-axis="x"') && !hp.includes('data-site-node'));
   /* 布局回归：节点列表需跨满 form-grid 两列；复用对象节点行（含抓手）后不再需要独立 vtx 模板 */
   ok('场地属性-多边形列表跨满整行', hp.includes('class="node-list span2"'));
@@ -5121,6 +5122,25 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
   eq('场地标注开关-无场地无开关组', api.renderSiteAnnotToggles(null), '');
   ok('场地标注开关-锁定禁用', api.renderSiteAnnotToggles({kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:10},locked:true}).includes('disabled'));
   ok('场地标注开关-未锁定可用', !api.renderSiteAnnotToggles(rectBG).includes('disabled'));
+  /* 锁定场地：几何入口禁用/拒绝，但锁定开关本身仍可操作（与锁定业务对象同语义） */
+  {
+    const hl=api.sitePropsHTML({kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:10},locked:true},'default');
+    ok('场地锁定-数值输入禁用', /data-site-field="w"[^>]*disabled/.test(hl));
+    const hlp=api.sitePropsHTML({kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]},locked:true},'default');
+    ok('场地锁定-多边形无抓手与增删按钮', !hlp.includes('data-node-grip') && !hlp.includes('data-node-add=') && !hlp.includes('data-node-del='));
+    ok('场地锁定-锁定开关自身可用', !/data-site-meta="locked"[^>]*disabled/.test(hlp));
+    api.resetState();
+    api.state.site={kind:'polygon',shape:{type:'polygon',points:[[0,0],[10,0],[10,10],[0,10]]},locked:true};
+    const before=JSON.stringify(api.state.site.shape.points), hist0=api.history.past.length;
+    ok('场地锁定-参数写入被拒绝', api.applySiteField('w',5)===false);
+    api.siteInsertNode(0); api.siteRemoveNode(0); api.siteMoveNode(0,1); api.siteMoveNodeTo(0,2);
+    eq('场地锁定-顶点增删排序均不生效', JSON.stringify(api.state.site.shape.points), before);
+    eq('场地锁定-不产生历史', api.history.past.length, hist0);
+    api.state.site.locked=false;
+    api.siteMoveNodeTo(0,2);
+    eq('场地解锁-抓手排序路径生效', api.state.site.shape.points.map(p=>p[0]), [10,10,0,0]);
+    eq('场地解锁-排序只产生一条历史', api.history.past.length, hist0+1);
+  }
   eq('场地标注开关-默认六键', api.SITE_ANNOT_SETTING_KEYS.map(k=>api.siteAnnotSettingOn(k)), [true,true,false,false,true,true]);
   ok('场地标注开关-写入生效', api.setSiteAnnotSetting('siteBase',true) && api.siteAnnotSettingOn('siteBase')===true);
   ok('场地标注开关-非法键拒绝', api.setSiteAnnotSetting('showLabels',false)===false && api.state.settings.siteNodes===true);
