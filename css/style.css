@@ -68,7 +68,10 @@
   body.tool-point .tool-options [data-for="point"],
   body.tool-rect .tool-options [data-for="rect"],
   body.tool-line .tool-options [data-for="line"],
+  body.tool-segment .tool-options [data-for="line"],
   body.tool-dimension .tool-options [data-for="dimension"]{display:flex}
+  /* 线段没有闭合语义：复用折线选项时隐藏「闭合区域」 */
+  body.tool-segment .tool-options [data-for="line"] label{display:none}
   .sidebar{width:390px;min-width:390px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;padding-bottom:env(safe-area-inset-bottom);box-shadow:-4px 0 18px rgba(16,24,40,.05);transition:transform .18s ease}
   /* 窄屏（平板竖屏/手机）：侧栏变为覆盖层，由 ☰ 面板按钮切换 */
   #sidebarToggle{display:none}

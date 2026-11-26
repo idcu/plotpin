@@ -24,8 +24,7 @@ async function waitSaved(page, pick, expected) {
   }, { timeout: 7000 }).toEqual(expected);
 }
 
-test('单击选中对象：不落盘、不清覆盖率、不留空撤销快照', async ({ page }) => {
-  await openApp(page);
+test('单击选中对象：不落盘、不清覆盖率、不留空撤销快照', async ({ page }) => {  await openApp(page);
   const { cx, cy } = await drawPointAtCenter(page);
   await waitSaved(page, r => r.objects.length, 1);
 
@@ -112,4 +111,26 @@ test('B7：删除对象后活动楼层条目立即与现场同一数组', async 
     return { same: !!f && f.objects === state.objects, count: f ? f.objects.length : -1 };
   });
   expect(r).toEqual({ same: true, count: 0 });
+});
+
+test('线段工具：两点落笔自动完成，生成 2 点开放折线，第三点另起一段', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.tool-btn[data-tool="segment"]').click();
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.mouse.click(cx - 100, cy);
+  await page.mouse.move(cx + 100, cy - 50, { steps: 4 });
+  await page.mouse.click(cx + 100, cy - 50);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  const seg = await page.evaluate(() => ({
+    kind: state.objects[0].kind,
+    points: state.objects[0].points.length,
+    closed: !!state.objects[0].closed,
+    tool: currentTool,
+    draft: draft
+  }));
+  expect(seg).toEqual({ kind: 'line', points: 2, closed: false, tool: 'segment', draft: null });
+  /* 完成后第三点不会追加到上一段：先起新草稿，第二次落点才产生第二条 */
+  await page.mouse.click(cx + 150, cy - 80);
+  expect(await page.evaluate(() => ({ n: state.objects.length, draftPoints: draft && draft.points.length }))).toEqual({ n: 1, draftPoints: 1 });
 });

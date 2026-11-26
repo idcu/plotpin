@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 方案 A：新增「线段」工具（复用 line kind，两点自动完成）
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - 左侧工具栏新增 `线段`（`data-tool="segment"`，中/英 `segment`）；`TOOL_TITLES` 给独立提示。
+  - 交互复用折线草稿：第一点起稿、第二点落笔立即 `finishDraft()`，生成 `kind:'line'`、`points.length=2`、`closed:false` 的开放折线；第三点另起一段，不追加到上一段。
+  - `Shift`/参考边约束与折线同源（`constrainWorldPoint`、`nearestReferenceEdge` 增加 segment）；闭合预览与「闭合区域」勾选在线段模式下强制关闭/隐藏。
+  - 类型下拉复用 `lineType`；属性面板、CSV/JSON/DXF/SVG/PDF、统计、规则对线段无需改动（就是 2 点折线）。无 schema 变更、无旧版兼容风险。
+- **预算**：dist **836,361 → 837,198 B（+837 B）**；gzip **274,191 → 274,436 B（+245 B）**；余量 **3,319 → 2,482 B**（仍 <8,000 B 强警告区；本次由用户明确授权在回收后落地）。
+- **验证数据**：
+  - `node scripts/selftest.mjs` **4,576 通过 / 0 失败**；`npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；bench 缓存帧 P95 0.07 ms、静态重建 16.79 ms、heapUsed 27.44 MB）。
+  - 双入口 e2e 全量：源码 **187 passed / 0 failed / 3 skipped**（3.8m），dist **184 passed / 0 failed / 6 skipped**（3.5m），均 exit 0；新增 `interaction.spec` 线段用例覆盖「两点自动完成 + 第三点另起」。
+  - i18n **47.89% = 885 / 1,848**，缺口 1，UI 硬编码 18；SW `VERSION=271`。
+- **公共抽象清单**：无新增公共函数/常量；复用 `line` 对象、`lineType`、折线草稿与约束链。
+- **遗留风险**：余量 2,482 B 仍在强警告区，下一项改动必须先回收；线段暂无独立图标（复用 `—` 字符）；线段与折线共用类型下拉，切换工具时保留上次类型。
+
 ## 2026-11-26 · 体积回收：terser ecma2020 + HTML 标记层等价压缩
 
 - **Commit Hash**：`待回填`

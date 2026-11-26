@@ -2,13 +2,13 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=269
-3123e72fb5f38b6ccd6f91e485e796f7302725669740dae96f14421933255168  css/style.css
+version=271
+44aeb7d8b0253a6a9a3230886adb8b83a2c7bf1ae1e84e8a35bcad433f287dea  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
-dc4056970c30b77da2708144eae1fea43fc262f268684e02d72116d3fa23f806  index.html
+9a1ce650ca8f87a3f9a0429a27ee7fa02802fe14fd7d6dd2a6067a3c0e3a45f3  index.html
 ac1a25e9004be7c200e0724a2ab7c45f173b054712d321f2f4df9d49b9bcb5fe  js/common/content-assets.js
 538ade5b75e5a6fed346f13dbd393ad1b7cd14003f591d8a6ab5581f34554ec6  js/common/dxf.js
-815906bee513bab4b1e4933763b8c2429ae3dd11073597e9fa20e4744d1a3aab  js/common/i18n.js
+9bf68f7c786f2939513b7b19d545e114ad74fd47a24a2ca3e9e9b884a95d307f  js/common/i18n.js
 fbcecd984677bac15092e2ab969204c5546c1356ba7584896c2175dfdb9cefdf  js/common/merge.js
 2dcab8d66ebc264bdce18eb1099cd7c3e255299090efcf7a06b1cc7be1d53c72  js/common/pdf-read.js
 3c1f00f47dacaf693a7f016f7f47bd86282f52b45218ff78a068499b41bbc5f0  js/common/pdf-vector.js
@@ -22,10 +22,10 @@ e1a0907148867f1abd7190f4c1b2861ef558fa1d45bd6687804765249f3c2c80  js/core/geomet
 fb7387cc7ecc95bf3761980a073d10d7ff2bd96fcd667fa18405dd186011352e  js/core/geometry-transform.js
 ea9f08d04fc068a51f27e55b408f2f94e8cd3af12a0a81ea0e93ad60142d79e6  js/core/geometry.js
 4c479ff9269a46f66b1c6e587aeb5e3f2605532987b623ecf70e9fe5f3b79499  js/core/ghost.js
-04c6d716078fc0fdc944598db6d81d734d6daf53b4cb9a51ec5bac6b1748ccf3  js/core/interaction.js
+36431832d9502ace0a04d330e2ae8ed34005bcbc8c9adf812792cd152af458fa  js/core/interaction.js
 5cd6d9e0acea14866278f0e5124f06d031cecffc07caeec4c3cc13fd72895131  js/core/model.js
 d3e5e1f23903a9868b0d0ccd753d9cc20d64a769369f07af1d41ee46e2aee55c  js/core/persistence.js
-45933a526f5d6d50d4aca43a65ce134eace6ee2f55d1625c1a92922311232c1d  js/core/render.js
+34ccef9284c1989bd63e1ee89670f57922470316915609dfcd86555d5b3c5e2b  js/core/render.js
 dd77b4e851ac5a38754a5527c9217b8ba703cd7fef37eba32cf75da71de3020f  js/core/snapshot.js
 e76b082f8bee86c3dc72b57d850a16e34eceb297ccc338459f34af2ba0f2566a  js/core/tab-lease.js
 c4ecfa089e5f0a86cab9704a622f6ea0877985cfbbdda4673e301cfb0f3ed945  js/core/viewport.js
@@ -55,4 +55,4 @@ a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/git
 1be284fb8b54201feef446fb0ad41e59f794f9ca8499eb122c290d49886451c4  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-be0dd65982c9c70bf54ebd4c6a2dbff2fa2542a99050087f5d15067cfd97e064  sw.js
+af32393acf894d475868ea44989300cf7deeb4ba5fc2da95c93fbf4f9b268fa4  sw.js

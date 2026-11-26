@@ -1322,7 +1322,7 @@ function drawDraft(c,v,d,toS){
   }else if(draft.points){
     const ps=draft.points.map(toS);
     const draftClosed=draft.kind==='sitePolygon'
-      ||(draft.kind==='line'&&$('lineClosed')&&$('lineClosed').checked)
+      ||(draft.kind==='line'&&currentTool!=='segment'&&$('lineClosed')&&$('lineClosed').checked)
       ||(draft.kind==='dimension'&&draft.subtype==='area');
     /* 已录入点之间的边：实线（未闭合时再带上指向光标的橡皮筋段） */
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
@@ -1360,7 +1360,7 @@ function drawDraftSegTags(c,v,toS,d){
   const closed=!!(d.points.length>=2 && (
     d.kind==='sitePolygon' ||
     (d.kind==='dimension'&&d.subtype==='area') ||
-    (d.kind==='line'&&$('lineClosed')&&$('lineClosed').checked)));
+    (d.kind==='line'&&currentTool!=='segment'&&$('lineClosed')&&$('lineClosed').checked)));
   const wps=d.points.slice();
   if(d.current && !closed) wps.push(d.current);
   let total=0;
