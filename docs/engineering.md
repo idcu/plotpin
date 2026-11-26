@@ -74,13 +74,15 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 - **不得调高上限、不得改预算常数、不得把 `size-report` 的账面值当回收承诺**。`size-report` 的重复字符串/重复行是压缩前账面值，只能当线索；dist 可回收应为 0。
 - 已证伪的回收手段不得重复列入计划：dist 注释、行首缩进、重复字符串池化、i18n 英文包、terser 全量改名。
 
-### 2.4 terser 局部 mangle 与 HTML 标记压缩（已接入）
+### 2.4 terser 局部 mangle、HTML 标记与 i18n 默认文案压缩（已接入）
 
 `pack-core.mjs` 合并出单脚本后交给 terser：`ecma: 2020` + `compress: true` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。
 
 - 保留顶层名是产品约束：`plugins.js` 按名探测 `state / toast / scheduleSave / commitChange` 等全局；全量改名会让插件路径失效。
 - 不启用 `compress.toplevel`：它会把未被静态引用的顶层声明当死代码删除（实测 dist 入口 40+ 用例 `ReferenceError`），与「顶层名全保留」的约束冲突。
 - HTML 标记层在最后做等价压缩：无 `<form>` 时去掉默认 `type="text"` / `type="button"`；标签内可省略引号的属性去引号；`option/th/tr/thead/tbody/tfoot` 的可选闭合标签按 HTML5 规则省略；`script` / `style` / 注释整段跳过，外链校验在压缩之前完成。
+- i18n 默认文案去重（2026-11-26）：发行包里，`data-i18n` 节点的文本、以及 `data-i18n-title` / `data-i18n-aria-label` / `data-i18n-placeholder` 对应的 `title` / `aria-label` / `placeholder` 值，**与 `DICT.zh` 逐字相同**时删除，启动时由 `I18N.apply` 从字典重新填充；源文件保持可读。实测 dist −2,730 B。代价：JS 未执行前这些标签/ARIA 为空（应用本身也依赖 JS）；值不一致时原样保留，不做模糊匹配。
+- 不采用「i18n 四张表重编码为前缀共享字符串」：实测 dist **+9,212 B**（对象字面量里 ASCII 键可省引号，已比带分隔符的表更紧凑），已回滚。
 - 代价：构建耗时增加、生产栈帧变短名、对未文档化全局名的隐式依赖会静默失效。
 - 变更 terser 版本或配置会让产物 SHA256 漂移，进而使 `build --check` 与 SW 版本抖动；升级必须同批重跑构建、双入口 e2e 与 SW 校验。
 

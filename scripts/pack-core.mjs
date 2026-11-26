@@ -13,6 +13,40 @@ import { minify } from 'terser';
 import { minifyCss, minifyJs } from './minify-core.mjs';
 import { findRemoteRefs } from './lib/offline-scan.mjs';
 
+/** 读 i18n.js 的 DICT.zh（构建期一次性；失败返回空表，去重自动跳过） */
+function i18nDictZh(src) {
+  try {
+    const win = {};
+    win.window = win;
+    const ctx = vm.createContext({ window: win, console });
+    vm.runInContext(String(src), ctx);
+    return (win.I18N && win.I18N.dict && win.I18N.dict.zh) || {};
+  } catch (_) {
+    return {};
+  }
+}
+/**
+ * 去掉 HTML 里与 DICT.zh 完全相同的默认文案/属性值：
+ * 这些节点都带 data-i18n / data-i18n-title / data-i18n-aria-label / data-i18n-placeholder，
+ * 启动时 I18N.apply 会按当前语言重新填充；发行包只留字典一份，源文件保持可读。
+ */
+function stripI18nDefaults(html, dict) {
+  if (!dict || !Object.keys(dict).length) return html;
+  let out = html.replace(/<([a-zA-Z][\w-]*)([^>]*\sdata-i18n="([^"]+)"[^>]*)>([^<]*)<\/\1>/g,
+    (m, name, attrs, key, text) => (dict[key] !== undefined && text === dict[key]) ? `<${name}${attrs}></${name}>` : m);
+  const pairs = [['data-i18n-title', 'title'], ['data-i18n-aria-label', 'aria-label'], ['data-i18n-placeholder', 'placeholder']];
+  out = out.replace(/<[a-zA-Z][^<>]*>/g, (tag) => {
+    let t = tag;
+    for (const [ki, attr] of pairs) {
+      const km = t.match(new RegExp('\\s' + ki + '="([^"]+)"'));
+      if (!km || dict[km[1]] === undefined) continue;
+      t = t.replace(new RegExp('(\\s' + attr + '=")([^"]*)(")'), (m, pre, val, post) => val === dict[km[1]] ? pre + post : m);
+    }
+    return t;
+  });
+  return out;
+}
+
 /**
  * HTML 属性引号与冗余 type 的等价压缩：只在标签内部处理，跳过 script/style/注释内容。
  * HTML5 允许「不含空白与 " ' ` = < > 的值」不带引号；`<button>`/`<input type=text>` 的
@@ -43,6 +77,8 @@ export async function buildStandalone(html, readFile) {  /* 结构缩进在 HTML
      `<!--` 字符串会被误判成注释起点）。 */
   let out = String(html).replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\n[ \t]+(?=<)/g, '\n').replace(/\n[ \t]*\n/g, '\n');
+  /* i18n 默认文案的发行包去重：HTML 只留结构，文案由启动时 I18N.apply 从字典填充 */
+  out = stripI18nDefaults(out, i18nDictZh(readFile('js/common/i18n.js')));
   const cspHashes = [];
 
   /* 内联后不再嵌来源标记：产物里的脚本/样式按 index.html 的声明顺序排列，
