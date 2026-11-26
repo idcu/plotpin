@@ -607,6 +607,12 @@ function buildSceneSvg(){
       const pts=outlineOf(o).map(p=>`${X(p[0])},${Y(p[1])}`);
       if(o.closed) pts.push(pts[0]);
       shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
+      /* 箭头线：末端实心三角（屏幕 8px，与画布一致） */
+      if(!o.closed&&o.style&&o.style.arrow&&o.points.length>=2){
+        const a=o.points[o.points.length-2], b=o.points[o.points.length-1];
+        const bx=X(b[0]), by=Y(b[1]), ang=Math.atan2(Y(b[1])-Y(a[1]),X(b[0])-X(a[0])), sz=8;
+        shapes.push(`<polygon points="${bx},${by} ${bx-sz*Math.cos(ang-.42)},${by-sz*Math.sin(ang-.42)} ${bx-sz*Math.cos(ang+.42)},${by-sz*Math.sin(ang+.42)}" fill="${color}"/>`);
+      }
       /* 编号与画布一致：开放折线取中点节点，闭合折线取质心（面积/周长胶囊可见时上移 30px 避让，避免重叠） */
       if(o.name&&annotOn(o,'name')){
         if(o.closed){
@@ -743,6 +749,16 @@ function dxfEntitiesForExport(opt){
       }
     }else if(o.kind==='line'){
       entities.push({type:'LWPOLYLINE',layer,color,points:outlineOf(o),closed:!!o.closed});
+      /* 箭头线：末端三角按世界尺寸落地，保证 DXF 往返仍是可编辑折线 */
+      if(!o.closed&&o.style&&o.style.arrow&&o.points.length>=2){
+        const a=o.points[o.points.length-2], b=o.points[o.points.length-1];
+        const ang=Math.atan2(b[1]-a[1],b[0]-a[0]), sz=Math.max(.4,styleVal(o,'strokeWidth',.1)*6);
+        entities.push({type:'LWPOLYLINE',layer,color,closed:true,points:[
+          b,
+          [b[0]-sz*Math.cos(ang-.42),b[1]-sz*Math.sin(ang-.42)],
+          [b[0]-sz*Math.cos(ang+.42),b[1]-sz*Math.sin(ang+.42)]
+        ]});
+      }
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);
       if(tt===CIR) entities.push({type:'CIRCLE',layer,color,x:o.x,y:o.y,r:o.shape.r});

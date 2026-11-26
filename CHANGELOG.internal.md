@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-26 · 新增「箭头」工具（line + style.arrow，画布/SVG/DXF 带箭头）
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - 左侧工具栏新增 `箭头`（`data-tool="arrow"`，`➤`），交互复用线段草稿：第一点起稿、第二点落笔立即完成；`Shift`/参考边约束与折线同源。
+  - 落笔生成 `kind:'line'`、2 点、`closed:false` 的开放折线，并写 `style.arrow=1`；类型沿用当前折线类型下拉，不新增对象 kind。
+  - 画布 `drawLine` 在末端画 8 px 实心三角；SVG 导出追加 `<polygon>`；DXF 追加闭合 `LWPOLYLINE` 三角；PNG/PDF 走画布路径自动带箭头。
+  - 对象清洗白名单新增 `style.arrow`，保证 JSON 落盘/载入/协作合并后箭头不丢。
+- **预算**：dist **836,902 → 838,573 B（+1,671 B）**；gzip **273,666 → 274,062 B（+396 B）**；余量 **2,778 → 1,107 B**；SW `VERSION=281 → 282`。
+- **验证数据**：
+  - `npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；selftest 4,576 通过 / 0 失败；bench 缓存帧 P95 0.06 ms、静态重建 16.20 ms、heapUsed 28.52 MB、覆盖率 7.1 ms）。
+  - 双入口 e2e 全量：源码 **189 passed / 0 failed / 3 skipped**（3.8m），dist **186 passed / 0 failed / 6 skipped**（3.5m），均 exit 0；`interaction.spec` 在既有线段用例中追加断言：两点自动完成、`style.arrow=1`、`closed=false`、草稿清空、`sanitizeObjects` 后箭头保留。
+  - i18n **48.06% = 892 / 1,856**，缺口 1，UI 硬编码 18。
+- **公共抽象清单**：无新增公共函数/常量；复用 `line` 对象、线段草稿、`drawLine`、SVG/DXF 现有折线写出与 `sanitizeObjects`。
+- **遗留风险**：余量仅 1,107 B，后续描边/引线/云线工具必须先回收；箭头是 `line` + `style.arrow`，旧版清洗会丢弃该标记、退化为普通折线（几何不丢，已写入 known-issues）。
+
 ## 2026-11-26 · 构建期回收 2,730 B：i18n 默认文案只留字典一份
 
 - **Commit Hash**：`待回填`

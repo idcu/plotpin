@@ -28,7 +28,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       new: '新建', projects: '📁 工程库', floors: '🏢 楼层', import: '导入', export: '导出',
       print: '打印/PDF', settings: '设置', clearAll: '清空',
       clearAllTitle: '清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销',
-      select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', segment: '线段', circleArc: '圆/弧', text: '文字',
+      select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', segment: '线段', arrow: '箭头', circleArc: '圆/弧', text: '文字',
       ruler: '测距', dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
       tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabSymbols: '符号库', tabStats: '统计', tabRules: '规则', tabComments: '批注',
       commentsLocalOnly: '评论仅本机可见，不随协作同步',
@@ -119,7 +119,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       new: 'New', projects: '📁 Projects', floors: '🏢 Floors', import: 'Import', export: 'Export',
       print: 'Print/PDF', settings: 'Settings', clearAll: 'Clear',
       clearAllTitle: 'Clear the image base, vector site, all objects and annotations on this floor; undo with Ctrl+Z',
-      select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', segment: 'Segment', circleArc: 'Circle/Arc', text: 'Text',
+      select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', segment: 'Segment', arrow: 'Arrow', circleArc: 'Circle/Arc', text: 'Text',
       ruler: 'Measure', dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
       tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabSymbols: 'Symbols', tabStats: 'Statistics', tabRules: 'Rules', tabComments: 'Comments',
       commentsLocalOnly: 'Comments are local only; not synced',
@@ -299,6 +299,8 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
       'Polyline: click point by point, double-click to finish; Shift constrains to horizontal/vertical; right-click/Esc cancels (enable Closed for triangles/polygons)',
     '线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直':
       'Segment: click start and end, finishes automatically; Shift constrains to horizontal/vertical',
+    '箭头：单击起点与终点，自动完成；按住 Shift 保持水平/垂直':
+      'Arrow: click start and end, finishes automatically; Shift constrains to horizontal/vertical',
     '圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消':
       'Circle/Arc: click the center, then the radius point (circle) or start/end points (arc); Esc cancels',
     '文字：单击输入文字内容':'Text: click to enter text',
@@ -508,7 +510,7 @@ const TXT_POLYLINE_HINT='折线：逐点单击，双击完成；按住 Shift 画
     '重命名图层':'Rename layer', '重命名类型':'Rename type', '实地':'real extent',
     '已添加区域':'Area added', '已添加平行四边形区域':'Parallelogram area added', '已添加圆形区域':'Circle area added',
     '已添加椭圆区域':'Ellipse area added', '已添加扇形区域':'Sector area added', '已添加闭合区域':'Closed area added',
-    '已添加折线':'Polyline added', '已添加线段':'Segment added', '已添加圆':'Circle added', '已添加圆弧':'Arc added', '半径过小':'Radius too small', '已添加测距':'Measure added', '已添加尺寸标注':'Dimension added',
+    '已添加折线':'Polyline added', '已添加线段':'Segment added', '已添加箭头':'Arrow added', '已添加圆':'Circle added', '已添加圆弧':'Arc added', '半径过小':'Radius too small', '已添加测距':'Measure added', '已添加尺寸标注':'Dimension added',
     /* D-11：补齐 D-07/D-09 新增存档、导入预览与 UI 文案的英文条目 */
     '底图资产缺失，请重新导入底图':'Base-map asset missing; re-import the base map',
     '图片底图正在解码，请稍后重试':'Image base map is still decoding; try again shortly',

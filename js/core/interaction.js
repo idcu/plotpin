@@ -16,6 +16,7 @@ const TOOL_TITLES={
   select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
   rect:L('区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消'),line:L(TXT_POLYLINE_HINT),
   segment:L('线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
+  arrow:L('箭头：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
   arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
   calibrate:L('比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用'),
@@ -78,7 +79,7 @@ function constrainWorldPoint(wp,e){
     return wp;
   }
   if(!draft) return wp;
-  if(draft.points && ['line','segment','dimension'].includes(currentTool) && draft.points.length){
+  if(draft.points && ['line','segment','arrow','dimension'].includes(currentTool) && draft.points.length){
     /* 测距链(ruler)与普通折线一样约束；角度/面积/两点距离标注不约束 */
     if(currentTool==='dimension' && draft.subtype!=='ruler') return wp;
     const last=draft.points[draft.points.length-1];
@@ -138,7 +139,7 @@ function clearGuides(){ clearGuideLines(); guideDraft=null; }
  */
 function nearestReferenceEdge(raw,excl){
   if(!draft||!draft.points||!draft.points.length) return null;
-  if(!(currentTool==='line'||currentTool==='segment'||(currentTool==='dimension'&&draft.subtype==='ruler'))) return null;
+  if(!(currentTool==='line'||currentTool==='segment'||currentTool==='arrow'||(currentTool==='dimension'&&draft.subtype==='ruler'))) return null;
   const tol=14/state.viewport.zoom;
   let best=null,bd=tol;
   const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
@@ -348,12 +349,12 @@ canvas.addEventListener('pointerdown',e=>{
     }
     return;
   }
-  if(currentTool==='line'||currentTool==='segment'){
-    const seg=currentTool==='segment';
-    if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg}; }
+  if(currentTool==='line'||currentTool==='segment'||currentTool==='arrow'){
+    const seg=currentTool==='segment', arw=currentTool==='arrow';
+    if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg,arrow:arw}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
-    /* 线段=两点折线：第二点落笔即完成，不需要双击/Enter */
-    if(seg&&draft.points.length>=2){ finishDraft(); return; }
+    /* 线段/箭头=两点折线：第二点落笔即完成，不需要双击/Enter */
+    if((seg||arw)&&draft.points.length>=2){ finishDraft(); return; }
     requestRender(); return;
   }
   if(currentTool==='arc'){
@@ -831,14 +832,15 @@ function finishDraft(){
   }else if(draft.kind==='line'){
     const ps=draft.points.slice();
     while(ps.length>=2 && dist(ps.at(-1),ps.at(-2))<EPS) ps.pop();
-    const seg=!!draft.segment;
-    const closed=seg?false:$('lineClosed').checked;
+    const seg=!!draft.segment, arw=!!draft.arrow;
+    const closed=seg||arw?false:$('lineClosed').checked;
     if(ps.length<2){ toast('至少需要 2 个点','warn'); return; }
     if(closed&&ps.length<3){ toast('闭合区域至少需要 3 个点','warn'); return; }
     pushHistory();
     const o=baseObject('line',draft.segment?$('segmentType').value:$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
+    if(arw) o.style.arrow=1;
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
-    commitChange(seg?'已添加线段':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
+    commitChange(seg?'已添加线段':arw?'已添加箭头':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
   }else if(draft.kind==='arcDraft'){
     const ps=draft.points, ce=ps[0], r=dist(ce,ps[1]||draft.current||ce);
     if(!(r>=.05)){ toast(L('半径过小'),'warn'); return; }

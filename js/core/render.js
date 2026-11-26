@@ -1144,6 +1144,15 @@ function drawLine(c,o,color,toS,v){
   c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
   if(o.closed){ c.closePath(); c.fillStyle=color; c.globalAlpha=.08; c.fill(); c.globalAlpha=1; }
   c.stroke(); c.restore();
+  /* 箭头线：开放折线末端补实心箭头，屏幕尺寸固定（与尺寸标注箭头一致） */
+  if(!o.closed&&o.style&&o.style.arrow&&pts.length>=2){
+    const b=pts[pts.length-1], a=pts[pts.length-2], ang=Math.atan2(b[1]-a[1],b[0]-a[0]), sz=8;
+    c.save(); c.fillStyle=color;
+    c.beginPath(); c.moveTo(b[0],b[1]);
+    c.lineTo(b[0]-sz*Math.cos(ang-.42),b[1]-sz*Math.sin(ang-.42));
+    c.lineTo(b[0]-sz*Math.cos(ang+.42),b[1]-sz*Math.sin(ang+.42));
+    c.closePath(); c.fill(); c.restore();
+  }
   if(!o.closed){
     const mid=pts[Math.floor((pts.length-1)/2)];
     if(o.name) drawLabel(c,o,mid[0],mid[1]-8,color,toS);

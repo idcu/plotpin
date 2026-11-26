@@ -133,6 +133,18 @@ test('线段工具：两点落笔自动完成，生成 2 点开放折线，第�
   /* 完成后第三点不会追加到上一段：先起新草稿，第二次落点才产生第二条 */
   await page.mouse.click(cx + 150, cy - 80);
   expect(await page.evaluate(() => ({ n: state.objects.length, draftPoints: draft && draft.points.length }))).toEqual({ n: 1, draftPoints: 1 });
+
+  /* 箭头工具：两点自动完成，style.arrow 经对象清洗后仍保留 */
+  await page.locator('.tool-btn[data-tool="arrow"]').click();
+  await page.mouse.click(cx - 150, cy + 80);
+  await page.mouse.click(cx - 60, cy + 80);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const arrow = await page.evaluate(() => {
+    const o = state.objects[1];
+    const clean = sanitizeObjects([JSON.parse(JSON.stringify(o))], state.layers, state.objectTypes, new Set(), new Set(), null)[0];
+    return { kind: o.kind, points: o.points.length, closed: !!o.closed, arrow: o.style.arrow, kept: clean && clean.style.arrow, draft: draft };
+  });
+  expect(arrow).toEqual({ kind: 'line', points: 2, closed: false, arrow: 1, kept: 1, draft: null });
 });
 
 test('线段类型与折线类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
