@@ -79,12 +79,18 @@ $('toolFlyout').onclick=e=>{
   const g=GROUPS.find(x=>x.tools.includes(b.dataset.tool)); if(g) g.last=b.dataset.tool;
   closeFly(); setTool(b.dataset.tool);
 };
+/* 圆弧/折线模式切换：顶部提示与画布预览同步（不重置已有草稿） */
+$('arcMode').addEventListener('change',()=>{ updateToolTitle(); requestRender(); });
+$('lineMode').addEventListener('change',()=>{ updateToolTitle(); requestRender(); });
 document.addEventListener('pointerdown',e=>{
   if(flyG&&!e.target.closest('#toolFlyout')&&!e.target.closest('[data-group-main]')) closeFly();
 },true);
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择）；弹出组已开则原地重建文案，不因后台刷新被关掉 */
 function updateToolTitle(){
-  $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||'');
+  let title=L(TOOL_TITLES[currentTool]||'');
+  if(currentTool==='arc'&&$('arcMode').value==='arc3') title=L('三点圆弧：依次点击起点、经过点、终点；Esc 取消');
+  else if(currentTool==='line'&&$('lineMode').value==='spline') title=L('样条曲线：逐点单击，双击/Enter 结束；Esc 取消');
+  $('toolTitle').textContent=title;
   syncRail();
   if(flyG) openGroup(flyG);
 }
@@ -196,8 +202,7 @@ function updateOsnapChip(){
   chip.textContent=osnapMode?L('◈ 捕捉：{label} ✕',{label:L(OSNAP_LABELS[osnapMode])}):L('◈ 捕捉：自动');
   chip.classList.toggle('locked',!!osnapMode);
 }
-$('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast(L('捕捉：自动（全部类型）')); requestRender(); } });
-/* 极轴/平行追踪提示：{from:[x,y], dir:[dx,dy]}（单位向量，世界坐标），render 画虚线 */
+$('osnapChip').addEventListener('click',()=>{ if(osnapMode){ osnapMode=null; updateOsnapChip(); toast(L('捕捉：自动（全部类型）')); requestRender(); } });/* 极轴/平行追踪提示：{from:[x,y], dir:[dx,dy]}（单位向量，世界坐标），render 画虚线 */
 let trackLine=null;
 let refEdge=null;      /* 鼠标附近的参考边（用于平行/垂直约束） */
 let guideDraft=null;   /* 参考线工具：两次点击定义一条无限长参考线 */
@@ -420,8 +425,8 @@ canvas.addEventListener('pointerdown',e=>{
     return;
   }
   if(currentTool==='line'){
-    const mode=$('lineMode').value, seg=mode==='segment', arw=mode==='arrow', both=mode==='arrow2', free=mode==='freehand';
-    if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg,arrow:arw?1:both?2:0}; if(free) drag={type:'freehand'}; }
+    const mode=$('lineMode').value, seg=mode==='segment', arw=mode==='arrow', both=mode==='arrow2', free=mode==='freehand', spl=mode==='spline';
+    if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg,arrow:arw?1:both?2:0,spline:spl}; if(free) drag={type:'freehand'}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
     /* 线段/箭头=两点折线：第二点落笔即完成；手绘在抬起时收笔 */
     if(free){ requestRender(); return; }
@@ -990,18 +995,29 @@ function finishDraft(){
   }else if(draft.kind==='line'){
     const ps=draft.points.slice();
     while(ps.length>=2 && dist(ps.at(-1),ps.at(-2))<EPS) ps.pop();
-    const seg=!!draft.segment, arw=!!draft.arrow;
-    const closed=seg||arw?false:$('lineClosed').checked;
+    const seg=!!draft.segment, arw=!!draft.arrow, spl=!!draft.spline;
+    const closed=seg||arw||spl?false:$('lineClosed').checked;
     if(ps.length<2){ toast('至少需要 2 个点','warn'); return; }
     if(closed&&ps.length<3){ toast('闭合区域至少需要 3 个点','warn'); return; }
     pushHistory();
     const o=baseObject('line',$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
     if(arw) o.style.arrow=draft.arrow;
-    /* 修订云线：仅折线工具可勾选（线段/箭头不参与） */
-    if(!seg&&!arw&&$('lineCloud').checked) o.style.cloud=1;
+    if(spl) o.smooth=true;
+    /* 修订云线：仅折线工具可勾选（线段/箭头/样条不参与） */
+    if(!seg&&!arw&&!spl&&$('lineCloud').checked) o.style.cloud=1;
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
-    commitChange(seg?'已添加线段':arw?'已添加箭头':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
+    commitChange(spl?'已添加样条曲线':seg?'已添加线段':arw?'已添加箭头':closed?'已添加闭合区域':'已添加折线'); switchTab('props');
   }else if(draft.kind==='arcDraft'){
+    /* 三点圆弧：p1→p2→p3 求外接圆，弧经过 p2；三点共线时拒绝 */
+    if(draft.mode==='arc3'){
+      const cc=arcThroughPoints(draft.points[0],draft.points[1],draft.points[2]);
+      if(!cc){ callHook('ui.toast',L('三点共线，无法生成圆弧'),'warn'); draft=null; requestRender(); return; }
+      pushHistory();
+      const o=baseObject('arc','arc.builtin',{x:cc.x,y:cc.y,shape:{type:ARC,r:cc.r,a0:cc.a0,a1:cc.a1}});
+      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
+      commitChange(L('已添加三点圆弧'));
+      draft=null; requestRender(); return;
+    }
     const ps=draft.points, ce=ps[0], r=dist(ce,ps[1]||draft.current||ce);
     if(!(r>=.05)){ toast(L('半径过小'),'warn'); return; }
     pushHistory();

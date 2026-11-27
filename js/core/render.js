@@ -47,7 +47,7 @@ function hitObject(p,screenP){
     }else if(o.kind==='dimension' && o.subtype==='area' && o.points.length>=3){
       if(pointInPolygon(p,o.points)) return o;
     }else{
-      const ps=o.points;
+      const ps=(o.kind==='line'&&o.smooth&&o.points.length>=3)?smoothPathPoints(o.points):o.points;
       for(let k=1;k<ps.length;k++) if(distanceToSegment(p,ps[k-1],ps[k])<=tol) return o;
       if(o.kind==='dimension' && o.subtype==='angle' && ps.length>=3){
         if(dist(p,ps[0])<=tol) return o;
@@ -806,7 +806,7 @@ function drawGuideLines(c,v,d,cssW,cssH,toS){
 function drawSiteAnnotations(c,v,toS){
   const site=state.site, S=state.settings;
   if(!site||!siteIsVisible(site)) return;
-  if(!(S.siteNodes||S.siteSegLen||S.siteArea||S.sitePerimeter||S.siteBase||S.siteRadius)) return;
+  if(!(S.siteNodes||S.siteSegLen||S.siteAngles||S.siteArea||S.sitePerimeter||S.siteBase||S.siteRadius)) return;
   const pts=siteBoundaryPoints(site);
   if(pts&&pts.length>=2){
     const n=pts.length, closed=n>=3;
@@ -821,6 +821,9 @@ function drawSiteAnnotations(c,v,toS){
     }
     if(S.siteNodes){
       pts.forEach(p=>{ const s=toS(p); drawScreenTag(c,s[0]+6,s[1]+6,'('+fmt(p[0])+', '+fmt(p[1])+')'); });
+    }
+    if(S.siteAngles){
+      vertexAngles(pts,closed).forEach(v=>{ const s=toS(v.p); drawScreenTag(c,s[0]+18*v.bx,s[1]-18*v.by,v.deg.toFixed(1)+'°'); });
     }
   }
   /* 基点坐标与半径分别可开关：圆/椭圆/扇形有半径与圆心，矩形/平行四边形只有基点，多边形两者皆无 */
@@ -900,6 +903,9 @@ function annotationItems(o,opt={}){
       const wp=rectPoints(o);
       for(let k=0;k<4;k++){ const a=wp[k],b=wp[(k+1)%4], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
     }
+    if(annotOn(o,'angle') && (tt==='rect'||tt===PARA)){
+      vertexAngles(rectPoints(o),true).forEach(v=>push(v.p[0],v.p[1],v.deg.toFixed(1)+'°',18*v.bx,-18*v.by));
+    }
     if(annotOn(o,'vertex') && (tt==='rect'||tt===PARA)){
       rectPoints(o).forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
     }
@@ -915,9 +921,12 @@ function annotationItems(o,opt={}){
     }
   }else if(o.kind==='line'){
     if(annotOn(o,'node')) o.points.forEach(p=>push(p[0],p[1],`(${fmt(p[0])}, ${fmt(p[1])})`,7,7));
-    if(annotOn(o,'edge')){
+    if(annotOn(o,'edge')&&!o.smooth){
       const ps=o.points, n=ps.length, segN=o.closed?n:n-1;
       for(let k=0;k<segN;k++){ const a=ps[k],b=ps[(k+1)%n], L=dist(a,b); push((a[0]+b[0])/2,(a[1]+b[1])/2,fmt(L)+' m',3,-19,L); }
+    }
+    if(annotOn(o,'angle')&&!o.smooth){
+      vertexAngles(o.points,o.closed).forEach(v=>push(v.p[0],v.p[1],v.deg.toFixed(1)+'°',18*v.bx,-18*v.by));
     }
     if(!o.closed && annotOn(o,'perimeter') && o.points.length>=2){
       const e=o.points[o.points.length-1]; push(e[0],e[1],'Σ '+fmt(objectLength(o))+' m',9,-9);
@@ -1169,7 +1178,8 @@ function cloudPoints(ps,closed){
 function drawLine(c,o,color,toS,v){
   if(!o.points.length) return;
   const cloud=!!(o.style&&o.style.cloud);
-  const pts=(cloud?cloudPoints(o.points,o.closed):o.points).map(toS);
+  const src=cloud?cloudPoints(o.points,o.closed):(o.smooth&&o.points.length>=3?smoothPathPoints(o.points):o.points);
+  const pts=src.map(toS);
   c.save(); c.strokeStyle=color; c.lineWidth=Math.max(1,(styleVal(o,'strokeWidth',.1))*v.zoom); c.lineJoin='round'; c.lineCap='round';
   c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
   if(o.closed&&!cloud){ c.closePath(); c.fillStyle=color; c.globalAlpha=.08; c.fill(); c.globalAlpha=1; }
@@ -1366,7 +1376,7 @@ function drawDraft(c,v,d,toS){
       const a=toS(draft.start), b=toS(draft.current);
       c.globalAlpha=.25; c.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]); c.globalAlpha=1; c.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
     }
-  }else if((draft.kind==='siteCircle'||draft.kind==='areaCircle'||draft.kind==='arcDraft') && draft.start && draft.current){
+  }else if((draft.kind==='siteCircle'||draft.kind==='areaCircle'||(draft.kind==='arcDraft'&&draft.mode!=='arc3')) && draft.start && draft.current){
     const ce=toS(draft.start), r=dist(draft.start,draft.current)*v.zoom;
     c.globalAlpha=.15; c.beginPath(); c.arc(ce[0],ce[1],r,0,Math.PI*2); c.fill(); c.globalAlpha=1; c.stroke();
   }else if((draft.kind==='siteEllipse'||draft.kind==='areaEllipse') && draft.start && draft.current){
@@ -1378,13 +1388,14 @@ function drawDraft(c,v,d,toS){
     const e1=Number.isFinite(a1)?a1:a0+90;
     c.globalAlpha=.15; c.beginPath(); c.moveTo(ce[0],ce[1]); c.arc(ce[0],ce[1],R,-e1*Math.PI/180,-a0*Math.PI/180,false); c.closePath(); c.fill(); c.globalAlpha=1; c.stroke();
   }else if(draft.points){
-    const ps=draft.points.map(toS);
     const draftClosed=draft.kind==='sitePolygon'
       ||(draft.kind==='line'&&$('lineClosed')&&$('lineClosed').checked)
       ||(draft.kind==='dimension'&&draft.subtype==='area');
-    /* 已录入点之间的边：实线（未闭合时再带上指向光标的橡皮筋段） */
+    const raw=draft.points.concat(draft.current&&!draftClosed?[draft.current]:[]);
+    const src=draft.spline?smoothPathPoints(raw):raw;
+    const ps=src.map(toS);
+    /* 已录入点之间的边：实线（样条按 Catmull-Rom 预览；未闭合时带上指向光标的橡皮筋段） */
     c.beginPath(); ps.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
-    if(draft.current && !draftClosed){ c.lineTo(toS(draft.current)[0],toS(draft.current)[1]); }
     c.stroke();
     /* 闭合预览：末节点→首节点的合拢边单独以虚线描边，与已定边界区分。
        同一条路径无法混用实/虚线型，故必须在 stroke 之后再单独二次描边。 */

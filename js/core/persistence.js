@@ -1184,6 +1184,7 @@ function sanitizeSettings(raw){
   settings.showAreaTag=settings.showAreaTag!==false;
   settings.siteNodes=settings.siteNodes!==false;    /* 旧档缺省：场地标注开关默认开启 */
   settings.siteSegLen=settings.siteSegLen!==false;
+  settings.siteAngles=!!settings.siteAngles;
   settings.siteArea=settings.siteArea!==false;
   /* 场地周长自「场地周长面积」拆出：旧档缺省继承原面积开关；基点/半径为新增项，默认关 */
   settings.sitePerimeter=(raw&&typeof raw.sitePerimeter==='boolean')?raw.sitePerimeter:settings.siteArea;
@@ -1686,7 +1687,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
     }
     if(kind==='point'){ o.iconSize=Math.min(3,Math.max(.5,finiteNumber(raw.iconSize,1))); }
     if(kind==='text'){ o.height=positiveNum(raw.height,2.2); }
-    if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)){ audit.dropped=(audit.dropped||0)+1; return; } syncFirstPoint(o); }
+    if(kind==='line'){ o.points=points; if(points.length<2||(o.closed&&points.length<3)){ audit.dropped=(audit.dropped||0)+1; return; } o.smooth=raw.smooth===true; syncFirstPoint(o); }
     if(kind==='dimension'){
       o.points=points;
       const minPts=(o.subtype==='distance'||o.subtype==='ruler'||o.subtype==='leader')?2:3;

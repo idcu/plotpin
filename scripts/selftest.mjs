@@ -5117,7 +5117,7 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
   ok('场地属性-多边形无基点/半径',
     !hp.includes('data-site-annot="siteBase"') && !hp.includes('data-site-annot="siteRadius"') && hp.includes('data-site-annot="siteNodes"'));
   ok('场地属性-开关组复用对象面板模板跨满两列', h1.includes('class="annot-chks span2"'));
-  eq('场地标注开关-矩形键集合', api.siteAnnotToggleKeys(rectBG).map(x=>x[0]), ['siteNodes','siteSegLen','siteBase','siteArea','sitePerimeter']);
+  eq('场地标注开关-矩形键集合', api.siteAnnotToggleKeys(rectBG).map(x=>x[0]), ['siteNodes','siteSegLen','siteAngles','siteBase','siteArea','sitePerimeter']);
   eq('场地标注开关-圆形键集合', api.siteAnnotToggleKeys({kind:'circle',shape:{type:'circle',cx:0,cy:0,r:5}}).map(x=>x[0]), ['siteBase','siteRadius','siteArea','sitePerimeter']);
   eq('场地标注开关-无场地无开关组', api.renderSiteAnnotToggles(null), '');
   ok('场地标注开关-锁定禁用', api.renderSiteAnnotToggles({kind:'rect',shape:{type:'rect',x:0,y:0,w:10,h:10},locked:true}).includes('disabled'));
@@ -5141,7 +5141,7 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
     eq('场地解锁-抓手排序路径生效', api.state.site.shape.points.map(p=>p[0]), [10,10,0,0]);
     eq('场地解锁-排序只产生一条历史', api.history.past.length, hist0+1);
   }
-  eq('场地标注开关-默认六键', api.SITE_ANNOT_SETTING_KEYS.map(k=>api.siteAnnotSettingOn(k)), [true,true,false,false,true,true]);
+  eq('场地标注开关-默认七键', api.SITE_ANNOT_SETTING_KEYS.map(k=>api.siteAnnotSettingOn(k)), [true,true,false,false,false,true,true]);
   ok('场地标注开关-写入生效', api.setSiteAnnotSetting('siteBase',true) && api.siteAnnotSettingOn('siteBase')===true);
   ok('场地标注开关-非法键拒绝', api.setSiteAnnotSetting('showLabels',false)===false && api.state.settings.siteNodes===true);
   api.setSiteAnnotSetting('siteBase',false);
@@ -5160,7 +5160,7 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
     beginPath(){},rect(){},roundRect(){},fill(){},fillText(t,x,y){freeLog.push([Math.round(x),Math.round(y)]);}};
   api.drawScreenTag(freeCtx,123,77,'T');
   eq('尺寸未知-标签不压到原点', freeLog[0], [128,87]);
-  /* 六项场地标注开关都必须进入静态层缓存签名，否则关闭后静态层不重建＝「切了没反应」 */
+  /* 七项场地标注开关都必须进入静态层缓存签名，否则关闭后静态层不重建＝「切了没反应」 */
   const prevSite=api.state.site;
   api.state.site={kind:'rect',shape:{type:'rect',x:0,y:0,w:100,h:70},updatedAt:'t'};
   const dims=api.worldDims();
@@ -5173,7 +5173,7 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
     api.setSiteAnnotSetting(k,before);
     return diff;
   });
-  eq('静态层缓存键-六项场地标注开关均参与签名', keyChanged, [true,true,true,true,true,true]);
+  eq('静态层缓存键-七项场地标注开关均参与签名', keyChanged, [true,true,true,true,true,true,true]);
   api.state.site=prevSite;
   /* 旧入口已移除：设置弹窗不再渲染场地/标签/段长/面积开关，工具栏不再有全局「标签」 */
   ok('旧入口-设置弹窗已无场地与全局标注开关', !code.includes('id="setSiteNodes"') && !code.includes('id="setLabels"') && !code.includes('id="setSegLen"') && !code.includes('id="setAreaTag"'));
@@ -5201,8 +5201,8 @@ await section("43. 逐对象标注开关：默认值 / setAnnot / annotationItem
   api.resetState();
   /* 支持键与类型默认值（保持既有观感） */
   eq('标注-点支持键', api.annotKeys('point'), ['name','coord']);
-  eq('标注-区域支持键', api.annotKeys('rect'), ['name','base','radius','edge','vertex','perimeter','area']);
-  eq('标注-折线支持键', api.annotKeys('line'), ['name','node','edge','perimeter','area']);
+  eq('标注-区域支持键', api.annotKeys('rect'), ['name','base','radius','edge','vertex','angle','perimeter','area']);
+  eq('标注-折线支持键', api.annotKeys('line'), ['name','node','edge','angle','perimeter','area']);
   eq('标注-文字无键', api.annotKeys('text'), []);
   eq('标注-尺寸标注无键', api.annotKeys('dimension'), []);
 

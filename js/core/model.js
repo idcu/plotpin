@@ -220,6 +220,7 @@ function createInitialState(){
       showAreaTag:true,  /* 全局缺省：未单独配置「面积/周长」的区域或闭合折线显示面积与周长 */
       siteNodes:true,    /* 矢量场地：边界节点世界坐标标注 */
       siteSegLen:true,   /* 矢量场地：相邻节点段长度标注 */
+      siteAngles:false,  /* 矢量场地：边界顶点内角标注 */
       siteBase:false,    /* 矢量场地：基点/圆心坐标标注 */
       siteRadius:false,  /* 矢量场地：半径标注（圆/椭圆/扇形） */
       siteArea:true,     /* 矢量场地：中心面积 */
@@ -681,16 +682,16 @@ function pointIconScale(o){
    点设备：编号/点坐标；区域：编号/基点坐标/半径/边长/顶点坐标/周长/面积；折线：编号/节点坐标(闭合即顶点)/段长/周长/面积。 */
 const ANNOT_KEYS={
   point:['name','coord'],
-  rect:['name','base','radius','edge','vertex','perimeter','area'],
-  line:['name','node','edge','perimeter','area'],
+  rect:['name','base','radius','edge','vertex','angle','perimeter','area'],
+  line:['name','node','edge','angle','perimeter','area'],
   arc:['name','radius','perimeter']
 };
-const ANNOT_LABELS={ name:'编号', coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', vertex:'顶点坐标', perimeter:'周长', area:'面积', node:'节点坐标' };
+const ANNOT_LABELS={ name:'编号', coord:'点坐标', base:'基点坐标', radius:'半径', edge:'边长', vertex:'顶点坐标', angle:'角度', perimeter:'周长', area:'面积', node:'节点坐标' };
 /* 默认值：编号标签沿用全局「显示标签」既有观感（开）、区域/闭合折线的面积周长沿用全局开关默认（开）；其余新增标注默认关闭 */
 const ANNOT_DEFAULTS={
   point:{ name:true, coord:false },
-  rect:{ name:true, base:false, radius:false, edge:false, vertex:false, perimeter:true, area:true },
-  line:{ name:true, node:false, edge:true, perimeter:true, area:true },
+  rect:{ name:true, base:false, radius:false, edge:false, vertex:false, angle:false, perimeter:true, area:true },
+  line:{ name:true, node:false, edge:true, angle:false, perimeter:true, area:true },
   arc:{ name:true, radius:false, perimeter:false }
 };
 /** 该对象（按 kind）支持的标注开关键列表 */
@@ -741,7 +742,7 @@ function setAnnot(o,key,val){
 }
 /* 场地标注显示开关：沿用 state.settings 原键（不改 schema、不做迁移），
    控件已从工程设置搬进场地属性面板；六项含义与 drawSiteAnnotations / SVG 导出同口径。 */
-const SITE_ANNOT_SETTING_KEYS=['siteNodes','siteSegLen','siteBase','siteRadius','siteArea','sitePerimeter'];
+const SITE_ANNOT_SETTING_KEYS=['siteNodes','siteSegLen','siteAngles','siteBase','siteRadius','siteArea','sitePerimeter'];
 /** 某场地标注开关的当前值（缺省按已有工程默认口径） */
 function siteAnnotSettingOn(key){
   if(!SITE_ANNOT_SETTING_KEYS.includes(key)) return false;

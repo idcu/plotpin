@@ -104,9 +104,9 @@
 | `lib/golden.mjs` | golden 写入闸门：`UPDATE_GOLDEN=1` 且 `ALLOW_GOLDEN=1` 且非 `CI` 三者同时满足才可写；拒绝时给出原因，写入时输出差异摘要并追加 `test-results/golden-change.log` | 环境变量 + 文件字节 → 写/拒 | `selftest.mjs`、`export-scope.spec.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-## tests（74 个）
+## tests（75 个）
 
-### e2e 用例（50 个 spec）
+### e2e 用例（51 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -117,6 +117,7 @@
 | `collab.spec.mjs` | 双标签建连、状态从等待→已连接→对端断开可见 |
 | `comments.spec.mjs` | 本地批注：新增即时渲染并写入独立键、工程 JSON 不含正文、编辑（Esc 取消/确认更新）、删除二次确认、只读禁用、锚点删除后标注 |
 | `coverage.spec.mjs` | 覆盖率 v2：4 个缩放级别一致、隐藏图层不计入、报告标注口径 |
+| `curves-angles.spec.mjs` | 三点圆弧（含共线拒绝）、样条 smooth 标记与采样、折线/矩形/场地顶点角度标注 |
 | `csp.spec.mjs` | 注入路径 1/4：恶意 `type.name/icon` 不执行 |
 | `dxf-version.spec.mjs` | B-03：AC1032 混合实体导入、版本与补充实体可见 |
 | `export-scope.spec.mjs` | N-05：台账全量+「显示」列=有效可见，图纸类只含可见对象；草稿/校准不进 PNG/PDF |

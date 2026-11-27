@@ -536,6 +536,7 @@ function buildSceneSvg(){
         const mx=(p[0]+q[0])/2, my=(p[1]+q[1])/2;
         markers.push(`<text x="${X(mx)}" y="${Y(my)}" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#0f766e" stroke="#fff" stroke-width="3" paint-order="stroke">${fmt(len)} m</text>`);
       });
+      if(S.siteAngles) vertexAngles(bp,true).forEach(v=>markers.push(`<text x="${X(v.p[0])+18*v.bx}" y="${Y(v.p[1])-18*v.by}" text-anchor="middle" font-size="11" font-family="Consolas,Menlo,monospace" fill="#b45309" stroke="#fff" stroke-width="3" paint-order="stroke">${v.deg.toFixed(1)}°</text>`));
     }
     /* 基点坐标（矩形/平行四边形/圆/椭圆/扇形）：画布 drawSiteAnnotations 同口径 */
     if(S.siteBase){

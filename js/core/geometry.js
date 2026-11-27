@@ -436,7 +436,10 @@ function outlineOf(o,seg){
   if(!o||typeof o!=='object') return [];
   if(o.kind==='rect') return shapeWorldPoints(o);
   if(o.kind==='arc') return arcWorldPoints(o,seg);   /* seg 可选：DXF 默认 24、PDF 按弦高自适应 */
-  if(o.kind==='line'||o.kind==='dimension') return (o.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
+  if(o.kind==='line'||o.kind==='dimension'){
+    if(o.kind==='line'&&o.smooth&&(o.points||[]).length>=3) return smoothPathPoints(o.points);
+    return (o.points||[]).map(p=>[Number(p&&p[0])||0,Number(p&&p[1])||0]);
+  }
   return [];
 }
 /** 折线等距偏移（纯函数）：正值=闭合多边形向外 / 开放折线向左；斜接（miter）连接，
@@ -553,10 +556,72 @@ function arcContainsAngle(o,p,tolWorld){
   return rel<=sweep+tolDeg || rel>=360-tolDeg;
 }
 /** 对象长度（米）：圆弧取弧长；折线逐段求和，闭合折线补首尾边；不足两点为 0。 */
+/** 样条曲线采样（Catmull-Rom，世界坐标）：控制点不足 3 个时原样返回。
+ *  渲染 / 长度 / SVG / DXF 共用同一采样源，保证所见与导出一致。 */
+function smoothPathPoints(points,seg=12){
+  const ps=points||[];
+  if(ps.length<3) return ps.map(p=>p.slice());
+  const out=[];
+  const at=i=>ps[Math.max(0,Math.min(ps.length-1,i))];
+  for(let i=0;i<ps.length-1;i++){
+    const p0=at(i-1),p1=at(i),p2=at(i+1),p3=at(i+2);
+    for(let k=0;k<seg;k++){
+      const t=k/seg,t2=t*t,t3=t2*t;
+      out.push([
+        .5*(2*p1[0]+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+        .5*(2*p1[1]+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
+      ]);
+    }
+  }
+  out.push(ps[ps.length-1].slice());
+  return out;
+}
+/** 顶点内角（度）与角平分线单位向量；闭合折线含首尾顶点，开放折线只算中间顶点。
+ *  近共线（<1° 或 >179°）视为无角，跳过以减少标签噪声。 */
+function vertexAngles(points,closed){
+  const ps=points||[],n=ps.length,out=[];
+  if(n<3) return out;
+  for(let i=0;i<n;i++){
+    if(!closed&&(i===0||i===n-1)) continue;
+    const a=ps[(i-1+n)%n],b=ps[i],c=ps[(i+1)%n];
+    const v1=[a[0]-b[0],a[1]-b[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const l1=Math.hypot(v1[0],v1[1]),l2=Math.hypot(v2[0],v2[1]);
+    if(l1<EPS||l2<EPS) continue;
+    const cos=Math.max(-1,Math.min(1,(v1[0]*v2[0]+v1[1]*v2[1])/(l1*l2)));
+    const deg=Math.acos(cos)*180/Math.PI;
+    if(deg<1||deg>179) continue;
+    let bx=v1[0]/l1+v2[0]/l2,by=v1[1]/l1+v2[1]/l2;
+    const bl=Math.hypot(bx,by);
+    if(bl<1e-6){ bx=-v1[1]/l1; by=v1[0]/l1; } else { bx/=bl; by/=bl; }
+    out.push({p:b,deg,bx,by});
+  }
+  return out;
+}
+/** 三点圆弧：求外接圆并选择经过第二点的走向；三点共线返回 null */
+function arcThroughPoints(a,b,c){
+  if(!a||!b||!c) return null;
+  const ax=a[0],ay=a[1],bx=b[0],by=b[1],cx=c[0],cy=c[1];
+  const d=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+  if(Math.abs(d)<1e-7) return null;
+  const ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d;
+  const uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d;
+  const r=Math.hypot(ax-ux,ay-uy);
+  if(!(r>1e-6)) return null;
+  const ang=p=>{ const v=Math.atan2(p[1]-uy,p[0]-ux)*180/Math.PI; return (v+360)%360; };
+  const A=ang(a),B=ang(b),C=ang(c);
+  const ccw=(from,to)=>(to-from+360)%360;
+  const toC=ccw(A,C),bFromA=ccw(A,B);
+  const shape=bFromA>1e-3&&bFromA<toC-1e-3
+    ? {type:ARC,x:ux,y:uy,r,a0:A,a1:C}
+    : {type:ARC,x:ux,y:uy,r,a0:C,a1:A};
+  return shape;
+}
+
 function objectLength(o){
   if(o.kind==='arc'){
     return Math.max(0,Number(o.shape&&o.shape.r)||0)*arcSweep(o.shape)*Math.PI/180;
   }
+  if(o.kind==='line'&&o.smooth&&o.points&&o.points.length>=3) return polylineLength(smoothPathPoints(o.points));
   if(!o.points||o.points.length<2) return 0;
   let l=polylineLength(o.points);
   if(o.closed) l+=dist(o.points.at(-1),o.points[0]);

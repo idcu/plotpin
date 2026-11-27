@@ -318,7 +318,7 @@ $('batchDeleteBtn').onclick=deleteSelected;
    只列出当前选中可编辑对象**适用**的类型（kind/shape 由 annotToggleKeys 判定），不适用的不渲染；
    状态仍写 o.annot（与属性面板、画布与导出共用 annotOn/setAnnot），不新增字段；
    一次勾选只压一条历史，与属性面板单对象语义一致。 */
-const BATCH_ANNOT_ORDER=['name','coord','base','radius','edge','vertex','node','perimeter','area'];
+const BATCH_ANNOT_ORDER=['name','coord','base','radius','edge','vertex','angle','node','perimeter','area'];
 /** 选中对象并集支持的标注键（固定顺序；空集返回 []） */
 function batchAnnotKeys(items){
   const has=new Set();

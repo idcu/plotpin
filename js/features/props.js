@@ -63,11 +63,16 @@ function annotToggleKeys(o){
   const keys=annotKeys(o.kind);
   if(o.kind==='rect'){
     const tt=areaShapeType(o);
-    /* 矩形/平行四边形：有边长与顶点坐标、无半径；圆/椭圆/扇形反之 */
-    return (tt==='rect'||tt===PARA) ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex');
+    /* 矩形/平行四边形：有边长/顶点/角度，无半径；圆/椭圆/扇形反之 */
+    return (tt==='rect'||tt===PARA) ? keys.filter(k=>k!=='radius') : keys.filter(k=>k!=='edge'&&k!=='vertex'&&k!=='angle');
   }
-  /* 开放折线无面积概念：不提供「面积」开关，避免出现勾选后无任何效果的无效配置 */
-  if(o.kind==='line' && !o.closed) return keys.filter(k=>k!=='area');
+  /* 开放折线无面积概念；样条曲线无直线段与折角，不提供段长/角度开关 */
+  if(o.kind==='line'){
+    let ks=keys;
+    if(!o.closed) ks=ks.filter(k=>k!=='area');
+    if(o.smooth) ks=ks.filter(k=>k!=='edge'&&k!=='angle');
+    return ks;
+  }
   return keys;
 }
 /**
@@ -111,6 +116,7 @@ function siteAnnotToggleKeys(site){
   return [
     ['siteNodes','节点坐标',hasPts],
     ['siteSegLen','段长',hasPts],
+    ['siteAngles',L('角度'),hasPts],
     ['siteBase','基点坐标',hasBase],
     ['siteRadius','半径',hasRadius],
     ['siteArea','面积',true],
