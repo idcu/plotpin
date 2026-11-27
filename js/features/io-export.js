@@ -608,11 +608,15 @@ function buildSceneSvg(){
       const pts=(cloud?cloudPoints(o.points,o.closed):outlineOf(o)).map(p=>`${X(p[0])},${Y(p[1])}`);
       if(o.closed&&!cloud) pts.push(pts[0]);
       shapes.push(`<polyline points="${pts.join(' ')}" fill="${o.closed&&!cloud?color:'none'}" fill-opacity=".08" stroke="${color}" stroke-width="${styleVal(o,'strokeWidth',.1)*ppu}" stroke-linejoin="round"/>`);
-      /* 箭头线：末端实心三角（屏幕 8px，与画布一致） */
+      /* 箭头线：末端实心三角（屏幕 8px，与画布一致）；arrow=2 两端 */
       if(!o.closed&&o.style&&o.style.arrow&&o.points.length>=2){
-        const a=o.points[o.points.length-2], b=o.points[o.points.length-1];
-        const bx=X(b[0]), by=Y(b[1]), ang=Math.atan2(Y(b[1])-Y(a[1]),X(b[0])-X(a[0])), sz=8;
-        shapes.push(`<polygon points="${bx},${by} ${bx-sz*Math.cos(ang-.42)},${by-sz*Math.sin(ang-.42)} ${bx-sz*Math.cos(ang+.42)},${by-sz*Math.sin(ang+.42)}" fill="${color}"/>`);
+        const n=o.points.length, sz=8;
+        const tri=(a,b)=>{
+          const bx=X(b[0]), by=Y(b[1]), ang=Math.atan2(Y(b[1])-Y(a[1]),X(b[0])-X(a[0]));
+          shapes.push(`<polygon points="${bx},${by} ${bx-sz*Math.cos(ang-.42)},${by-sz*Math.sin(ang-.42)} ${bx-sz*Math.cos(ang+.42)},${by-sz*Math.sin(ang+.42)}" fill="${color}"/>`);
+        };
+        tri(o.points[n-2],o.points[n-1]);
+        if(o.style.arrow===2) tri(o.points[1],o.points[0]);
       }
       /* 编号与画布一致：开放折线取中点节点，闭合折线取质心（面积/周长胶囊可见时上移 30px 避让，避免重叠） */
       if(o.name&&annotOn(o,'name')){
@@ -757,15 +761,19 @@ function dxfEntitiesForExport(opt){
     }else if(o.kind==='line'){
       /* 修订云线：扇贝点串落成折线（CAD 里仍是可编辑 LWPOLYLINE，视觉效果与原样不同） */
       entities.push({type:'LWPOLYLINE',layer,color,points:o.style&&o.style.cloud?cloudPoints(o.points,o.closed):outlineOf(o),closed:!!o.closed});
-      /* 箭头线：末端三角按世界尺寸落地，保证 DXF 往返仍是可编辑折线 */
+      /* 箭头线：末端三角按世界尺寸落地，保证 DXF 往返仍是可编辑折线；arrow=2 两端 */
       if(!o.closed&&o.style&&o.style.arrow&&o.points.length>=2){
-        const a=o.points[o.points.length-2], b=o.points[o.points.length-1];
-        const ang=Math.atan2(b[1]-a[1],b[0]-a[0]), sz=Math.max(.4,styleVal(o,'strokeWidth',.1)*6);
-        entities.push({type:'LWPOLYLINE',layer,color,closed:true,points:[
-          b,
-          [b[0]-sz*Math.cos(ang-.42),b[1]-sz*Math.sin(ang-.42)],
-          [b[0]-sz*Math.cos(ang+.42),b[1]-sz*Math.sin(ang+.42)]
-        ]});
+        const n=o.points.length, sz=Math.max(.4,styleVal(o,'strokeWidth',.1)*6);
+        const tri=(a,b)=>{
+          const ang=Math.atan2(b[1]-a[1],b[0]-a[0]);
+          entities.push({type:'LWPOLYLINE',layer,color,closed:true,points:[
+            b,
+            [b[0]-sz*Math.cos(ang-.42),b[1]-sz*Math.sin(ang-.42)],
+            [b[0]-sz*Math.cos(ang+.42),b[1]-sz*Math.sin(ang+.42)]
+          ]});
+        };
+        tri(o.points[n-2],o.points[n-1]);
+        if(o.style.arrow===2) tri(o.points[1],o.points[0]);
       }
     }else if(o.kind==='rect'){
       const tt=areaShapeType(o);

@@ -1691,7 +1691,7 @@ function sanitizeObjects(arr,layers,types,seenIds,seenNames,report){
       ['color'].forEach(k=>{ if(/^#[0-9a-fA-F]{6}$/.test(raw.style[k])) o.style[k]=raw.style[k]; });
       if(raw.style.fillAlpha!==undefined) o.style.fillAlpha=Math.min(1,Math.max(0,finiteNumber(raw.style.fillAlpha,.15)));
       if(raw.style.strokeWidth!==undefined) o.style.strokeWidth=Math.max(.01,finiteNumber(raw.style.strokeWidth,.1));
-      if(raw.style.arrow) o.style.arrow=1;
+      if(raw.style.arrow) o.style.arrow=raw.style.arrow===2?2:1;
       if(raw.style.cloud) o.style.cloud=1;
     }
     if(raw.props&&typeof raw.props==='object'){

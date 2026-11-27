@@ -362,6 +362,40 @@ test('环形阵列：绕指定中心复制；坐标/标高标注单击落文字'
   expect(txt.startsWith('▽ ')).toBe(true);
 });
 
+test('手绘与双向箭头：拖动生成多点折线；两级箭头经清洗保留', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'line');
+  await page.selectOption('#lineMode', 'freehand');
+  await page.mouse.move(cx - 120, cy + 40);
+  await page.mouse.down();
+  for (let i = 1; i <= 20; i++) {
+    await page.mouse.move(cx - 120 + i * 8, cy + 40 + Math.sin(i / 2) * 10);
+  }
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  const fh = await page.evaluate(() => ({
+    kind: state.objects[0].kind,
+    n: state.objects[0].points.length,
+    draft
+  }));
+  expect(fh.kind).toBe('line');
+  expect(fh.n).toBeGreaterThan(5);
+  expect(fh.draft).toBe(null);
+
+  await page.selectOption('#lineMode', 'arrow2');
+  await page.mouse.click(cx - 100, cy - 80);
+  await page.mouse.click(cx + 100, cy - 80);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const both = await page.evaluate(() => {
+    const o = state.objects[1];
+    const clean = sanitizeObjects([JSON.parse(JSON.stringify(o))], state.layers, state.objectTypes, new Set(), new Set(), null)[0];
+    return { arrow: o.style.arrow, kept: clean && clean.style.arrow, closed: !!o.closed, n: o.points.length };
+  });
+  expect(both).toEqual({ arrow: 2, kept: 2, closed: false, n: 2 });
+});
+
 test('折线模式与类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {

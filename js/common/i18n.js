@@ -8,12 +8,9 @@
 const TX_CLR='将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。';
 const TX_AFF='仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消';
 const TX_TIMP='可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。';
-const TX_IMG='图片变换：橙色中心=平移，蓝点=旋转，右下角=等比缩放，顶边中点=切变；只改图片，不动任何标注对象；图片角点靠近场地边角时自动吸附';
 const TX_DWG='PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：';
 const TX_SDRAG='拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。';
 const TX_SEDIT='直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
-const TX_SNODE='场地节点：拖拽画布上的控制点调整矢量场地形状；属性面板可精确输入坐标/参数，多边形支持双击边插入、双击节点删除';
-const TX_GUIDE='参考线：两次点击定义一条无限长参考线（参与交点/垂足/平行/垂直捕捉）；Backspace 删除上一条，Shift+G 清除全部，Esc 退出';
 const TX_SNAPC='画布聚焦时循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动';
 const TX_SNAP='回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。';
 const TX_REF='参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。';
@@ -59,7 +56,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       new: '新建', projects: '📁 工程库', floors: '🏢 楼层', import: '导入', export: '导出',
       print: '打印/PDF', settings: '设置', clearAll: '清空',
       clearAllTitle: '清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销',
-      select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', segment: '线段', arrow: '箭头', circleArc: '圆/弧', text: '文字',
+      select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', segment: '线段', arrow: '箭头', arrowBoth: '双向箭头', freehand: '手绘', circleArc: '圆/弧', text: '文字',
       dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
       tabProps: '属性', tabList: '清单', tabLayers: '图层/类型', tabSymbols: '符号库', tabStats: '统计', tabRules: '规则', tabComments: '批注',
       commentsLocalOnly: '评论仅本机可见，不随协作同步',
@@ -155,7 +152,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       new: 'New', projects: '📁 Projects', floors: '🏢 Floors', import: 'Import', export: 'Export',
       print: 'Print/PDF', settings: 'Settings', clearAll: 'Clear',
       clearAllTitle: 'Clear the image base, vector site, all objects and annotations on this floor; undo with Ctrl+Z',
-      select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', segment: 'Segment', arrow: 'Arrow', circleArc: 'Circle/Arc', text: 'Text',
+      select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', segment: 'Segment', arrow: 'Arrow', arrowBoth: 'Both ends', freehand: 'Freehand', circleArc: 'Circle/Arc', text: 'Text',
       dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
       tabProps: 'Properties', tabList: 'Objects', tabLayers: 'Layers/Types', tabSymbols: 'Symbols', tabStats: 'Statistics', tabRules: 'Rules', tabComments: 'Comments',
       commentsLocalOnly: 'Comments are local only; not synced',
@@ -343,15 +340,12 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '文字：单击输入文字内容':'Text: click to enter text',
     '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
-    [TX_IMG]:
-      'Image transform: orange center = move, blue dot = rotate, bottom-right = uniform scale, top-edge midpoint = shear; affects the image only (objects stay put); image corners snap to site corners',
+    '图片变换': 'Image transform',
     [TX_CALIB]:
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     [TX_AFF]:
       'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); red/green control points are draggable, Delete removes, Ctrl+Z undoes, press Enter or ✓ to solve, right-click/Esc cancels',
-    [TX_SNODE]:'Site nodes: drag handles to reshape the vector site; enter exact coordinates/parameters in the panel; polygons support double-click edge insert and vertex delete',
-    [TX_GUIDE]:
-      'Guides: two clicks define an infinite guide (participates in intersection/perpendicular/parallel snapping); Backspace removes the last, Shift+G clears all, Esc exits',
+    '参考线': 'Guides',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
     '撤销 / 重做':'Undo / Redo', '删除选中对象':'Delete selected objects',

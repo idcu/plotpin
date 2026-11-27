@@ -17,9 +17,9 @@ const TOOL_TITLES={
   affine:L(TX_AFF),
   'site-rect':L('矩形'), 'site-circle':L('圆形'), 'site-ellipse':L('椭圆'), 'site-sector':L('扇形'),
   'site-parallelogram':L('平行四边形'), 'site-polygon':L('多边形场地'),
-  'site-node':L(TX_SNODE),
-  'image-transform':L(TX_IMG),
-  'guide':L(TX_GUIDE),
+  'site-node':L('场地节点'),
+  'image-transform':L('图片变换'),
+  'guide':L('参考线'),
   'mirror':L('镜像：选中后点两点定义轴')
 };
 /* 左侧栏分组：组按钮显示组内当前/上次工具；再次点击当前组弹出组内工具（Photoshop 式） */
@@ -411,11 +411,12 @@ canvas.addEventListener('pointerdown',e=>{
     return;
   }
   if(currentTool==='line'){
-    const mode=$('lineMode').value, seg=mode==='segment', arw=mode==='arrow';
-    if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg,arrow:arw}; }
+    const mode=$('lineMode').value, seg=mode==='segment', arw=mode==='arrow', both=mode==='arrow2', free=mode==='freehand';
+    if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg,arrow:arw?1:both?2:0}; if(free) drag={type:'freehand'}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
-    /* 线段/箭头=两点折线：第二点落笔即完成，不需要双击/Enter */
-    if((seg||arw)&&draft.points.length>=2){ finishDraft(); return; }
+    /* 线段/箭头=两点折线：第二点落笔即完成；手绘在抬起时收笔 */
+    if(free){ requestRender(); return; }
+    if((seg||arw||both)&&draft.points.length>=2){ finishDraft(); return; }
     requestRender(); return;
   }
   if(currentTool==='arc'){
@@ -494,6 +495,13 @@ canvas.addEventListener('pointermove',e=>{
   /* 空闲移动（无拖拽/草稿）也必须重绘：十字准星、世界坐标、捕捉标记随鼠标实时显示，
      不必等到点击；requestRender 内部按帧合并，重复调用无额外开销 */
   requestRender();
+  if(drag?.type==='freehand'&&draft){
+    /* 手绘取原始世界坐标（不吸附），按屏幕 2px 采样，避免点列过密 */
+    const p=pointerWorld(e), last=draft.points[draft.points.length-1];
+    if(Math.hypot(p[0]-last[0],p[1]-last[1])*state.viewport.zoom<2) return;
+    if(!pushDraftPoint(draft.points,p)) return;
+    draft.current=p; requestRender(); return;
+  }
   if(drag?.type==='pan'){
     state.viewport.panX=drag.pan.panX+sp[0]-drag.start[0];
     state.viewport.panY=drag.pan.panY+sp[1]-drag.start[1];
@@ -580,6 +588,11 @@ canvas.addEventListener('pointerup',e=>{
   }
   if(activePointers.size===0) touchArm=false;
   if(drag?.type==='pan'){ drag=null; document.body.classList.remove('panning'); return; }
+  if(drag?.type==='freehand'){
+    drag=null;
+    if(draft&&draft.points.length>=2) finishDraft(); else { draft=null; requestRender(); }
+    return;
+  }
   if(drag?.type==='calibPoint'){
     if(!drag.moved) calibUndoStack.pop();   /* 仅点选未拖动：弹出未变更的撤销快照 */
     drag=null; requestRender(); return;
@@ -820,6 +833,7 @@ function cancelActiveDrag(){
   const d=drag; drag=null;
   document.body.classList.remove('panning');
   if(d.type==='pan') return true;
+  if(d.type==='freehand'){ draft=null; requestRender(); return true; }
   const changed=dragChanged(d);
   if(d.type==='move'){
     const idx=dragObjectIndex(d);
@@ -926,7 +940,7 @@ function finishDraft(){
     if(closed&&ps.length<3){ toast('闭合区域至少需要 3 个点','warn'); return; }
     pushHistory();
     const o=baseObject('line',$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
-    if(arw) o.style.arrow=1;
+    if(arw) o.style.arrow=draft.arrow;
     /* 修订云线：仅折线工具可勾选（线段/箭头不参与） */
     if(!seg&&!arw&&$('lineCloud').checked) o.style.cloud=1;
     state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
