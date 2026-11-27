@@ -12,7 +12,7 @@ const TX_DWG='PlotPin 不内置 DWG 内核，也不会修改原文件。请在 C
 const TX_SDRAG='拖拽画布控制点调整场地；也可输入精确坐标/参数（米，可为负）；场地与图片底图可同时存在。';
 const TX_SEDIT='直接改下方坐标/参数；也可用「场地节点」工具拖拽控制点（米，可为负）。';
 const TX_SNAPC='画布聚焦时 Tab 循环切换捕捉类型；点击底部捕捉徽标恢复自动';
-const TX_SNAP='回滚到快照「{name}」？未保存修改先进入撤销栈（Ctrl+Z 可撤回）；回滚后立即落盘并可继续编辑。';
+const TX_SNAP='回滚到快照「{name}」？未保存修改先入撤销栈（Ctrl+Z 可撤回）；回滚后立即落盘。';
 const TX_REF='参考层导入后整层锁定，需编辑请在图层管理器解锁；DXF 样式不映射，以几何与图层为准。';
 const TX_TAUTO='长度/面积/节点数按几何自动计算；导入核对不一致只告警，以几何为准。';
 const TX_BDXF='该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入';
@@ -29,15 +29,15 @@ const TX_LDEL='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使
 const TX_TDEL='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后迁移到「{target}」。继续？';
 const TX_PDFMP='多页按所选页升序并排，首页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，底图只取首页。';
 const TX_REST='恢复=一次新编辑（可 Ctrl+Z）；对端采纳前可能仍显示旧版；旧底图/照片可能已回收。';
-const TX_PEER='对端已推送工程快照。确认后对方拥有完整编辑权：可覆盖、删除对象与楼层、改配置。是否应用并继续同步？';
-const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）';
-const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个用逗号分隔。凭据明文存本机，不进邀请串/协作/工程。';
+const TX_PEER='对端已推送工程快照。确认后对方拥有完整编辑权：可覆盖、删除对象与楼层、改配置。是否应用？';
+const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页；也可能是扫描图或使用了不支持的压缩）';
+const TX_RELAY='默认直连。每行：地址 | 用户名 | 凭据；STUN 只填地址，多个用逗号分隔。凭据明文存本机，不进邀请/协作/工程。';
 const TX_ACOORD='坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/多边形请用「折线」勾选闭合。';
 const TX_RECT='区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消';
 const TX_OSNAP='自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪';
-const TX_ARC='含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。';
+const TX_ARC='含圆弧的工程请用 ≥ 当前版本打开；旧版打开会丢弃圆弧，保存一次后永久消失。';
 const TX_ARCIMP='不勾选则按 24 段折线导入（与旧版一致）。圆弧为纯描边几何，不参与面积与覆盖率。';
-const TX_QR='扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。';
+const TX_QR='扫码得到 PLOTPIN:编号，可搜索定位设备。本页由 PlotPin 离线生成，无外部依赖。';
 const TX_TB='默认关闭，关闭时导出与旧版一致；日期留空=当天，比例留空=自动 1:N。';
 const TX_PDFST='浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存';
 const TX_BADJSON='JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）';
@@ -50,7 +50,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     zh: {
       brand: '图钉',
       new: '新建', projects: '📁 工程库', floors: '🏢 楼层', import: '导入', export: '导出',
-      print: '打印/PDF', settings: '设置', clearAll: '清空',
+      print: '打印/PDF', settings: '设置', clearAll: '清空', helpTitle: '快速上手与快捷键',
       clearAllTitle: '清空当前楼层的底图、场地、对象与标注；可 Ctrl+Z 撤销',
       select: '选择', pan: '平移', point: '点设备', area: '区域', line: '折线', segment: '线段', arrow: '箭头', arrowBoth: '双向箭头', freehand: '手绘', circleArc: '圆/弧', text: '文字',
       dimension: '标注', siteNode: '场地节点', imageXform: '图片变换', guide: '参考线', finish: '完成',
@@ -88,7 +88,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       ariaBatchLayer: '批量移动到图层', ariaBatchDx: 'X 方向平移距离', ariaBatchDy: 'Y 方向平移距离', ariaBatchAngle: '旋转角度',
       /* HUD / 清单 / 图层与类型 */
       typeLabel: '类型', shapeLabel: '形状', closedArea: '闭合区域', pointSize: '点大小',
-      hintText: '滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉类型；可拖拽文件到画布导入；按 ? 查看全部快捷键',
+      hintText: '滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉；按 ? 查看帮助；可拖拽文件导入',
       allObjects: '全部对象', allLayers: '全部图层',
       filterPoint: '点设备', filterArea: '矩形/区域', filterLine: '线段/折线', filterArc: '圆弧', filterText: '文字', filterDimension: '尺寸标注',
       thId: '编号', thName: '名称', thType: '类型', thLayer: '图层', thParam: '参数', thVisible: '显隐', thLock: '锁',
@@ -146,7 +146,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     en: {
       brand: 'PlotPin',
       new: 'New', projects: '📁 Projects', floors: '🏢 Floors', import: 'Import', export: 'Export',
-      print: 'Print/PDF', settings: 'Settings', clearAll: 'Clear',
+      print: 'Print/PDF', settings: 'Settings', clearAll: 'Clear', helpTitle: 'Quick start & shortcuts',
       clearAllTitle: 'Clear this floor’s base, site, objects and annotations; undo with Ctrl+Z',
       select: 'Select', pan: 'Pan', point: 'Point', area: 'Area', line: 'Polyline', segment: 'Segment', arrow: 'Arrow', arrowBoth: 'Both ends', freehand: 'Freehand', circleArc: 'Circle/Arc', text: 'Text',
       dimension: 'Dimension', siteNode: 'Site nodes', imageXform: 'Image transform', guide: 'Guides', finish: 'Finish',
@@ -181,7 +181,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       ariaTypeColor: 'Type color', ariaTypeRename: 'Rename type', ariaTypeDelete: 'Delete type',
       ariaBatchLayer: 'Move selection to layer', ariaBatchDx: 'X offset', ariaBatchDy: 'Y offset', ariaBatchAngle: 'Rotation angle',
       typeLabel: 'Type', shapeLabel: 'Shape', closedArea: 'Closed area', pointSize: 'Marker size',
-      hintText: 'Wheel to zoom; right/middle drag or Space+drag to pan; Delete to remove; Tab cycles snap types; drop files to import; press ? for shortcuts',
+      hintText: 'Wheel to zoom; right/middle drag or Space+drag to pan; Delete to remove; Tab cycles snap; press ? for help; drop files to import',
       allObjects: 'All objects', allLayers: 'All layers',
       filterPoint: 'Point', filterArea: 'Rect/Area', filterLine: 'Polyline', filterArc: 'Arc', filterText: 'Text', filterDimension: 'Dimension',
       thId: 'ID', thName: 'Name', thType: 'Type', thLayer: 'Layer', thParam: 'Params', thVisible: 'Visible', thLock: 'Lock',
@@ -365,22 +365,24 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '适应窗口（显示整张场地）':'Fit view (whole site)', '缩放 / 平移画布 / 键盘缩放':'Zoom / pan / keyboard zoom',
     '单指绘制移动；双指缩放/平移':'One finger draws/moves; pinch zooms, two-finger pans',
     '导入 JSON / DXF / 表格 / 图片':'Import JSON/DXF/tables/images',
+    '快速上手：底图/场地并校准 → 左栏选工具逐点单击，双击/Enter 完成 → 拖圆手柄旋转、方手柄缩放 → 清单批量编辑 → 导出。':
+      'Quick start: base map/site + calibrate → pick a tool and click points; double-click/Enter to finish → drag round handle to rotate, square to scale → batch edit in List → export.',
     '显示本帮助':'Show this help', '知道了':'Got it',
     /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
-    '栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。':
-      'Raster image (PNG/JPG/WebP). Calibrate pixels to metres first; affects image objects only.',
-    '按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。':
-      'Metre-based rect/circle/ellipse/sector/parallelogram/polygon; no calibration.',
-    '每层独立底图/场地与对象；图层、类型、工程库与 JSON 跨层共享。':
+    '栅格图片（PNG/JPG/WebP）；先校准像素→米，仅影响图片对象。':
+      'Raster image (PNG/JPG/WebP); calibrate pixels to metres first; image objects only.',
+    '按米制绘制的矩形/圆/椭圆/扇形/多边形边界；无需校准。':
+      'Metre-based rect/circle/ellipse/sector/polygon; no calibration.',
+    '每层独立底图/场地与对象；图层、类型与工程库跨层共享。':
       'Each floor has its own base map/site and objects; layers, types and archives are shared.',
     '用两点及其实距求像素→米比例与旋转；仅作用于图片底图。':
       'Two points and their real distance solve pixel-to-metre scale and rotation; image maps only.',
     '用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。':
       'Real X,Y points solve image-to-world; 2 points = similarity, 3+ = full affine.',
-    '按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。':
-      'Camera FOV and mounting height projected; counts visible devices and blind spots.',
+    '按视场角与安装高度投影，统计可见设备覆盖率与盲区。':
+      'FOV and mounting height projected; counts visible devices and blind spots.',
     'JSON 工程':'JSON project', 'PNG 高清图':'HD PNG', 'SVG 矢量图':'SVG vector',
     'PDF（图纸位图+清单）':'PDF (raster drawing + list)', 'DXF（CAD 互通）':'DXF (CAD)',
     'CSV 表格':'CSV table', 'TSV 表格':'TSV table', 'Excel (.xlsx)':'Excel (.xlsx)',
@@ -396,7 +398,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Site in standalone SITE layer; millimetre coordinates stay editable.',
     'DXF（保真：椭圆+圆弧）':'DXF (fidelity: ellipse + arc)',
     [TX_ARC]:
-      'Open projects containing arcs with this version or newer; older builds discard arcs, and one save in an older build loses them for good.',
+      'Open projects with arcs in this version or newer; older builds discard arcs and one save loses them for good.',
     '全楼层台账；= + - @ 开头加单引号防公式注入。':
       'All-floor ledger; leading apostrophe guards = + - @ formula injection.',
     '同 CSV，制表符分隔；同一公式防护。':
@@ -748,7 +750,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Delete snapshot "{name}"? Only this version record is removed; the current project and other snapshots are unaffected.',
     '快照已生成：{n} 个对象 · {size} · {ms}ms': 'Snapshot created: {n} objects · {size} · {ms}ms',
     [TX_SNAP]:
-      'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack (Ctrl+Z to revert); the rollback is saved immediately and editing continues.',
+      'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack (Ctrl+Z to revert); the rollback is saved immediately.',
     '已回滚到快照：{time}': 'Rolled back to snapshot: {time}',
     '仿射校准 · 第 {n} 点': 'Affine calibration · point {n}',
     '该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ({x}, {y})':
@@ -871,7 +873,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '◈ 捕捉：':'◈ Snap: ', '◈ 捕捉：自动':'◈ Snap: Auto',
     '设备标签':'device labels', '设备二维码标签':'Device QR labels', '台':'units', '图纸工程':'Drawing project',
     [TX_QR]:
-      'Scan to get PLOTPIN:ID; search this ID in the project to locate the device. Generated offline by PlotPin with no external resources.',
+      'Scan to get PLOTPIN:ID; search this ID to locate the device. Generated offline by PlotPin, no external resources.',
     '图纸标注报告':'Drawing annotation report', '生成时间：':'Generated: ', '统计摘要':'Summary',
     '统计摘要（全部楼层）':'Summary (all floors)', '正在生成多楼层报告…':'Generating multi-floor report…',
     '正在生成多楼层 PDF…':'Generating multi-floor PDF…', '报告生成失败：':'Report generation failed: ',
@@ -1109,9 +1111,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* 片2 协作安全默认 + 其余整句缺口 */
     '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list is rebuilt from records in real time',
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
-    [TX_PEER]:'The peer sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete objects/floors, change settings. Apply and continue syncing?',
+    [TX_PEER]:'The peer sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete objects/floors, change settings. Apply?',
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
-    [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; pages are not merged; scans may lack embedded graphics or use unsupported compression)',
+    [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; scans may lack embedded graphics or use unsupported compression)',
     [TX_PDFST]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
     '该类型仍被对象使用，且没有可迁移的同类内置类型':'This type is still used by objects, and there is no migratable built-in type of the same kind',
     '评论':'Comment', '编辑评论':'Edit comment',
@@ -1129,7 +1131,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    [TX_RELAY]:'Direct by default. One server per line: URL | username | credential; STUN needs only URL; commas separate URLs. Credentials stay local and never enter invites/collab/project files.',
+    [TX_RELAY]:'Direct by default. One per line: URL | username | credential; STUN needs URL only; commas separate URLs. Credentials stay local and never enter invites/collab/projects.',
     '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',

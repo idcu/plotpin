@@ -10624,7 +10624,7 @@ await section("D-03 帮助中心：三页签与 i18n", async () => {
   ok('D-03 导出清单标注 PDF 位图页', exp.some(r => r[1].includes('位图页')));
   ok('D-03 导出清单标注 DXF SITE 图层', exp.some(r => r[1].includes('SITE 图层')));
   ok('D-03 导出清单标注圆弧前向不兼容',
-    exp.some(r => r[1].includes('旧版打开会丢弃这些圆弧') && r[1].includes('保存一次后弧永久消失')));
+    exp.some(r => r[1].includes('旧版打开会丢弃圆弧') && r[1].includes('保存一次后永久消失')));
   ok('D-03 导出清单标注表格公式防护',
     exp.filter(r => r[0].includes('表格') || r[0].includes('Excel')).every(r => r[1].includes('公式')));
   const keys = ['帮助中心', ...tabs.map(t => t.label), ...gloss.flat(), ...exp.flat()];

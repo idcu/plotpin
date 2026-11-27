@@ -1369,12 +1369,12 @@ function helpShortcutRows(){
 }
 function helpGlossaryRows(){
   return [
-    [L('图片底图'), L('栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。')],
-    [L('矢量场地'), L('按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。')],
-    [L('楼层'), L('每层独立底图/场地与对象；图层、类型、工程库与 JSON 跨层共享。')],
+    [L('图片底图'), L('栅格图片（PNG/JPG/WebP）；先校准像素→米，仅影响图片对象。')],
+    [L('矢量场地'), L('按米制绘制的矩形/圆/椭圆/扇形/多边形边界；无需校准。')],
+    [L('楼层'), L('每层独立底图/场地与对象；图层、类型与工程库跨层共享。')],
     [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
     [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
-    [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')]
+    [L('覆盖率口径'), L('按视场角与安装高度投影，统计可见设备覆盖率与盲区。')]
   ];
 }
 function helpExportRows(){
@@ -1403,7 +1403,7 @@ function helpTabDefs(){
 function helpPanelHTML(key){
   if(key==='glossary') return helpRowsHTML(helpGlossaryRows(),'help-term');
   if(key==='exports') return helpRowsHTML(helpExportRows(),'help-term');
-  return helpRowsHTML(helpShortcutRows());
+  return '<div class="hint-text">'+L('快速上手：底图/场地并校准 → 左栏选工具逐点单击，双击/Enter 完成 → 拖圆手柄旋转、方手柄缩放 → 清单批量编辑 → 导出。')+'</div>'+helpRowsHTML(helpShortcutRows());
 }
 function switchHelpTab(key){
   const body=$('modalBody');
@@ -1425,6 +1425,7 @@ function openShortcutsHelp(){
   openModal(L('帮助中心'),body,[{text:L('知道了'),class:'primary',click:closeModal}]);
   $('modalBody').querySelectorAll('[data-help-tab]').forEach(btn=>btn.addEventListener('click',()=>switchHelpTab(btn.dataset.helpTab)));
 }
+$('helpBtn').onclick=openShortcutsHelp;
 function reorderSelected(delta){
   if(selectedIds.size!==1) return;
   const o=state.objects.find(x=>selectedIds.has(x.id)); const i=state.objects.indexOf(o),j=i+delta;

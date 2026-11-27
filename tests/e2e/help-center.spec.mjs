@@ -28,9 +28,16 @@ test('D-03 帮助中心三页签与焦点回归', async ({ page }) => {
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('位图页');
   await expect(page.locator('.help-panel:not([hidden])')).toContainText('公式注入');
   /* 圆弧前向不兼容必须出现在清单里：只改条数会漏掉「条目被换掉」的情况 */
-  await expect(page.locator('.help-panel:not([hidden])')).toContainText('旧版保存一次后弧永久消失');
+  await expect(page.locator('.help-panel:not([hidden])')).toContainText('保存一次后永久消失');
 
   await page.keyboard.press('Escape');
   await expect(page.locator('#modalBackdrop')).not.toHaveClass(/show/);
   expect(await page.evaluate(() => document.activeElement && document.activeElement.id)).toBe('canvas');
+
+  /* 画布底部 ? 按钮：不依赖键盘也能打开帮助，并显示快速上手 */
+  await page.locator('#helpBtn').click();
+  await expect(page.locator('#modalBackdrop')).toHaveClass(/show/);
+  await expect(page.locator('.help-panel:not([hidden])')).toContainText('快速上手');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#modalBackdrop')).not.toHaveClass(/show/);
 });
