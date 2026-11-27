@@ -9,29 +9,29 @@ const TX_CLR='将清空当前楼层底图、场地、{n} 个对象与标注、�
 const TX_AFF='仿射校准：依次点击已知点并输入实地 X,Y（2 点=相似，≥3 点=完整仿射）；控制点可拖拽/Delete 删除/Ctrl+Z 撤销，Enter 或 ✓ 求解，右键/Esc 取消';
 const TX_TIMP='可更新名称、业务类型、图层、坐标/角度/宽高/形状/闭合/节点、标注、显隐、锁定、备注；替换只改属性不改几何；匹配列限定范围，「楼层」列限定落点。';
 const TX_DWG='PlotPin 不内置 DWG 内核，也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF 后导入：';
-const TX_SDRAG='拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。';
-const TX_SEDIT='直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
+const TX_SDRAG='拖拽画布控制点调整场地；也可输入精确坐标/参数（米，可为负）；场地与图片底图可同时存在。';
+const TX_SEDIT='直接改下方坐标/参数；也可用「场地节点」工具拖拽控制点（米，可为负）。';
 const TX_SNAPC='画布聚焦时 Tab 循环切换捕捉类型；点击底部捕捉徽标恢复自动';
 const TX_SNAP='回滚到快照「{name}」？未保存修改先进入撤销栈（Ctrl+Z 可撤回）；回滚后立即落盘并可继续编辑。';
-const TX_REF='参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。';
+const TX_REF='参考层导入后整层锁定，需编辑请在图层管理器解锁；DXF 样式不映射，以几何与图层为准。';
 const TX_TAUTO='长度/面积/节点数按几何自动计算；导入核对不一致只告警，以几何为准。';
 const TX_BDXF='该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入';
-const TX_POLY='折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）';
+const TX_POLY='折线：逐点单击、双击结束；Shift 正交，右键/Esc 取消（可勾选闭合）';
 /* 界面提示与字典键共用同一份字符串：同一句在产物里只存一份（体积预算按原始字节计） */
 const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
-const TX_CALIB='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
+const TX_CALIB='比例尺：点两个已知点，可拖拽/Delete 删除/Ctrl+Z 撤销，Enter 或 ✓ 应用';
 const TX_STATS='统计与缩放/像素/DPR 无关；面积为解析公式，与报告同源；历史 v1/v2 报告不可直接对比。';
 const TX_LENS='镜头口径：张角取 fov（默认 90°，10–360°）；距离取 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 不计入；隐藏对象/图层不进分母。';
 const TX_DXFIMP='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
 const TX_UNSUP='不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）';
 const TX_MERGE='合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}';
-const TX_LDEL='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
-const TX_TDEL='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
+const TX_LDEL='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后迁移到「{target}」。继续？';
+const TX_TDEL='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后迁移到「{target}」。继续？';
 const TX_PDFMP='多页按所选页升序并排，首页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层。底图只取首页内嵌图。';
 const TX_REST='恢复=一次新编辑（可 Ctrl+Z）；对端采纳前可能仍显示旧版；旧底图/照片可能已回收。';
-const TX_PEER='对端已连接并推送工程快照。确认后对方拥有本工程完整编辑权：可覆盖、删除、清空对象与楼层、修改配置。是否应用并继续同步？';
+const TX_PEER='对端已推送工程快照。确认后对方拥有完整编辑权：可覆盖、删除对象与楼层、修改配置。是否应用并继续同步？';
 const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）';
-const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。';
+const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个用逗号分隔。凭据明文存本机，不进邀请串、协作消息与工程文件。';
 const TX_ACOORD='坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。';
 const TX_RECT='区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消';
 const TX_OSNAP='自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪';
@@ -282,7 +282,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     [TX_PTYPE]:
       'This type is a fixed-screen position marker. For scale-true coverage, use a circle/square/sector/bar point type under Layers/Types.',
     [TX_SEDIT]:
-      'Edit the coordinates/parameters below to adjust the site, or use the Site nodes tool to drag handles on canvas. Coordinates are world metres and may be negative.',
+      'Edit the coordinates/parameters below, or drag handles with the Site nodes tool (metres, may be negative).',
     '提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。':
       'Tip: click an object to edit its properties here; drag a box to select multiple; Delete removes; Ctrl+Z undoes.',
     '图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。':
@@ -329,14 +329,14 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     [TX_RECT]:
       'Area: choose a shape above and drag; Shift makes a square/circle or snaps sectors to 45°; Esc cancels',
     [TX_POLY]:
-      'Polyline: click point by point, double-click to finish; Shift constrains to horizontal/vertical; right-click/Esc cancels (enable Closed for triangles/polygons)',
+      'Polyline: click point by point, double-click to finish; Shift constrains ortho; right-click/Esc cancels (enable Closed for polygons)',
     '圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消':
       'Circle/Arc: click the center, then the radius point (circle) or start/end points (arc); Esc cancels',
     '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
     '图片变换': 'Image transform',
     [TX_CALIB]:
-      'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
+      'Scale: click two known points; drag/Delete to adjust, Ctrl+Z to undo, Enter or ✓ to apply',
     [TX_AFF]:
       'Affine: click known points and enter real X,Y (2 = similarity, 3+ = full affine); drag controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, Esc cancels.',
     '参考线': 'Guides',
@@ -361,7 +361,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Cycle focus across top bar/tool rail/sidebar tabs (Tab cycles snapping)',
     '显示/隐藏网格':'Show/hide grid',
     '临时平移画布':'Temporary canvas pan', '移动选中对象（Shift ×10）':'Move objects (Shift ×10)',
-    '适应窗口（显示整张场地）':'Fit view (whole site)', '缩放 / 平移画布':'Zoom / pan canvas',
+    '适应窗口（显示整张场地）':'Fit view (whole site)', '缩放 / 平移画布 / 键盘缩放':'Zoom / pan / keyboard zoom',
     '单指绘制移动；双指缩放/平移':'One finger draws/moves; pinch zooms, two-finger pans',
     '导入 JSON / DXF / 表格 / 图片':'Import JSON/DXF/tables/images',
     '显示本帮助':'Show this help', '知道了':'Got it',
@@ -537,7 +537,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '落点':'Target',
     '可编辑对象（按原图层）':'Editable objects (keep original layers)',
     '只读参考层（新建层并锁定）':'Read-only reference layer (new layer, locked)',
-    [TX_REF]:'The reference layer is locked after import; unlock it in the layer manager to edit. DXF length/area/fill styles are not mapped; geometry and layers are authoritative.',
+    [TX_REF]:'The reference layer is locked after import; unlock it in the layer manager to edit. DXF styles are not mapped; geometry and layers are authoritative.',
     '导入':'Import',
     'DXF 中没有可导入实体':'No importable entities in this DXF',
     '提示：该 DXF 含 ':'Note: this DXF contains ',
@@ -595,7 +595,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '目录根对象非法':'Invalid catalog root object',
     '拖拽文件到画布':'Drag files onto canvas',
     '触屏单指 / 双指':'Touch: one / two fingers',
-    '滚轮 / 右键拖拽':'Wheel / right-drag',
+    '滚轮 / 右键拖拽 / + / -':'Wheel / right-drag / + / -',
     'items 须非空':'items must not be empty',
     '-产品目录.json':'-catalog.json',
     '双击 / Enter':'Double-click / Enter',
@@ -636,7 +636,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '页范围格式如 1-3,5':'Page range format e.g. 1-3,5',
     '没有有效页码':'No valid page number',
     '所选页没有可导入的图形':'The selected pages contain no importable shapes',
-    [TX_SDRAG]:'Drag canvas handles to adjust the site, or enter exact coordinates/parameters here. World coordinates (m), may be negative; site and image base can coexist.'
+    [TX_SDRAG]:'Drag canvas handles to adjust the site, or enter exact coordinates/parameters (m, may be negative); site and image base can coexist.'
   };
 
   /* 插值模板：中文整句（含 {占位}）→ 英文整句。调用方只传数据，不再拼接句子；
@@ -784,9 +784,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* 片2 协作安全默认 / 导入与图层类型的整句缺口 */
     '已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表': 'Skipped {n} sheets with more than 50,000 rows; only usable worksheets were imported',
     [TX_LDEL]:
-      'Layer "{layer}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
+      'Layer "{layer}" is used by {count} objects on {floors} floors; they will move to "{target}". Continue?',
     [TX_TDEL]:
-      'Type "{type}" is used by {count} objects on {floors} floors; after deletion they will move to "{target}". Continue?',
+      'Type "{type}" is used by {count} objects on {floors} floors; they will move to "{target}". Continue?',
     /* M1 多页 PDF 导入（含占位） */
     '检测到多页 PDF（共 {n} 页）。默认只导入第 1 页；选择页范围才会走多页导入。':
       'Multi-page PDF detected ({n} pages). By default only page 1 is imported; choose a page range to import multiple pages.',
@@ -1108,7 +1108,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* 片2 协作安全默认 + 其余整句缺口 */
     '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list is rebuilt from records in real time',
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
-    [TX_PEER]:'The peer sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete/clear objects and floors, change settings. Apply and continue syncing?',
+    [TX_PEER]:'The peer sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete objects/floors, change settings. Apply and continue syncing?',
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
     [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; pages are not merged; scans may lack embedded graphics or use unsupported compression)',
     [TX_PDFST]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',

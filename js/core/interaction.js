@@ -1361,7 +1361,7 @@ function helpShortcutRows(){
     ['F7',L('显示/隐藏网格')],
     [L('空格 + 拖拽'),L('临时平移画布')],
     [L('方向键'),L('移动选中对象（Shift ×10）')],['F',L('适应窗口（显示整张场地）')],
-    [L('滚轮 / 右键拖拽'),L('缩放 / 平移画布')],
+    [L('滚轮 / 右键拖拽 / + / -'),L('缩放 / 平移画布 / 键盘缩放')],
     [L('触屏单指 / 双指'),L('单指绘制移动；双指缩放/平移')],
     [L('拖拽文件到画布'),L('导入 JSON / DXF / 表格 / 图片')],['?',L('显示本帮助')]
   ];
@@ -1480,6 +1480,11 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!e.shiftKey&&(currentTool==='calibrate'||currentTool==='affine')&&calibUndo()) return; e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key==='0'){ e.preventDefault(); fitView(); return; }
+  /* +/- 键盘缩放（围绕画布中心，步进与滚轮一致）；带 Ctrl/Alt 时交还浏览器 */
+  if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='+'||e.key==='='||e.key==='-'||e.key==='_')){
+    e.preventDefault();
+    zoomAt(canvas.clientWidth/2,canvas.clientHeight/2,e.key==='-'||e.key==='_'?1/1.15:1.15); return;
+  }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){
     e.preventDefault(); const c=$('selectAllChk'); if(c){ c.checked=true; c.dispatchEvent(new Event('change')); }
     return;

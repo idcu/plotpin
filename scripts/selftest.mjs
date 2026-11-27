@@ -5095,7 +5095,7 @@ await section("42. 场地属性面板：未选中对象时的可编辑场地属�
   /* 工具模式（场地节点）：标题与提示切换，且不再出现未选中对象的操作提示 */
   const h2=api.sitePropsHTML(rectBG,'tool');
   ok('场地节点-工具模式标题', h2.includes('场地节点') && !h2.includes('场地属性'));
-  ok('场地节点-工具模式含画布拖拽提示', h2.includes('拖拽画布上的控制点'));
+  ok('场地节点-工具模式含画布拖拽提示', h2.includes('拖拽画布控制点'));
   ok('场地节点-工具模式无未选中提示', !h2.includes('单击对象可在此编辑其属性'));
   /* 各矢量形状的参数入口 */
   const hc=api.sitePropsHTML({kind:'circle',shape:{type:'circle',cx:30,cy:20,r:10}},'default');

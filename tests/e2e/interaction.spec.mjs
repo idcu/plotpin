@@ -601,7 +601,7 @@ test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
 
-test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、单键切工具', async ({ page }) => {
+test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、单键切工具', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -661,6 +661,13 @@ test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、单键�
   await expect.poll(() => page.evaluate(() => state.settings.gridVisible)).toBe(!grid);
   await page.keyboard.press('F7');
   await expect.poll(() => page.evaluate(() => state.settings.gridVisible)).toBe(grid);
+
+  /* +/-：键盘缩放（围绕画布中心） */
+  const z0 = await page.evaluate(() => state.viewport.zoom);
+  await page.keyboard.press('Equal');
+  await expect.poll(() => page.evaluate(() => state.viewport.zoom)).toBeGreaterThan(z0);
+  await page.keyboard.press('Minus');
+  await expect.poll(() => page.evaluate(() => state.viewport.zoom)).toBeCloseTo(z0, 6);
 
   /* 单键切换工具：L→折线，V→选择 */
   await page.keyboard.press('l');
