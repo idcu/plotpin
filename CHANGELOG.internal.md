@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 补齐常用编辑快捷键，压缩英文文案后净增 33 B
+
+- **Commit Hash**：`7e25fd7`
+- **核心改动**：
+  - **Ctrl+A**：复用清单 `#selectAllChk` 的 change 处理器，全选当前筛选结果；不新增选择逻辑，不绕过筛选。
+  - **Ctrl+Shift+V**：`pasteClipboard(inPlace)` 增加参数；原位粘贴不偏移，Ctrl+V 仍偏移 1 m。
+  - **Ctrl+0**：复用 `fitView()`，与 F 键等价。
+  - **回收（英文文案）**：压缩 5 条冗长英文 PHRASES（`TX_TIMP` / `TX_SDRAG` / `TX_PEER` / `TX_RELAY` / `TX_AFF`），中文文案与字段含义不变。
+- **预算**（实测）：dist **839,384 → 839,417 B（+33）**；gzip **274,131 → 274,142 B（+11）**；余量 **296 → 263 B**（gzip 余量 12,578 B）；SW `VERSION=299 → 300`；发行包 SHA256 `3b31d618…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.82% = 887 / 1,855**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 双入口全量 e2e（**202** 用例）：源码 **199 passed / 0 failed / 3 skipped**（4.0m），dist **196 passed / 0 failed / 6 skipped**（3.6m），均 exit 0。
+  - 新增用例：Ctrl+A 后选中 2 个对象；Ctrl+C → Ctrl+Shift+V 后副本坐标与原对象完全相同；再 Ctrl+V 后副本偏移 (1,1)；Ctrl+0 将 zoom=50 恢复到适应窗口值。`interaction.spec` 双入口各 **16 passed**。
+- **公共抽象清单**：`pasteClipboard(inPlace)` 扩展现有函数，未新增复制实现；Ctrl+A 复用清单全选处理器；无新增 i18n 键。
+- **遗留风险**：余量仅 **263 B**；Ctrl+A 受清单筛选影响（筛选为空时全选可见可编辑对象）；原位粘贴会与原对象重叠，需手动移开；Ctrl+0 与 F 等价，不改变 F 的既有语义；部分浏览器/输入法可能占用 Ctrl+A，输入框内已由 typing 守卫放行给原生行为。
+
 ## 2026-11-27 · 新增批量线宽，回收四段帮助文案后净减 62 B
 
 - **Commit Hash**：`80dec31`
