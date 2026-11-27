@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 新增批量颜色，回收工具提示与导出文案后净增 88 B
+
+- **Commit Hash**：`70686ab`
+- **核心改动**：
+  - **批量颜色**：`清单` 批量栏新增取色器 `#batchColor` 与 `颜色` 按钮；对选中且可编辑的对象统一写对象级 `style.color`，一次 `pushHistory` + `commitChange(ids)`，可 Ctrl+Z 撤销；画布与 SVG/PDF/DXF 导出同源。无选中时提示「没有可修改的选中对象」。
+  - **回收（砍口径）**：移除已废弃的 `.rail-sep`；缩短 `clearAllTitle`、`exportPdfVector` 中英文（下拉改为「PDF（矢量）· 文字可搜索」，完整口径仍保留在导出确认弹窗）；`pan`/`text`/`mirror` 工具标题缩短，其中 `pan`/`mirror` 改用 `I18N.t('pan'|'mirror')` 复用既有 DICT，英文界面不再回退中文，i18n 缺口 3→1。
+  - 测试同步：`pdf-vector-option.spec` 的选项断言改为短文案，弹窗仍校验完整口径；`interaction.spec` 增加批量颜色断言。
+- **预算**（实测）：dist **839,305 → 839,393 B（+88）**；gzip **274,441 → 274,345 B（−96）**；余量 **375 → 287 B**（gzip 余量 12,375 B）；SW `VERSION=295 → 296`；发行包 SHA256 `82848cc6…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.73% = 884 / 1,852**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 最终提交双入口全量 e2e（**199** 用例）：源码 **196 passed / 0 failed / 3 skipped**（4.4m），dist **193 passed / 0 failed / 6 skipped**（3.8m），均 exit 0。跳过为协作 soak 与缺 `pdftotext` 的 V-6/V-6b，dist 另跳过 3 条源码结构用例。
+  - 最终 i18n 标题回退修正后，`interaction.spec` + `i18n-template.spec` 双入口各 **14 passed**；批量颜色断言断言选中对象颜色全部为 `#ff0000`。
+- **公共抽象清单**：无新增公共函数；复用 `isEditable` / `pushHistory` / `commitChange`，颜色保持对象级 `style.color` 单一来源（画布、SVG、DXF、PDF 共用）。
+- **遗留风险**：余量仅 **287 B**，下一次功能改动前必须先回收；批量颜色只改对象级颜色，不新增类型默认色/图例；取色器不跨刷新记忆；取消/清空选择后不会恢复上一次颜色。
+
 ## 2026-11-27 · 新增手绘与双向箭头，砍 3 条 HUD 长提示后净减 130 B
 
 - **Commit Hash**：`e494137`
