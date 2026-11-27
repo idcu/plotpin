@@ -40,7 +40,7 @@ const META={
   select:['↖','select'],pan:['✥','pan'],point:['●','point'],rect:['▭','area'],line:['╱','line'],arc:['◯','circleArc'],text:['T','text'],
   dimension:['⌁','dimension'],'site-node':['⊗','siteNode'],'image-transform':['🖼','imageXform'],guide:['╱','guide'],mirror:['⇋','mirror']
 };
-$('toolRail').innerHTML=GROUPS.map(g=>`<div class="tool-group"${g.tools[1]?' data-multi':''}><button class="tool-btn" data-group-main="${g.id}"></button></div>`).join('')
+$('toolRail').innerHTML=GROUPS.map(g=>`<div class="tool-group"><button class="tool-btn" data-group-main="${g.id}"${g.tools[1]?' data-multi':''}></button></div>`).join('')
   +'<div class="rail-sep"></div><button class="tool-btn" id="finishDraftBtn"><span class="ico">✓</span><span class="lbl" data-x="finish"></span></button>';
 let flyG=null;
 function closeFly(){ const f=$('toolFlyout'); if(f&&!f.hidden){ f.hidden=true; flyG=null; } }

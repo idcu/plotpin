@@ -2,8 +2,8 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=290
-7d2a8374985d915a097a6079ce40ebe1d01ab8378c914178c4b5e0202131fd6e  css/style.css
+version=291
+0d71081e6e341d59ae48c3f8c4ec902f7fb28a2199bb143715bc200f805473f5  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 2422d8783e8335bccbb1fcf1af23f9e16bec54177dbb733be66293f2b3d7f8e0  index.html
 ac1a25e9004be7c200e0724a2ab7c45f173b054712d321f2f4df9d49b9bcb5fe  js/common/content-assets.js
@@ -22,7 +22,7 @@ e1a0907148867f1abd7190f4c1b2861ef558fa1d45bd6687804765249f3c2c80  js/core/geomet
 fb7387cc7ecc95bf3761980a073d10d7ff2bd96fcd667fa18405dd186011352e  js/core/geometry-transform.js
 612305d8ee66a5cc0a5cccea47c21f5b24d204dfa8928eb11738be5a1b3ebf12  js/core/geometry.js
 4c479ff9269a46f66b1c6e587aeb5e3f2605532987b623ecf70e9fe5f3b79499  js/core/ghost.js
-95f6a3aca2124a518e731ad3edbbf44d972c606691551347e27208becb8c8954  js/core/interaction.js
+8863227f84d9cea9da9a248802c55d062e0874082ed48e4873d823417a76231e  js/core/interaction.js
 5cd6d9e0acea14866278f0e5124f06d031cecffc07caeec4c3cc13fd72895131  js/core/model.js
 02dabc88cd555d3c120cd312f3b8eb16847aa5e8f9e24d3eb7f24583fc57a2d5  js/core/persistence.js
 0ba76ffcd4d20515395ddb9c695f5ce51aebe05a2d1a940be1dbf1b7d94acfc5  js/core/render.js
@@ -55,4 +55,4 @@ a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/git
 1be284fb8b54201feef446fb0ad41e59f794f9ca8499eb122c290d49886451c4  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-db3d65e9cdd607173d7f21830193c4821c0119336a7a88eb4cb03a9d3c9ed180  sw.js
+27ae1ca496eed6a67bdf3685f78b76392622e532af3d0604d06e950eb070e522  sw.js

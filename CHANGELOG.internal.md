@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 修复分组工具栏折叠角标激活色与英文标签溢出，+41 B
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - **折叠角标**：`data-multi` 从 `.tool-group` 容器移到组主按钮 `.tool-btn`，`::after` 改用 `border` 三角并以 `currentColor` 取色，激活态自动变白；修复此前 CSS 选择器 `.tool-group.active::after` 永远不命中（`active` 实际加在按钮上）导致激活组角标仍为灰色的问题。三角位于图标右上，不压标签。
+  - **英文标签**：新增 `html[lang=en] .tool-rail .lbl{font-size:8px}`，使 `Polyline` / `Dimension` 收进 42 px 按钮与 58 px 栏宽，不再溢出到画布；中文标签保持 10 px。
+  - 行为无变化：分组、弹出、点击外部关闭、`openGroupFor` 测试入口均不变。
+- **预算**（实测）：dist **839,433 → 839,474 B（+41）**；gzip **274,501 → 274,502 B（+1）**；余量 **247 → 206 B**；SW `VERSION=290 → 291`；发行包 SHA256 `52806084…`。
+- **验证数据**：
+  - 3× 截图核对：中文激活组角标为白色实心三角、非激活为灰色；英文 `Polyline` / `Dimension` 均在栏内；弹出组标签完整。
+  - `npm run ci` 退出 0（selftest 4,576 / 0；门禁牙齿 10/10 + 20/20；i18n 47.53%；dist 确定性一致）。
+  - 双入口 e2e 全量：源码 **193 passed / 0 failed / 3 skipped**（4.3m），dist **190 passed / 0 failed / 6 skipped**（3.8m），均 exit 0。
+- **公共抽象清单**：无新增；角标颜色复用 `.tool-btn.active` 的 `color`（`currentColor`），不新增 i18n 键或工具配置。
+- **遗留风险**：余量仅 **206 B**（强警告区），下一次代码改动前必须先回收；英文栏标签 8 px 偏小，属窄栏约束下的取舍。
+
 ## 2026-11-27 · 左侧工具栏改为 Photoshop 式分组弹出，合并重复入口，净增 678 B
 
 - **Commit Hash**：`ac6684c`
