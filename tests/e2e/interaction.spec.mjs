@@ -549,6 +549,21 @@ test('双击文字就地编辑：确认写入并可一步撤销，取消不改�
   await page.locator('#modalFooter button').first().click();
   await expect.poll(() => page.evaluate(() => state.objects[0].text)).toBe('原始文字');
   expect(await page.evaluate(() => history.past.length)).toBe(past);
+
+  /* 引线标注：双击标注线同样命中文字编辑，写回 o.text */
+  await clickTool(page, 'dimension');
+  await page.selectOption('#dimensionType', 'leader');
+  await page.mouse.click(cx - 150, cy + 120);
+  await page.mouse.click(cx - 50, cy + 120);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const oldText = await page.evaluate(() => state.objects[1].text);
+  expect(typeof oldText).toBe('string');
+  await clickTool(page, 'select');
+  await page.mouse.dblclick(cx - 100, cy + 120);
+  await expect(page.locator('#promptInput')).toHaveValue(oldText);
+  await page.fill('#promptInput', '引线新文字');
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects[1].text)).toBe('引线新文字');
 });
 
 test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+单击不留副本', async ({ page }) => {
