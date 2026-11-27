@@ -1,22 +1,22 @@
 # 事实源（FACTS）
 
 > **用途**：易变数字的唯一集中快照。正文只写“以命令输出为准”，不复制本表的旧值。
-> **取数时间**：2026-11-28；代码基线：`ae57a71`（英文翻译精简回收 1,411 B；SW 317）。本表随文档批次提交，产品代码以上述提交为准。
+> **取数时间**：2026-11-28；代码基线：`1302341`（F9 网格吸附；英文翻译第三批精简；SW 318）。本表随文档批次提交，产品代码以上述提交为准。
 > **规则**：本表每一行必须能在当前仓库复跑；数字变化后同批更新本表，禁止估算。
 
 ## 1. 构建产物
 
-| 指标 | 2026-11-27 快照 | 取数命令 | 说明 |
+| 指标 | 2026-11-28 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 835,460 B（815.9 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + `unsafe`/`unsafe_arrows`/`pure_getters` + `passes:6` + 标记层去引号/省略可选闭合标签 + i18n 默认文案去重 + 空 title/aria-label/placeholder 删除 + `data-x*` 属性缩写；工具栏改为运行时生成的分组按钮（HTML 只留空容器）；长文案共享 `TX_*` 常量（2026-11-28） |
-| gzip 字节 | 272,300 B（265.9 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 单文件产物字节 | 835,387 B（815.8 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + `unsafe`/`unsafe_arrows`/`pure_getters` + `passes:6` + 标记层去引号/省略可选闭合标签 + i18n 默认文案去重 + 空 title/aria-label/placeholder 删除 + `data-x*` 属性缩写；工具栏改为运行时生成的分组按钮（HTML 只留空容器）；长文案共享 `TX_*` 常量（2026-11-28） |
+| gzip 字节 | 272,199 B（265.8 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
-| 体积余量 | 4,220 B（gzip 余量 14,420 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
-| Service Worker 版本 | `VERSION=317` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 4,293 B（gzip 余量 14,521 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| Service Worker 版本 | `VERSION=318` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
-| 指标 | 2026-11-27 快照 | 取数命令 | 说明 |
+| 指标 | 2026-11-28 快照 | 取数命令 | 说明 |
 |---|---|---|---|
 | selftest 断言 | 4,576 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；2026-11-26 在 4,567 上补场地顶点 9 条（抓手排序生效 / 锁定后几何入口拒绝且锁定开关可用） |
 | selftest 分区 | 176 个 | `node scripts/selftest.mjs --list` | 输出 177 行（含 1 行标题） |
@@ -29,7 +29,7 @@
 | 必需钩子 | 13 个提供方 / 13 个被调钩子 / 32 处调用 / 8 个必需 | `node scripts/check.mjs`（9.3） | 缺注册时 `assertHooksReady()` 启动即抛错 |
 | 门禁牙齿 | 正面基线 10/10 + 人为破坏 20/20 | `node scripts/check-gates.mjs` | 只断言非 0 且命中目标关键字；i18n 探针数按当前覆盖率动态计算 |
 | 方法论纪律 | 13/13（L4） | `node scripts/check-discipline.mjs --strict` | 含文档命令可解析、单文件 ≤60KB/600 行 |
-| i18n 扫描 | 覆盖率 46.81% = 852 / 1,820 / 缺口 1 / UI 硬编码 18（全仓未走入口 967，未字典化 579，UI 已字典待接入 76，阈值 76） | `node scripts/i18n-scan.mjs --check` 或 `--json` | 口径见 [engineering](engineering.md)§4.6：分母是含 CJK 的出现次数，18 只是 967 的 UI 子集；缺口 1 是 `collab.js` 的拼接片段 `' 等 {n} 项'`，非整句文案；阈值 ≥40%、缺口 ≤10、UI 硬编码 ≤20、已字典待接入 ≤76、模板内 =0 |
+| i18n 扫描 | 覆盖率 46.84% = 853 / 1,821 / 缺口 1 / UI 硬编码 18（全仓未走入口 967，未字典化 579，UI 已字典待接入 76，阈值 76） | `node scripts/i18n-scan.mjs --check` 或 `--json` | 口径见 [engineering](engineering.md)§4.6：分母是含 CJK 的出现次数，18 只是 967 的 UI 子集；缺口 1 是 `collab.js` 的拼接片段 `' 等 {n} 项'`，非整句文案；阈值 ≥40%、缺口 ≤10、UI 硬编码 ≤20、已字典待接入 ≤76、模板内 =0 |
 | Node bench（桩） | 以命令为准 | `node scripts/bench.mjs` | Node 桩数据，不能替代浏览器性能结论 |
 
 ## 3. 文档规模
