@@ -339,7 +339,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     [TX_CALIB]:
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     [TX_AFF]:
-      'Affine calibration: click known points and enter real X,Y (2 = rotation + uniform scale, 3+ = full affine); drag red/green controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, right-click/Esc cancels',
+      'Affine: click known points, enter real X,Y (2 = rotation + scale, 3+ = full affine); drag red/green controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, Esc cancels.',
     '参考线': 'Guides',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
@@ -461,9 +461,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Grid estimate; coverage = sampled cells covered by any field of view inside the area',
     '统计口径 v3':'Coverage spec v3', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
     [TX_STATS]:
-      'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors), shared with the stats panel and reports. Legacy v1/v2 reports are not directly comparable.',
+      'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors), shared with stats and reports. Legacy v1/v2 reports are not directly comparable.',
     [TX_LENS]:
-      'Lens: sweep from type fov (default 90°, 10–360°, 360° = omni); range from point phys(m): sector=phys, circle/square=phys/2; markers without phys are excluded; hidden objects/layers are excluded from the denominator.',
+      'Lens: fov from type (default 90°, 10–360°, 360° = omni); range from phys(m): sector=phys, circle/square=phys/2; markers without phys excluded; hidden objects/layers excluded from denominator.',
     '当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。':'No areas to analyze: draw an Area or a closed Polyline first.',
     '视场覆盖率分析':'Field-of-view coverage', '布点优化…':'Placement optimization…', '导出盲区 GeoJSON':'Export blind spots GeoJSON',
     '清除叠加层':'Clear overlay', '布点优化':'Placement optimization',
@@ -523,7 +523,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* D-11：补齐 D-07/D-09 新增存档、导入预览与 UI 文案的英文条目 */
     '底图资产缺失，请重新导入底图':'Base-map asset missing; re-import the base map',
     '图片底图正在解码，请稍后重试':'Image base map is still decoding; try again shortly',
-    [TX_DWG]:'PlotPin does not bundle a DWG engine (no ODA/Aspose licence, no embedded DWG kernel) and never modifies the original file. Save a copy as DXF or PDF in CAD, then choose the converted file:',
+    [TX_DWG]:'PlotPin has no DWG engine (no ODA/Aspose licence) and never modifies the original file. Save a copy as DXF or PDF in CAD, then choose the converted file:',
     '转 DXF':'Convert to DXF',
     'AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；':'In AutoCAD: File → Save As → DXF (ASCII), preferably 2013/2018;',
     '转 PDF':'Convert to PDF',
@@ -989,7 +989,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '本机时钟不晚于删除时间，已拒绝恢复（否则下次同步会被删除盖回）':
       'Local clock is not later than the deletion time; restore refused (the next sync would delete it again)',
     [TX_REST]:
-      'Restore is a new edit (Ctrl+Z to undo); the peer may still show the old version until it syncs. Base-map/photo assets referenced by the old value may already have been reclaimed.',
+      'Restore is a new edit (Ctrl+Z to undo); the peer may still show the old version until sync. Assets referenced by the old value may already be reclaimed.',
     '{n} 个对象':'{n} object(s)',
     '邀请串':'Invite string',
     '字节，超过内置二维码上限':'bytes, exceeding the built-in QR limit of',
@@ -1110,7 +1110,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* 片2 协作安全默认 + 其余整句缺口 */
     '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list is rebuilt from records in real time',
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
-    [TX_PEER]:'The peer connected and sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete/clear objects and floors, change settings. Apply and continue syncing?',
+    [TX_PEER]:'The peer sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete/clear objects and floors, change settings. Apply and continue syncing?',
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
     [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; pages are not merged; scans may lack embedded graphics or use unsupported compression)',
     [TX_PDFST]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
@@ -1130,7 +1130,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    [TX_RELAY]:'Direct connections by default. One server per line: URL | username | credential; STUN needs only URL; separate URLs with commas. Credentials stay in plain text in this browser and never enter invites, messages or project files.',
+    [TX_RELAY]:'Direct by default. One server per line: URL | username | credential; STUN needs only URL; commas separate URLs. Credentials stay in this browser and never enter invites, messages or project files.',
     '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',

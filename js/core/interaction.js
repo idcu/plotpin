@@ -34,6 +34,8 @@ const META={
   select:['↖','select'],pan:['✥','pan'],point:['●','point'],rect:['▭','area'],line:['╱','line'],arc:['◯','circleArc'],text:['T','text'],
   dimension:['⌁','dimension'],'site-node':['⊗','siteNode'],'image-transform':['🖼','imageXform'],guide:['╱','guide'],mirror:['⇋','mirror']
 };
+/* 单键切换工具（画布/文档体聚焦且无修饰键） */
+const TOOL_KEYS={v:'select',p:'point',r:'rect',l:'line',t:'text',d:'dimension',m:'mirror'};
 $('toolRail').innerHTML=GROUPS.map(g=>`<div class="tool-group"><button class="tool-btn" data-group-main="${g.id}"${g.tools[1]?' data-multi':''}></button></div>`).join('')
   +'<button class="tool-btn" id="finishDraftBtn"><span class="ico">✓</span><span class="lbl" data-x="finish"></span></button>';
 /* 立即渲染栏内容：不依赖工程载入/语言初始化成功，避免存储或载入异常时只剩空按钮（看起来像工具栏消失） */
@@ -1487,6 +1489,8 @@ window.addEventListener('keydown',e=>{
     }else reorderSelected(front?1:-1);
     return;
   }
+  const tk=(!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey)?TOOL_KEYS[e.key.toLowerCase()]:null;
+  if(tk){ e.preventDefault(); setTool(tk); return; }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }

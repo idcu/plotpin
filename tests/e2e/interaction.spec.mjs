@@ -601,7 +601,7 @@ test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
 
-test('常用快捷键：Ctrl+A 全选、Ctrl+Shift+V 原位粘贴、Ctrl+0 适应窗口、F2 重命名', async ({ page }) => {
+test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、单键切工具', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -646,6 +646,12 @@ test('常用快捷键：Ctrl+A 全选、Ctrl+Shift+V 原位粘贴、Ctrl+0 适�
   await page.fill('#promptInput', '对象改名');
   await page.locator('#modalFooter button.primary').click();
   await expect.poll(() => page.evaluate(() => state.objects[0].name)).toBe('对象改名');
+
+  /* 单键切换工具：L→折线，V→选择 */
+  await page.keyboard.press('l');
+  await expect.poll(() => page.evaluate(() => currentTool)).toBe('line');
+  await page.keyboard.press('v');
+  await expect.poll(() => page.evaluate(() => currentTool)).toBe('select');
 });
 
 test('Ctrl+] / Ctrl+[ 调整叠放层级：单步与 Shift 置顶/置底', async ({ page }) => {
