@@ -20,10 +20,10 @@ const TX_POLY='折线：逐点单击，双击完成；按住 Shift 画水平/垂
 /* 界面提示与字典键共用同一份字符串：同一句在产物里只存一份（体积预算按原始字节计） */
 const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
 const TX_CALIB='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
-const TX_LOD='交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。';
-const TX_FLOOR='每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。';
-const TX_STATS='统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。';
-const TX_LENS='镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。';
+const TX_LOD='低缩放时按屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示；导出始终带标签。';
+const TX_FLOOR='每层独立设置底图/场地与对象；画布只显示当前楼层；图层/类型共用，工程库与 JSON 保存全部楼层。';
+const TX_STATS='统计与缩放/像素/DPR 无关；面积用解析公式（圆/椭圆/扇形），与统计面板、报告同源。历史 v1/v2 报告不可直接对比。';
+const TX_LENS='镜头口径：张角取类型 fov（默认 90°，10–360°，360° 全向）；距离取点设备 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象/图层不进分母。';
 const TX_DXFIMP='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
 const TX_UNSUP='不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）';
 const TX_MERGE='合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}';
@@ -101,7 +101,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       layersHeading: '图层', newLayerPlaceholder: '新图层名称', addLayer: '新增图层',
       typesHeading: '类型管理', addTypeHeading: '新增自定义类型',
       builtinType: '内置', customType: '自定义', objectsUnit: '个对象',
-      kindLabel: '类别', nameLabel: '名称', colorLabel: '颜色', iconLabel: '图标',
+      kindLabel: '类别', nameLabel: '名称', colorLabel: '颜色', widthLabel: '线宽', iconLabel: '图标',
       scaleShapeLabel: '尺寸图形', iconSizeLabel: '图标大小', addType: '新增类型', importSvg: '导入 SVG 图元…',
       shapeRect: '矩形', shapeCircle: '圆形', shapeEllipse: '椭圆', shapeSector: '扇形', shapeParallelogram: '平行四边形',
       areaNoFill: '仅描边', revCloud: '修订云线',
@@ -194,7 +194,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       layersHeading: 'Layers', newLayerPlaceholder: 'New layer name', addLayer: 'Add layer',
       typesHeading: 'Types', addTypeHeading: 'Add custom type',
       builtinType: 'Built-in', customType: 'Custom', objectsUnit: 'objects',
-      kindLabel: 'Category', nameLabel: 'Name', colorLabel: 'Color', iconLabel: 'Icon',
+      kindLabel: 'Category', nameLabel: 'Name', colorLabel: 'Color', widthLabel: 'Line width', iconLabel: 'Icon',
       scaleShapeLabel: 'Sized shape', iconSizeLabel: 'Icon size', addType: 'Add type', importSvg: 'Import SVG symbol…',
       shapeRect: 'Rectangle', shapeCircle: 'Circle', shapeEllipse: 'Ellipse', shapeSector: 'Sector', shapeParallelogram: 'Parallelogram',
       areaNoFill: 'Outline only', revCloud: 'Revision cloud',
@@ -370,7 +370,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
     '低缩放标签':'Labels at low zoom',
     [TX_LOD]:
-      'At low zoom the interactive view hides name/area/segment labels by on-screen object size, and point-symbol labels by density; selected objects always show every label. Exports are unaffected and always include labels.',
+      'At low zoom, labels hide by on-screen size (points by density); selected objects always show all; exports always include labels.',
     '栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。':
       'Raster image (PNG/JPG/WebP). Calibrate pixels to metres first; affects image objects only.',
     '按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。':
@@ -410,7 +410,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '楼层 / 多底图':'Floors / Base maps', '当前楼层：':'Current floor: ',
     '新增楼层（空白场地）':'Add floor (blank site)',
     [TX_FLOOR]:
-      'Each floor has its own base map/site and objects; the canvas shows only the current floor. Layers and types are shared, and the project library/JSON keep all floors.',
+      'Each floor has its own base/site and objects; the canvas shows only the current floor; layers/types are shared, and the library/JSON keep all floors.',
     '楼层名称':'Floor name',
     '重命名楼层':'Rename floor',
     '楼层已删除':'Floor deleted',
@@ -464,9 +464,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Grid estimate; coverage = sampled cells covered by any field of view inside the area',
     '统计口径 v3':'Coverage spec v3', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
     [TX_STATS]:
-      'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors no longer approximated by sampled polygons), shared with the stats panel and reports. Legacy v1/v2 report values are not directly comparable.',
+      'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors), shared with the stats panel and reports. Legacy v1/v2 reports are not directly comparable.',
     [TX_LENS]:
-      'Lens spec: sweep from type fov (default 90°, clamped 10–360°, 360° = omnidirectional); effective range from point physical size phys(m): sector radius=phys, circle/square=phys/2; markers without phys are excluded. Hidden objects and hidden layers are excluded from the denominator.',
+      'Lens: sweep from type fov (default 90°, 10–360°, 360° = omni); range from point phys(m): sector=phys, circle/square=phys/2; markers without phys are excluded; hidden objects/layers are excluded from the denominator.',
     '当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。':'No areas to analyze: draw an Area or a closed Polyline first.',
     '视场覆盖率分析':'Field-of-view coverage', '布点优化…':'Placement optimization…', '导出盲区 GeoJSON':'Export blind spots GeoJSON',
     '清除叠加层':'Clear overlay', '布点优化':'Placement optimization',

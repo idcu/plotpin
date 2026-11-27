@@ -301,6 +301,13 @@ test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({
   const cols = await page.evaluate(() => [...selectedIds].map(id => state.objects.find(o => o.id === id).style.color));
   expect(cols.length).toBeGreaterThan(0);
   expect(cols.every(c => c === '#ff0000')).toBe(true);
+
+  /* 批量线宽：同一批选中对象写 style.strokeWidth */
+  await page.fill('#batchWidth', '0.35');
+  await page.click('#batchWidthBtn');
+  const widths = await page.evaluate(() => [...selectedIds].map(id => state.objects.find(o => o.id === id).style.strokeWidth));
+  expect(widths.length).toBeGreaterThan(0);
+  expect(widths.every(w => w === 0.35)).toBe(true);
 });
 
 test('批量闭合/反向：折线顶点顺序反转且闭合状态可切换', async ({ page }) => {

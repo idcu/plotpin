@@ -304,14 +304,15 @@ $('batchReverseBtn').onclick=()=>{
   pushHistory(); items.forEach(o=>{ o.points.reverse(); syncFirstPoint(o); });
   commitChange(L('已更新'),items.map(o=>o.id));
 };
-/* 批量颜色：写对象级 style.color（导出与画布同源） */
-$('batchColorBtn').onclick=()=>{
+/* 批量样式：选中可编辑对象统一写对象级 style[key]，一次撤销（颜色/线宽共用） */
+function batchStyle(key,value){
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!items.length) return toast(L('没有可修改的选中对象'),'warn');
-  const c=$('batchColor').value;
-  pushHistory(); items.forEach(o=>o.style.color=c);
+  pushHistory(); items.forEach(o=>o.style[key]=value);
   commitChange(L('已更新'),items.map(o=>o.id));
-};
+}
+$('batchColorBtn').onclick=()=>batchStyle('color',$('batchColor').value);
+$('batchWidthBtn').onclick=()=>batchStyle('strokeWidth',Math.min(20,Math.max(.01,Number($('batchWidth').value)||.1)));
 $('batchDeleteBtn').onclick=deleteSelected;
 /* -------------------- 批量标注显隐（按标识类型勾选） --------------------
    只列出当前选中可编辑对象**适用**的类型（kind/shape 由 annotToggleKeys 判定），不适用的不渲染；
