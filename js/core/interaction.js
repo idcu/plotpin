@@ -1271,6 +1271,18 @@ function deleteSelected(){
     commitChange('已删除对象');
   });
 }
+/** H：隐藏选中的可编辑对象；Shift+H：恢复当前楼层全部隐藏对象。只改可见性，几何不动 */
+function toggleHidden(show){
+  if(!guardWrite(L(show?'显示':'隐藏'))) return;
+  const items=show
+    ? state.objects.filter(o=>o.visible===false&&isEditable(o))
+    : state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)&&o.visible!==false);
+  if(!items.length) return callHook('ui.toast',L(show?'没有隐藏的对象':'没有可修改的选中对象'),'warn');
+  pushHistory();
+  items.forEach(o=>{ o.visible=show; });
+  const msg=show?L('已显示 {n} 个对象',{n:items.length}):L('已隐藏 {n} 个对象',{n:items.length});
+  commitChange(msg, items.map(o=>o.id));
+}
 /** 复制对象列表（Ctrl+D 偏移 1m，Alt+拖动偏移 0）：编号作用域一次建立，返回新 id */
 function cloneObjects(objs,offset){
   const fresh=[];
@@ -1360,6 +1372,7 @@ function helpShortcutRows(){
     ['Tab / Shift+Tab',L(TX_SNAPC)],
     ['F6',L('在顶栏/工具栏/侧栏循环焦点（Tab 用于捕捉）')],
     ['F7 / F9',L('网格显隐 / 网格吸附')],
+    ['H / Shift+H',L('隐藏选中 / 显示全部')],
     [L('空格 + 拖拽'),L('临时平移画布')],
     [L('方向键'),L('移动选中对象（Shift ×10）')],['F',L('适应窗口（显示整张场地）')],
     [L('滚轮 / 右键拖拽 / + / -'),L('缩放 / 平移画布 / 键盘缩放')],
@@ -1531,6 +1544,12 @@ window.addEventListener('keydown',e=>{
     state.settings.snap=!state.settings.snap;
     callHook('ui.toast',L('网格吸附')+(state.settings.snap?' ✓':' ✕'));
     scheduleSave(); return;
+  }
+  /* H / Shift+H 对象显隐：纯可见性，不改几何；锁定对象与锁定图层不参与 */
+  if(e.key.toLowerCase()==='h'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    e.preventDefault();
+    e.shiftKey?toggleHidden(true):toggleHidden(false);
+    return;
   }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }

@@ -698,6 +698,30 @@ test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、F8
   await expect.poll(() => page.evaluate(() => currentTool)).toBe('select');
 });
 
+test('H 隐藏选中 / Shift+H 显示全部：只改可见性且可一步撤销', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'point');
+  await page.mouse.click(cx - 80, cy);
+  await page.mouse.click(cx + 80, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  await clickTool(page, 'select');
+  await page.evaluate(() => { selectedIds = new Set([state.objects[0].id]); refreshSelectionUI(); });
+  await page.locator('#canvas').focus();
+
+  await page.keyboard.press('h');
+  await expect.poll(() => page.evaluate(() => state.objects.map(o => o.visible))).toEqual([false, true]);
+  /* 再次 H：选中对象已隐藏，不应产生新的可见性变化 */
+  await page.keyboard.press('h');
+  await expect.poll(() => page.evaluate(() => state.objects.map(o => o.visible))).toEqual([false, true]);
+
+  await page.keyboard.press('Shift+h');
+  await expect.poll(() => page.evaluate(() => state.objects.every(o => o.visible))).toBe(true);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects.map(o => o.visible))).toEqual([false, true]);
+});
+
 test('Ctrl+] / Ctrl+[ 调整叠放层级：单步与 Shift 置顶/置底', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();

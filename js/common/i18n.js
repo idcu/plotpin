@@ -219,7 +219,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
       ariaTypeColor: 'Type color', ariaTypeRename: 'Rename type', ariaTypeDelete: 'Delete type',
       ariaBatchLayer: 'Move selection to layer', ariaBatchDx: 'X offset', ariaBatchDy: 'Y offset', ariaBatchAngle: 'Rotation angle',
       typeLabel: 'Type', shapeLabel: 'Shape', closedArea: 'Closed area', pointSize: 'Marker size',
-      hintText: 'Wheel zoom; right/middle/Space-drag pan; Delete; Tab snaps; ? help; drop files to import',
+      hintText: 'Wheel zoom; right/middle/Space-drag pan; Delete; Tab snaps; ? help; drop to import',
       allObjects: 'All objects', allLayers: 'All layers',
       filterPoint: 'Point', filterArea: 'Rect/Area', filterLine: 'Polyline', filterArc: 'Arc', filterText: 'Text', filterDimension: 'Dimension',
       thId: 'ID', thName: 'Name', thType: 'Type', thLayer: 'Layer', thParam: 'Params', thVisible: 'Visible', thLock: 'Lock',
@@ -251,7 +251,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
       symbolPhysLabel: 'Real size (m)', symbolPhysTitle: '0 = fixed icon; enter width (m) for true scale', symbolPhysAria: 'Real symbol width (m)',
       symbolPlaceHint: 'Click a symbol, then the canvas; adjust rotation/size in Properties.',
       symbolCustomHeading: 'Custom symbols', symbolImportSvg: 'Import SVG…',
-      symbolImportSvgTitle: 'Import SVG with sanitization (no scripts/events/links; size-limited)',
+      symbolImportSvgTitle: 'Import SVG (sanitized: no scripts/events/links; size-limited)',
       symbolExportJson: 'Export JSON', symbolExportJsonTitle: "Export this project's custom symbols only",
       symbolImportJson: 'Import JSON', symbolImportJsonTitle: 'Import custom symbols into this project only',
       symbolCustomHint: 'Custom symbols apply to this project only.',
@@ -306,28 +306,28 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '几何检查':'Geometry check', '本地存储':'Local storage', '统计中…':'Calculating…',
     '浏览器配额':'Browser quota', '使用率':'Usage', '点坐标':'Point coords', '基点坐标':'Base coords',
     '半径':'Radius', '边长':'Side length', '顶点坐标':'Vertex coords', '节点坐标':'Node coords', '段长':'Segment length',
-    [TX_SEGMIN]:'Hide segment-length labels shorter than this many pixels to avoid clutter',
-    '自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）':'Snap endpoints, midpoints, centers, feet, intersections (Tab cycles)',
-    [TX_POLARHINT]:'While picking points, snap to multiples of the polar angle (reference parallel/perpendicular and spacing constraints stay available)',
+    [TX_SEGMIN]:'Hide segment labels under this many pixels',
+    '自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）':'Snap endpoints/midpoints/centers/feet/intersections (Tab cycles)',
+    [TX_POLARHINT]:'While picking points, snap to polar-angle multiples (parallel/perpendicular and spacing constraints stay available)',
     '极轴追踪的角度步长':'Polar tracking angle step',
     '拖拽调整节点顺序':'Drag to reorder nodes',
     [TX_PARA]:
-      'Base is the lower-left corner and rotation center; parallelogram area = base × height, skew changes only the slanted edge.',
+      'Base = lower-left corner and rotation center; parallelogram area = base × height; skew moves only the slanted edge.',
     [TX_CENTERTIP]:
-      'The circle/ellipse/sector center is the shape base (marked ⊕ on canvas); moving the shape moves the base.',
+      'Circle/ellipse/sector center is the shape base (⊕ on canvas); moving the shape moves the base.',
     [TX_ACOORD]:
-      'World coordinates in metres, may be negative; areas stay true-to-scale. For triangles/polygons use the Polyline tool with Closed.',
+      'World coordinates in metres, may be negative; areas stay true-to-scale. For triangles/polygons use Polyline with Closed.',
     [TX_PTYPE]:
-      'Fixed-screen position marker; for real coverage use a circle/square/sector/bar type under Layers/Types.',
+      'Marker only (fixed screen icon); for real coverage use a circle/square/sector/bar type under Layers/Types.',
     [TX_SEDIT]:
-      'Edit the coordinates/parameters below, or drag handles with the Site nodes tool (metres, may be negative).',
+      'Edit coordinates/parameters below, or drag handles with Site nodes (metres, may be negative).',
     [TX_PROPTIP]:
-      'Tip: click an object to edit its properties here; drag a box to select multiple; Delete removes; Ctrl+Z undoes.',
+      'Tip: click an object to edit properties; drag a box to select multiple; Delete removes; Ctrl+Z undoes.',
     [TX_IMGSCALE]:
-      'The image maps pixels to world coordinates via the scale; use Scale calibration or Affine calibration for precise alignment.',
+      'The image maps pixels to world coordinates via scale; use Scale or Affine calibration for precise alignment.',
     '未发现明显的零尺寸、自相交或越界问题。':'No zero-size, self-intersection or out-of-bounds issues.',
     [TX_STORAGE2]:
-      'Projects and base maps live in IndexedDB (content-hashed); settings live in localStorage.',
+      'Projects/base maps: IndexedDB (hashed); settings: localStorage.',
     [TX_STORAGE]:
       'Storage usage is high: remove unused base maps or export a JSON backup and clear site data.',
     '在图上显示':'Show on drawing', '共':'total', '至少':'min', 
@@ -340,7 +340,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '物理尺寸':'physical size', '超过场地长边':'exceeds the site long edge', '超出场地范围':'is outside the site',
     '标注总长':'Total annotation length', '区域总面积':'Total area', '（含闭合边）':'(including closing edge)',
     '（外接矩形）':'(bounding box)', '外接':'bounding box',
-    '画布上双击边插入顶点、双击顶点删除':'double-click an edge to insert a vertex, double-click a vertex to delete',
+    '画布上双击边插入顶点、双击顶点删除':'double-click edge to add a vertex, double-click vertex to delete',
     '移除照片':'Remove photo', '设备照片':'Device photo', '顶栏还有全局点大小':'top bar also has a global marker size',
     '占用':'Usage', 'IndexedDB 含底图':'IndexedDB incl. base maps', 'localStorage':'localStorage',
     '点':'pts', '条边':'edges', '扇区':'sector', '旋转':'rotation', '占地':'footprint',
@@ -354,7 +354,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '可在画布上拖节点手柄调整位置':'Drag node handles on canvas to adjust positions',
     '测距链':'Measure chain', '闭合区域':'Closed area', '开放折线':'Open polyline',
     '上传图片底图，或改画矢量场地':'Upload an image base map or switch to a vector site',
-    '仅图片底图需要：指定两点实际距离校准米/像素':'Image base maps: set a known distance between two points to calibrate m/px',
+    '仅图片底图需要：指定两点实际距离校准米/像素':'Image base maps: set a known distance between two points (m/px)',
     [TX_AFFPRE]:'Click known points and enter their real-world coordinates to correct skew and non-uniform scale',
     '该类型按「':'This type renders as “', '」渲染：填 0 为纯位置图标；填':'”: fill 0 for a position-only marker; fill',
     '，张角 ':' with a sweep of ', '°，朝向随朝向角':'°, heading follows the heading angle',
@@ -362,21 +362,21 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '默认图标大小（屏幕倍率）':'Default icon size (screen multiplier)',
     /* 工具提示 */
     [TX_SELTITLE]:
-      'Select: click objects or drag a selection box; drawing/dragging snaps to endpoints, midpoints and centers (toggle in Settings)',
+      'Select: click objects or drag a box; drawing/dragging snaps to endpoints, midpoints and centers (toggle in Settings)',
     '点设备：单击放置（自动捕捉特征点，设置可关）':'Point: click to place (auto-snaps; toggle in Settings)',
     [TX_RECT]:
-      'Area: choose a shape above and drag; Shift makes a square/circle or snaps sectors to 45°; Esc cancels',
+      'Area: choose a shape and drag; Shift = square/circle or 45° sector snap; Esc cancels',
     [TX_POLY]:
-      'Polyline: click point by point, double-click to finish; Shift constrains ortho; right-click/Esc cancels (enable Closed for polygons)',
+      'Polyline: click points, double-click to finish; Shift ortho; right-click/Esc cancels (enable Closed for polygons)',
     [TX_ARCTITLE]:
       'Circle/Arc: click the center, then the radius point (circle) or start/end points (arc); Esc cancels',
     [TX_DIMTITLE]:
-      'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
+      'Dimension: click points, double-click to finish (right-click/Esc cancels); other types follow on-screen prompts',
     '图片变换': 'Image transform',
     [TX_CALIB]:
-      'Scale: click two known points; drag/Delete to adjust, Ctrl+Z to undo, Enter or ✓ to apply',
+      'Scale: click two known points; drag/Delete adjust, Ctrl+Z undo, Enter/✓ apply',
     [TX_AFF]:
-      'Affine: click known points and enter real X,Y (2 = similarity, 3+ = full affine); drag/Delete/Ctrl+Z controls, Enter or ✓ solves, Esc cancels.',
+      'Affine: click known points, enter real X,Y (2 = similarity, 3+ = full); drag/Delete/Ctrl+Z; Enter/✓ solves; Esc cancels.',
     '参考线': 'Guides',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
@@ -393,9 +393,9 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '水平/垂直约束（F8 锁定，Shift 临时）':'Horizontal/vertical constraint (F8 locks, Shift temporary)',
     '正方形 / 正圆 / 45°方位吸附':'Square / circle / 45° bearing snap',
     '自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪':
-      'Snap endpoint □ midpoint △ center ◎ quadrant ◇ perpendicular ⊥ intersection × tangent; dashed = 45° polar/parallel',
+      'Snap endpoint □ midpoint △ center ◎ quadrant ◇ perpendicular ⊥ intersection × tangent; dashed = polar/parallel',
     [TX_SNAPC]:
-      'Tab cycles snap types when the canvas is focused; click the bottom badge to restore Auto',
+      'Tab cycles snap types when canvas focused; click bottom badge for Auto',
     '在顶栏/工具栏/侧栏循环焦点（Tab 用于捕捉）':
       'Cycle focus: top bar/tool rail/sidebar tabs (Tab snaps)',
     '网格显隐 / 网格吸附':'Grid show / grid snap',
@@ -405,21 +405,21 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '单指绘制移动；双指缩放/平移':'One finger draws/moves; pinch zooms, two-finger pans',
     '导入 JSON / DXF / 表格 / 图片':'Import JSON/DXF/tables/images',
     [TX_QUICK]:
-      'Quick start: base map/site + calibrate → pick a tool and click points; double-click/Enter to finish → drag round handle to rotate, square to scale → batch edit in List → export.',
+      'Quick start: base map/site + calibrate → pick a tool, click points; double-click/Enter finish → round handle rotate, square scale → edit in List → export.',
     '显示本帮助':'Show this help', '知道了':'Got it',
     /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
     [TX_GLOSSIMG]:
-      'Raster image (PNG/JPG/WebP); calibrate pixels to metres first; image objects only.',
+      'Raster image (PNG/JPG/WebP); calibrate px→metres; image objects only.',
     [TX_GLOSSSITE]:
       'Metre-based rect/circle/ellipse/sector/polygon; no calibration.',
     [TX_FLOORGLOSS]:
-      'Each floor has its own base map/site and objects; layers, types and archives are shared.',
+      'Floors keep their own base map/site/objects; layers, types, archives shared.',
     [TX_GLOSSSCALE]:
       'Two points and their real distance solve pixel-to-metre scale and rotation; image maps only.',
     [TX_AFFHINT]:
-      'Real X,Y points solve image-to-world; 2 points = similarity, 3+ = full affine.',
+      'Real X,Y solve image-to-world; 2 points = similarity, 3+ = full affine.',
     [TX_GLOSSCOV]:
       'FOV and mounting height projected; counts visible devices and blind spots.',
     'JSON 工程':'JSON project', 'PNG 高清图':'HD PNG', 'SVG 矢量图':'SVG vector',
@@ -437,7 +437,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
       'Site on SITE layer; mm coords stay editable.',
     'DXF（保真：椭圆+圆弧）':'DXF (fidelity: ellipse + arc)',
     [TX_ARC]:
-      'Open projects with arcs in this version or newer; older builds discard arcs and one save loses them for good.',
+      'Open projects with arcs in this version or newer; older builds discard arcs and one save loses them.',
     '全楼层台账；= + - @ 开头加单引号防公式注入。':
       'All-floor ledger; leading apostrophe guards = + - @ formulas.',
     '同 CSV，制表符分隔；同一公式防护。':
@@ -457,11 +457,11 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '点击楼层行可切换；汇总覆盖全部楼层。':'Click a floor row to switch; totals cover all floors.',
     '工程库（保存在本机浏览器）':'Project library (stored in this browser)',
     [TX_LIBEMPTY]:
-      'The project library is empty. Save the current drawing to the library first, then switch between projects anytime.',
+      'The library is empty. Save the current drawing to it first, then switch projects anytime.',
     '当前工程':'Current project', '当前草稿：':'Current draft: ', '已绑定工程库':'linked to the library',
     '把当前图纸另存到工程库':'Save current drawing to library', '合并他人工程…':'Merge another project…',
     [TX_AUTOSAVE]:
-      'Auto-save: once linked, every change syncs to the library; deleting a project does not affect exported JSON files.',
+      'Auto-save: once linked, every change syncs to the library; deleting a project keeps exported JSON files.',
     '另存到工程库':'Save to library', '未命名图纸工程':'Untitled drawing project', '已存入工程库':'Saved to the library',
     '冲突':'conflicts',
     '新增':'added', '更新':'updated', '新增楼层':'floors added',
@@ -490,7 +490,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '全部行均可导入。':'All rows can be imported.',
     '项更新、':'updates, ', '项新增。':'new objects.',
     [TX_TAUTO]:
-      'Length/area/node count are computed from geometry; inconsistent imported values only warn; geometry wins.',
+      'Length/area/node count are computed from geometry; imported mismatches only warn; geometry wins.',
     '建议导入前先导出 JSON 备份。':'Export a JSON backup before importing.',
     '取消':'Cancel', '合并导入':'Merge import',
     '参与统计的点设备：':'Cameras counted: ', '（含物理尺寸的圆/球机、扇形/摄像头、方形覆盖）':' (physical circles/dome cameras, sector/cameras, square coverage)',
@@ -498,12 +498,12 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '区域/闭合折线：':'Areas/closed polylines: ', '合计覆盖':'total coverage ',
     '覆盖面积':'Covered area', '盲区':'Blind area', '总面积':'Total area', '覆盖':'Coverage ',
     '已覆盖':'Covered', '栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比':
-      'Grid estimate; coverage = sampled cells covered by any field of view inside the area',
+      'Grid estimate; coverage = sampled cells covered by any FOV in the area',
     '统计口径 v3':'Coverage spec v3', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
     [TX_STATS]:
-      'Independent of zoom/pixels/DPR; areas use analytic formulas, shared with reports. Legacy v1/v2 reports are not directly comparable.',
+      'Independent of zoom/pixels/DPR; areas are analytic, shared with reports. Legacy v1/v2 reports are not comparable.',
     [TX_LENS]:
-      'Lens: fov (default 90°, 10–360°); range from phys(m): sector=phys, circle/square=phys/2; missing phys excluded; hidden objects/layers excluded from denominator.',
+      'Lens: fov 90° (10–360°); range from phys(m): sector=phys, circle/square=phys/2; no phys or hidden excluded.',
     [TX_NOAREA]:'No areas to analyze: draw an Area or a closed Polyline first.',
     '视场覆盖率分析':'Field-of-view coverage', '布点优化…':'Placement optimization…', '导出盲区 GeoJSON':'Export blind spots GeoJSON',
     '清除叠加层':'Clear overlay', '布点优化':'Placement optimization',
@@ -511,12 +511,12 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '没有可用于布点的区域：请先绘制区域或闭合折线':'No areas for placement: draw an area or closed polyline first',
     '当前覆盖':'Current coverage', '预计':'estimated', '目标':'target', '已达标':'target reached', '仍未达标':'target not reached',
     '视场半径':'FOV radius', '张角':'sweep', '仅在「区域/闭合折线」内统计；建议点位可位于场地边界外（立杆/壁挂）':
-      'Counted only inside areas/closed polylines; suggested positions may lie outside the site (pole/wall mount)',
+      'Counted only in areas/closed polylines; suggested positions may fall outside the site (pole/wall mount)',
     '建议位置 X, Y (m)':'Suggested X, Y (m)', '朝向':'Heading', '新增覆盖':'New coverage', '累计覆盖':'Cumulative coverage',
     '当前已达标，无需新增点位。':'Target already reached; no new cameras needed.',
     '布点优化（贪心覆盖最大化）':'Placement optimization (greedy coverage)',
     [TX_NEWWARN]:
-      'New project clears the current project. The auto-saved draft will be overwritten; export JSON or save to the library first?',
+      'New project clears the current one; the auto-saved draft will be overwritten. Export JSON or save to library first?',
     '已清空当前楼层':'Current floor cleared',
     '添加文字':'Add text', '文字内容':'Text content', '标注文字':'Annotation text', '已添加文字':'Text added',
     '扇形场地角度':'Sector site angles', '起始角, 张角（度，用逗号分隔），例如 0,90':'start angle, sweep (deg, comma-separated), e.g. 0,90',
@@ -527,6 +527,9 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '已记录 1 个点，继续点击下一已知点':'Recorded 1 point; click the next known point',
     /* 常用操作反馈（toast 自动按整句匹配翻译） */
     '已撤销':'Undone', '已重做':'Redone', '已删除对象':'Objects deleted', '已复制对象':'Objects duplicated',
+    '隐藏选中 / 显示全部':'Hide selection / show all',
+    '已隐藏 {n} 个对象':'Hid {n} objects', '已显示 {n} 个对象':'Restored {n} objects',
+    '没有隐藏的对象':'No hidden objects',
     /* 核心层默认名与快照差异字段（CORE-P2-16） */
     '默认图层':'Default layer', '未命名工程':'Untitled project', '自定义类型':'Custom type', ' 副本':' copy',
     '对象类别':'Object kind', '可见':'Visible', '宽':'Width', '高':'Height', '属性':'Properties', '样式':'Style',
@@ -539,7 +542,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '上对齐':'Align top', '垂直居中':'Center vertically', '下对齐':'Align bottom',
     '水平分布':'Distribute horizontally', '垂直分布':'Distribute vertically',
     [TX_ALIGNTIP]:
-      'Aligns by object bounding boxes; distribution keeps the first and last objects fixed and spaces the rest evenly.',
+      'Aligns by object bounding boxes; distribution keeps the first/last objects fixed and spaces the rest evenly.',
     '至少选择两个对象':'Select at least two objects', '至少选择三个对象':'Select at least three objects',
     '编号 / 层级':'Numbering / z-order', '编号前缀':'Number prefix', '起始序号':'Start number', '步长':'Step',
     '批量编号':'Renumber selected', '置顶':'Bring to front', '置底':'Send to back',
@@ -552,7 +555,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     [TX_NOEDIT]:'No editable selection', '没有可移动的选中对象':'No movable selection',
     '已新建工程':'New project created', '工程已导入':'Project imported', '设置已保存':'Settings saved',
     '已插入节点':'Node inserted', '已删除节点':'Node deleted',
-    [TX_RSMALL]:'Radius too small (under 0.5 m); enter it in the Base/Site dialog',
+    [TX_RSMALL]:'Radius too small (<0.5 m); enter it in the Base/Site dialog',
     '多边形场地至少需要 3 个顶点':'A polygon site needs at least 3 vertices',
     '仿射校准仅适用于图片底图':'Affine calibration applies to image base maps only',
     '请先导入图片底图':'Import an image base map first', '已完成仿射校准':'Affine calibration complete',
@@ -563,32 +566,32 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     /* D-11：补齐 D-07/D-09 新增存档、导入预览与 UI 文案的英文条目 */
     '底图资产缺失，请重新导入底图':'Base-map asset missing; re-import the base map',
     '图片底图正在解码，请稍后重试':'Image base map is still decoding; try again shortly',
-    [TX_DWG]:'PlotPin has no DWG engine and never modifies the original file. Save a copy as DXF or PDF in CAD, then import it:',
+    [TX_DWG]:'PlotPin has no DWG engine and never modifies originals. Save a copy as DXF or PDF in CAD, then import:',
     '转 DXF':'Convert to DXF',
-    [TX_DXFSAVE]:'In AutoCAD: File → Save As → DXF (ASCII), preferably 2013/2018;',
+    [TX_DXFSAVE]:'In AutoCAD: File → Save As → DXF (ASCII), prefer 2013/2018;',
     '转 PDF':'Convert to PDF',
-    [TX_PDFSAVE]:'In AutoCAD: Print/Export → PDF; import it as a vector drawing or base map;',
-    [TX_DXFLOSS]:'Dynamic blocks, external references, proxy objects and dimension styles may be lost in conversion; check the fidelity notices after import.',
+    [TX_PDFSAVE]:'In AutoCAD: Print/Export → PDF; import as vector drawing or base map;',
+    [TX_DXFLOSS]:'Dynamic blocks, xrefs, proxy objects and dimension styles may be lost; check fidelity notices after import.',
     [TX_LOCALCONV]:'Conversion happens locally; PlotPin only reads DXF/PDF, and the single-file promise is unchanged.',
     '转 DXF 后选择文件':'Choose the converted DXF file',
     '转 PDF 后选择文件':'Choose the converted PDF file',
     'DXF 中暂未找到可导入实体；文件含未落地类型：':'No importable entities; this DXF has unsupported types:',
     '按文件（未声明，按米处理）':'By file (undeclared; treat as metres)',
-    [TX_IMPORTFIRST]:'Check version, units and fidelity first, then choose the target; a failed import rolls back the whole batch.',
+    [TX_IMPORTFIRST]:'Check version, units and fidelity first, then choose the target; a failed import rolls back the batch.',
     '单位确认':'Unit confirmation',
     '落点':'Target',
     '可编辑对象（按原图层）':'Editable objects (keep original layers)',
     '只读参考层（新建层并锁定）':'Read-only reference layer (new layer, locked)',
-    [TX_REF]:'The reference layer is locked after import; unlock it in the layer manager to edit. DXF styles are not mapped; geometry and layers are authoritative.',
+    [TX_REF]:'Reference layers stay locked after import; unlock in the layer manager. DXF styles unmapped; geometry/layers win.',
     '导入':'Import',
     'DXF 中没有可导入实体':'No importable entities in this DXF',
     '提示：该 DXF 含 ':'Note: this DXF contains ',
     'DXF 导入失败（已回滚）：':'DXF import failed (rolled back): ',
-    [TX_BADROWS]:'Invalid rows found; the batch import is cancelled. Fix and re-import; existing objects are untouched.',
-    [TX_TABLEOPS]:'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
+    [TX_BADROWS]:'Invalid rows found; the whole import is cancelled. Fix and re-import; existing objects are untouched.',
+    [TX_TABLEOPS]:'Update by ID / batch-replace via “Match…” / add rows without IDs:',
     '个对象替换（':' objects replaced (',
     '行条件）、':' row conditions), ',
-    [TX_TIMP]:'Updatable: name, type, layer, coords/angle/size/shape/closed/nodes, annotation, visibility, lock, note. Replace rows change properties only; match columns narrow scope; Floor scopes all rows.',
+    [TX_TIMP]:'Edit name, type, layer, geometry, annotation, visibility, lock, note; Replace changes props only; match/Floor narrow scope.',
     '表格导入失败（已回滚）：':'Table import failed (rolled back): ',
     '该型号在多厂商重名，请填写厂商后计价':'Model duplicated across vendors; fill vendor before pricing.',
     '定位失败：无法切换到目标楼层':'Locate failed: cannot switch to the target floor',
@@ -678,7 +681,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '页范围格式如 1-3,5':'Page range format e.g. 1-3,5',
     '没有有效页码':'No valid page number',
     '所选页没有可导入的图形':'The selected pages contain no importable shapes',
-    [TX_SDRAG]:'Drag canvas handles to adjust the site, or enter exact coordinates/parameters (m, may be negative); site and image base can coexist.'
+    [TX_SDRAG]:'Drag handles to adjust the site, or enter exact coordinates (m, negative allowed); site and image base can coexist.'
   };
 
   /* 插值模板：中文整句（含 {占位}）→ 英文整句。调用方只传数据，不再拼接句子；
@@ -718,7 +721,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '保留圆弧（ARC {n} 条）：写入圆弧对象；旧版 PlotPin 打开该工程会丢弃这些圆弧':
       'Keep arcs ({n} ARC) as objects; older versions drop them',
     [TX_ARCIMP]:
-      'Leave unchecked to import as 24-segment polylines (same as before). Arcs are stroke-only and excluded from area/coverage.',
+      'Unchecked: import as 24-segment polylines (as before). Arcs are stroke-only, excluded from area/coverage.',
     'PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}':
       'PDF: {line} lines / {area} areas / {text} texts{notes}',
     '表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项':
@@ -730,7 +733,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '多楼层 PDF 已导出：{floors} 层 / {pages} 页': 'Multi-floor PDF exported: {floors} floors / {pages} pages',
     'PDF 生成失败：{msg}': 'PDF generation failed: {msg}',
     [TX_UNSUP]:
-      'Unsupported file type: .{ext} (supported: JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)',
+      'Unsupported file type: .{ext} (JSON project / DXF / PDF / CSV·TSV·XLSX tables / base-map images)',
     /* 「前缀：+ 动态值」家族：模板化后不再拼句子，英文整句可命中字典 */
     '发送失败：{msg}': 'Send failed: {msg}',
     '已连接对端：{name}': 'Peer connected: {name}',
@@ -775,7 +778,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '已同步：{detail}': 'Synced: {detail}',
     '已同步：{detail} · 可按 Ctrl+Z 回滚': 'Synced: {detail} · Ctrl+Z to roll back',
     [TX_MERGE]:
-      'Merge complete: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{extra}{conflict}',
+      'Merged: {added} added · {updated} updated · {deleted} deleted · {floorsAdded} floors added{extra}{conflict}',
     '；冲突 {n} 项按较新版本保留': '; {n} conflicts kept by the newer version',
     '配置未采纳 {n} 项（本地优先）': '{n} config changes not applied (local wins)',
     '配置已补缺 {n} 项': '{n} config items filled from peer',
@@ -786,10 +789,10 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '生成快照失败：{msg}': 'Snapshot creation failed: {msg}',
     '快照操作失败：{msg}': 'Snapshot operation failed: {msg}',
     '删除快照「{name}」？只删除该版本记录，不影响当前工程与其它快照。':
-      'Delete snapshot "{name}"? Only this record; project & snapshots stay.',
+      'Delete snapshot "{name}"? Only this record; project & others stay.',
     '快照已生成：{n} 个对象 · {size} · {ms}ms': 'Snapshot created: {n} objects · {size} · {ms}ms',
     [TX_SNAP]:
-      'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack (Ctrl+Z to revert); the rollback is saved immediately.',
+      'Roll back to snapshot "{name}"? Unsaved changes go to undo (Ctrl+Z); rollback saves immediately.',
     '已回滚到快照：{time}': 'Rolled back to snapshot: {time}',
     '仿射校准 · 第 {n} 点': 'Affine calibration · point {n}',
     '该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ({x}, {y})':
@@ -799,7 +802,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '删除失败：{msg}': 'Delete failed: {msg}',
     '报价导出失败：{msg}': 'Quote export failed: {msg}',
     '报价表已导出；{n} 个型号跨厂商重名未计价（请填厂商）':
-      'Quote exported; {n} duplicate-name models not priced (fill vendor).',
+      'Quote exported; {n} duplicate-name models unpriced (fill vendor)',
     '鼠标：{x}, {y} {unit}{osnap}': 'Cursor: {x}, {y} {unit}{osnap}',
     '◈ 捕捉：{label} ✕': '◈ Snap: {label} ✕',
     '新增于 {floor}': 'Added on {floor}',
@@ -826,12 +829,12 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     /* 片2 协作安全默认 / 导入与图层类型的整句缺口 */
     '已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表': 'Skipped {n} sheets >50,000 rows; only usable sheets imported.',
     [TX_LDEL]:
-      'Layer "{layer}" is used by {count} objects on {floors} floors; they will move to "{target}". Continue?',
+      'Layer "{layer}" is used by {count} objects on {floors} floors; they move to "{target}". Continue?',
     [TX_TDEL]:
       'Type "{type}" is used by {count} objects on {floors} floors; they will move to "{target}". Continue?',
     /* M1 多页 PDF 导入（含占位） */
     '检测到多页 PDF（共 {n} 页）。默认只导入第 1 页；选择页范围才会走多页导入。':
-      'Multi-page PDF ({n} pages). Page 1 only by default; choose a range.',
+      'Multi-page PDF ({n} pages). Page 1 default; choose a range.',
     '页码必须在 1–{n} 内，且起始页不大于结束页':
       'Page numbers must be 1–{n}, & start must not exceed end',
     '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
@@ -853,13 +856,13 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
   const MORE = {
     '请先导入图片底图':'Import a base image first',
     '重新载入':'Reload', '仍以本页为准':'Keep this tab',
-    '另一标签页可能正在编辑，仍以本页为准会覆盖对方最近的修改。':'Another tab may be editing; keeping this tab overwrites its changes.',
+    '另一标签页可能正在编辑，仍以本页为准会覆盖对方最近的修改。':'Another tab editing; this tab overwrites its changes.',
     '另一标签页正在编辑，已暂停自动保存':'Another tab is editing this project; autosave paused',
     '工程标识不一致，已按工程库记录修正':'Project ID mismatch; corrected to the project library record',
     '资产回收已跳过：{msg}，未删除任何文件':'Asset cleanup skipped: {msg}; no files were deleted',
     '已忽略旧工程同步快照':'Ignored a sync snapshot from a previous project',
     '已忽略其他工程的同步快照':'Ignored a sync snapshot from another project',
-    '仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）':'Direct networks only (same LAN); across NAT usually fails (no TURN).',
+    '仅限可直连网络（同一局域网/可直连）；跨 NAT 通常不可用（未配置 TURN）':'Direct networks only (same LAN); NAT usually fails (no TURN)',
     '已连接（未绑定工程，业务消息被忽略）':'Connected (no project bound; business messages are ignored)',
     '文字 {n} 条无法解码，已跳过':'Skipped {n} text run(s) that could not be decoded',
     '已跳过 {n} 个非法绘制操作':'Skipped {n} invalid drawing operation(s)',
@@ -874,7 +877,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '图纸比例与 DPI 必须为正数':'Drawing scale & DPI must be positive numbers',
     '将覆盖当前标定：1 px = {old} m → {mpp} m（1:{s} @ {d}dpi）。确定应用？':'Overwrite calibration: 1 px = {old} m → {mpp} m (1:{s} @ {d}dpi)?',
     '图纸比例已应用':'Drawing scale applied',
-    [TX_DSCALE]:'Drawing scale 1:{a}{more} detected (hint only; calibration is unchanged)',
+    [TX_DSCALE]:'Drawing scale 1:{a}{more} detected (hint only; calibration unchanged)',
     '、1:{b}':', 1:{b}',
     '水平像素':'Horizontal pixels', '水平张角 (°)':'Horizontal FOV (°)', '水平张角':'Horizontal FOV',
     '未填':'Not set', '侦测':'Detect', '观察':'Observe', '识别':'Recognize', '辨认':'Identify',
@@ -896,10 +899,10 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '请填写类型名称':'Enter a type name', '已新增类型':'Type added', '已删除类型':'Type deleted',
     '工程已导入':'Project imported',
     'XLSX 中没有可导入的工作表':'The XLSX has no importable worksheet',
-    'DXF 中未找到支持的实体（线/多段线/圆/弧/椭圆/样条/块参照/点/文字）':'No supported DXF entities (LINE/polyline/circle/arc/ellipse/spline/block/point/text)',
+    'DXF 中未找到支持的实体（线/多段线/圆/弧/椭圆/样条/块参照/点/文字）':'No supported DXF entities (LINE/polyline/circle/arc/block/point/text)',
     '请选择图片文件（PNG/JPG/WebP/BMP/GIF/SVG）':'Choose an image file (PNG/JPG/WebP/BMP/GIF/SVG)',
     '底图已导入':'Base map imported',
-    '浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存':'Browser storage unavailable; base map lasts this session—save a JSON project.',
+    '浏览器本地存储不可用，底图仅本次会话有效，请改用 JSON 工程保存':'Browser storage unavailable; base map lasts this session—save JSON project.',
     '当前没有可见的点设备':'No visible point devices', '请先执行「覆盖率分析」':'Run Coverage analysis first',
     '当前没有盲区可导出':'No blind spots to export', 'JSON 工程已导出（含底图与设备照片）':'JSON project exported (with base map & device photos)',
     'XLSX 已导出（可再次导入更新对象属性）':'XLSX exported (re-import to update object properties)',
@@ -912,7 +915,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '◈ 捕捉：':'◈ Snap: ', '◈ 捕捉：自动':'◈ Snap: Auto',
     '设备标签':'device labels', '设备二维码标签':'Device QR labels', '台':'units', '图纸工程':'Drawing project',
     [TX_QR]:
-      'Scan to get PLOTPIN:ID; search this ID to locate the device. Generated offline by PlotPin, no external resources.',
+      'Scan for PLOTPIN:ID; search the ID to locate the device. Generated offline, no external resources.',
     '图纸标注报告':'Drawing annotation report', '生成时间：':'Generated: ', '统计摘要':'Summary',
     '统计摘要（全部楼层）':'Summary (all floors)', '正在生成多楼层报告…':'Generating multi-floor report…',
     '正在生成多楼层 PDF…':'Generating multi-floor PDF…', '报告生成失败：':'Report generation failed: ',
@@ -920,7 +923,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '对象总数：':'Total objects: ', '点设备：':'Points: ', '区域：':'Areas: ', '折线：':'Polylines: ',
     '几何检查：':'Geometry check: ', '项提示':'warnings', '未发现明显问题':'No obvious issues',
     '对象清单':'Object list', '清单超过 180 行，已在打印版截断；完整数据请导出 JSON/CSV。':
-      'The list exceeds 180 rows & is truncated in print; export JSON/CSV for the full data.',
+      'List >180 rows truncated in print; export JSON/CSV for all data.',
     '第':'page ', '页':'', '对象类型':'Object type', '业务类型':'Business type', '参数':'Params', '长度':'Length',
     /* 停车规划 */
     '停车规划':'Parking planner', '当前场地：':'Current site: ', '可排布':'Layout ',
@@ -958,9 +961,9 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '已复制':'Copied',
     '还没有可复制的信令':'No signal to copy yet', '复制失败，请手动选择文本':'Copy failed; select the text manually',
     '底图图片与设备照片不通过实时通道传输；完整同步请用工程库合并或 JSON 导出。':
-      'Base maps/photos not sent live; use library merge or JSON export for full sync.',
+      'Base maps/photos not live; use library merge or JSON export to sync.',
     '尚未连接':'Not connected', '协作消息过大，已跳过（请用工程库合并或 JSON 交换）':
-      'Collaboration message too large & skipped (use project-library merge or JSON exchange)',
+      'Collab message too large, skipped (use library merge or JSON)',
     /* 实时协作 B-06：邀请串、连接状态、冲突回滚、消息层护栏 */
     '同一浏览器多标签页即时同步；跨设备可用 WebRTC 邀请串手动信令，无需服务器。':
       'Instant tab sync; cross-device via manual WebRTC invites, no server.',
@@ -995,11 +998,11 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '收到无法识别的楼层同步消息':'Received an unrecognized floor sync message',
     /* N-16：断线待发队列与自动重连 */
     '离线待发快照超过 {n} KB，未写入本地队列（仍在内存，重连后补发）':
-      'Offline draft >{n} KB not queued (kept in memory; sent after reconnect)',
+      'Offline draft >{n} KB not queued (in memory; sent later)',
     '离线待发队列写入失败：{msg}':'Failed to write the offline pending queue: {msg}',
     '{s} 秒后自动重连（第 {n} 次）':'Reconnecting automatically in {s}s (attempt {n})',
     '跨设备连接已断开：请重新交换邀请串（WebRTC 无信令通道，无法自动重连）':
-      'Cross-device lost: re-exchange invites (WebRTC has no signaling; no auto-reconnect).',
+      'Cross-device lost: re-exchange invites (no signaling/reconnect).',
     /* N-17：冲突可见性与跨工程隔离 */
     '冲突 {n} 条（保留较新值）':'{n} conflict(s) (newer value kept)',
     '已保留较新值':'newer value kept',
@@ -1029,7 +1032,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '本机时钟不晚于删除时间，已拒绝恢复（否则下次同步会被删除盖回）':
       'Local clock not later than deletion; restore refused (next sync deletes it).',
     [TX_REST]:
-      'Restore is a new edit (Ctrl+Z to undo); the peer may still show the old version; old base maps/photos may already be reclaimed.',
+      'Restore is a new edit (Ctrl+Z); the peer may show the old version until applied; old base maps may be reclaimed.',
     '{n} 个对象':'{n} object(s)',
     '邀请串':'Invite string',
     '字节，超过内置二维码上限':'bytes, exceeding the built-in QR limit of',
@@ -1053,20 +1056,20 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '绘制图框边框':'Draw frame border', '绘制比例尺':'Draw scale bar',
     '绘制图例（按可见对象类型/图层）':'Draw legend (visible types / layers)',
     [TX_TB]:
-      'Off by default; when off exports match the previous version. Empty date = today, empty scale = auto 1:N.',
+      'Off by default (exports unchanged). Empty date = today; empty scale = auto 1:N.',
     '图框模板已保存':'Title block saved',
     '工程名':'Project name', '图号':'Drawing no.', '比例':'Scale', '日期':'Date', '版本':'Version',
     '设计':'Designer', '审核':'Reviewer', '单位':'Company', '图例':'Legend',
     '落点 只读参考层（已锁定）':'Imported to a read-only reference layer (locked)',
     /* 校准 / 场地 / 目录 / 报价等界面短句（B-14 补齐缺口） */
     '已取消比例尺校准':'Scale calibration cancelled',
-    '已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点':'Two control points set: drag to adjust, Enter to apply, Delete to remove.',
+    '已有 2 个校准点：拖动调整，Enter 应用，Delete 删除选中点':'Two control points set: drag, Enter applies, Delete removes.',
     '图片已变换':'Image transformed',
-    [TX_SSMALL]:'Site too small (< 0.5 m); enter dimensions in the base-map dialog',
+    [TX_SSMALL]:'Site too small (<0.5 m); enter dimensions in the base-map dialog',
     '比例尺校准仅适用于图片底图':'Scale calibration only applies to image base maps',
     '仿射校准至少需要 2 个对应点':'Affine calibration needs at least 2 point pairs',
     'IndexedDB 不可用：已降级为 localStorage 自动保存（容量有限，建议定期导出 JSON）':
-      'IndexedDB unavailable: localStorage autosave (export JSON regularly).',
+      'IndexedDB unavailable: localStorage autosave (export JSON often)',
     '已删除楼层':'Floor deleted',
     '楼层已重命名':'Floor renamed',
     '待保存…':'Saving…', '已保存':'Saved', '已自动保存':'Auto-saved', '请手动导出':'Export manually',
@@ -1079,9 +1082,9 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '删除目录？BOM 降级为名称/数量。':'Delete the catalog? BOMs fall back to name/quantity.',
     '检测到 DWG 文件版本：':'DWG file version detected: ',
     [TX_BADJSON]:
-      'Invalid JSON project (expected a v1 project exported by PlotPin)',
+      'Invalid JSON project (expected v1 export from PlotPin)',
     [TX_BDXF]:
-      'This DXF is binary (AutoCAD Binary DXF) & cannot be parsed in the browser; save it as ASCII DXF in CAD first',
+      'This DXF is binary (AutoCAD Binary DXF) and cannot be parsed in the browser; save it as ASCII DXF first',
     '目录已导出':'Catalog exported',
     '目录已删除':'Catalog deleted',
     '目录数据损坏，已忽略：{msg}':'Catalog data is corrupt & was ignored: {msg}',
@@ -1150,10 +1153,10 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     /* 片2 协作安全默认 + 其余整句缺口 */
     '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list rebuilds from records',
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: peer has full edit rights (overwrite, delete, clear, settings).',
-    [TX_PEER]:'The peer sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete objects/floors, change settings. Apply?',
+    [TX_PEER]:'Peer sent a project snapshot. Confirming grants full edit rights: overwrite, delete objects/floors, change settings. Apply?',
     '已拒绝应用对端快照，协作连接已断开':'Peer snapshot declined; collaboration disconnected',
-    [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; scans may lack embedded graphics or use unsupported compression)',
-    [TX_PDFST]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
+    [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; scans may lack graphics or use unsupported compression)',
+    [TX_PDFST]:'Browser storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
     '该类型仍被对象使用，且没有可迁移的同类内置类型':'Type still used; no migratable built-in type of the same kind.',
     '评论':'Comment', '编辑评论':'Edit comment',
     '评论不能为空':'Comment required', '先选中一个对象':'Select one object',
@@ -1170,7 +1173,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    [TX_RELAY]:'Direct by default. One per line: URL | username | credential; STUN needs URL only; commas separate URLs. Credentials stay local & never enter invites/collab/projects.',
+    [TX_RELAY]:'Direct by default. Per line: URL | user | credential; STUN URL only; comma-separated. Credentials stay local; never in invites/collab/projects.',
     '中继配置':'Relay config', '应用配置':'Apply', '清除配置':'Clear config',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',

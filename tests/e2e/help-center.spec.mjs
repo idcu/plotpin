@@ -12,7 +12,7 @@ test('D-03 帮助中心三页签与焦点回归', async ({ page }) => {
   await expect(page.locator('#modalTitle')).toHaveText('帮助中心');
   await expect(page.locator('.help-tab')).toHaveCount(3);
   await expect(page.locator('.help-tab.active')).toHaveText('快捷键');
-  await expect(page.locator('.help-panel:not([hidden]) .help-grid span.kbd')).toHaveCount(21);
+  await expect(page.locator('.help-panel:not([hidden]) .help-grid span.kbd')).toHaveCount(22);
 
   await page.locator('.help-tab[data-help-tab="glossary"]').click();
   await expect(page.locator('.help-tab.active')).toHaveText('概念词典');
