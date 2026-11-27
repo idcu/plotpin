@@ -6,7 +6,7 @@
 
 ## 2026-11-27 · 修复分组工具栏折叠角标激活色与英文标签溢出，+41 B
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`c716ab0`
 - **核心改动**：
   - **折叠角标**：`data-multi` 从 `.tool-group` 容器移到组主按钮 `.tool-btn`，`::after` 改用 `border` 三角并以 `currentColor` 取色，激活态自动变白；修复此前 CSS 选择器 `.tool-group.active::after` 永远不命中（`active` 实际加在按钮上）导致激活组角标仍为灰色的问题。三角位于图标右上，不压标签。
   - **英文标签**：新增 `html[lang=en] .tool-rail .lbl{font-size:8px}`，使 `Polyline` / `Dimension` 收进 42 px 按钮与 58 px 栏宽，不再溢出到画布；中文标签保持 10 px。
