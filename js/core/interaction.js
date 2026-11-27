@@ -94,6 +94,10 @@ function createTextObject(wp,text){
   state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
   return o;
 }
+/** 文字输入弹窗唯一入口（新建文字/双击编辑共用）：title 已翻译，label 固定 */
+function askText(title,value){
+  return showPrompt({title,label:L('文字内容'),value:value===undefined?L('标注文字'):value});
+}
 /** 草稿顶点入列：达到 SHAPE_POINTS_MAX 后拒绝并提示，避免病态点列拖垮包围盒/渲染 */
 function pushDraftPoint(points,wp){
   if(points.length>=APP_LIMITS.SHAPE_POINTS_MAX){
@@ -465,7 +469,7 @@ canvas.addEventListener('pointerdown',e=>{
     const a=draft.points[0]; draft=null; requestRender(); mirrorSelected(a,wp); return;
   }
   if(currentTool==='text'){
-    showPrompt({title:L('添加文字'),label:L('文字内容'),value:L('标注文字')}).then(text=>{
+    askText(L('添加文字')).then(text=>{
       if(text===null) return;
       if(!ensureObjectCapacity(1)) return;
       pushHistory(); createTextObject(wp,text);
@@ -666,7 +670,16 @@ canvas.addEventListener('dblclick',e=>{
     finishDraft();
   }
   else if(currentTool==='site-node') editSiteNodeByDoubleClick(e);
-  else editLineNodeByDoubleClick(e);
+  else{
+    /* 选择工具下双击文字：就地改文字内容；取消/空值/未变化都不落历史 */
+    const o=currentTool==='select'?hitObject(pointerWorld(e),pointerScreen(e)):null;
+    if(o&&o.kind==='text'){
+      if(guardWrite(L('编辑'))) askText(L('文字'),o.text||'').then(v=>{
+        if(!v||v===o.text) return;
+        pushHistory(); o.text=v; commitChange(L('已更新'),[o.id]);
+      });
+    }else editLineNodeByDoubleClick(e);
+  }
 });
 /** 「场地节点」工具下双击多边形场地：点中顶点→删除；点中边→在该处插入顶点（吸附生效） */
 function editSiteNodeByDoubleClick(e){

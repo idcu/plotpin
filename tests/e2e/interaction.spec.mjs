@@ -515,3 +515,31 @@ test('圆/弧工具：圆生成描边圆对象，圆弧生成 arc 对象', async
   expect(arc.sweep).toBeLessThan(360);
   expect(arc.draft).toBe(null);
 });
+
+test('双击文字就地编辑：确认写入并可一步撤销，取消不改原文', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'text');
+  await page.mouse.click(cx, cy);
+  await page.fill('#promptInput', '原始文字');
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+
+  await clickTool(page, 'select');
+  await page.mouse.dblclick(cx, cy);
+  await expect(page.locator('#promptInput')).toHaveValue('原始文字');
+  await page.fill('#promptInput', '改后文字');
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects[0].text)).toBe('改后文字');
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects[0].text)).toBe('原始文字');
+
+  /* 取消不写历史 */
+  const past = await page.evaluate(() => history.past.length);
+  await page.mouse.dblclick(cx, cy);
+  await page.locator('#promptInput').fill('不应写入');
+  await page.locator('#modalFooter button').first().click();
+  await expect.poll(() => page.evaluate(() => state.objects[0].text)).toBe('原始文字');
+  expect(await page.evaluate(() => history.past.length)).toBe(past);
+});

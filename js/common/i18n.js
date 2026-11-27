@@ -600,7 +600,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '厂商/型号缺':'Vendor/model missing',
     '厂商型号重复':'Duplicate vendor/model',
     'SVG 图元':'SVG symbol',
-    ' ？\n能力：':' ?\nCapabilities: ',
     '空格 + 拖拽':'Space + drag',
     '目录根对象非法':'Invalid catalog root object',
     '拖拽文件到画布':'Drag files onto canvas',
@@ -878,7 +877,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '交点':'intersection', '切点':'tangent', '自动':'Auto',
     '（Tab 切换，循环回自动）':' (Tab to cycle back to Auto)',
     '捕捉：自动（全部类型）':'Snap: Auto (all types)', '◈ 捕捉：':'◈ Snap: ', '◈ 捕捉：自动':'◈ Snap: Auto',
-    '镜像：选中后点两点定义轴':'Mirror: select, then click two points for the axis',
     '设备标签':'device labels', '设备二维码标签':'Device QR labels', '台':'units', '图纸工程':'Drawing project',
     [TX_QR]:
       'Scan to get PLOTPIN:ID; search this ID in the project to locate the device. Generated offline by PlotPin with no external resources.',
