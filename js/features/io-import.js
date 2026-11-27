@@ -127,11 +127,11 @@ async function importDwgFile(f){
     '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('检测到 DWG 文件版本：'))+'<b>'+esc(info.label)+'</b></p>'+
     '<p class="hint-text">'+esc(L(TX_DWG))+'</p>'+
     '<ul class="hint-text" style="margin:8px 0 0;padding-left:20px;line-height:1.7">'+
-      '<li><b>'+esc(L('转 DXF'))+'</b>：'+esc(L('AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；'))+'</li>'+
-      '<li><b>'+esc(L('转 PDF'))+'</b>：'+esc(L('AutoCAD「打印/导出 → PDF」，可作矢量图纸或底图导入；'))+'</li>'+
-      '<li>'+esc(L('动态块 / 外部参照 / 代理对象 / 标注样式在转换时可能丢失，导入后请核对保真度提示。'))+'</li>'+
+      '<li><b>'+esc(L('转 DXF'))+'</b>：'+esc(L(TX_DXFSAVE))+'</li>'+
+      '<li><b>'+esc(L('转 PDF'))+'</b>：'+esc(L(TX_PDFSAVE))+'</li>'+
+      '<li>'+esc(L(TX_DXFLOSS))+'</li>'+
     '</ul>'+
-    '<p class="hint-text">'+esc(L('转换在你的本机完成，PlotPin 只读取 DXF/PDF，单文件承诺不变。'))+'</p>',
+    '<p class="hint-text">'+esc(L(TX_LOCALCONV))+'</p>',
     [{text:L('转 DXF 后选择文件'),class:'primary',click:()=>{closeModal();pickConvertedFile('.dxf');}},
      {text:L('转 PDF 后选择文件'),click:()=>{closeModal();pickConvertedFile('.pdf');}},
      {text:L('取消'),click:closeModal}]);
@@ -219,7 +219,7 @@ async function importDxfFile(f){
   [4,5,6,1,2].forEach(c=>{ if(c!==detected) unitOpts.push([String(c),L('按{unit}',{unit:Dxf.unitLabel(c)})]); });
   const lines=dxfFidelityLines(meta,parsed);
   openModal(L('DXF 导入预检：{name}',{name:f.name}),
-    '<p style="line-height:1.7;margin:0 0 8px">'+esc(L('先核对版本、单位与保真度，再决定落点；导入失败会整批回滚。'))+'</p>'+
+    '<p style="line-height:1.7;margin:0 0 8px">'+esc(L(TX_IMPORTFIRST))+'</p>'+
     '<div style="margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;line-height:1.7">'+
       lines.map(l=>'<div class="hint-text">'+esc(l)+'</div>').join('')+'</div>'+
     '<label style="display:block;margin:8px 0">'+esc(L('单位确认'))+

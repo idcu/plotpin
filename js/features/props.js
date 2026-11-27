@@ -27,7 +27,7 @@ function renderNodeEditor(o, opts){
   const hint=opts.hint
     ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L(opts.hintUnit||'点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L(opts.hintUnit||'点'))}）；${esc(L(opts.hint))}</div>`
     : canEdit
-      ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L('点'))}）；${esc(L('拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除'))}</div>`
+      ? `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}（${esc(L(shapeName))} ${esc(L('至少'))} ${min} ${esc(L('点'))}）；${esc(L(TX_NODETIP))}</div>`
       : `<div class="hint-text">${esc(L('共'))} ${n} ${esc(L('点'))}；${esc(L('可在画布上拖节点手柄调整位置'))}</div>`;
   /* span2：节点列表需跨满 form-grid 两列，否则会被压进 78px 的标签列导致坐标输入框仅剩几十像素 */
   return `<div class="node-list span2">${rows}${hint}</div>`;
@@ -187,7 +187,7 @@ function sitePropsHTML(site, mode){
     </div>
     <div class="form-grid">${renderSiteAnnotToggles(site)}</div>
     <div class="hint-text">${esc(L(hint))}</div>
-    ${tool?'':`<div class="hint-text">${esc(L('提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。'))}</div>`}
+    ${tool?'':`<div class="hint-text">${esc(L(TX_PROPTIP))}</div>`}
   </div>`;
 }
 /** 图片底图属性摘要（含比例尺/仿射校准入口）；实测范围为其外接矩形 */
@@ -210,9 +210,9 @@ function imagePropsHTML(bg, heading){
     <div class="form-grid">
       <button class="primary" id="siteOpenBtn" title="${esc(L('上传图片底图，或改画矢量场地'))}">${esc(L('底图/场地…'))}</button>
       <button id="siteCalibBtn" ${dis(calibPre)} title="${esc(calibPre.ok?L('仅图片底图需要：指定两点实际距离校准米/像素'):calibPre.reason)}">${esc(L('比例尺校准'))}</button>
-      <button id="siteAffineBtn" ${dis(affPre)} title="${esc(affPre.ok?L('在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放'):affPre.reason)}">${esc(L('仿射校准'))}</button>
+      <button id="siteAffineBtn" ${dis(affPre)} title="${esc(affPre.ok?L(TX_AFFPRE):affPre.reason)}">${esc(L('仿射校准'))}</button>
     </div>
-    <div class="hint-text">${esc(L('图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。'))}</div>
+    <div class="hint-text">${esc(L(TX_IMGSCALE))}</div>
   </div>`;
 }
 /** 渲染「图片底图 + 场地」双槽属性面板：图片只读摘要 + 场地可编辑属性 */
@@ -320,7 +320,7 @@ function siteInsertNode(at){
 }
 function siteRemoveNode(i){
   const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
-  if(pts.length<=3) return toast('多边形场地至少保留 3 个顶点','warn');
+  if(pts.length<=3) return toast(TX_POLYMIN,'warn');
   pushHistory(); pts.splice(i,1); state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已删除场地顶点');
 }
 /** 顶点移动到指定下标（抓手拖拽与 ↑↓ 共用；越界/未移动不产生历史） */
@@ -378,7 +378,7 @@ function renderProps(){
       ${row('透明度',`<input type="range" min="0" max="1" step=".01" data-style="fillAlpha" value="${styleVal(o,'fillAlpha',.15)}">`)}
       ${row('线宽',`<input type="number" step=".01" data-style="strokeWidth" value="${fmt(styleVal(o,'strokeWidth',.1))}">`)}
       ${renderAnnotToggles(o)}
-      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?'基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':'圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；'))}${esc(L(TX_ACOORD))}</div>`;
+      <div class="hint-text span2" style="grid-column:1/-1">${esc(L(stt==='rect'||stt===PARA?TX_PARA:TX_CENTERTIP))}${esc(L(TX_ACOORD))}</div>`;
   }else if(o.kind==='arc'){
     /* 描边圆弧：只有圆心/半径/起止角；没有宽高与旋转角，也没有面积与填充 */
     const sh=o.shape||{};
@@ -484,7 +484,7 @@ function renderMultiProps(box,objs){
         <button class="mini" data-distribute="x">${esc(L('水平分布'))}</button>
         <button class="mini" data-distribute="y">${esc(L('垂直分布'))}</button>
       </div>
-      <p class="hint-text">${esc(L('按对象包围盒对齐；分布保持首末对象不动、其余等间距。'))}</p>
+      <p class="hint-text">${esc(L(TX_ALIGNTIP))}</p>
     </div>
     <div class="section"><h3>${esc(L('编号 / 层级'))}</h3>
       <div class="form-grid">
@@ -499,13 +499,13 @@ function renderMultiProps(box,objs){
       </div>
       <p class="hint-text">${esc(L('编号跨楼层自动避让；置顶/置底改变叠放顺序。'))}</p>
     </div>`;
-  $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层', items.map(o=>o.id)); };
+  $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层', items.map(o=>o.id)); };
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
-  $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
-  $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
+  $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
+  $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
   /* 批量交付：全选都已交付时整体取消，否则整体标记（一键切换，不额外增加按钮） */
   $('multiPublishBtn').onclick=()=>{
-    const items=objs.filter(isEditable); if(!items.length) return toast('选中对象位于锁定图层','warn');
+    const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn');
     const all=items.every(isDelivered); pushHistory(); setDelivered(items,!all);
     commitChange(all?'已取消交付':'已标记交付', items.map(o=>o.id));
   };
@@ -530,7 +530,7 @@ function renderMultiProps(box,objs){
   });
   if($('multiRenumberBtn')) $('multiRenumberBtn').onclick=()=>{
     const items=objs.filter(isEditable);
-    if(!items.length) return toast(L('选中对象位于锁定图层'),'warn');
+    if(!items.length) return toast(L(TX_LOCKED),'warn');
     const prefix=String($('multiPrefix').value||'').trim()||'P';
     const startRaw=Number($('multiStart').value), stepRaw=Number($('multiStep').value);
     const start=Number.isFinite(startRaw)?Math.max(0,Math.floor(startRaw)):1;
@@ -542,7 +542,7 @@ function renderMultiProps(box,objs){
   };
   const restack=mode=>{
     const items=objs.filter(isEditable);
-    if(!items.length) return toast(L('选中对象位于锁定图层'),'warn');
+    if(!items.length) return toast(L(TX_LOCKED),'warn');
     pushHistory();
     const n=restackObjects(state.objects,new Set(items.map(o=>o.id)),mode);
     commitChange((mode==='front'?L('已置顶'):L('已置底'))+' '+n+' '+L('个对象'));

@@ -408,7 +408,7 @@ function showTableImportPreview(fileName,plan){
       '<div style="max-height:240px;overflow:auto;margin:10px 0">'.concat(
         plan.errors.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join(''),
         plan.errors.length>50?'<p class="hint-text">'+esc(L('其余错误略 {n}',{n:plan.errors.length-50}))+'</p>':'',
-        '</div><p class="hint-text">'+esc(L('存在非法行，整批取消导入；修正后重新导入即可，现有对象未被修改。'))+'</p>'),
+        '</div><p class="hint-text">'+esc(L(TX_BADROWS))+'</p>'),
       [{text:L('知道了'),class:'primary',click:closeModal}]);
     return;
   }
@@ -422,7 +422,7 @@ function showTableImportPreview(fileName,plan){
     ? '<div style="max-height:190px;overflow:auto;margin:10px 0">'+plan.warnings.slice(0,50).map(w=>'<div class="issue">'+esc(w)+'</div>').join('')+
       (plan.warnings.length>50?'<p class="hint-text">'+esc(L('其余提示略 {n}',{n:plan.warnings.length-50}))+'</p>':'')+'</div>'
     : `<div class="ok-banner">${esc(L('全部行均可导入。'))}</div>`;
-  const countLine='<p style="line-height:1.7">'+esc(L('按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：'))+
+  const countLine='<p style="line-height:1.7">'+esc(L(TX_TABLEOPS))+
     '<b>'+plan.updates.length+'</b> '+esc(L('项更新、'))+
     '<b>'+replaceCount+'</b> '+esc(L('个对象替换（'))+'<b>'+(plan.replaces||[]).length+'</b> '+esc(L('行条件）、'))+
     '<b>'+plan.creates.length+'</b> '+esc(L('项新增。'))+'</p>';

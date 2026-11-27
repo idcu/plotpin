@@ -9,10 +9,10 @@ function syncToolButtons(tool){
   });
 }
 const TOOL_TITLES={
-  select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:I18N.t('pan'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
+  select:L(TX_SELTITLE),pan:I18N.t('pan'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
   rect:L(TX_RECT),line:L(TX_POLY),
-  arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
-  text:L('文字'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
+  arc:L(TX_ARCTITLE),
+  text:L('文字'),dimension:L(TX_DIMTITLE),
   calibrate:L(TX_CALIB),
   affine:L(TX_AFF),
   'site-rect':L('矩形'), 'site-circle':L('圆形'), 'site-ellipse':L('椭圆'), 'site-sector':L('扇形'),
@@ -469,7 +469,7 @@ canvas.addEventListener('pointerdown',e=>{
     return;
   }
   if(currentTool==='mirror'){
-    if(!state.objects.some(o=>selectedIds.has(o.id)&&isEditable(o))) return callHook('ui.toast',L('先勾选对象'),'warn');
+    if(!state.objects.some(o=>selectedIds.has(o.id)&&isEditable(o))) return callHook('ui.toast',L(TX_PICKFIRST),'warn');
     if(!draft){ draft={kind:'mirror',points:[wp],current:wp}; requestRender(); return; }
     const a=draft.points[0]; draft=null; requestRender(); mirrorSelected(a,wp); return;
   }
@@ -714,7 +714,7 @@ function editSiteNodeByDoubleClick(e){
   let ni=-1;
   pts.forEach((p,i)=>{ if(dist(p,wp)<=tol) ni=i; });
   if(ni>=0){
-    if(n<=3){ toast('多边形场地至少保留 3 个顶点','warn'); return; }
+    if(n<=3){ toast(TX_POLYMIN,'warn'); return; }
     pushHistory(); pts.splice(ni,1);
   }else{
     let best=null;
@@ -1369,12 +1369,12 @@ function helpShortcutRows(){
 }
 function helpGlossaryRows(){
   return [
-    [L('图片底图'), L('栅格图片（PNG/JPG/WebP）；先校准像素→米，仅影响图片对象。')],
-    [L('矢量场地'), L('按米制绘制的矩形/圆/椭圆/扇形/多边形边界；无需校准。')],
-    [L('楼层'), L('每层独立底图/场地与对象；图层、类型与工程库跨层共享。')],
-    [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
-    [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
-    [L('覆盖率口径'), L('按视场角与安装高度投影，统计可见设备覆盖率与盲区。')]
+    [L('图片底图'), L(TX_GLOSSIMG)],
+    [L('矢量场地'), L(TX_GLOSSSITE)],
+    [L('楼层'), L(TX_FLOORGLOSS)],
+    [L('比例尺'), L(TX_GLOSSSCALE)],
+    [L('仿射'), L(TX_AFFHINT)],
+    [L('覆盖率口径'), L(TX_GLOSSCOV)]
   ];
 }
 function helpExportRows(){
@@ -1403,7 +1403,7 @@ function helpTabDefs(){
 function helpPanelHTML(key){
   if(key==='glossary') return helpRowsHTML(helpGlossaryRows(),'help-term');
   if(key==='exports') return helpRowsHTML(helpExportRows(),'help-term');
-  return '<div class="hint-text">'+L('快速上手：底图/场地并校准 → 左栏选工具逐点单击，双击/Enter 完成 → 拖圆手柄旋转、方手柄缩放 → 清单批量编辑 → 导出。')+'</div>'+helpRowsHTML(helpShortcutRows());
+  return '<div class="hint-text">'+L(TX_QUICK)+'</div>'+helpRowsHTML(helpShortcutRows());
 }
 function switchHelpTab(key){
   const body=$('modalBody');

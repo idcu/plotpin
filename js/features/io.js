@@ -3,7 +3,7 @@
 $('newBtn').onclick=async()=>{
   /* P0-04：救援模式下先让用户确认（或导出救援 JSON），避免未落盘编辑被静默丢弃 */
   if(!await guardRescueSwitch()) return;
-  const ok=await showConfirm(L('新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？')
+  const ok=await showConfirm(L(TX_NEWWARN)
     +(state.meta.projectId?'':' '+L('草稿评论将一并清除。')));
   if(!ok) return;
   /* 替换现场前强制落盘：租约被占用或保存失败时中止新建，避免静默丢最后一次编辑（P2-A3） */
@@ -107,7 +107,7 @@ async function openProjectLibrary(){
         <button data-op="copy">${esc(L('复制'))}</button>
         <button data-op="del" class="danger">${esc(L('删除'))}</button>
       </div></div>`;
-  }).join('')||`<p class="hint-text">${esc(L('工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。'))}</p>`;
+  }).join('')||`<p class="hint-text">${esc(L(TX_LIBEMPTY))}</p>`;
   const boundName=state.meta.projectId?(state.meta.name||L('当前工程')):'';
   openModal(L('工程库（保存在本机浏览器）'),
     modalBody`<div class="proj-current">${L('当前草稿：')}<b>${state.meta.name}</b>${boundName?` · ${L('已绑定工程库')}`:''}　${L('对象')} ${state.objects.length} ${L('个')}</div>
@@ -116,7 +116,7 @@ async function openProjectLibrary(){
        <button id="projMerge">⇄ ${L('合并他人工程…')}</button>
      </div>
      <div class="proj-list">${safeHTML(rows)}</div>
-     <p class="hint-text">${L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。')}</p>`,
+     <p class="hint-text">${L(TX_AUTOSAVE)}</p>`,
     [{text:L('关闭'),click:closeModal}]);
   $('projSaveAs').onclick=async()=>{
     const v=await showPrompt({title:L('另存到工程库'),label:L('工程名称'),value:state.meta.name||L('未命名图纸工程')});

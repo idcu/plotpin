@@ -175,7 +175,7 @@ $('headSelectChk').addEventListener('change',e=>{
 $('selectAllChk').addEventListener('change',e=>{
   filteredObjects().forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
 });
-$('batchLayerBtn').onclick=()=>{ const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可修改的选中对象','warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层', items.map(o=>o.id)); };
+$('batchLayerBtn').onclick=()=>{ const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast(TX_NOEDIT,'warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层', items.map(o=>o.id)); };
 $('batchMoveBtn').onclick=()=>{
   const dx=Number($('batchDx').value)||0,dy=Number($('batchDy').value)||0; if(!dx&&!dy) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可移动的选中对象','warn');
@@ -187,7 +187,7 @@ $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0)
 /* 阵列：选中对象按「行,列,行距X,列距Y」复制；包含原位（1,1），只新增其余位置 */
 $('batchArrayBtn').onclick=async()=>{
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
-  if(!items.length) return toast(L('先勾选对象'),'warn');
+  if(!items.length) return toast(L(TX_PICKFIRST),'warn');
   const v=await showPrompt({title:I18N.t('batchArray'),label:I18N.t('arrayHint'),value:'2,2,5,5'});
   if(v===null) return;
   const [r,c,dx,dy]=v.split(/[,，\s]+/).map(Number);
@@ -224,7 +224,7 @@ function rotateObjectAbout(o,c,deg){
 /** 环形阵列：绕选中对象包围盒中心按「数量,总角度」复制，含原位 */
 $('batchPolarBtn').onclick=async()=>{
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
-  if(!items.length) return toast(L('先勾选对象'),'warn');
+  if(!items.length) return toast(L(TX_PICKFIRST),'warn');
   const v=await showPrompt({title:I18N.t('batchPolar'),label:I18N.t('polarHint'),value:'6,360'});
   if(v===null) return;
   const [n,total,cx,cy]=v.split(/[,，\s]+/).map(Number);
@@ -275,13 +275,13 @@ function offsetObject(o,d){
 }
 $('batchOffsetBtn').onclick=async()=>{
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
-  if(!items.length) return toast(L('先勾选对象'),'warn');
+  if(!items.length) return toast(L(TX_PICKFIRST),'warn');
   const v=await showPrompt({title:I18N.t('batchOffset'),label:I18N.t('offsetHint'),value:'1'});
   if(v===null) return;
   const d=Number(v);
   if(!(d>0&&Number.isFinite(d))) return toast(I18N.t('badParam'),'warn');
   const clones=items.map(o=>offsetObject(o,d)).filter(Boolean);
-  if(!clones.length) return toast(L('没有可修改的选中对象'),'warn');
+  if(!clones.length) return toast(L(TX_NOEDIT),'warn');
   if(!ensureObjectCapacity(clones.length)) return;
   pushHistory();
   withObjectNameScope(allObjectNames(),()=>clones.forEach(n=>{
@@ -294,20 +294,20 @@ $('batchOffsetBtn').onclick=async()=>{
 const editableLines=()=>state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)&&o.kind==='line');
 $('batchCloseBtn').onclick=()=>{
   const items=editableLines().filter(o=>o.points.length>2);
-  if(!items.length) return toast(L('没有可修改的选中对象'),'warn');
+  if(!items.length) return toast(L(TX_NOEDIT),'warn');
   pushHistory(); const all=items.every(o=>o.closed); items.forEach(o=>o.closed=!all);
   commitChange(L('已更新'),items.map(o=>o.id));
 };
 $('batchReverseBtn').onclick=()=>{
   const items=editableLines();
-  if(!items.length) return toast(L('没有可修改的选中对象'),'warn');
+  if(!items.length) return toast(L(TX_NOEDIT),'warn');
   pushHistory(); items.forEach(o=>{ o.points.reverse(); syncFirstPoint(o); });
   commitChange(L('已更新'),items.map(o=>o.id));
 };
 /* 批量样式：选中可编辑对象统一写对象级 style[key]，一次撤销（颜色/线宽共用） */
 function batchStyle(key,value){
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
-  if(!items.length) return toast(L('没有可修改的选中对象'),'warn');
+  if(!items.length) return toast(L(TX_NOEDIT),'warn');
   pushHistory(); items.forEach(o=>o.style[key]=value);
   commitChange(L('已更新'),items.map(o=>o.id));
 }
@@ -351,7 +351,7 @@ function renderBatchAnnot(){
   master.disabled=!keys.length;
   master.checked=!!keys.length&&states.every(s=>s==='on');
   master.indeterminate=!master.checked&&states.some(s=>s!=='off');
-  if(!keys.length){ box.innerHTML=`<span class="hint-text">${esc(L('先勾选对象'))}</span>`; return; }
+  if(!keys.length){ box.innerHTML=`<span class="hint-text">${esc(L(TX_PICKFIRST))}</span>`; return; }
   box.innerHTML=keys.map((k,i)=>
     `<label class="annot-chk"><input type="checkbox" data-batch-annot="${k}" ${states[i]==='on'?'checked':''}> ${esc(L(batchAnnotLabel(k,items)))}</label>`).join('');
   box.querySelectorAll('[data-batch-annot]').forEach(el=>{
@@ -687,8 +687,8 @@ function refreshStorageUsage(){
       (quota?'<span>'+esc(L('浏览器配额'))+'</span><b>'+formatBytes(quota)+'</b><span>'+esc(L('使用率'))+'</span><b>'+pct.toFixed(1)+'%</b>':'')+
       '</div>'+
       (pct>=85
-        ? '<div class="issue">'+esc(L('存储使用率较高：可移除不用的底图，或导出 JSON 备份后清理本站数据。'))+'</div>'
-        : '<p class="hint-text">'+esc(L('工程与底图存于 IndexedDB（底图按内容哈希去重），设置存于 localStorage。'))+'</p>');
+        ? '<div class="issue">'+esc(L(TX_STORAGE))+'</div>'
+        : '<p class="hint-text">'+esc(L(TX_STORAGE2))+'</p>');
   };
   if(navigator.storage&&navigator.storage.estimate){
     navigator.storage.estimate()
@@ -733,7 +733,7 @@ function runCoverageAnalysis(){
     <span><i style="display:inline-block;width:11px;height:11px;background:rgba(239,68,68,.5);border:1px solid #dc2626;border-radius:2px;vertical-align:-1px"></i> ${esc(L('盲区'))}</span>
     <span style="color:#94a3b8">${esc(L('栅格法估算，覆盖率＝区域内被任一视场覆盖的采样格占比'))}</span></div>`;
   const body=res.regions.length? head+rows+doriBlock+legend
-    : head+doriBlock+`<div class="hint-text" style="padding:8px 0">${esc(L('当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。'))}</div>`;
+    : head+doriBlock+`<div class="hint-text" style="padding:8px 0">${esc(L(TX_NOAREA))}</div>`;
   openModal(L('视场覆盖率分析'), body, [
     {text:L('布点优化…'),class:'',click:()=>{ closeModal(); runPlacementOptimization(); }},
     {text:L('导出盲区 GeoJSON'),class:'',click:exportBlindSpotsGeoJson},
@@ -746,7 +746,7 @@ function runCoverageAnalysis(){
  * 应用建议后自动重跑覆盖率分析，形成闭环。
  */
 async function runPlacementOptimization(){
-  const v=await showPrompt({title:L('布点优化'),label:L('视场半径(m), 张角(°), 目标覆盖率(%), 最多新增台数（如 120,90,90,5）'),value:'120,90,90,5'});
+  const v=await showPrompt({title:L('布点优化'),label:L(TX_FOVHINT),value:'120,90,90,5'});
   if(v===null) return;
   const m=v.split(/[,，\s]+/).map(Number);
   const phys=m[0]>0?m[0]:120, fov=m[1]>0?m[1]:90;

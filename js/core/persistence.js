@@ -141,7 +141,7 @@ function isReadOnly(){ return readOnly; }
 /** 只读写入守卫：拒绝并给出可读原因；返回 true 表示可写 */
 function guardWrite(what){
   if(!readOnly) return true;
-  toast(L('本地只读：{what}已拒（仅锁本端编辑，对端仍可改本工程）',{what:what||L('编辑')}),'warn');
+  toast(L(TX_RO,{what:what||L('编辑')}),'warn');
   return false;
 }
 /** 顶栏按钮态 + 撤销/重做可用态（只读时两者恒灰） */

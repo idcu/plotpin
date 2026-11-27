@@ -44,6 +44,44 @@ const TX_BADJSON='JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1
 const TX_DSCALE='检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）';
 const TX_RSMALL='半径过小（不足 0.5m），可在底图弹窗中直接输入半径';
 const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输入尺寸';
+const TX_QUICK='快速上手：底图/场地并校准 → 左栏选工具逐点单击，双击/Enter 完成 → 拖圆手柄旋转、方手柄缩放 → 清单批量编辑 → 导出。';
+const TX_LOCKED='选中对象位于锁定图层';
+const TX_NOEDIT='没有可修改的选中对象';
+const TX_PICKFIRST='先勾选对象';
+const TX_PARA='基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；';
+const TX_IMGSCALE='图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。';
+const TX_AUTOSAVE='工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。';
+const TX_DXFLOSS='动态块 / 外部参照 / 代理对象 / 标注样式在转换时可能丢失，导入后请核对保真度提示。';
+const TX_SELTITLE='选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）';
+const TX_NEWWARN='新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？';
+const TX_LIBEMPTY='工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。';
+const TX_DIMTITLE='尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击';
+const TX_PROPTIP='提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。';
+const TX_POLARHINT='逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）';
+const TX_NOAREA='当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。';
+const TX_STORAGE='存储使用率较高：可移除不用的底图，或导出 JSON 备份后清理本站数据。';
+const TX_STORAGE2='工程与底图存于 IndexedDB（底图按内容哈希去重），设置存于 localStorage。';
+const TX_BADROWS='存在非法行，整批取消导入；修正后重新导入即可，现有对象未被修改。';
+const TX_AFFHINT='用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。';
+const TX_ARCTITLE='圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消';
+const TX_CENTERTIP='圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；';
+const TX_NODETIP='拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除';
+const TX_FOVHINT='视场半径(m), 张角(°), 目标覆盖率(%), 最多新增台数（如 120,90,90,5）';
+const TX_IMPORTFIRST='先核对版本、单位与保真度，再决定落点；导入失败会整批回滚。';
+const TX_AFFPRE='在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放';
+const TX_LOCALCONV='转换在你的本机完成，PlotPin 只读取 DXF/PDF，单文件承诺不变。';
+const TX_DXFSAVE='AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；';
+const TX_PDFSAVE='AutoCAD「打印/导出 → PDF」，可作矢量图纸或底图导入；';
+const TX_TABLEOPS='按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：';
+const TX_POLYMIN='多边形场地至少保留 3 个顶点';
+const TX_ALIGNTIP='按对象包围盒对齐；分布保持首末对象不动、其余等间距。';
+const TX_SEGMIN='屏幕上短于该像素长度的线段不显示段长标注，避免拥挤';
+const TX_RO='本地只读：{what}已拒（仅锁本端编辑，对端仍可改本工程）';
+const TX_FLOORGLOSS='每层独立底图/场地与对象；图层、类型与工程库跨层共享。';
+const TX_GLOSSIMG='栅格图片（PNG/JPG/WebP）；先校准像素→米，仅影响图片对象。';
+const TX_GLOSSSITE='按米制绘制的矩形/圆/椭圆/扇形/多边形边界；无需校准。';
+const TX_GLOSSSCALE='用两点及其实距求像素→米比例与旋转；仅作用于图片底图。';
+const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖率与盲区。';
 (function (global) {
   'use strict';
   const DICT = {
@@ -253,7 +291,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '只读':'Read-only', '只读中':'Read-only ON',
     '已进入本地只读：仅锁本端，对端仍可改本工程':'Read-only on: this device only; peers can still edit',
     '已退出本地只读':'Read-only off',
-    '本地只读：{what}已拒（仅锁本端编辑，对端仍可改本工程）':'Read-only: {what} denied (local only; peers can still edit)',
+    [TX_RO]:'Read-only: {what} denied (local only; peers can still edit)',
     '编辑':'Edit', '撤销':'Undo', '重做':'Redo', '拖拽':'drag', '该工具':'this tool', '属性写入':'property edit',
     '编辑快捷键':'edit shortcut', '复制对象':'duplicate', '粘贴':'paste', '清空楼层':'clear floor',
     '批量属性':'Batch properties', '移动到':'Move to', '应用图层':'Apply layer', '批量旋转':'Rotate all', '全部删除':'Delete all',
@@ -268,14 +306,14 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '几何检查':'Geometry check', '本地存储':'Local storage', '统计中…':'Calculating…',
     '浏览器配额':'Browser quota', '使用率':'Usage', '点坐标':'Point coords', '基点坐标':'Base coords',
     '半径':'Radius', '边长':'Side length', '顶点坐标':'Vertex coords', '节点坐标':'Node coords', '段长':'Segment length',
-    '屏幕上短于该像素长度的线段不显示段长标注，避免拥挤':'Hide segment-length labels shorter than this many pixels to avoid clutter',
+    [TX_SEGMIN]:'Hide segment-length labels shorter than this many pixels to avoid clutter',
     '自动吸附端点、中点、圆心、垂足、交点等（Tab 切换类型）':'Snap to endpoints, midpoints, centers, feet, intersections, etc. (Tab cycles types)',
-    '逐点录入时自动吸附到极轴角整数倍（参考边平行/垂直与等距约束始终可用）':'While picking points, snap to multiples of the polar angle (reference parallel/perpendicular and spacing constraints stay available)',
+    [TX_POLARHINT]:'While picking points, snap to multiples of the polar angle (reference parallel/perpendicular and spacing constraints stay available)',
     '极轴追踪的角度步长':'Polar tracking angle step',
     '拖拽调整节点顺序':'Drag to reorder nodes',
-    '基点为图形左下角，也是旋转中心；平行四边形面积=底×高，倾角只改变斜边不改变面积；':
+    [TX_PARA]:
       'Base is the lower-left corner and rotation center; parallelogram area = base × height, skew changes only the slanted edge.',
-    '圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；':
+    [TX_CENTERTIP]:
       'The circle/ellipse/sector center is the shape base (marked ⊕ on canvas); moving the shape moves the base.',
     [TX_ACOORD]:
       'World coordinates in metres, may be negative; areas stay true-to-scale. For triangles/polygons use the Polyline tool with Closed.',
@@ -283,19 +321,19 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Fixed-screen position marker; for real coverage use a circle/square/sector/bar type under Layers/Types.',
     [TX_SEDIT]:
       'Edit the coordinates/parameters below, or drag handles with the Site nodes tool (metres, may be negative).',
-    '提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。':
+    [TX_PROPTIP]:
       'Tip: click an object to edit its properties here; drag a box to select multiple; Delete removes; Ctrl+Z undoes.',
-    '图片以像素×比例尺映射到世界坐标；如需精确贴合请用「比例尺校准」或「仿射校准」。':
+    [TX_IMGSCALE]:
       'The image maps pixels to world coordinates via the scale; use Scale calibration or Affine calibration for precise alignment.',
     '未发现明显的零尺寸、自相交或越界问题。':'No obvious zero-size, self-intersection, or out-of-bounds issues found.',
-    '工程与底图存于 IndexedDB（底图按内容哈希去重），设置存于 localStorage。':
+    [TX_STORAGE2]:
       'Projects and base maps live in IndexedDB (content-hashed); settings live in localStorage.',
-    '存储使用率较高：可移除不用的底图，或导出 JSON 备份后清理本站数据。':
+    [TX_STORAGE]:
       'Storage usage is high: remove unused base maps or export a JSON backup and clear site data.',
     '在图上显示':'Show on drawing', '共':'total', '至少':'min', 
     '已插入场地顶点':'Site vertex inserted', '已删除场地顶点':'Site vertex deleted',
     '场地顶点顺序已调整':'Site vertex order updated',
-    '多边形场地至少保留 3 个顶点':'A polygon site needs at least 3 vertices',
+    [TX_POLYMIN]:'A polygon site needs at least 3 vertices',
     '（米）后随底图真实比例缩放':' (m) to scale with the base map',
     '杆长':'bar length', '直径':'diameter',
     '尺寸过小':'is too small', '折线节点不足':'has too few polyline nodes', '存在自相交':'self-intersects',
@@ -312,27 +350,27 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '（世界坐标，无需比例尺校准）':'(world coordinates, no scale calibration needed)',
     '（已校准）':'(calibrated)', '（未校准）':'(not calibrated)',
     '方形区域':'Square area', '主码流':'Main stream', '子码流':'Sub stream',
-    '拖 ⠿ 或 ↑↓ 调整顺序；画布上双击线段插入节点、双击节点删除':'Drag ⠿ or use ↑↓ to reorder; double-click a segment to insert a node, double-click a node to delete',
+    [TX_NODETIP]:'Drag ⠿ or use ↑↓ to reorder; double-click a segment to insert a node, double-click a node to delete',
     '可在画布上拖节点手柄调整位置':'Drag node handles on canvas to adjust positions',
     '测距链':'Measure chain', '闭合区域':'Closed area', '开放折线':'Open polyline',
     '上传图片底图，或改画矢量场地':'Upload an image base map or switch to a vector site',
     '仅图片底图需要：指定两点实际距离校准米/像素':'Image base maps only: set the real distance between two points to calibrate m/px',
-    '在图上依次点击已知点并输入实地坐标，纠正倾斜与不等比缩放':'Click known points and enter their real-world coordinates to correct skew and non-uniform scale',
+    [TX_AFFPRE]:'Click known points and enter their real-world coordinates to correct skew and non-uniform scale',
     '该类型按「':'This type renders as “', '」渲染：填 0 为纯位置图标；填':'”: fill 0 for a position-only marker; fill',
     '，张角 ':' with a sweep of ', '°，朝向随朝向角':'°, heading follows the heading angle',
     '图标':'Icon',
     '默认图标大小（屏幕倍率）':'Default icon size (screen multiplier)',
     /* 工具提示 */
-    '选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）':
+    [TX_SELTITLE]:
       'Select: click objects or drag a selection box; drawing/dragging snaps to endpoints, midpoints and centers (toggle in Settings)',
     '点设备：单击放置（自动捕捉特征点，设置可关）':'Point: click to place (auto-snaps to feature points; toggle in Settings)',
     [TX_RECT]:
       'Area: choose a shape above and drag; Shift makes a square/circle or snaps sectors to 45°; Esc cancels',
     [TX_POLY]:
       'Polyline: click point by point, double-click to finish; Shift constrains ortho; right-click/Esc cancels (enable Closed for polygons)',
-    '圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消':
+    [TX_ARCTITLE]:
       'Circle/Arc: click the center, then the radius point (circle) or start/end points (arc); Esc cancels',
-    '尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击':
+    [TX_DIMTITLE]:
       'Dimension: click point by point and double-click to finish (right-click/Esc cancels); other types follow the on-screen prompts',
     '图片变换': 'Image transform',
     [TX_CALIB]:
@@ -365,23 +403,23 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '适应窗口（显示整张场地）':'Fit view (whole site)', '缩放 / 平移画布 / 键盘缩放':'Zoom / pan / keyboard zoom',
     '单指绘制移动；双指缩放/平移':'One finger draws/moves; pinch zooms, two-finger pans',
     '导入 JSON / DXF / 表格 / 图片':'Import JSON/DXF/tables/images',
-    '快速上手：底图/场地并校准 → 左栏选工具逐点单击，双击/Enter 完成 → 拖圆手柄旋转、方手柄缩放 → 清单批量编辑 → 导出。':
+    [TX_QUICK]:
       'Quick start: base map/site + calibrate → pick a tool and click points; double-click/Enter to finish → drag round handle to rotate, square to scale → batch edit in List → export.',
     '显示本帮助':'Show this help', '知道了':'Got it',
     /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
-    '栅格图片（PNG/JPG/WebP）；先校准像素→米，仅影响图片对象。':
+    [TX_GLOSSIMG]:
       'Raster image (PNG/JPG/WebP); calibrate pixels to metres first; image objects only.',
-    '按米制绘制的矩形/圆/椭圆/扇形/多边形边界；无需校准。':
+    [TX_GLOSSSITE]:
       'Metre-based rect/circle/ellipse/sector/polygon; no calibration.',
-    '每层独立底图/场地与对象；图层、类型与工程库跨层共享。':
+    [TX_FLOORGLOSS]:
       'Each floor has its own base map/site and objects; layers, types and archives are shared.',
-    '用两点及其实距求像素→米比例与旋转；仅作用于图片底图。':
+    [TX_GLOSSSCALE]:
       'Two points and their real distance solve pixel-to-metre scale and rotation; image maps only.',
-    '用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。':
+    [TX_AFFHINT]:
       'Real X,Y points solve image-to-world; 2 points = similarity, 3+ = full affine.',
-    '按视场角与安装高度投影，统计可见设备覆盖率与盲区。':
+    [TX_GLOSSCOV]:
       'FOV and mounting height projected; counts visible devices and blind spots.',
     'JSON 工程':'JSON project', 'PNG 高清图':'HD PNG', 'SVG 矢量图':'SVG vector',
     'PDF（图纸位图+清单）':'PDF (raster drawing + list)', 'DXF（CAD 互通）':'DXF (CAD)',
@@ -417,11 +455,11 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '点击切换到该楼层':'Click to switch to this floor',
     '点击楼层行可切换；汇总覆盖全部楼层。':'Click a floor row to switch; totals cover all floors.',
     '工程库（保存在本机浏览器）':'Project library (stored in this browser)',
-    '工程库还是空的。先把当前图纸「另存到工程库」，以后可在多个工程间快速切换。':
+    [TX_LIBEMPTY]:
       'The project library is empty. Save the current drawing to the library first, then switch between projects anytime.',
     '当前工程':'Current project', '当前草稿：':'Current draft: ', '已绑定工程库':'linked to the library',
     '把当前图纸另存到工程库':'Save current drawing to library', '合并他人工程…':'Merge another project…',
-    '工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。':
+    [TX_AUTOSAVE]:
       'Auto-save: once linked, every change syncs to the library; deleting a project does not affect exported JSON files.',
     '另存到工程库':'Save to library', '未命名图纸工程':'Untitled drawing project', '已存入工程库':'Saved to the library',
     '冲突':'conflicts',
@@ -465,10 +503,10 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Independent of zoom/pixels/DPR; areas use analytic formulas, shared with reports. Legacy v1/v2 reports are not directly comparable.',
     [TX_LENS]:
       'Lens: fov (default 90°, 10–360°); range from phys(m): sector=phys, circle/square=phys/2; missing phys excluded; hidden objects/layers excluded from denominator.',
-    '当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。':'No areas to analyze: draw an Area or a closed Polyline first.',
+    [TX_NOAREA]:'No areas to analyze: draw an Area or a closed Polyline first.',
     '视场覆盖率分析':'Field-of-view coverage', '布点优化…':'Placement optimization…', '导出盲区 GeoJSON':'Export blind spots GeoJSON',
     '清除叠加层':'Clear overlay', '布点优化':'Placement optimization',
-    '视场半径(m), 张角(°), 目标覆盖率(%), 最多新增台数（如 120,90,90,5）':'FOV radius (m), sweep (°), target coverage (%), max new cameras (e.g. 120,90,90,5)',
+    [TX_FOVHINT]:'FOV radius (m), sweep (°), target coverage (%), max new cameras (e.g. 120,90,90,5)',
     '没有可用于布点的区域：请先绘制区域或闭合折线':'No areas for placement: draw an area or closed polyline first',
     '当前覆盖':'Current coverage', '预计':'estimated', '目标':'target', '已达标':'target reached', '仍未达标':'target not reached',
     '视场半径':'FOV radius', '张角':'sweep', '仅在「区域/闭合折线」内统计；建议点位可位于场地边界外（立杆/壁挂）':
@@ -476,7 +514,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '建议位置 X, Y (m)':'Suggested X, Y (m)', '朝向':'Heading', '新增覆盖':'New coverage', '累计覆盖':'Cumulative coverage',
     '当前已达标，无需新增点位。':'Target already reached; no new cameras needed.',
     '布点优化（贪心覆盖最大化）':'Placement optimization (greedy coverage)',
-    '新建将清空当前工程。已自动保存的草稿会被覆盖，是否先导出 JSON 或另存到工程库？':
+    [TX_NEWWARN]:
       'New project clears the current project. The auto-saved draft will be overwritten; export JSON or save to the library first?',
     '已清空当前楼层':'Current floor cleared',
     '添加文字':'Add text', '文字内容':'Text content', '标注文字':'Annotation text', '已添加文字':'Text added',
@@ -499,7 +537,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '对齐 / 分布':'Align / distribute', '左对齐':'Align left', '水平居中':'Center horizontally', '右对齐':'Align right',
     '上对齐':'Align top', '垂直居中':'Center vertically', '下对齐':'Align bottom',
     '水平分布':'Distribute horizontally', '垂直分布':'Distribute vertically',
-    '按对象包围盒对齐；分布保持首末对象不动、其余等间距。':
+    [TX_ALIGNTIP]:
       'Aligns by object bounding boxes; distribution keeps the first and last objects fixed and spaces the rest evenly.',
     '至少选择两个对象':'Select at least two objects', '至少选择三个对象':'Select at least three objects',
     '编号 / 层级':'Numbering / z-order', '编号前缀':'Number prefix', '起始序号':'Start number', '步长':'Step',
@@ -508,9 +546,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Numbering avoids duplicates across floors; front/back changes stacking order.',
     '已置顶':'Brought to front', '已置底':'Sent to back',
     '至少保留一个图层':'Keep at least one layer',
-    '选中对象位于锁定图层':'Selected objects are on a locked layer',
+    [TX_LOCKED]:'Selected objects are on a locked layer',
     '没有可删除的选中对象（可能位于锁定图层）':'No deletable selection (it may be on a locked layer)',
-    '没有可修改的选中对象':'No editable selection', '没有可移动的选中对象':'No movable selection',
+    [TX_NOEDIT]:'No editable selection', '没有可移动的选中对象':'No movable selection',
     '已新建工程':'New project created', '工程已导入':'Project imported', '设置已保存':'Settings saved',
     '已插入节点':'Node inserted', '已删除节点':'Node deleted',
     [TX_RSMALL]:'Radius too small (under 0.5 m); enter it in the Base/Site dialog',
@@ -526,16 +564,16 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '图片底图正在解码，请稍后重试':'Image base map is still decoding; try again shortly',
     [TX_DWG]:'PlotPin has no DWG engine and never modifies the original file. Save a copy as DXF or PDF in CAD, then import it:',
     '转 DXF':'Convert to DXF',
-    'AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；':'In AutoCAD: File → Save As → DXF (ASCII), preferably 2013/2018;',
+    [TX_DXFSAVE]:'In AutoCAD: File → Save As → DXF (ASCII), preferably 2013/2018;',
     '转 PDF':'Convert to PDF',
-    'AutoCAD「打印/导出 → PDF」，可作矢量图纸或底图导入；':'In AutoCAD: Print/Export → PDF; import it as a vector drawing or base map;',
-    '动态块 / 外部参照 / 代理对象 / 标注样式在转换时可能丢失，导入后请核对保真度提示。':'Dynamic blocks, external references, proxy objects and dimension styles may be lost in conversion; check the fidelity notices after import.',
-    '转换在你的本机完成，PlotPin 只读取 DXF/PDF，单文件承诺不变。':'Conversion happens locally; PlotPin only reads DXF/PDF, and the single-file promise is unchanged.',
+    [TX_PDFSAVE]:'In AutoCAD: Print/Export → PDF; import it as a vector drawing or base map;',
+    [TX_DXFLOSS]:'Dynamic blocks, external references, proxy objects and dimension styles may be lost in conversion; check the fidelity notices after import.',
+    [TX_LOCALCONV]:'Conversion happens locally; PlotPin only reads DXF/PDF, and the single-file promise is unchanged.',
     '转 DXF 后选择文件':'Choose the converted DXF file',
     '转 PDF 后选择文件':'Choose the converted PDF file',
     'DXF 中暂未找到可导入实体；文件含未落地类型：':'No importable entities were found in this DXF; it contains unsupported types:',
     '按文件（未声明，按米处理）':'By file (undeclared; treat as metres)',
-    '先核对版本、单位与保真度，再决定落点；导入失败会整批回滚。':'Check version, units and fidelity first, then choose the target; a failed import rolls back the whole batch.',
+    [TX_IMPORTFIRST]:'Check version, units and fidelity first, then choose the target; a failed import rolls back the whole batch.',
     '单位确认':'Unit confirmation',
     '落点':'Target',
     '可编辑对象（按原图层）':'Editable objects (keep original layers)',
@@ -545,8 +583,8 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     'DXF 中没有可导入实体':'No importable entities in this DXF',
     '提示：该 DXF 含 ':'Note: this DXF contains ',
     'DXF 导入失败（已回滚）：':'DXF import failed (rolled back): ',
-    '存在非法行，整批取消导入；修正后重新导入即可，现有对象未被修改。':'Invalid rows found; the batch import is cancelled. Fix and re-import; existing objects are untouched.',
-    '按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：':'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
+    [TX_BADROWS]:'Invalid rows found; the batch import is cancelled. Fix and re-import; existing objects are untouched.',
+    [TX_TABLEOPS]:'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
     '个对象替换（':' objects replaced (',
     '行条件）、':' row conditions), ',
     [TX_TIMP]:'Updatable: name, type, layer, coords/angle/size/shape/closed/nodes, annotation, visibility, lock, note. Replace rows change properties only; match columns narrow scope; Floor scopes all rows.',
@@ -614,7 +652,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已批量显示标注':'Labels shown for selection',
     '已批量隐藏标注':'Labels hidden for selection',
     '已更新图上标注':'On-plan labels updated',
-    '先勾选对象':'Select objects first',
+    [TX_PICKFIRST]:'Select objects first',
     '选中对象标注状态未变化':'Selected objects already have the requested label state',
     '没有可修改标注的选中对象':'No selected objects with editable labels',
     /* V-5 图纸修订参照版（仅本会话运行时，不持久化） */
