@@ -228,7 +228,7 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 | 静态层局部补绘的边界 | 3 条像素采样只覆盖 **dpr=1 的 headless Chromium** 与**属性面板提交**路径；标签溢出超出 96 px pad 仍可能被擦，dpr=2、拖拽（走整层重建）与真实设备未实测 |
 | 状态写入口 / 耦合 / 钩子 | 由 `check.mjs` 9.1～9.4 静态判据与 `check-gates` 场景 14～17 反向验证；**无运行时 e2e**，动态别名、`globalThis[…]` 访问仍可能漏 |
 | 插件沙箱导出器权限 | 导出器未声明 `state:read` 时只收到空 `input`，目前是静态核对；无运行期 e2e |
-| 批量闭合/反向、环形阵列、坐标/标高、手绘/双向箭头、双击文字/引线编辑、Alt+拖动复制、批量颜色/线宽、Ctrl+A / Ctrl+Shift+V / Ctrl+0 / Ctrl+] / Ctrl+[ / Ctrl+Shift+] / [ / F2 / F3 / F7 / +/- / 单键切工具、鼠标旋转手柄（点/折线/扇形） | e2e 覆盖 UI 行为；`rotateObjectAbout` / `createTextObject` / `askText` / `cloneObjects` / `dropAltCopies` 作为 DOM 入口内的纯函数无独立 selftest，手绘采样与双端箭头导出也只有交互路径覆盖 |
+| 批量闭合/反向、环形阵列、坐标/标高、手绘/双向箭头、双击文字/引线编辑、Alt+拖动复制、批量颜色/线宽、Ctrl+A / Ctrl+Shift+V / Ctrl+0 / Ctrl+] / Ctrl+[ / Ctrl+Shift+] / [ / F2 / F3 / F7 / F8 / +/- / 单键切工具、鼠标旋转手柄（点/折线/扇形） | e2e 覆盖 UI 行为；`rotateObjectAbout` / `createTextObject` / `askText` / `cloneObjects` / `dropAltCopies` 作为 DOM 入口内的纯函数无独立 selftest，手绘采样与双端箭头导出也只有交互路径覆盖 |
 
 上表任一空白被补上时，必须同时更新本节、§3.2 矩阵与 [performance](performance.md)（如涉及性能读数）。
 

@@ -6,7 +6,7 @@
  */
 /* 长文案单一来源：既做 i18n 键，也被界面直接引用，避免同一串在产物里重复两遍 */
 const TX_CLR='将清空当前楼层底图、场地、{n} 个对象与标注、校准/仿射配置；可用 Ctrl+Z 撤销。';
-const TX_AFF='仿射校准：依次点击已知点并输入实地 X,Y（2 点=相似，≥3 点=完整仿射）；控制点可拖拽/Delete 删除/Ctrl+Z 撤销，Enter 或 ✓ 求解，右键/Esc 取消';
+const TX_AFF='仿射校准：点击已知点并输入实地 X,Y（2 点=相似，≥3 点=完整仿射）；控制点可拖拽/Delete/Ctrl+Z，Enter 或 ✓ 求解，右键/Esc 取消';
 const TX_TIMP='可更新名称、业务类型、图层、坐标/角度/宽高/形状/闭合/节点、标注、显隐、锁定、备注；替换只改属性不改几何；匹配列限定范围，「楼层」列限定落点。';
 const TX_DWG='PlotPin 不内置 DWG 内核，也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF 后导入：';
 const TX_SDRAG='拖拽画布控制点调整场地；也可输入精确坐标/参数（米，可为负）；场地与图片底图可同时存在。';
@@ -18,7 +18,7 @@ const TX_TAUTO='长度/面积/节点数按几何自动计算；导入核对不�
 const TX_BDXF='该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入';
 const TX_POLY='折线：逐点单击、双击结束；Shift 正交，右键/Esc 取消（可勾选闭合）';
 /* 界面提示与字典键共用同一份字符串：同一句在产物里只存一份（体积预算按原始字节计） */
-const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
+const TX_PTYPE='该类型仅标识位置（屏幕固定图标）；如需真实覆盖范围，请在「图层/类型」改用圆/方/扇形/杆型。';
 const TX_CALIB='比例尺：点两个已知点，可拖拽/Delete 删除/Ctrl+Z 撤销，Enter 或 ✓ 应用';
 const TX_STATS='统计与缩放/像素/DPR 无关；面积为解析公式，与报告同源；历史 v1/v2 报告不可直接对比。';
 const TX_LENS='镜头口径：张角取 fov（默认 90°，10–360°）；距离取 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 不计入；隐藏对象/图层不进分母。';
@@ -27,18 +27,18 @@ const TX_UNSUP='不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / P
 const TX_MERGE='合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}';
 const TX_LDEL='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后迁移到「{target}」。继续？';
 const TX_TDEL='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后迁移到「{target}」。继续？';
-const TX_PDFMP='多页按所选页升序并排，首页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层。底图只取首页内嵌图。';
+const TX_PDFMP='多页按所选页升序并排，首页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，底图只取首页。';
 const TX_REST='恢复=一次新编辑（可 Ctrl+Z）；对端采纳前可能仍显示旧版；旧底图/照片可能已回收。';
-const TX_PEER='对端已推送工程快照。确认后对方拥有完整编辑权：可覆盖、删除对象与楼层、修改配置。是否应用并继续同步？';
+const TX_PEER='对端已推送工程快照。确认后对方拥有完整编辑权：可覆盖、删除对象与楼层、改配置。是否应用并继续同步？';
 const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）';
-const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个用逗号分隔。凭据明文存本机，不进邀请串、协作消息与工程文件。';
-const TX_ACOORD='坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。';
+const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个用逗号分隔。凭据明文存本机，不进邀请串/协作/工程。';
+const TX_ACOORD='坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/多边形请用「折线」勾选闭合。';
 const TX_RECT='区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消';
 const TX_OSNAP='自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪';
 const TX_ARC='含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。';
-const TX_ARCIMP='不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。';
+const TX_ARCIMP='不勾选则按 24 段折线导入（与旧版一致）。圆弧为纯描边几何，不参与面积与覆盖率。';
 const TX_QR='扫码得到 PLOTPIN:编号，可在工程内搜索该编号定位设备。本页由 PlotPin 离线生成，无外部依赖。';
-const TX_TB='默认关闭；关闭时导出产物与旧版一致。日期留空=导出当天，比例留空=按当前缩放自动 1:N。';
+const TX_TB='默认关闭，关闭时导出与旧版一致；日期留空=当天，比例留空=自动 1:N。';
 const TX_PDFST='浏览器本地存储不可用，PDF 底图仅本次会话有效，请改用 JSON 工程保存';
 const TX_BADJSON='JSON 工程格式不正确（应为图钉 PlotPin 导出的 v1 工程文件）';
 const TX_DSCALE='检测到图纸比例 1:{a}{more}（仅提示，不修改自动标定）';
@@ -278,9 +278,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '圆心/中心即形状基点（画布上以 ⊕ 标出），移动图形即移动基点；':
       'The circle/ellipse/sector center is the shape base (marked ⊕ on canvas); moving the shape moves the base.',
     [TX_ACOORD]:
-      'Coordinates are world coordinates in metres and may be negative; areas stay true-to-scale. For triangles/arbitrary polygons use the Polyline tool with Closed area.',
+      'World coordinates in metres, may be negative; areas stay true-to-scale. For triangles/polygons use the Polyline tool with Closed.',
     [TX_PTYPE]:
-      'This type is a fixed-screen position marker. For scale-true coverage, use a circle/square/sector/bar point type under Layers/Types.',
+      'Fixed-screen position marker; for real coverage use a circle/square/sector/bar type under Layers/Types.',
     [TX_SEDIT]:
       'Edit the coordinates/parameters below, or drag handles with the Site nodes tool (metres, may be negative).',
     '提示：单击对象可在此编辑其属性；框选可批量选择；Delete 删除；Ctrl+Z 撤销。':
@@ -338,7 +338,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     [TX_CALIB]:
       'Scale: click two known points; drag/Delete to adjust, Ctrl+Z to undo, Enter or ✓ to apply',
     [TX_AFF]:
-      'Affine: click known points and enter real X,Y (2 = similarity, 3+ = full affine); drag controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, Esc cancels.',
+      'Affine: click known points and enter real X,Y (2 = similarity, 3+ = full affine); drag/Delete/Ctrl+Z controls, Enter or ✓ solves, Esc cancels.',
     '参考线': 'Guides',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
@@ -352,6 +352,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '在折线上插入节点 / 删除节点':'Insert/delete a node on the polyline',
     '双击线段 / 节点（选择工具）':'Double-click segment/node (Select tool)',
     '水平/垂直约束':'Horizontal/vertical constraint',
+    '水平/垂直约束（F8 锁定，Shift 临时）':'Horizontal/vertical constraint (F8 locks, Shift temporary)',
     '正方形 / 正圆 / 45°方位吸附':'Square / circle / 45° bearing snap',
     '自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪':
       'Auto-snap endpoint □ midpoint △ center ◎ quadrant ◇ perpendicular ⊥ intersection × tangent; orange dashed = 45° polar/parallel tracking',
@@ -606,7 +607,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     'Backspace（绘制中）':'Backspace (drawing)',
     '双击线段 / 双击节点（选择工具）':'Double-click segment / node (select tool)',
     '校准点退化（共线/重合），无法求解':'Calibration points are degenerate (collinear/coincident); cannot solve',
-    'Shift（画线/标注/拖节点时）':'Shift (while drawing/annotating/dragging nodes)',
+    'Shift / F8（正交）':'Shift / F8 (ortho)',
     'Shift（拖矩形/椭圆/扇形时）':'Shift (while dragging rectangle/ellipse/sector)',
     '已批量显示标注':'Labels shown for selection',
     '已批量隐藏标注':'Labels hidden for selection',
@@ -676,7 +677,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '保留圆弧（ARC {n} 条）：写入圆弧对象；旧版 PlotPin 打开该工程会丢弃这些圆弧':
       'Keep arcs ({n} ARC): write arc objects; older PlotPin versions will drop them when opening this project',
     [TX_ARCIMP]:
-      'Leave unchecked to import as 24-segment polylines (same as before, opens in any version). Arcs are stroke-only geometry and do not count toward area or coverage.',
+      'Leave unchecked to import as 24-segment polylines (same as before). Arcs are stroke-only and excluded from area/coverage.',
     'PDF 已导入：{line} 线 / {area} 区域 / {text} 文字{notes}':
       'PDF imported: {line} lines / {area} areas / {text} texts{notes}',
     '表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项':
@@ -795,7 +796,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
       '{n} page(s) selected · {e} shapes · {o} / {max} objects after import',
     [TX_PDFMP]:
-      'Pages are placed side by side in ascending order, first page at the origin, {gap} m apart; each page\'s objects go to a "PDF page i" layer. Only the first page\'s embedded image is used as the base map.',
+      'Pages side by side in selected order, first page at origin, {gap} m apart; each page\'s objects go to a "PDF page i" layer; base map from page 1 only.',
     '共 {total} 页，已导入第 {list} 页（横向并排，间距 {gap} m）':
       '{total} page(s); imported page(s) {list} (side by side, {gap} m gap)',
     '第 {list} 页没有可导入的图形，已跳过':
@@ -1011,7 +1012,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '绘制图框边框':'Draw frame border', '绘制比例尺':'Draw scale bar',
     '绘制图例（按可见对象类型/图层）':'Draw legend (visible types / layers)',
     [TX_TB]:
-      'Off by default; when off the export is identical to the previous version. Empty date = export date, empty scale = auto 1:N by current zoom.',
+      'Off by default; when off exports match the previous version. Empty date = today, empty scale = auto 1:N.',
     '图框模板已保存':'Title block saved',
     '工程名':'Project name', '图号':'Drawing no.', '比例':'Scale', '日期':'Date', '版本':'Version',
     '设计':'Designer', '审核':'Reviewer', '单位':'Company', '图例':'Legend',
@@ -1128,7 +1129,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    [TX_RELAY]:'Direct by default. One server per line: URL | username | credential; STUN needs only URL; commas separate URLs. Credentials stay in this browser and never enter invites, messages or project files.',
+    [TX_RELAY]:'Direct by default. One server per line: URL | username | credential; STUN needs only URL; commas separate URLs. Credentials stay local and never enter invites/collab/project files.',
     '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',

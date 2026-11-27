@@ -135,9 +135,9 @@ let lastCanvasHandledAt=0, lastCanvasPointerUpAt=0;
  *  - 扇形拖画：Shift=方位角吸附 45° 整数倍
  */
 function constrainWorldPoint(wp,e){
-  const shift=!!e.shiftKey;
+  const shift=!!e.shiftKey, ortho=shift||orthoLock;
   if(drag?.type==='node'){
-    if(!shift) return wp;
+    if(!ortho) return wp;
     const o=state.objects.find(x=>x.id===drag.id);
     if(o && o.points && o.points.length>1){
       const i=drag.handle.index;
@@ -151,7 +151,7 @@ function constrainWorldPoint(wp,e){
     /* 测距链(ruler)与普通折线一样约束；角度/面积/两点距离标注不约束 */
     if(currentTool==='dimension' && draft.subtype!=='ruler') return wp;
     const last=draft.points[draft.points.length-1];
-    if(shift) return orthoPoint(last,wp,true);
+    if(ortho) return orthoPoint(last,wp,true);
     const prev=draft.points.length>=2?draft.points[draft.points.length-2]:null;
     const pv=prev?[last[0]-prev[0],last[1]-prev[1]]:null;
     const prevLen=pv?Math.hypot(pv[0],pv[1]):0;
@@ -175,6 +175,7 @@ function constrainWorldPoint(wp,e){
 }
 const OSNAP_PX=11;   // 捕捉吸附半径（屏幕像素）
 let activeOsnap=null; // 当前帧命中的捕捉点（渲染标记用）
+let orthoLock=false;  // F8 正交锁定：仅折线/标注逐点录入与拖节点；矩形/椭圆/扇形仍按 Shift
 /* Tab 循环锁定的捕捉类型：null=自动（全部类型按优先级），其余为仅吸附该类型。
    循环顺序：自动 → 端点 → 中点 → 圆心 → 象限点 → 交点 → 垂足 → 切点 → 自动 */
 const OSNAP_CYCLE=[null,'endpoint','midpoint','center','quadrant','intersection','perpendicular','tangent'];
@@ -1353,7 +1354,7 @@ function helpShortcutRows(){
     [L('Esc / 右键（绘制中）'),L('取消绘制 / 清除选择（右键取消逐点录入；空闲时平移）')],[L('双击 / Enter'),L('完成测距/折线/面积（双击不重复落点）')],
     [L('Backspace（绘制中）'),L('删除上一个录入节点')],
     [L('双击线段 / 节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
-    [L('Shift（画线/标注/拖节点时）'),L('水平/垂直约束')],
+    [L('Shift / F8（正交）'),L('水平/垂直约束（F8 锁定，Shift 临时）')],
     [L('Shift（拖矩形/椭圆/扇形时）'),L('正方形 / 正圆 / 45°方位吸附')],
     [L('对象捕捉')+' / F3',L(TX_OSNAP)],
     ['Tab / Shift+Tab',L(TX_SNAPC)],
@@ -1515,6 +1516,13 @@ window.addEventListener('keydown',e=>{
     e.preventDefault();
     state.settings.gridVisible=!state.settings.gridVisible;
     scheduleSave(); requestRender(); return;
+  }
+  /* F8 正交锁定：仅逐点录入/拖节点；Shift 仍可临时正交 */
+  if(onCanvas&&e.key==='F8'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    e.preventDefault();
+    orthoLock=!orthoLock;
+    callHook('ui.toast',L('水平/垂直约束')+(orthoLock?' ✓':' ✕'));
+    return;
   }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }

@@ -601,7 +601,7 @@ test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
 
-test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、单键切工具', async ({ page }) => {
+test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、F8、单键切工具', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -668,6 +668,21 @@ test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、�
   await expect.poll(() => page.evaluate(() => state.viewport.zoom)).toBeGreaterThan(z0);
   await page.keyboard.press('Minus');
   await expect.poll(() => page.evaluate(() => state.viewport.zoom)).toBeCloseTo(z0, 6);
+
+  /* F8：正交锁定；线段落点被约束为水平/垂直，再按一次关闭 */
+  await page.keyboard.press('F8');
+  await expect.poll(() => page.evaluate(() => orthoLock)).toBe(true);
+  await clickTool(page, 'line');
+  await page.selectOption('#lineMode', 'segment');
+  await page.mouse.click(cx - 60, cy);
+  await page.mouse.move(cx + 60, cy + 40, { steps: 4 });
+  await page.mouse.click(cx + 60, cy + 40);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(7);
+  const orthoPts = await page.evaluate(() => state.objects.at(-1).points);
+  expect(Math.abs(orthoPts[0][1] - orthoPts[1][1]) < 1e-6 || Math.abs(orthoPts[0][0] - orthoPts[1][0]) < 1e-6).toBe(true);
+  await page.locator('#canvas').focus();
+  await page.keyboard.press('F8');
+  await expect.poll(() => page.evaluate(() => orthoLock)).toBe(false);
 
   /* 单键切换工具：L→折线，V→选择 */
   await page.keyboard.press('l');
