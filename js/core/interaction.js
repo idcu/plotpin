@@ -9,10 +9,10 @@ function syncToolButtons(tool){
   });
 }
 const TOOL_TITLES={
-  select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
+  select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:I18N.t('pan'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
   rect:L(TX_RECT),line:L(TX_POLY),
   arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
-  text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
+  text:L('文字'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
   calibrate:L(TX_CALIB),
   affine:L(TX_AFF),
   'site-rect':L('矩形'), 'site-circle':L('圆形'), 'site-ellipse':L('椭圆'), 'site-sector':L('扇形'),
@@ -20,7 +20,7 @@ const TOOL_TITLES={
   'site-node':L('场地节点'),
   'image-transform':L('图片变换'),
   'guide':L('参考线'),
-  'mirror':L('镜像：选中后点两点定义轴')
+  'mirror':I18N.t('mirror')
 };
 /* 左侧栏分组：组按钮显示组内当前/上次工具；再次点击当前组弹出组内工具（Photoshop 式） */
 const GROUPS=[
@@ -35,7 +35,7 @@ const META={
   dimension:['⌁','dimension'],'site-node':['⊗','siteNode'],'image-transform':['🖼','imageXform'],guide:['╱','guide'],mirror:['⇋','mirror']
 };
 $('toolRail').innerHTML=GROUPS.map(g=>`<div class="tool-group"><button class="tool-btn" data-group-main="${g.id}"${g.tools[1]?' data-multi':''}></button></div>`).join('')
-  +'<div class="rail-sep"></div><button class="tool-btn" id="finishDraftBtn"><span class="ico">✓</span><span class="lbl" data-x="finish"></span></button>';
+  +'<button class="tool-btn" id="finishDraftBtn"><span class="ico">✓</span><span class="lbl" data-x="finish"></span></button>';
 /* 立即渲染栏内容：不依赖工程载入/语言初始化成功，避免存储或载入异常时只剩空按钮（看起来像工具栏消失） */
 syncRail();
 let flyG=null;

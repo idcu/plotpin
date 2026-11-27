@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 
 const sha = b => createHash('sha256').update(b).digest('hex');
 const COPY = '文字可选中·可搜索（视觉仍为位图，放大会发虚）';
+const OPT = '文字可搜索';
 
 test('V-3b1：矢量 PDF 选项明示文字口径与档位，默认路径字节不变', async ({ page }) => {
   await page.goto('/index.html');
@@ -28,7 +29,7 @@ test('V-3b1：矢量 PDF 选项明示文字口径与档位，默认路径字节�
   const base = readFileSync(await (await dl0).path());
 
   /* 选项文案：导出下拉必须与 features/known-issues 逐字一致 */
-  await expect(page.locator('#exportKind option[value="pdf-vector"]')).toHaveText('PDF（矢量）· ' + COPY);
+  await expect(page.locator('#exportKind option[value="pdf-vector"]')).toHaveText('PDF（矢量）· ' + OPT);
   /* 长文案不得让顶栏溢出的控件盖住右侧页签（曾导致其他用例点击超时） */
   expect(await page.evaluate(() => {
     const t = document.getElementById('tabBtn-list'), b = t.getBoundingClientRect();

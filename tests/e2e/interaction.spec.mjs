@@ -294,6 +294,13 @@ test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({
   expect(off.n).toBe(2);
   expect(off.dy).toBeCloseTo(1, 6);
   expect(off.dx).toBeCloseTo(0, 6);
+
+  /* 批量颜色：对当前选中的偏移副本写对象级颜色 */
+  await page.locator('#batchColor').evaluate(el => { el.value = '#ff0000'; });
+  await page.click('#batchColorBtn');
+  const cols = await page.evaluate(() => [...selectedIds].map(id => state.objects.find(o => o.id === id).style.color));
+  expect(cols.length).toBeGreaterThan(0);
+  expect(cols.every(c => c === '#ff0000')).toBe(true);
 });
 
 test('批量闭合/反向：折线顶点顺序反转且闭合状态可切换', async ({ page }) => {

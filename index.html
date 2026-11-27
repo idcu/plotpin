@@ -29,7 +29,7 @@
       <option value="png" data-x="exportPng">PNG 高清图</option>
       <option value="svg" data-x="exportSvg">SVG 矢量图</option>
       <option value="pdf" data-x="exportPdf">PDF（图纸位图+清单）</option>
-      <option value="pdf-vector" data-x="exportPdfVector">PDF（矢量）· 文字可选中·可搜索（视觉仍为位图，放大会发虚）</option>
+      <option value="pdf-vector" data-x="exportPdfVector">PDF（矢量）· 文字可搜索</option>
       <option value="dxf" data-x="exportDxf">DXF（CAD 互通）</option>
       <option value="dxf-fidelity" data-x="exportDxfFidelity" title="默认与旧版一致；保真导出原生曲线">DXF（保真：椭圆+圆弧）</option>
       <option value="csv" data-x="exportCsv">CSV 表格</option>
@@ -170,6 +170,8 @@
           <button class="mini" id="batchOffsetBtn" data-x="batchOffset">偏移</button>
           <button class="mini" id="batchCloseBtn" data-x="batchClose">闭合</button>
           <button class="mini" id="batchReverseBtn" data-x="batchReverse">反向</button>
+          <input type="color" id="batchColor" value="#111827" aria-label="颜色" data-xa="colorLabel">
+          <button class="mini" id="batchColorBtn" data-x="colorLabel">颜色</button>
           <button class="mini danger" id="batchDeleteBtn" data-x="batchDelete">删除</button>
         </div>
         <div class="batch-row annot-batch-row">
