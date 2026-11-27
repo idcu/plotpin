@@ -60,7 +60,7 @@ function openFloorManager(){
     `<div class="proj-current">${esc(L('当前楼层：'))}<b>${esc(currentFloorName())}</b>　${esc(L('共'))} ${floors.length} ${esc(L('层'))} · ${total} ${esc(L('个对象'))}</div>
      <div style="margin:8px 0"><button class="primary" id="floorAdd">＋ ${esc(L('新增楼层（空白场地）'))}</button></div>
      <div class="proj-list">${rows}</div>
-     <p class="hint-text">${esc(L(TX_FLOOR))}</p>`,
+     `,
     [{text:L('关闭'),click:closeModal}]);
   $('floorAdd').onclick=async()=>{
     const v=await showPrompt({title:L('新增楼层'),label:L('楼层名称'),value:'F'+(floors.length+1)});

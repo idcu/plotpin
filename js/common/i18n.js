@@ -21,7 +21,6 @@ const TX_POLY='折线：逐点单击，双击完成；按住 Shift 画水平/垂
 const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
 const TX_CALIB='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
 const TX_LOD='低缩放时按屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示；导出始终带标签。';
-const TX_FLOOR='每层独立设置底图/场地与对象；画布只显示当前楼层；图层/类型共用，工程库与 JSON 保存全部楼层。';
 const TX_STATS='统计与缩放/像素/DPR 无关；面积用解析公式（圆/椭圆/扇形），与统计面板、报告同源。历史 v1/v2 报告不可直接对比。';
 const TX_LENS='镜头口径：张角取类型 fov（默认 90°，10–360°，360° 全向）；距离取点设备 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象/图层不进分母。';
 const TX_DXFIMP='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
@@ -409,8 +408,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '切换':'Switch', '重命名':'Rename', '打开':'Open', '关闭':'Close', '层':'floors', '对象':'objects', '个':'',
     '楼层 / 多底图':'Floors / Base maps', '当前楼层：':'Current floor: ',
     '新增楼层（空白场地）':'Add floor (blank site)',
-    [TX_FLOOR]:
-      'Each floor has its own base/site and objects; the canvas shows only the current floor; layers/types are shared, and the library/JSON keep all floors.',
     '楼层名称':'Floor name',
     '重命名楼层':'Rename floor',
     '楼层已删除':'Floor deleted',

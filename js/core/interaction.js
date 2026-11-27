@@ -94,9 +94,11 @@ function createTextObject(wp,text){
   state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
   return o;
 }
-/** 文字输入弹窗唯一入口（新建文字/双击编辑共用）：title 已翻译，label 固定 */
+/** 单行输入弹窗唯一入口（文字/重命名共用） */
+function askOne(title,label,value){ return showPrompt({title,label,value}); }
+/** 文字输入入口（新建文字/双击编辑共用）：title 已翻译，label 固定 */
 function askText(title,value){
-  return showPrompt({title,label:L('文字内容'),value:value===undefined?L('标注文字'):value});
+  return askOne(title,L('文字内容'),value===undefined?L('标注文字'):value);
 }
 /** 草稿顶点入列：达到 SHAPE_POINTS_MAX 后拒绝并提示，避免病态点列拖垮包围盒/渲染 */
 function pushDraftPoint(points,wp){
@@ -1463,7 +1465,7 @@ window.addEventListener('keydown',e=>{
   if($('modalBackdrop').classList.contains('show')){ modalKeydown(e); return; }
   if(typing) return;
   /* G5：只读时拦截编辑类快捷键（撤销/重做/复制副本/粘贴/剪切/删除/方向键移动） */
-  const roEdit=(e.ctrlKey||e.metaKey)?['z','y','d','v','x'].includes(e.key.toLowerCase()):['Delete','Backspace','Enter'].includes(e.key)||e.key.startsWith('Arrow');
+  const roEdit=(e.ctrlKey||e.metaKey)?['z','y','d','v','x'].includes(e.key.toLowerCase()):['Delete','Backspace','Enter','F2'].includes(e.key)||e.key.startsWith('Arrow');
   if(readOnly&&roEdit){ e.preventDefault(); return guardWrite(L('编辑快捷键')); }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!e.shiftKey&&(currentTool==='calibrate'||currentTool==='affine')&&calibUndo()) return; e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
@@ -1501,6 +1503,17 @@ window.addEventListener('keydown',e=>{
     if(calibSelection.kind==='calibrate') calibPoints.splice(calibSelection.index,1);
     else affinePairs.splice(calibSelection.index,1);
     calibSelection=null; refreshCalibStatus(); requestRender(); return;
+  }
+  if(e.key==='F2'&&selectedIds.size===1){
+    const o=state.objects.find(x=>selectedIds.has(x.id));
+    if(o&&isEditable(o)){
+      e.preventDefault();
+      askOne(L('重命名'),L('名称'),o.name||'').then(v=>{
+        if(!v||v===o.name) return;
+        pushHistory(); o.name=v; commitChange(L('已更新'),[o.id]);
+      });
+    }
+    return;
   }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
