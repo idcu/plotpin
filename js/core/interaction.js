@@ -1262,14 +1262,26 @@ function deleteSelected(){
   if(!deletable.length) return toast('没有可删除的选中对象（可能位于锁定图层）','warn');
   showConfirm(`${L('确定删除选中的')} ${deletable.length} ${L('个对象吗？')}`).then(ok=>{
     if(!ok) return;
-    pushHistory();
-    const ids=new Set(deletable.map(o=>o.id));
-    deletable.forEach(o=>markTombstone(o.id,'object'));
-    state.objects=state.objects.filter(o=>!ids.has(o.id));
-    syncActiveFloor();   /* B7：整体替换后立即重建活动楼层别名，不等下一次保存/统计 */
-    deletable.forEach(o=>selectedIds.delete(o.id));
-    commitChange('已删除对象');
+    removeObjects(deletable,L('已删除对象'));
   });
+}
+/** 删除与剪切共用：一次历史、墓碑、活动楼层重建、清选中；message 由调用方决定 */
+function removeObjects(items,message){
+  pushHistory();
+  const ids=new Set(items.map(o=>o.id));
+  items.forEach(o=>markTombstone(o.id,'object'));
+  state.objects=state.objects.filter(o=>!ids.has(o.id));
+  syncActiveFloor();   /* B7：整体替换后立即重建活动楼层别名，不等下一次保存/统计 */
+  items.forEach(o=>selectedIds.delete(o.id));
+  commitChange(message);
+}
+/** Ctrl+X：复制可编辑选中对象到剪贴板后移除；Ctrl+Z 可整体撤回，Ctrl+V 可粘贴为副本 */
+function cutSelected(){
+  if(!guardWrite(L('剪切'))) return;
+  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+  if(!items.length) return callHook('ui.toast',L('没有可修改的选中对象'),'warn');
+  clipboard=items.map(o=>deepClone(o));
+  removeObjects(items,L('已剪切 {n} 个对象',{n:items.length}));
 }
 /** H：隐藏选中的可编辑对象；Shift+H：恢复当前楼层全部隐藏对象。只改可见性，几何不动 */
 function toggleHidden(show){
@@ -1362,7 +1374,7 @@ function pasteClipboard(inPlace){
 function helpShortcutRows(){
   return [
     ['Ctrl + Z / Y',L('撤销 / 重做')],['Delete / Backspace',L('删除选中对象')],
-    ['Ctrl + D',L('原地复制选中对象')],['Ctrl + C / V',L('复制 / 粘贴对象（偏移 1m）')],
+    ['Ctrl + D',L('原地复制选中对象')],['Ctrl + C / X / V',L('复制 / 剪切 / 粘贴对象（偏移 1m）')],
     [L('Esc / 右键（绘制中）'),L('取消绘制 / 清除选择（右键取消逐点录入；空闲时平移）')],[L('双击 / Enter'),L('完成测距/折线/面积（双击不重复落点）')],
     [L('Backspace（绘制中）'),L('删除上一个录入节点')],
     [L('双击线段 / 节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
@@ -1581,6 +1593,7 @@ window.addEventListener('keydown',e=>{
   }
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='x'){ e.preventDefault(); cutSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(e.shiftKey); return; }
   if(e.key==='Escape'){

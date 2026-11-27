@@ -722,6 +722,34 @@ test('H 隐藏选中 / Shift+H 显示全部：只改可见性且可一步撤销'
   await expect.poll(() => page.evaluate(() => state.objects.map(o => o.visible))).toEqual([false, true]);
 });
 
+test('Ctrl+X 剪切：复制并移除，Ctrl+V 粘贴副本且两步可撤销', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'point');
+  await page.mouse.click(cx - 80, cy);
+  await page.mouse.click(cx + 80, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  await clickTool(page, 'select');
+  const firstId = await page.evaluate(() => {
+    selectedIds = new Set([state.objects[0].id]); refreshSelectionUI(); return state.objects[0].id;
+  });
+  await page.locator('#canvas').focus();
+
+  await page.keyboard.press('Control+x');
+  await expect.poll(() => page.evaluate(() => ({ n: state.objects.length, c: clipboard.length, sel: selectedIds.size })))
+    .toEqual({ n: 1, c: 1, sel: 0 });
+
+  await page.keyboard.press('Control+v');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  expect(await page.evaluate(() => state.objects[1].id)).not.toBe(firstId);
+
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+});
+
 test('Ctrl+] / Ctrl+[ 调整叠放层级：单步与 Shift 置顶/置底', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();

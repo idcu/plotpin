@@ -381,7 +381,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
     '撤销 / 重做':'Undo / Redo', '删除选中对象':'Delete selected objects',
-    '原地复制选中对象':'Duplicate selection in place', '复制 / 粘贴对象（偏移 1m）':'Copy / paste objects (offset 1 m)',
+    '原地复制选中对象':'Duplicate selection in place', '复制 / 剪切 / 粘贴对象（偏移 1m）':'Copy / cut / paste objects (offset 1 m)',
     '取消绘制 / 清除选择（右键取消逐点录入；空闲时平移）':
       'Cancel drawing/clear (right-click cancels picking; pans when idle)',
     '完成测距/折线/面积（双击不重复落点）':
@@ -527,6 +527,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '已记录 1 个点，继续点击下一已知点':'Recorded 1 point; click the next known point',
     /* 常用操作反馈（toast 自动按整句匹配翻译） */
     '已撤销':'Undone', '已重做':'Redone', '已删除对象':'Objects deleted', '已复制对象':'Objects duplicated',
+    '剪切':'Cut', '已剪切 {n} 个对象':'Cut {n} objects',
     '隐藏选中 / 显示全部':'Hide selection / show all',
     '已隐藏 {n} 个对象':'Hid {n} objects', '已显示 {n} 个对象':'Restored {n} objects',
     '没有隐藏的对象':'No hidden objects',
