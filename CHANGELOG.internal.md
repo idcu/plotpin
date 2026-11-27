@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 新增置顶/置底快捷键，压缩帮助文案后净增 17 B
+
+- **Commit Hash**：`8c8592a`
+- **核心改动**：
+  - **Ctrl+Shift+] / Ctrl+Shift+[**：多选对象置顶/置底，复用 `restackObjects`（选中对象之间保持原有相对顺序）；`Ctrl+]` / `Ctrl+[` 仍为单选单步。
+  - 快捷键改用 `e.code` 判断 `BracketRight/BracketLeft`，Shift 后的 `e.key` 映射（`}`/`{`）不再影响判断。
+  - **回收**：`TX_SNAPC` 中英文去掉逐类型长列表（保留 Tab 切换与徽标恢复自动）；`TX_TIMP` / `TX_RELAY` 英文进一步压缩。
+- **预算**（实测）：dist **839,501 → 839,518 B（+17）**；gzip **274,164 → 274,116 B（−48）**；余量 **179 → 162 B**（gzip 余量 12,604 B）；SW `VERSION=302 → 303`；发行包 SHA256 `83d47603…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.82% = 887 / 1,855**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 双入口全量 e2e（**203** 用例）：源码 **200 passed / 0 failed / 3 skipped**（4.0m），dist **197 passed / 0 failed / 6 skipped**（3.7m），均 exit 0。
+  - 既有层级用例追加断言：中间对象 Ctrl+Shift+] 到索引 2、Ctrl+Shift+[ 回到 0；`interaction.spec` 双入口各 **17 passed**。
+- **公共抽象清单**：无新增函数；复用 `restackObjects` / `reorderSelected`；无新增 i18n 键。
+- **遗留风险**：余量仅 **162 B**；置顶/置底可多选，单步快捷键仍仅单选；部分浏览器或输入法可能占用 Ctrl+Shift+[，Chromium e2e 通过不代表所有环境。
+
 ## 2026-11-27 · 双击引线文字就地编辑，净增 18 B
 
 - **Commit Hash**：`7562045`
