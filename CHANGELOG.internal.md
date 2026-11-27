@@ -4,6 +4,22 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 清单筛选新增对象类型并改为多选联动
+
+- **Commit Hash**：`5528182`
+- **核心改动**：
+  - **多选筛选**：清单顶部原「全部对象 / 全部图层」两个原生 `select` 改为统一的勾选面板（`.ms` + popover），类别、对象类型、图层三项均可多选；空选=全部，面板底部「全部…」一键清空，点击外部/Esc 关闭。
+  - **对象类型筛选**：新增第三项；选项来自类型表与实际对象 `typeId`（含 arc/text/dimension 等不在类型表中的内置 id），并**随已选类别联动**过滤。类别取消后，不属于该类别的已选类型自动剔除，避免残留条件造成永远 0 行。
+  - **筛选逻辑**：`listFilterState()` 返回 `kf/tf/lf` 数组；`objectMatchesFilter()` 兼容数组与旧字符串入参（selftest 旧用法不变），关键字统一 `String()` 化，避免非字符串入参进入 `includes`。
+  - **文档**：features/user-guide 说明筛选为多选、类型随类别联动；testing/modules 增补 `list-filters.spec.mjs`。
+- **预算**（实测，基线 `7650328`）：dist **844,383 → 848,258 B（+3,875）**；gzip **274,903 → 275,940 B（+1,037）**；上限 840 KiB 下余量 **11,902 B**（gzip 余量 18,972 B）；SW `VERSION=327 → 329`；发行包 SHA256 `70f397a8…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.54% = 878 / 1,847**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 新增 `list-filters.spec.mjs`：类别多选（点+区域）、类型随类别联动、取消类别剔除类型、图层多选、组合筛选与清空；双入口各 **1 passed**。
+  - 双入口全量 e2e（**214** 用例 / **52** spec）：源码 **211 passed / 0 failed / 3 skipped**（4.0m），dist **208 passed / 0 failed / 6 skipped**（3.8m），均 exit 0。
+- **公共抽象清单**：新增 `filterKinds/filterTypes/filterLayers`、`FILTER_KINDS/FILTER_KIND_LABEL`、`typeFilterOptions()`、`renderMs()`、`renderFilterMulti()`、`filterChanged()`、`openFilterPopId()/closeFilterPops()`（features/ui-panels）；`objectMatchesFilter()` 升级为数组入参；新增 `.ms/.ms-btn/.ms-pop/.ms-item` 样式与 `allTypes`、`已选 {n} 项` 文案。
+- **遗留风险**：多选面板是自定义 popover，键盘只能逐个 Tab 勾选，未实现方向键/全选快捷键；类型选项包含类型表中暂无对象的类型（与旧类别筛选口径一致）；筛选集合只在运行期保存，刷新后回到全部；移除了 `#filterKind/#filterLayer` 原生控件，外部脚本若依赖这两个 id 需改用 `.ms` 面板。
+
 ## 2026-11-28 · 新增三点圆弧/样条曲线与顶点角度标注
 
 - **Commit Hash**：`ed8a076`
