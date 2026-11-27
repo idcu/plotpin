@@ -42,6 +42,8 @@ const META={
 };
 $('toolRail').innerHTML=GROUPS.map(g=>`<div class="tool-group"><button class="tool-btn" data-group-main="${g.id}"${g.tools[1]?' data-multi':''}></button></div>`).join('')
   +'<div class="rail-sep"></div><button class="tool-btn" id="finishDraftBtn"><span class="ico">✓</span><span class="lbl" data-x="finish"></span></button>';
+/* 立即渲染栏内容：不依赖工程载入/语言初始化成功，避免存储或载入异常时只剩空按钮（看起来像工具栏消失） */
+syncRail();
 let flyG=null;
 function closeFly(){ const f=$('toolFlyout'); if(f&&!f.hidden){ f.hidden=true; flyG=null; } }
 /** 组按钮显示组内当前工具并同步高亮 */
