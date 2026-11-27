@@ -585,3 +585,41 @@ test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
+
+test('常用快捷键：Ctrl+A 全选、Ctrl+Shift+V 原位粘贴、Ctrl+0 适应窗口', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'point');
+  await page.mouse.click(cx - 80, cy);
+  await page.mouse.click(cx + 80, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  await clickTool(page, 'select');
+
+  await page.keyboard.press('Control+a');
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(2);
+
+  await page.keyboard.press('Control+c');
+  await page.keyboard.press('Control+Shift+v');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(4);
+  const inPlace = await page.evaluate(() => {
+    const src = state.objects.slice(0, 2).map(o => [o.x, o.y]);
+    const cp = state.objects.slice(2).map(o => [o.x, o.y]);
+    return { src, cp, sel: selectedIds.size };
+  });
+  expect(inPlace.cp).toEqual(inPlace.src);
+  expect(inPlace.sel).toBe(2);
+
+  await page.keyboard.press('Control+v');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(6);
+  const offset = await page.evaluate(() => {
+    const o = state.objects[4];
+    return { dx: o.x - state.objects[0].x, dy: o.y - state.objects[0].y };
+  });
+  expect(offset.dx).toBeCloseTo(1, 6);
+  expect(offset.dy).toBeCloseTo(1, 6);
+
+  await page.evaluate(() => { state.viewport.zoom = 50; requestRender(); });
+  await page.keyboard.press('Control+0');
+  await expect.poll(() => page.evaluate(() => state.viewport.zoom === 50)).toBe(false);
+});

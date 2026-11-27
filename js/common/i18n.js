@@ -340,7 +340,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     [TX_CALIB]:
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     [TX_AFF]:
-      'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); red/green control points are draggable, Delete removes, Ctrl+Z undoes, press Enter or ✓ to solve, right-click/Esc cancels',
+      'Affine calibration: click known points and enter real X,Y (2 = rotation + uniform scale, 3+ = full affine); drag red/green controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, right-click/Esc cancels',
     '参考线': 'Guides',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
@@ -551,7 +551,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：':'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
     '个对象替换（':' objects replaced (',
     '行条件）、':' row conditions), ',
-    [TX_TIMP]:'Updatable: name, business type, layer, anchor, angle, width/height, shape, closed, node coordinates, annotation type, visibility, lock, note. Replace rows change properties only, not geometry; use Match ID / Match name / Match name contains / Match object type / Match business type / Match layer columns to narrow the scope (all must match); the Floor column also scopes updates, replacements and new-row placement.',
+    [TX_TIMP]:'Updatable: name, business type, layer, anchor, angle, size, shape, closed, nodes, annotation type, visibility, lock, note. Replace rows change properties only, not geometry; match columns (ID / name / name contains / object type / business type / layer) narrow the scope (all must match); Floor also scopes updates, replacements and new rows.',
     '表格导入失败（已回滚）：':'Table import failed (rolled back): ',
     '该型号在多厂商重名，请填写厂商后计价':'This model name is duplicated across vendors; fill in the vendor before pricing',
     '定位失败：无法切换到目标楼层':'Locate failed: cannot switch to the target floor',
@@ -641,7 +641,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '页范围格式如 1-3,5':'Page range format e.g. 1-3,5',
     '没有有效页码':'No valid page number',
     '所选页没有可导入的图形':'The selected pages contain no importable shapes',
-    [TX_SDRAG]:'Drag the control points on the canvas to adjust the site; you can also enter exact coordinates/parameters here. Coordinates are world coordinates (m) and may be negative; a site and an image base map can coexist.'
+    [TX_SDRAG]:'Drag canvas handles to adjust the site, or enter exact coordinates/parameters here. World coordinates (m), may be negative; site and image base can coexist.'
   };
 
   /* 插值模板：中文整句（含 {占位}）→ 英文整句。调用方只传数据，不再拼接句子；
@@ -1113,7 +1113,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* 片2 协作安全默认 + 其余整句缺口 */
     '快照索引写入失败，列表改为按记录实时重建':'Snapshot index write failed; the list is rebuilt from records in real time',
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
-    [TX_PEER]:'The peer connected and sent a project snapshot. After confirming, it has full edit rights to this project: it can overwrite, delete or clear objects and floors, and change settings. Apply and continue syncing?',
+    [TX_PEER]:'The peer connected and sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete/clear objects and floors, change settings. Apply and continue syncing?',
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
     [TX_PDFE]:'No usable graphics found on PDF page 1 (only page 1 is imported; pages are not merged; a scanned image may lack embedded graphics or use unsupported compression)',
     [TX_PDFST]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
@@ -1133,7 +1133,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    [TX_RELAY]:'Direct connections are used by default. One server per line: URL | username | credential; STUN needs only the URL, and multiple URLs are comma-separated. Credentials are stored in plain text in this browser and never enter invite strings, collaboration messages or project files.',
+    [TX_RELAY]:'Direct connections by default. One server per line: URL | username | credential; STUN needs only the URL; separate URLs with commas. Credentials are stored in plain text in this browser and never enter invites, collaboration messages or project files.',
     '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',

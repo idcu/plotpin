@@ -1317,7 +1317,7 @@ function copySelected(){
   clipboard=state.objects.filter(o=>selectedIds.has(o.id)).map(o=>deepClone(o));
   if(clipboard.length) toast(L('已复制 {n} 个对象到剪贴板',{n:clipboard.length}));
 }
-function pasteClipboard(){
+function pasteClipboard(inPlace){
   if(!guardWrite(L('粘贴'))) return;
   if(!clipboard.length) return;
   if(!ensureObjectCapacity(clipboard.length)) return;   /* M-13：按粘贴数量一次校验 */
@@ -1326,7 +1326,7 @@ function pasteClipboard(){
   withObjectNameScope(allObjectNames(), () => clipboard.forEach(o=>{
     const n=deepClone(o);
     n.id=uid('OBJ'); n.name=nextObjectId();
-    n.x+=1;n.y+=1; if(n.points)n.points=n.points.map(p=>[p[0]+1,p[1]+1]);
+    if(!inPlace){ n.x+=1;n.y+=1; if(n.points)n.points=n.points.map(p=>[p[0]+1,p[1]+1]); }
     n.createdAt=nowISO(); n.updatedAt=nowISO();
     state.objects.push(n); fresh.push(n.id);
   }));
@@ -1467,6 +1467,11 @@ window.addEventListener('keydown',e=>{
   if(readOnly&&roEdit){ e.preventDefault(); return guardWrite(L('编辑快捷键')); }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!e.shiftKey&&(currentTool==='calibrate'||currentTool==='affine')&&calibUndo()) return; e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='0'){ e.preventDefault(); fitView(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){
+    e.preventDefault(); const c=$('selectAllChk'); if(c){ c.checked=true; c.dispatchEvent(new Event('change')); }
+    return;
+  }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }
@@ -1487,7 +1492,7 @@ window.addEventListener('keydown',e=>{
   if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size){ deleteSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); duplicateSelected(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); return; }
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(e.shiftKey); return; }
   if(e.key==='Escape'){
     if(escapeInterrupt()==='drag') requestRender();
     return;
