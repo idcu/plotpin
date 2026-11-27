@@ -69,6 +69,11 @@ function getHandles(o){
     areaShapeHandles(o,handles);
   }else if(o.points){
     o.points.forEach((p,i)=>handles.push({type:'node',index:i,x:p[0],y:p[1]}));
+    /* 折线（含闭合多边形）：包围盒上方圆心手柄旋转全部顶点；节点手柄优先命中 */
+    if(o.kind==='line'){
+      const b=objectBounds(o);
+      handles.push({type:'rotate',kind:'lineRotate',x:(b.minX+b.maxX)/2,y:b.maxY+30/state.viewport.zoom});
+    }
   }
   return handles;
 }
@@ -101,6 +106,8 @@ function areaShapeHandles(o,handles){
     handles.push({type:'shapeHandle',mode:'edge0',x:p(a0)[0],y:p(a0)[1]});
     handles.push({type:'shapeHandle',mode:'edge1',x:p(a0+sweep)[0],y:p(a0+sweep)[1]});
     handles.push({type:'shapeHandle',mode:'arcR',x:p(mid)[0],y:p(mid)[1]});
+    const off=Math.max(.55,30/state.viewport.zoom), ha=mid*Math.PI/180;
+    handles.push({type:'rotate',x:o.x+Math.cos(ha)*(sh.r+off),y:o.y+Math.sin(ha)*(sh.r+off)});
   }
 }
 function handleAt(p,screenP){
@@ -1339,7 +1346,7 @@ function drawSelection(c,v,toS){
     }
     if(selectedIds.size===1){
       c.fillStyle='#fff'; c.strokeStyle='#2563eb'; c.lineWidth=1.5;
-      getHandles(o).forEach(h=>{ const s=toS([h.x,h.y]); c.beginPath(); c.rect(s[0]-5,s[1]-5,10,10); c.fill(); c.stroke(); });
+      getHandles(o).forEach(h=>{ const s=toS([h.x,h.y]); c.beginPath(); if(h.type==='rotate') c.arc(s[0],s[1],5,0,Math.PI*2); else c.rect(s[0]-5,s[1]-5,10,10); c.fill(); c.stroke(); });
     }
   });
 }

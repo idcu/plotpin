@@ -5,30 +5,30 @@
  * 用法：I18N.setLang('en'); I18N.apply(document); I18N.t('new')
  */
 /* 长文案单一来源：既做 i18n 键，也被界面直接引用，避免同一串在产物里重复两遍 */
-const TX_CLR='将清空当前楼层的图片底图、矢量场地、 {n} 个业务对象与标注，以及全部校准控制点/仿射配置；选中态与取景框会重置。此操作可用 Ctrl+Z 撤销。';
-const TX_AFF='仿射校准：在图上依次点击已知点并输入其实地坐标 X,Y（2 点=旋转+等比相似，≥3 点=完整仿射）；红/绿控制点可拖拽、Delete 删除、Ctrl+Z 撤销，按 Enter 或左侧 ✓ 求解，右键/Esc 取消';
-const TX_TIMP='可更新：名称、业务类型、图层、基点坐标、角度、宽高、形状、闭合、节点坐标、标注类型、显隐、锁定、备注；替换行只改属性、不改几何，可填「匹配编号 / 匹配名称 / 匹配名称包含 / 匹配对象类型 / 匹配业务类型 / 匹配图层」限定范围（多列同时满足）；「楼层」列同时限定更新、替换与新增落点。';
-const TX_DWG='PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：';
+const TX_CLR='将清空当前楼层底图、场地、{n} 个对象与标注、校准/仿射配置；可用 Ctrl+Z 撤销。';
+const TX_AFF='仿射校准：依次点击已知点并输入实地 X,Y（2 点=相似，≥3 点=完整仿射）；控制点可拖拽/Delete 删除/Ctrl+Z 撤销，Enter 或 ✓ 求解，右键/Esc 取消';
+const TX_TIMP='可更新名称、业务类型、图层、坐标/角度/宽高/形状/闭合/节点、标注、显隐、锁定、备注；替换只改属性不改几何；匹配列限定范围，「楼层」列限定落点。';
+const TX_DWG='PlotPin 不内置 DWG 内核，也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF 后导入：';
 const TX_SDRAG='拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。';
 const TX_SEDIT='直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
 const TX_SNAPC='画布聚焦时 Tab 循环切换捕捉类型；点击底部捕捉徽标恢复自动';
-const TX_SNAP='回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。';
+const TX_SNAP='回滚到快照「{name}」？未保存修改先进入撤销栈（Ctrl+Z 可撤回）；回滚后立即落盘并可继续编辑。';
 const TX_REF='参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。';
-const TX_TAUTO='长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。';
+const TX_TAUTO='长度/面积/节点数按几何自动计算；导入核对不一致只告警，以几何为准。';
 const TX_BDXF='该 DXF 是二进制格式（AutoCAD Binary DXF），浏览器端暂不能直接解析；请在 CAD 中另存为 ASCII DXF 后导入';
 const TX_POLY='折线：逐点单击，双击完成；按住 Shift 画水平/垂直线，右键/Esc 取消（勾选闭合画三角形/多边形）';
 /* 界面提示与字典键共用同一份字符串：同一句在产物里只存一份（体积预算按原始字节计） */
 const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
 const TX_CALIB='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
-const TX_STATS='统计与缩放/像素/DPR 无关；面积用解析公式（圆/椭圆/扇形），与统计面板、报告同源。历史 v1/v2 报告不可直接对比。';
-const TX_LENS='镜头口径：张角取类型 fov（默认 90°，10–360°，360° 全向）；距离取点设备 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象/图层不进分母。';
+const TX_STATS='统计与缩放/像素/DPR 无关；面积为解析公式，与报告同源；历史 v1/v2 报告不可直接对比。';
+const TX_LENS='镜头口径：张角取 fov（默认 90°，10–360°）；距离取 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 不计入；隐藏对象/图层不进分母。';
 const TX_DXFIMP='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
 const TX_UNSUP='不支持的文件类型：.{ext}（支持 JSON 工程 / DXF / PDF / CSV·TSV·XLSX 表格 / 图片底图）';
 const TX_MERGE='合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 新增楼层 {floorsAdded}{extra}{conflict}';
 const TX_LDEL='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
 const TX_TDEL='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
-const TX_PDFMP='多页按所选页升序横向并排，所选的第一个页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，便于区分来源页。底图只取所选页中第 1 页的内嵌图。';
-const TX_REST='恢复 = 一次新编辑（可 Ctrl+Z 撤销）；对端采纳前可能仍显示旧版本。旧值引用的底图/照片可能已被回收。';
+const TX_PDFMP='多页按所选页升序并排，首页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层。底图只取首页内嵌图。';
+const TX_REST='恢复=一次新编辑（可 Ctrl+Z）；对端采纳前可能仍显示旧版；旧底图/照片可能已回收。';
 const TX_PEER='对端已连接并推送工程快照。确认后对方拥有本工程完整编辑权：可覆盖、删除、清空对象与楼层、修改配置。是否应用并继续同步？';
 const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）';
 const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。';
@@ -338,7 +338,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     [TX_CALIB]:
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     [TX_AFF]:
-      'Affine: click known points, enter real X,Y (2 = rotation + scale, 3+ = full affine); drag red/green controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, Esc cancels.',
+      'Affine: click known points and enter real X,Y (2 = similarity, 3+ = full affine); drag controls, Delete removes, Ctrl+Z undoes, Enter/✓ solves, Esc cancels.',
     '参考线': 'Guides',
     '鼠标：':'Cursor: ',
     /* 快捷键帮助 */
@@ -448,7 +448,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '全部行均可导入。':'All rows can be imported.',
     '项更新、':'updates, ', '项新增。':'new objects.',
     [TX_TAUTO]:
-      'Length/area/node count are recomputed from geometry; inconsistent manual values only warn and never block, geometry wins.',
+      'Length/area/node count are computed from geometry; inconsistent imported values only warn; geometry wins.',
     '建议导入前先导出 JSON 备份。':'Export a JSON backup before importing.',
     '取消':'Cancel', '合并导入':'Merge import',
     '参与统计的点设备：':'Cameras counted: ', '（含物理尺寸的圆/球机、扇形/摄像头、方形覆盖）':' (physical circles/dome cameras, sector/cameras, square coverage)',
@@ -459,9 +459,9 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Grid estimate; coverage = sampled cells covered by any field of view inside the area',
     '统计口径 v3':'Coverage spec v3', '固定目标':'fixed target', '格，按可见区域面积分配（实际':'cells allocated by visible area (actual', '格），格边':'cells), cell edge',
     [TX_STATS]:
-      'Independent of zoom/pixels/DPR; area uses analytic formulas (circles/ellipses/sectors), shared with stats and reports. Legacy v1/v2 reports are not directly comparable.',
+      'Independent of zoom/pixels/DPR; areas use analytic formulas, shared with reports. Legacy v1/v2 reports are not directly comparable.',
     [TX_LENS]:
-      'Lens: fov from type (default 90°, 10–360°, 360° = omni); range from phys(m): sector=phys, circle/square=phys/2; markers without phys excluded; hidden objects/layers excluded from denominator.',
+      'Lens: fov (default 90°, 10–360°); range from phys(m): sector=phys, circle/square=phys/2; missing phys excluded; hidden objects/layers excluded from denominator.',
     '当前没有可用于统计的区域：请先绘制「区域」或勾选闭合的「折线」。':'No areas to analyze: draw an Area or a closed Polyline first.',
     '视场覆盖率分析':'Field-of-view coverage', '布点优化…':'Placement optimization…', '导出盲区 GeoJSON':'Export blind spots GeoJSON',
     '清除叠加层':'Clear overlay', '布点优化':'Placement optimization',
@@ -521,7 +521,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* D-11：补齐 D-07/D-09 新增存档、导入预览与 UI 文案的英文条目 */
     '底图资产缺失，请重新导入底图':'Base-map asset missing; re-import the base map',
     '图片底图正在解码，请稍后重试':'Image base map is still decoding; try again shortly',
-    [TX_DWG]:'PlotPin has no DWG engine (no ODA/Aspose licence) and never modifies the original file. Save a copy as DXF or PDF in CAD, then choose the converted file:',
+    [TX_DWG]:'PlotPin has no DWG engine and never modifies the original file. Save a copy as DXF or PDF in CAD, then import it:',
     '转 DXF':'Convert to DXF',
     'AutoCAD「文件 → 另存为 → DXF（ASCII）」，建议 2013/2018 版本；':'In AutoCAD: File → Save As → DXF (ASCII), preferably 2013/2018;',
     '转 PDF':'Convert to PDF',
@@ -546,7 +546,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：':'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
     '个对象替换（':' objects replaced (',
     '行条件）、':' row conditions), ',
-    [TX_TIMP]:'Updatable: name, type, layer, anchor, angle, size, shape, closed, nodes, annotation, visibility, lock, note. Replace rows change properties only; match columns (ID/name/name contains/object type/business type/layer) narrow scope; Floor scopes updates, replacements and new rows.',
+    [TX_TIMP]:'Updatable: name, type, layer, coords/angle/size/shape/closed/nodes, annotation, visibility, lock, note. Replace rows change properties only; match columns narrow scope; Floor scopes all rows.',
     '表格导入失败（已回滚）：':'Table import failed (rolled back): ',
     '该型号在多厂商重名，请填写厂商后计价':'This model name is duplicated across vendors; fill in the vendor before pricing',
     '定位失败：无法切换到目标楼层':'Locate failed: cannot switch to the target floor',
@@ -723,7 +723,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '确定删除工程「{name}」？此操作不可撤销（不影响已导出的文件）。':
       'Delete project "{name}"? This cannot be undone (exported files are unaffected).',
     [TX_CLR]:
-      'Clear the image base, vector site, {n} objects and annotations on this floor, plus all calibration control points and affine settings; selection and view will reset. Undo with Ctrl+Z.',
+      'Clear this floor\'s base map, site, {n} objects/labels and calibration/affine data; Ctrl+Z undoes it.',
     '其余提示略 {n}': 'Remaining warnings omitted: {n}',
     '其余错误略 {n}': 'Remaining errors omitted: {n}',
     ' · 第 {n} / {total} 页': ' · Page {n} / {total}',
@@ -747,7 +747,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Delete snapshot "{name}"? Only this version record is removed; the current project and other snapshots are unaffected.',
     '快照已生成：{n} 个对象 · {size} · {ms}ms': 'Snapshot created: {n} objects · {size} · {ms}ms',
     [TX_SNAP]:
-      'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack first (Ctrl+Z to revert); the rollback is saved immediately and editing continues.',
+      'Roll back to snapshot "{name}"? Unsaved changes go to the undo stack (Ctrl+Z to revert); the rollback is saved immediately and editing continues.',
     '已回滚到快照：{time}': 'Rolled back to snapshot: {time}',
     '仿射校准 · 第 {n} 点': 'Affine calibration · point {n}',
     '该点的实地坐标 X,Y（米，逗号分隔）。已记录图上像素 ({x}, {y})':
@@ -795,7 +795,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
       '{n} page(s) selected · {e} shapes · {o} / {max} objects after import',
     [TX_PDFMP]:
-      'Pages are placed side by side in ascending order, first page at the origin, {gap} m apart; each page\'s objects go to a "PDF page i" layer to keep sources traceable. Only the first page\'s embedded image is used as the base map.',
+      'Pages are placed side by side in ascending order, first page at the origin, {gap} m apart; each page\'s objects go to a "PDF page i" layer. Only the first page\'s embedded image is used as the base map.',
     '共 {total} 页，已导入第 {list} 页（横向并排，间距 {gap} m）':
       '{total} page(s); imported page(s) {list} (side by side, {gap} m gap)',
     '第 {list} 页没有可导入的图形，已跳过':
@@ -987,7 +987,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '本机时钟不晚于删除时间，已拒绝恢复（否则下次同步会被删除盖回）':
       'Local clock is not later than the deletion time; restore refused (the next sync would delete it again)',
     [TX_REST]:
-      'Restore is a new edit (Ctrl+Z to undo); the peer may still show the old version until sync. Assets referenced by the old value may already be reclaimed.',
+      'Restore is a new edit (Ctrl+Z to undo); the peer may still show the old version; old base maps/photos may already be reclaimed.',
     '{n} 个对象':'{n} object(s)',
     '邀请串':'Invite string',
     '字节，超过内置二维码上限':'bytes, exceeding the built-in QR limit of',

@@ -3607,8 +3607,8 @@ await section("36.6 ARC 渲染交互：命中/手柄/画布/标注", async () =>
   ok('S2-hitObject 角度不符不命中', api.hitObject(at(180),[0,0])===null);
 
   const hs=api.getHandles(arc);
-  eq('S2-三个形状手柄', hs.length, 3);
-  eq('S2-手柄模式', JSON.stringify(hs.map(h=>h.mode)), JSON.stringify(['edge0','edge1','arcR']));
+  eq('S2-四个形状手柄', hs.length, 4);
+  eq('S2-手柄模式', JSON.stringify(hs.map(h=>h.type==='rotate'?'rotate':h.mode)), JSON.stringify(['edge0','edge1','arcR','rotate']));
   approx('S2-edge0 落点角度 0°', hs[0].x, 50, 1e-9);
   approx('S2-edge1 落点角度 90°', hs[1].y, 50, 1e-9);
   approx('S2-arcR 落在弧中点', hs[2].y, 50*Math.SQRT1_2, 1e-9);

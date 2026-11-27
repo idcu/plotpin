@@ -545,8 +545,9 @@ canvas.addEventListener('pointermove',e=>{
   if(drag?.type==='rotate'){
     drag.dirty=true;
     const o=state.objects.find(x=>x.id===drag.id); if(!o) return;
-    /* 圆弧没有整体朝向，旋转手柄按指针方位增量搬移起止角 */
-    if(o.kind==='arc'&&o.shape&&o.shape.type===ARC) rotateArcByHandle(o,drag.original,drag.start,wp);
+    /* 折线/扇形/圆弧：按指针方位增量旋转几何；其余形状写回 angle */
+    if(o.kind==='line'&&drag.handle.kind==='lineRotate') rotateLineByHandle(o,drag,wp);
+    else if(o.shape&&(o.shape.type===ARC||o.shape.type===SEC)) rotateArcByHandle(o,drag.original,drag.start,wp);
     else rotateShapeByHandle(o,wp,drag.handle.kind==='pointRotate');
     requestRender(); return;
   }
@@ -759,6 +760,13 @@ function moveObjectBy(o,orig,d){
   o.updatedAt=nowISO();
 }
 function syncFirstPoint(o){ if(o.points&&o.points.length){ o.x=o.points[0][0]; o.y=o.points[0][1]; } }
+/** 折线旋转：以原始质心为轴、按拖拽起止方位增量旋转全部顶点；基线取 drag.original，避免逐帧累加漂移 */
+function rotateLineByHandle(o,d,wp){
+  const c=objectCenter(d.original);
+  const delta=(Math.atan2(wp[1]-c[1],wp[0]-c[0])-Math.atan2(d.start[1]-c[1],d.start[0]-c[0]))*180/Math.PI;
+  o.points=d.original.points.map(p=>rotatePoint(p,c,delta));
+  syncFirstPoint(o);
+}
 function resizeRectByHandle(o,drag,p){
   if(!o) return;
   if(o.shape&&o.shape.type===PARA) return resizeParallelogramByHandle(o,drag,p);
@@ -1491,14 +1499,14 @@ window.addEventListener('keydown',e=>{
   }
   const tk=(!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey)?TOOL_KEYS[e.key.toLowerCase()]:null;
   if(tk){ e.preventDefault(); setTool(tk); return; }
-  if(e.key==='F3'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+  if(onCanvas&&e.key==='F3'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
     e.preventDefault();
     state.settings.osnap=!state.settings.osnap;
     if(!state.settings.osnap) osnapMode=null;
     updateOsnapChip(); scheduleSave(); requestRender(); return;
   }
   /* F7 网格显隐：视图设置，静态层签名含 settings，requestRender 即触发重建 */
-  if(e.key==='F7'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+  if(onCanvas&&e.key==='F7'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
     e.preventDefault();
     state.settings.gridVisible=!state.settings.gridVisible;
     scheduleSave(); requestRender(); return;

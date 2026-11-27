@@ -594,13 +594,14 @@ function rotateShapeByHandle(o,wp,pointRotate){
  * 起止角整体搬移、张角不变。基线取 drag.original 里的 a0，避免逐帧累加漂移。
  */
 function rotateArcByHandle(o,orig,startWp,wp){
-  if(!o||!o.shape||o.shape.type!==ARC) return;
-  const base=(orig&&orig.shape&&orig.shape.type===ARC)?orig.shape:o.shape;
-  const cx=Number(o.x)||0, cy=Number(o.y)||0, sweep=arcSweep(base);
+  if(!o||!o.shape||(o.shape.type!==ARC&&o.shape.type!==SEC)) return;
+  const base=(orig&&orig.shape&&(orig.shape.type===ARC||orig.shape.type===SEC))?orig.shape:o.shape;
+  const cx=Number(o.x)||0, cy=Number(o.y)||0, isArc=base.type===ARC;
+  const sweep=isArc?arcSweep(base):sectorSweep(base);
   const bearing=p=>Math.atan2((Number(p&&p[1])||0)-cy,(Number(p&&p[0])||0)-cx)*180/Math.PI;
   const delta=bearing(wp)-bearing(startWp);
   const a0=normalizeAngle((Number(base.a0)||0)+delta);
-  o.shape={type:ARC,r:Math.max(.05,Number(base.r)||0),a0,a1:a0+sweep};
+  o.shape={type:base.type,r:Math.max(.05,Number(base.r)||0),a0,a1:a0+sweep};
 }
 /**
  * 区域形状互换：保持中心（质心）不动，按等面积（矩形/平行四边形/圆/扇形）或外接轴（椭圆）换算参数。

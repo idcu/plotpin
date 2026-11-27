@@ -647,7 +647,8 @@ test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、单键�
   await page.locator('#modalFooter button.primary').click();
   await expect.poll(() => page.evaluate(() => state.objects[0].name)).toBe('对象改名');
 
-  /* F3：开关对象捕捉（两次切回原值） */
+  /* F3：开关对象捕捉（两次切回原值）；先让画布获得焦点，F 键仅在画布/正文聚焦时生效 */
+  await page.locator('#canvas').focus();
   const osnap = await page.evaluate(() => state.settings.osnap);
   await page.keyboard.press('F3');
   await expect.poll(() => page.evaluate(() => state.settings.osnap)).toBe(!osnap);
@@ -692,4 +693,86 @@ test('Ctrl+] / Ctrl+[ 调整叠放层级：单步与 Shift 置顶/置底', async
   await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(2);
   await page.keyboard.press('Control+Shift+[');
   await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(0);
+});
+
+/* 旋转手柄工具：返回手柄与对象中心的屏幕坐标 */
+async function rotateHandle(page, index = 0) {
+  return page.evaluate((i) => {
+    const o = state.objects[i];
+    const h = getHandles(o).find(x => x.type === 'rotate');
+    if (!h) return null;
+    const c = objectCenter(o), s = w2s([h.x, h.y]), cs = w2s([c[0], c[1]]);
+    const r = document.getElementById('canvas').getBoundingClientRect();
+    return { hx: r.left + s[0], hy: r.top + s[1], cx: r.left + cs[0], cy: r.top + cs[1] };
+  }, index);
+}
+async function dragRotate(page, p, deg = 90) {
+  await page.mouse.move(p.hx, p.hy);
+  await page.mouse.down();
+  await page.mouse.move(p.cx + Math.cos(deg * Math.PI / 180) * 120, p.cy + Math.sin(deg * Math.PI / 180) * 120, { steps: 8 });
+  await page.mouse.up();
+}
+
+test('鼠标旋转：点设备、折线、扇形拖圆形手柄旋转并可撤销', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  const resetScene = () => page.evaluate(() => {
+    state.objects = []; selectedIds.clear(); draft = null;
+    history.past.length = 0; history.future.length = 0;
+    setTool('select'); refreshSelectionUI(); requestRender();
+  });
+
+  /* 点设备：初始 angle=0，拖到 90° */
+  await clickTool(page, 'point');
+  await page.mouse.click(cx, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await clickTool(page, 'select');
+  await page.mouse.click(cx, cy);
+  const ph = await rotateHandle(page);
+  expect(ph).not.toBeNull();
+  await dragRotate(page, ph, 90);
+  const pAngle = await page.evaluate(() => state.objects[0].angle);
+  expect(pAngle).toBeGreaterThan(45);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects[0].angle)).toBe(0);
+
+  /* 折线：拖包围盒上方圆形手柄，全部顶点绕质心旋转；撤销回原坐标 */
+  await resetScene();
+  await clickTool(page, 'line');
+  await page.mouse.click(cx - 80, cy);
+  await page.mouse.click(cx + 80, cy);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await clickTool(page, 'select');
+  await page.mouse.click(cx, cy);
+  const before = await page.evaluate(() => state.objects[0].points.map(p => p.slice()));
+  const lh = await rotateHandle(page);
+  expect(lh).not.toBeNull();
+  await dragRotate(page, lh, 90);
+  const after = await page.evaluate(() => state.objects[0].points.map(p => p.slice()));
+  expect(after).not.toEqual(before);
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(() => state.objects[0].points.map(p => p.slice()))).toEqual(before);
+
+  /* 扇形：旋转手柄搬移 a0/a1，张角不变；撤销回原角 */
+  await resetScene();
+  await clickTool(page, 'rect');
+  await page.selectOption('#areaShape', 'sector');
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 100, cy, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await clickTool(page, 'select');
+  await page.evaluate(() => { selectedIds = new Set([state.objects[0].id]); refreshSelectionUI(); });
+  const sh0 = await page.evaluate(() => ({ a0: state.objects[0].shape.a0, sweep: sectorSweep(state.objects[0].shape) }));
+  const handle = await rotateHandle(page);
+  expect(handle).not.toBeNull();
+  await dragRotate(page, handle, 90);
+  const sh1 = await page.evaluate(() => ({ a0: state.objects[0].shape.a0, sweep: sectorSweep(state.objects[0].shape) }));
+  expect(sh1.a0).not.toBe(sh0.a0);
+  expect(sh1.sweep).toBeCloseTo(sh0.sweep, 6);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects[0].shape.a0)).toBe(sh0.a0);
 });
