@@ -4,6 +4,33 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 新增 Ctrl+X 剪切，复用删除/剪切移除逻辑
+
+- **Commit Hash**：`b597816`
+- **核心改动**：
+  - **Ctrl+X 剪切**：把可编辑选中对象复制到内嵌剪贴板后立即移除；无确认弹窗，`Ctrl+Z` 可撤回剪切，`Ctrl+V` 粘贴为带新 id 的副本（偏移 1m），`Ctrl+Shift+V` 原位粘贴。
+  - **公共函数**：新增 `removeObjects(items,message)`，删除与剪切共用一次历史、墓碑、`syncActiveFloor()`、清选中与 `commitChange`；`deleteSelected` 改为调用它，行为与确认流程不变。
+  - **权限/锁**：只处理 `isEditable` 对象；只读模式走既有 `guardWrite`；无可用对象时提示且不产生历史。
+  - **文档/测试**：帮助中心「Ctrl + C / X / V」、`docs/features.md`、`docs/user-guide.md`、`docs/testing.md` 同步；新增双入口 e2e（剪切→粘贴→两步撤销）。
+- **预算**（实测，基线 `e9fe2bf`）：dist **835,169 → 835,696 B（+527）**；gzip **272,061 → 272,173 B（+112）**；新上限下余量 **24,464 B**（gzip 余量 22,739 B）；SW `VERSION=320 → 321`；发行包 SHA256 `811de937…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.13% = 863 / 1,831**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 定向 e2e：`interaction` + `help-center` 双入口各 **21 passed**。
+  - 双入口全量 e2e（**206** 用例）：源码 **203 passed / 0 failed / 3 skipped**（4.0m），dist **200 passed / 0 failed / 6 skipped**（3.7m），均 exit 0。
+- **公共抽象清单**：新增 `removeObjects(items,message)`（core/interaction，删除与剪切共用）与 `cutSelected()`；i18n 新增 `'剪切'`、`'已剪切 {n} 个对象'`，改写快捷键行键为 `'复制 / 剪切 / 粘贴对象（偏移 1m）'`；未新增全局常量或 API。
+- **遗留风险**：剪贴板是应用内内存（不支持跨标签/跨应用粘贴）；剪切不弹确认，依赖 `Ctrl+Z`；锁定对象不会被剪切，若混选只移动可编辑部分。
+
+## 2026-11-28 · 体积上限经授权调高至 840 KiB / gzip 288 KiB
+
+- **Commit Hash**：`e9fe2bf`
+- **核心改动**：
+  - `scripts/lib/budget.mjs`：`MAX_BYTES` 820 → 840 KiB（860,160 B）；`GZIP_MAX_BYTES` 280 → 288 KiB（294,912 B）；`GZIP_WARN_BYTES` 260 → 272 KiB（278,528 B）；余量预警 8,000/6,000 B 不变。
+  - `docs/engineering.md`§2.3 与禁止事项改为「经用户明确授权后的新边界，再调高需新的授权」；README 与 `docs/facts.md` 同步。
+- **预算**（实测）：当前 dist **835,169 B**，余量 **4,511 → 24,991 B**；gzip **272,061 B**，余量 **14,659 → 22,851 B**；gzip 不再触发预警。
+- **验证数据**：`npm run ci` 退出 0，含 `dist-manifest.json` 预算常量一致性、二次构建确定性、门禁牙齿 10/10 + 20/20。
+- **公共抽象清单**：无代码函数/常量新增；仅调整预算常量与文档口径。
+- **遗留风险**：上限调高只解决“没有空间”的门禁问题，不改变“新增功能需带实测数据”的纪律；gzip 预警线随之上调后，260–272 KiB 区间不再提醒，需靠余量预警兜底。
+
 ## 2026-11-28 · 新增 H/Shift+H 显隐，英文四五批精简后净回收 218 B
 
 - **Commit Hash**：`52a656d`
