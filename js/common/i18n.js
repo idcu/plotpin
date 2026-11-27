@@ -536,6 +536,13 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '没有隐藏的对象':'No hidden objects',
     /* 核心层默认名与快照差异字段（CORE-P2-16） */
     '默认图层':'Default layer', '未命名工程':'Untitled project', '自定义类型':'Custom type', ' 副本':' copy',
+    '当前':'Current', '设为当前图层':'Set as current layer',
+    '当前楼层 {n} 个对象':'{n} objects on this floor',
+    '隐藏或锁定的图层不能设为当前':'Hidden or locked layers cannot be current',
+    '默认图层不可删除（可重命名）':'The default layer cannot be deleted (rename it)',
+    '图层名称为空或与现有图层重复':'Layer name is empty or duplicated',
+    '选择该图层的对象':'Select objects on this layer',
+    '已选择图层「{layer}」的 {n} 个对象':'Selected {n} objects on layer "{layer}"',
     '对象类别':'Object kind', '可见':'Visible', '宽':'Width', '高':'Height', '属性':'Properties', '样式':'Style',
     '标注':'Annotations', '图标倍率':'Icon scale', '子类型':'Subtype', '场地形状':'Site shape', '场地名称':'Site name',
     '底图':'Background image', '楼层名':'Floor name', '图层名':'Layer name', '类型定义':'Type definition',

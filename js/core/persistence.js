@@ -680,7 +680,12 @@ function migrateRefsAndDelete(kind, fromId, toId){
   const moved=[];
   syncActiveFloor();
   (state.floors||[]).forEach(f=>(f.objects||[]).forEach(o=>{ if(o&&o[field]===fromId){ o[field]=toId; moved.push(o); } }));
-  if(kind==='layer') state.layers=state.layers.filter(x=>x.id!==fromId);
+  if(kind==='layer'){
+    /* 场地也是图层引用方：对象计数之外单独迁移，避免删层后 site.layerId 悬空 */
+    const sites=[state.site,...(state.floors||[]).map(f=>f.site)];
+    sites.forEach(s=>{ if(s&&s.layerId===fromId){ s.layerId=toId; s.updatedAt=nowISO(); } });
+    state.layers=state.layers.filter(x=>x.id!==fromId);
+  }
   else state.objectTypes=state.objectTypes.filter(x=>x.id!==fromId);
   markTombstone(fromId,kind);      /* MERGE-10：删除随墓碑传播到离线副本 */
   stampObjectsIn(moved);
@@ -744,6 +749,7 @@ function syncActiveFloor(){
  */
 function replaceState(next,opts={}){
   state=next;
+  resetActiveLayer();
   if(opts.quiet) return next;
   syncActiveFloor();
   return afterStateLoaded(opts.fit,opts);

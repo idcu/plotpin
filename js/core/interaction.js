@@ -1287,14 +1287,14 @@ function cutSelected(){
 function selectSimilar(){
   const base=state.objects.find(o=>selectedIds.has(o.id));
   if(!base) return callHook('ui.toast',L(TX_PICKFIRST),'warn');
-  const items=state.objects.filter(o=>o.typeId===base.typeId&&o.visible!==false&&isEditable(o));
+  const items=state.objects.filter(o=>o.typeId===base.typeId&&isVisible(o)&&isEditable(o));
   selectedIds=new Set(items.map(o=>o.id));
   callHook('ui.refresh'); requestRender();
   callHook('ui.toast',L('已选择 {n} 个同类对象',{n:items.length}));
 }
 /** I：反向选择当前楼层可见可编辑对象（隐藏、锁定与锁定图层不参与） */
 function invertSelection(){
-  const items=state.objects.filter(o=>o.visible!==false&&isEditable(o)&&!selectedIds.has(o.id));
+  const items=state.objects.filter(o=>isVisible(o)&&isEditable(o)&&!selectedIds.has(o.id));
   selectedIds=new Set(items.map(o=>o.id));
   callHook('ui.refresh'); requestRender();
   callHook('ui.toast',L('已反向选择 {n} 个对象',{n:items.length}));
@@ -1304,7 +1304,7 @@ function toggleHidden(show){
   if(!guardWrite(L(show?'显示':'隐藏'))) return;
   const items=show
     ? state.objects.filter(o=>o.visible===false&&isEditable(o))
-    : state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)&&o.visible!==false);
+    : state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)&&isVisible(o));
   if(!items.length) return callHook('ui.toast',L(show?'没有隐藏的对象':'没有可修改的选中对象'),'warn');
   pushHistory();
   items.forEach(o=>{ o.visible=show; });

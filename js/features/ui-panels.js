@@ -373,25 +373,59 @@ function setSelectedAnnot(on,key){
 $('batchAnnotAll').addEventListener('change',()=>{ const on=$('batchAnnotAll').checked; setSelectedAnnot(on); renderBatchAnnot(); });
 
 /* -------------------- 图层 / 类型管理 -------------------- */
+/** 图层名清洗：去首尾空白、限 40 字；空或与现有图层重名（忽略大小写）返回 null */
+function validLayerName(v,exceptId){
+  const name=String(v||'').trim().slice(0,40);
+  if(!name) return null;
+  if(state.layers.some(l=>l.id!==exceptId&&l.name.toLowerCase()===name.toLowerCase())) return null;
+  return name;
+}
+/** 新图层默认名去重：新图层 / 新图层 2 ... */
+function uniqueLayerName(base){
+  const names=new Set(state.layers.map(l=>l.name.toLowerCase()));
+  if(!names.has(base.toLowerCase())) return base;
+  let k=2; while(names.has((base+' '+k).toLowerCase())) k++;
+  return base+' '+k;
+}
 function renderLayers(){
+  const activeId=currentLayer().id;
   $('layerList').innerHTML=state.layers.map(l=>{
     const count=state.objects.filter(o=>o.layerId===l.id).length;
-    return `<div class="layer-row">
-      <div class="meta"><div class="name">${esc(l.name)}</div><div class="sub">${count} ${esc(I18N.t('objectsUnit'))}</div></div>
+    const active=l.id===activeId;
+    return `<div class="layer-row${active?' current':''}">
+      <div class="meta"><div class="name" data-layer-set="${l.id}" title="${esc(L('设为当前图层'))}">${active?'<span class="pill">'+esc(L('当前'))+'</span> ':''}${esc(l.name)}</div><div class="sub" data-layer-select="${l.id}" title="${esc(L('选择该图层的对象'))}">${esc(L('当前楼层 {n} 个对象',{n:count}))}</div></div>
       <button class="icon-btn" data-layer-visible="${l.id}" title="${esc(L('显隐'))}" aria-label="${esc(I18N.t('ariaLayerVisible')+'：'+l.name)}">${l.visible?'👁':'–'}</button>
       <button class="icon-btn" data-layer-lock="${l.id}" title="${esc(L('锁定'))}" aria-label="${esc(I18N.t('ariaLayerLock')+'：'+l.name)}">${l.locked?'🔒':'○'}</button>
       <button class="icon-btn" data-layer-rename="${l.id}" title="${esc(L('重命名'))}" aria-label="${esc(I18N.t('ariaLayerRename')+'：'+l.name)}">✎</button>
       <button class="icon-btn danger" data-layer-delete="${l.id}" title="${esc(L('删除'))}" aria-label="${esc(I18N.t('ariaLayerDelete')+'：'+l.name)}">×</button>
     </div>`;
   }).join('');
-  $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerVisible); pushHistory(); l.visible=!l.visible; commitChange(); });
-  $('layerList').querySelectorAll('[data-layer-lock]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerLock); pushHistory(); l.locked=!l.locked; commitChange(); });
+  $('layerList').querySelectorAll('[data-layer-set]').forEach(el=>el.onclick=()=>{
+    if(setActiveLayer(el.dataset.layerSet)) renderLayers();
+    else toast(L('隐藏或锁定的图层不能设为当前'),'warn');
+  });
+  $('layerList').querySelectorAll('[data-layer-select]').forEach(el=>el.onclick=()=>{
+    const l=getLayer(el.dataset.layerSelect); if(!l) return;
+    const items=state.objects.filter(o=>o.layerId===l.id&&isVisible(o)&&isEditable(o));
+    selectedIds=new Set(items.map(o=>o.id));
+    callHook('ui.refresh'); requestRender();
+    callHook('ui.toast',L('已选择图层「{layer}」的 {n} 个对象',{layer:l.name,n:items.length}));
+  });
+  $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerVisible); if(!l) return; pushHistory(); l.visible=!l.visible; ensureActiveLayerUsable(); commitChange(); });
+  $('layerList').querySelectorAll('[data-layer-lock]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerLock); if(!l) return; pushHistory(); l.locked=!l.locked; ensureActiveLayerUsable(); commitChange(); });
   $('layerList').querySelectorAll('[data-layer-rename]').forEach(b=>b.onclick=async()=>{
-    const l=getLayer(b.dataset.layerRename); const v=await showPrompt({title:L('重命名图层'),label:L('名称'),value:l.name}); if(v){ pushHistory(); l.name=v; commitChange(); }
+    const l=getLayer(b.dataset.layerRename); if(!l) return;
+    const v=await showPrompt({title:L('重命名图层'),label:L('名称'),value:l.name});
+    if(v==null) return;
+    const name=validLayerName(v,l.id);
+    if(!name) return toast(L('图层名称为空或与现有图层重复'),'warn');
+    if(name===l.name) return;
+    pushHistory(); l.name=name; commitChange();
   });
   $('layerList').querySelectorAll('[data-layer-delete]').forEach(b=>b.onclick=async()=>{
     const l=getLayer(b.dataset.layerDelete);
     if(!l) return;
+    if(l.id==='layer.default') return toast(L('默认图层不可删除（可重命名）'),'warn');
     if(state.layers.length===1) return toast('至少保留一个图层','warn');
     /* N-08：跨楼层检查引用；有引用时显式确认并迁移到默认图层，避免其他楼层悬空 */
     const refs=floorRefs(o=>o.layerId===l.id);
@@ -402,14 +436,20 @@ function renderLayers(){
         {layer:l.name,floors:refs.length,count:total,target:target.name}));
       if(!ok) return;
     }
+    const wasActive=currentLayer().id===l.id;
     pushHistory();
     migrateRefsAndDelete('layer', l.id, target.id);
+    if(wasActive){ activeLayerId=target.id; ensureActiveLayerUsable(); }
+    renderLayers();
   });
 }
 function getLayer(id){ return state.layers.find(l=>l.id===id); }
 $('addLayerBtn').onclick=()=>{
-  const name=$('newLayerName').value.trim()||L('新图层');
-  pushHistory(); state.layers.push({id:uid('layer'),name,visible:true,locked:false}); $('newLayerName').value=''; commitChange('已新增图层');
+  const base=String($('newLayerName').value||'').trim().slice(0,40)||L('新图层');
+  const name=uniqueLayerName(base), id=uid('layer');
+  pushHistory(); state.layers.push({id,name,visible:true,locked:false});
+  setActiveLayer(id);
+  $('newLayerName').value=''; commitChange('已新增图层'); renderLayers();
 };
 function renderTypes(){
   const groups={point:I18N.t('point'),rect:I18N.t('filterArea'),line:I18N.t('filterLine')};

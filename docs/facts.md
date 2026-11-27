@@ -21,7 +21,7 @@
 | selftest 断言 | 4,576 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；2026-11-26 在 4,567 上补场地顶点 9 条（抓手排序生效 / 锁定后几何入口拒绝且锁定开关可用） |
 | selftest 分区 | 176 个 | `node scripts/selftest.mjs --list` | 输出 177 行（含 1 行标题） |
 | 加载脚本 | 48 个（38 项目 + 10 vendor） | `node scripts/check.mjs --selftest` 输出「加载 48 个脚本」 | `js/` 下 38 个 `.js` |
-| e2e spec 文件 | 49 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 顶层共 51 个 `.mjs`（49 spec + `helpers.mjs` + `toolbar.mjs`） |
+| e2e spec 文件 | 50 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 顶层共 52 个 `.mjs`（50 spec + `helpers.mjs` + `toolbar.mjs`） |
 | e2e 用例 | 207 个（源码 204 通过 + 0 失败 + 3 条件跳过；dist 201 通过 + 6 跳过） | `node scripts/e2e.mjs`；`$env:E2E_ENTRY='dist'; node scripts/e2e.mjs` | 2026-11-28 双入口全量实跑：源码 4.0m、dist 3.8m，均 exit 0；跳过为协作 soak（需 `COLLAB_SOAK=1`）与 V-6/V-6b（缺 `pdftotext`）；dist 额外跳过 3 条依赖源码结构的用例。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check-contracts.mjs` | 规则删空即红 |
 | 插件 API 面 | 31 键 / 31 条清单 / 0 泄漏 / 0 落空 | `node scripts/check-plugin-api.mjs` | 词法器 + fail-closed；API 1.1.0 / 8 项能力 |

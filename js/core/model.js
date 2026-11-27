@@ -12,6 +12,8 @@ const RULE_TYPE_LIMIT = 200;
 const STATS_ISSUE_VERSION = 2;
 
 let state = createInitialState();
+/* 当前图层：新对象默认落在该层；仅内存态，载入/替换工程时由 replaceState 复位 */
+let activeLayerId = 'layer.default';
 /* 叠放序版本：对象增删/重排/载入时递增，命中缓存据此失效（P1-04） */
 var zVersion = 0;
 let bgImage = null;
@@ -532,7 +534,7 @@ function defaultTypeId(kind){
 function baseObject(kind, typeId, patch={}){
   const o = Object.assign({
     id: uid('OBJ'), name: '', kind, typeId: typeId || defaultTypeId(kind),
-    layerId: 'layer.default', x:0, y:0, points:[], width:0, height:0, angle:0,
+    layerId: currentLayer().id, x:0, y:0, points:[], width:0, height:0, angle:0,
     phys:0,   /* 点设备物理尺寸(米，高级)：0=纯位置标识(屏幕固定图标)；>0=按世界比例渲染的覆盖图形 */
     iconSize:1, /* 点设备图标屏幕大小倍率（纯视觉，无物理意义）；与类型默认值、全局倍率连乘 */
     annot:{},   /* 逐对象标注显示开关（点坐标/基点/半径/边长/周长/面积/节点坐标），未显式设置时按类型默认 */
@@ -569,6 +571,29 @@ function typeDisplayName(t){
 }
 function typesOfKind(kind){ return state.objectTypes.filter(t => t.kind === kind); }
 function layerOf(o){ return state.layers.find(l => l.id === o.layerId) || state.layers[0]; }
+/** 当前图层对象；id 失效时回退到首个图层，避免新对象落到已删除图层 */
+function currentLayer(){
+  return (state.layers||[]).find(l=>l.id===activeLayerId) || (state.layers||[])[0] ||
+    {id:'layer.default',name:L('默认图层'),visible:true,locked:false};
+}
+/** 设为当前图层：隐藏或锁定的图层拒绝，避免新对象不可见/不可编辑 */
+function setActiveLayer(id){
+  const l=(state.layers||[]).find(x=>x.id===id);
+  if(!l||l.visible===false||l.locked) return false;
+  activeLayerId=id; return true;
+}
+/** 当前图层被隐藏/锁定后，自动切到首个可见且解锁的图层；没有可用的则保持原状 */
+function ensureActiveLayerUsable(){
+  const l=(state.layers||[]).find(x=>x.id===activeLayerId);
+  if(l&&l.visible!==false&&!l.locked) return;
+  const alt=(state.layers||[]).find(x=>x.visible!==false&&!x.locked);
+  if(alt) activeLayerId=alt.id;
+}
+/** 载入/替换工程后复位当前图层（图层 id 属于工程，不跨工程沿用） */
+function resetActiveLayer(){
+  activeLayerId=((state.layers||[])[0]||{}).id||'layer.default';
+  ensureActiveLayerUsable();
+}
 /** 有效可见：对象自身 visible 且所属图层 visible。画布、覆盖率与所有图纸类导出共用此唯一判断源（P2-18：下沉到 model 层，避免 core 反向依赖 render）。 */
 function effectiveVisible(o){ const l=layerOf(o); return o.visible!==false && l.visible!==false; }
 function styleVal(o, key, fallback){

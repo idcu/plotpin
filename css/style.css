@@ -146,7 +146,11 @@
   tbody tr.hidden-row{opacity:.45}
   .icon-btn{border:0;background:transparent;padding:2px 4px;border-radius:5px}
   .icon-btn:hover{background:#e5eefb}
-  .layer-row,.type-row{display:grid;grid-template-columns:1fr auto auto auto;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid #eef2f7}
+  .layer-row,.type-row{display:grid;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid #eef2f7}
+  .layer-row{grid-template-columns:1fr auto auto auto auto}
+  .type-row{grid-template-columns:1fr auto auto auto}
+  .layer-row.current{background:var(--primary-soft);border-radius:6px}
+  .layer-row .name[data-layer-set],.layer-row .sub[data-layer-select]{cursor:pointer}
   .layer-row .meta,.type-row .meta{min-width:0}
   .layer-row .name,.type-row .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .layer-row .sub,.type-row .sub{font-size:11px;color:var(--muted)}
