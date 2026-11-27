@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 新增 Alt+拖动复制，回收两条面板帮助后净增 22 B
+
+- **Commit Hash**：`dbc274d`
+- **核心改动**：
+  - **Alt+拖动复制**：选择工具下按住 Alt 拖动，越过 2 px 阈值后才复制选区；副本随指针移动、原对象保留，一次 Ctrl+Z 同时回退复制与移动。拖回精确原位、Esc 或系统取消都会删除副本、恢复复制前选择并弹回唯一快照；Alt+单击不留副本。
+  - **公共抽象**：`cloneObjects(objs,offset)` 统一 Ctrl+D（偏移 1 m）与 Alt+拖动（偏移 0）的复制实现；`dropAltCopies(d)` 统一「回原位 / 取消」的副本清理与历史回滚。
+  - **回收（砍口径）**：删除 `工程库` 的离线合并说明 `TX_OMERGE`（单独实测 −401 B）与协作面板的三步建连说明 `TX_STEPS`；两份内容保留在 `docs/user-guide.md`（§3.3 离线合并、§11 协作建连）。
+- **预算**（实测）：dist **839,424 → 839,446 B（+22）**；gzip **274,338 → 274,199 B（−139）**；余量 **256 → 234 B**（gzip 余量 12,521 B）；SW `VERSION=297 → 298`；发行包 SHA256 `8d8f8529…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.82% = 887 / 1,855**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 双入口全量 e2e（**201** 用例）：源码 **198 passed / 0 failed / 3 skipped**（4.0m），dist **195 passed / 0 failed / 6 skipped**（3.6m），均 exit 0。
+  - 新增用例：Alt+拖动后对象数 2、原对象坐标不变、选中副本、历史只增 1 条；Ctrl+Z 一次回到 1 个对象；Alt+单击对象数与历史均不变。`interaction.spec` 双入口各 **15 passed**。
+- **公共抽象清单**：`js/core/interaction.js` 新增 `cloneObjects(objs,offset)`、`dropAltCopies(d)`；Ctrl+D 行为不变（仍偏移 1 m、单选/多选语义不变）；复用 `ensureObjectCapacity` / `withObjectNameScope` / `dragObjectIndex`；无新增 i18n 键。
+- **遗留风险**：余量仅 **234 B**；Alt+拖动复制的是整个可编辑选区（不是仅命中的单个对象）；拖回精确原位视为取消，不保留副本；部分桌面环境可能把 Alt+拖动解释为窗口/系统手势，入口同时保留 Ctrl+D 与复制/粘贴；两条面板帮助已移除，新用户需查 user-guide。
+
 ## 2026-11-27 · 双击文字就地编辑，回收废弃段后净增 31 B
 
 - **Commit Hash**：`ffeee22`
