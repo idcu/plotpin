@@ -1472,6 +1472,9 @@ window.addEventListener('keydown',e=>{
     e.preventDefault(); const c=$('selectAllChk'); if(c){ c.checked=true; c.dispatchEvent(new Event('change')); }
     return;
   }
+  if((e.ctrlKey||e.metaKey)&&(e.key===']'||e.key==='[')){
+    e.preventDefault(); reorderSelected(e.key===']'?1:-1); return;
+  }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }

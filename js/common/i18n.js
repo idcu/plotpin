@@ -542,7 +542,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '落点':'Target',
     '可编辑对象（按原图层）':'Editable objects (keep original layers)',
     '只读参考层（新建层并锁定）':'Read-only reference layer (new layer, locked)',
-    [TX_REF]:'The reference layer is locked after import; unlock it in the layer manager to edit. DXF styles such as length/area/fill are not mapped; geometry and layers are authoritative.',
+    [TX_REF]:'The reference layer is locked after import; unlock it in the layer manager to edit. DXF length/area/fill styles are not mapped; geometry and layers are authoritative.',
     '导入':'Import',
     'DXF 中没有可导入实体':'No importable entities in this DXF',
     '提示：该 DXF 含 ':'Note: this DXF contains ',
@@ -800,7 +800,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
       '{n} page(s) selected · {e} shapes · {o} / {max} objects after import',
     [TX_PDFMP]:
-      'Pages are placed side by side in ascending order with the first page at the origin and a {gap} m gap; each page\'s objects go to a "PDF page i" layer so the source page stays traceable. Only the first selected page\'s embedded image is used as the base map.',
+      'Pages are placed side by side in ascending order, first page at the origin, {gap} m apart; each page\'s objects go to a "PDF page i" layer to keep sources traceable. Only the first page\'s embedded image is used as the base map.',
     '共 {total} 页，已导入第 {list} 页（横向并排，间距 {gap} m）':
       '{total} page(s); imported page(s) {list} (side by side, {gap} m gap)',
     '第 {list} 页没有可导入的图形，已跳过':
@@ -1115,7 +1115,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已连接：对方拥有本工程完整编辑权（可覆盖、删除、清空、修改配置）':'Connected: the peer has full edit rights to this project (overwrite, delete, clear, change settings)',
     [TX_PEER]:'The peer connected and sent a project snapshot. Once confirmed it has full edit rights: overwrite, delete/clear objects and floors, change settings. Apply and continue syncing?',
     '已拒绝应用对端快照，协作连接已断开':'Declined the peer snapshot; the collaboration connection was closed',
-    [TX_PDFE]:'No usable graphics found on PDF page 1 (only page 1 is imported; pages are not merged; a scanned image may lack embedded graphics or use unsupported compression)',
+    [TX_PDFE]:'No usable graphics on PDF page 1 (only page 1 is imported; pages are not merged; scans may lack embedded graphics or use unsupported compression)',
     [TX_PDFST]:'Browser local storage unavailable; the PDF base map lasts this session only—save a JSON project instead',
     '该类型仍被对象使用，且没有可迁移的同类内置类型':'This type is still used by objects, and there is no migratable built-in type of the same kind',
     '评论':'Comment', '编辑评论':'Edit comment',

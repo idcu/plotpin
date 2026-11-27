@@ -623,3 +623,25 @@ test('常用快捷键：Ctrl+A 全选、Ctrl+Shift+V 原位粘贴、Ctrl+0 适�
   await page.keyboard.press('Control+0');
   await expect.poll(() => page.evaluate(() => state.viewport.zoom === 50)).toBe(false);
 });
+
+test('Ctrl+] / Ctrl+[ 调整叠放层级：单步上移/下移', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'point');
+  await page.mouse.click(cx - 100, cy);
+  await page.mouse.click(cx, cy);
+  await page.mouse.click(cx + 100, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(3);
+  await clickTool(page, 'select');
+  await page.mouse.click(cx, cy);
+  const mid = await page.evaluate(() => ({ id: [...selectedIds][0], i: state.objects.findIndex(o => o.id === [...selectedIds][0]) }));
+  expect(mid.i).toBe(1);
+
+  await page.keyboard.press('Control+]');
+  await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(2);
+  await page.keyboard.press('Control+[');
+  await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(1);
+  await page.keyboard.press('Control+[');
+  await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(0);
+});
