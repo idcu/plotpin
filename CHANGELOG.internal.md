@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 双击文字就地编辑，回收废弃段后净增 31 B
+
+- **Commit Hash**：`ffeee22`
+- **核心改动**：
+  - **双击文字编辑**：选择工具下双击命中可编辑文字对象，直接弹出输入框；确认后 `pushHistory` + `commitChange([id])`，一步撤销；取消、空值、未变化都不写历史。只读经 `guardWrite` 拦截，锁定对象由 `hitObject` 过滤。双击命中文字时不再落到折线节点编辑；未命中文字仍走原逻辑。
+  - **公共抽象**：新增 `askText(title,value)` 作为文字输入弹窗唯一入口，新建文字与双击编辑共用；`core→features` 的 `showPrompt` 静态引用保持 4 次，未抬高耦合基线。
+  - **回收（砍口径）**：删除 2 条无静态引用的 PHRASES（插件确认残片 `' ？\n能力：'`、旧镜像长标题）、无引用 `.chev` 与 `body.tool-segment` 选择器、`render.js` 两处 `currentTool!=='segment'` 死条件；回收 **274 B**。
+- **预算**（实测）：dist **839,393 → 839,424 B（+31）**（回收 −274 B，功能 +305 B）；gzip **274,345 → 274,338 B（−7）**；余量 **287 → 256 B**（gzip 余量 12,382 B）；SW `VERSION=296 → 297`；发行包 SHA256 `da9699ae…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **47.82% = 887 / 1,855**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 双入口全量 e2e（**200** 用例）：源码 **197 passed / 0 failed / 3 skipped**（4.1m），dist **194 passed / 0 failed / 6 skipped**（3.8m），均 exit 0。
+  - 新增用例「双击文字就地编辑」：原始文字→双击回填原文→改为「改后文字」→Ctrl+Z 一步回退→再次双击后取消，历史和原文均不变；`interaction.spec` 双入口各 **14 passed**。
+- **公共抽象清单**：`js/core/interaction.js` 新增 `askText(title,value)`（新建文字/双击编辑唯一入口）；复用 `hitObject` / `guardWrite` / `pushHistory` / `commitChange`；无新增 i18n 键。
+- **遗留风险**：余量仅 **256 B**，下一次功能改动前必须先回收；仅 `text` 对象支持双击编辑，引线/标注文字仍需属性面板；空文本不允许写入；帮助浮层未新增双击提示，入口靠 user-guide 与属性面板。
+
 ## 2026-11-27 · 新增批量颜色，回收工具提示与导出文案后净增 88 B
 
 - **Commit Hash**：`70686ab`
