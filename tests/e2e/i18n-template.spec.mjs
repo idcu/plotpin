@@ -52,7 +52,7 @@ test('英文界面：模板插值整句生效，用户输入只作文本不注�
   expect(r.lang).toBe('en');
   expect(r.exportBtn).toBe('Export');
   expect(r.texts[0]).toBe('Pasted 3 objects');
-  expect(r.texts[1]).toBe('Table import complete: 2 updated, 1 replaced, 4 created');
+  expect(r.texts[1]).toBe('Table import: 2 updated, 1 replaced, 4 created');
   expect(r.texts[2]).toBe('SVG symbol imported: ' + '<img src=x onerror="window.__xss=1">');
   expect(r.childTags).toBe(0);
   expect(r.xss).toBe(false);

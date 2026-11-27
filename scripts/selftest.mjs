@@ -7515,7 +7515,7 @@ await section("58. 中英界面切换与无障碍标记", async () => {
   eq('i18n-动态词组未收录回退原文', I.p('__未收录词组__'), '__未收录词组__');
   eq('i18n-动态模板粘贴', I.p('已粘贴 {n} 个对象', { n: 3 }), 'Pasted 3 objects');
   eq('i18n-动态模板表格导入', I.p('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
-    { updated: 2, replaced: 0, created: 1 }), 'Table import complete: 2 updated, 0 replaced, 1 created');
+    { updated: 2, replaced: 0, created: 1 }), 'Table import: 2 updated, 0 replaced, 1 created');
   eq('i18n-捕捉类型英文', I.p('端点') + ' / ' + I.p('切点'), 'endpoint / tangent');
   eq('i18n-捕捉提示英文', I.p('捕捉：自动（全部类型）'), 'Snap: Auto (all types)');
   api.resetState();
@@ -10291,7 +10291,7 @@ await section("75.11 B-14 i18n 插值模板：中文语义不变、英文整句�
   eq('B-14 英文 DXF 整句', I.p('DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}',
     { line: 2, rect: 1, point: 3, text: 4, extra: '' }), 'DXF imported: 2 lines / 1 circles / 3 points / 4 texts');
   eq('B-14 英文表格导入整句', I.p('表格导入完成：更新 {updated} 项，替换 {replaced} 个对象，新增 {created} 项',
-    { updated: 3, replaced: 2, created: 5 }), 'Table import complete: 3 updated, 2 replaced, 5 created');
+    { updated: 3, replaced: 2, created: 5 }), 'Table import: 3 updated, 2 replaced, 5 created');
   eq('B-14 英文导出页脚', I.p('共 {n} 个对象 · 第 {page} / {total} 页 · {time}',
     { n: 10, page: 2, total: 5, time: 'T' }), 'Objects: 10 · Page 2 / 5 · T');
   eq('B-14 未知中文回退', I.p('未收录的中文'), '未收录的中文');
