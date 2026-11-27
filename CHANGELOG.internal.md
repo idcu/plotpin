@@ -6,7 +6,7 @@
 
 ## 2026-11-27 · 修复载入异常时左侧工具栏空白（栏内容提前渲染），+11 B
 
-- **Commit Hash**：`待回填`
+- **Commit Hash**：`0bc9157`
 - **核心改动**：
   - `#toolRail` 生成 5 个组按钮 + `完成` 后**立即调用 `syncRail()`**。此前只有 `refreshI18nRuntimeText()`（异步启动链末尾）才会填充图标与标签；当 `loadSavedProject()` / IndexedDB 抛错导致 init 中断时，栏里只剩 6 个空的 42×42 按钮，深色背景上看起来就是「左侧工具栏消失」。
   - 该调用只依赖 `model.js` 已初始化的 `state`/`currentTool`/`bgImage*`，不读取工程数据；正常启动后仍由 `refreshI18nRuntimeText()` 按保存的语言重渲染。
