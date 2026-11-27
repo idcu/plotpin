@@ -11,7 +11,7 @@ const TX_TIMP='可更新：名称、业务类型、图层、基点坐标、角�
 const TX_DWG='PlotPin 不内置 DWG 内核（不使用 ODA/Aspose 授权、不嵌入 DWG 引擎），也不会修改原文件。请在 CAD 中另存为 DXF 或 PDF，再选择转换后的文件：';
 const TX_SDRAG='拖拽画布上的控制点即可调整场地；也可在此输入精确坐标/参数。坐标按世界坐标（米），可为负；场地与图片底图可同时存在。';
 const TX_SEDIT='直接修改下方坐标/参数即可调整场地；点左侧「⊗ 场地节点」工具可在画布上拖拽控制点。坐标按世界坐标（米），可为负。';
-const TX_SNAPC='画布聚焦时循环切换捕捉类型（自动→端点→中点→圆心→象限点→交点→垂足→切点）；点击底部捕捉徽标恢复自动';
+const TX_SNAPC='画布聚焦时 Tab 循环切换捕捉类型；点击底部捕捉徽标恢复自动';
 const TX_SNAP='回滚到快照「{name}」？当前未保存的修改会先进入撤销栈（可用 Ctrl+Z 撤回）；回滚后会立即落盘并可继续编辑。';
 const TX_REF='参考层导入后整层锁定；需编辑时可在图层管理器解锁。长度/面积/填充等 DXF 样式不映射，以几何与图层为准。';
 const TX_TAUTO='长度/面积/节点数为系统按几何自动计算值，导入时会逐行核对，手改不一致只告警不拦截、以几何为准。';
@@ -357,7 +357,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪':
       'Auto-snap endpoint □ midpoint △ center ◎ quadrant ◇ perpendicular ⊥ intersection × tangent; orange dashed = 45° polar/parallel tracking',
     [TX_SNAPC]:
-      'Cycle snap types when the canvas is focused (Auto→Endpoint→Midpoint→Center→Quadrant→Intersection→Perpendicular→Tangent); click the bottom badge to restore Auto',
+      'Tab cycles snap types when the canvas is focused; click the bottom badge to restore Auto',
     '在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）':
       'Cycle focus across the top bar / tool rail / sidebar tabs (Tab inside the canvas cycles snapping; press F6 to leave)',
     '临时平移画布':'Temporary canvas pan', '移动选中对象（Shift ×10 倍步距）':'Move selected objects (Shift ×10 step)',
@@ -551,7 +551,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '按「编号」更新 / 「匹配…」条件批量替换 / 无编号行新增：':'Update by ID / batch-replace by “Match…” conditions / add rows without IDs:',
     '个对象替换（':' objects replaced (',
     '行条件）、':' row conditions), ',
-    [TX_TIMP]:'Updatable: name, business type, layer, anchor, angle, size, shape, closed, nodes, annotation type, visibility, lock, note. Replace rows change properties only, not geometry; match columns (ID / name / name contains / object type / business type / layer) narrow the scope (all must match); Floor also scopes updates, replacements and new rows.',
+    [TX_TIMP]:'Updatable: name, type, layer, anchor, angle, size, shape, closed, nodes, annotation, visibility, lock, note. Replace rows change properties only; match columns (ID/name/name contains/object type/business type/layer) narrow scope; Floor scopes updates, replacements and new rows.',
     '表格导入失败（已回滚）：':'Table import failed (rolled back): ',
     '该型号在多厂商重名，请填写厂商后计价':'This model name is duplicated across vendors; fill in the vendor before pricing',
     '定位失败：无法切换到目标楼层':'Locate failed: cannot switch to the target floor',
@@ -1133,7 +1133,7 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '已导出 {n} 行（模板）':'Exported {n} row(s) with template', '台账':'Ledger',
     /* ICE 中继配置（凭据只存本机，文案一律脱敏） */
     '中继服务器（可选：跨 NAT 才需要）':'Relay servers (optional; only needed across NAT)',
-    [TX_RELAY]:'Direct connections by default. One server per line: URL | username | credential; STUN needs only the URL; separate URLs with commas. Credentials are stored in plain text in this browser and never enter invites, collaboration messages or project files.',
+    [TX_RELAY]:'Direct connections by default. One server per line: URL | username | credential; STUN needs only URL; separate URLs with commas. Credentials stay in plain text in this browser and never enter invites, messages or project files.',
     '中继配置':'Relay configuration', '应用配置':'Apply', '清除配置':'Clear configuration',
     '在本机记住（明文存于浏览器）':'Remember on this device (plain text in browser)',
     '仅本次会话':'This session only', '已记住':'Saved',

@@ -639,7 +639,7 @@ test('常用快捷键：Ctrl+A 全选、Ctrl+Shift+V 原位粘贴、Ctrl+0 适�
   await expect.poll(() => page.evaluate(() => state.viewport.zoom === 50)).toBe(false);
 });
 
-test('Ctrl+] / Ctrl+[ 调整叠放层级：单步上移/下移', async ({ page }) => {
+test('Ctrl+] / Ctrl+[ 调整叠放层级：单步与 Shift 置顶/置底', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -658,5 +658,9 @@ test('Ctrl+] / Ctrl+[ 调整叠放层级：单步上移/下移', async ({ page }
   await page.keyboard.press('Control+[');
   await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(1);
   await page.keyboard.press('Control+[');
+  await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(0);
+  await page.keyboard.press('Control+Shift+]');
+  await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(2);
+  await page.keyboard.press('Control+Shift+[');
   await expect.poll(() => page.evaluate(id => state.objects.findIndex(o => o.id === id), mid.id)).toBe(0);
 });

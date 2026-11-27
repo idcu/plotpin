@@ -1472,8 +1472,18 @@ window.addEventListener('keydown',e=>{
     e.preventDefault(); const c=$('selectAllChk'); if(c){ c.checked=true; c.dispatchEvent(new Event('change')); }
     return;
   }
-  if((e.ctrlKey||e.metaKey)&&(e.key===']'||e.key==='[')){
-    e.preventDefault(); reorderSelected(e.key===']'?1:-1); return;
+  if((e.ctrlKey||e.metaKey)&&(e.code==='BracketRight'||e.code==='BracketLeft')){
+    e.preventDefault();
+    const front=e.code==='BracketRight';
+    if(e.shiftKey){
+      const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+      if(items.length){
+        const ids=new Set(items.map(o=>o.id));
+        pushHistory(); restackObjects(state.objects,ids,front?'front':'back');
+        commitChange(undefined,ids);
+      }
+    }else reorderSelected(front?1:-1);
+    return;
   }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
