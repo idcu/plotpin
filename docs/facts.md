@@ -1,18 +1,18 @@
 # 事实源（FACTS）
 
 > **用途**：易变数字的唯一集中快照。正文只写“以命令输出为准”，不复制本表的旧值。
-> **取数时间**：2026-11-28；代码基线：`5279492`（长文案共享常量回收 2,321 B；SW 316）。本表随文档批次提交，产品代码以上述提交为准。
+> **取数时间**：2026-11-28；代码基线：`ae57a71`（英文翻译精简回收 1,411 B；SW 317）。本表随文档批次提交，产品代码以上述提交为准。
 > **规则**：本表每一行必须能在当前仓库复跑；数字变化后同批更新本表，禁止估算。
 
 ## 1. 构建产物
 
 | 指标 | 2026-11-27 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| 单文件产物字节 | 836,871 B（817.3 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + `unsafe`/`unsafe_arrows`/`pure_getters` + `passes:6` + 标记层去引号/省略可选闭合标签 + i18n 默认文案去重 + 空 title/aria-label/placeholder 删除 + `data-x*` 属性缩写；工具栏改为运行时生成的分组按钮（HTML 只留空容器）；长文案共享 `TX_*` 常量（2026-11-28） |
-| gzip 字节 | 272,749 B（266.4 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
+| 单文件产物字节 | 835,460 B（815.9 KB） | `node scripts/build.mjs --check`；精确值见 `scripts/dist-manifest.json` 的 `bytes` | 48 段脚本内联为 1 个 HTML；terser `ecma:2020` + `unsafe`/`unsafe_arrows`/`pure_getters` + `passes:6` + 标记层去引号/省略可选闭合标签 + i18n 默认文案去重 + 空 title/aria-label/placeholder 删除 + `data-x*` 属性缩写；工具栏改为运行时生成的分组按钮（HTML 只留空容器）；长文案共享 `TX_*` 常量（2026-11-28） |
+| gzip 字节 | 272,300 B（265.9 KB） | 同上（`gzipBytes`） | 上限 286,720 B；260 KiB 预警 |
 | 体积上限 | 839,680 B（820 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致 |
-| 体积余量 | 2,809 B（gzip 余量 13,971 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
-| Service Worker 版本 | `VERSION=316` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| 体积余量 | 4,220 B（gzip 余量 14,420 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
+| Service Worker 版本 | `VERSION=317` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
