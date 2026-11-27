@@ -1283,6 +1283,22 @@ function cutSelected(){
   clipboard=items.map(o=>deepClone(o));
   removeObjects(items,L('已剪切 {n} 个对象',{n:items.length}));
 }
+/** S：以首个选中对象的类型为基准，选择当前楼层同类且可见可编辑的对象 */
+function selectSimilar(){
+  const base=state.objects.find(o=>selectedIds.has(o.id));
+  if(!base) return callHook('ui.toast',L(TX_PICKFIRST),'warn');
+  const items=state.objects.filter(o=>o.typeId===base.typeId&&o.visible!==false&&isEditable(o));
+  selectedIds=new Set(items.map(o=>o.id));
+  callHook('ui.refresh'); requestRender();
+  callHook('ui.toast',L('已选择 {n} 个同类对象',{n:items.length}));
+}
+/** I：反向选择当前楼层可见可编辑对象（隐藏、锁定与锁定图层不参与） */
+function invertSelection(){
+  const items=state.objects.filter(o=>o.visible!==false&&isEditable(o)&&!selectedIds.has(o.id));
+  selectedIds=new Set(items.map(o=>o.id));
+  callHook('ui.refresh'); requestRender();
+  callHook('ui.toast',L('已反向选择 {n} 个对象',{n:items.length}));
+}
 /** H：隐藏选中的可编辑对象；Shift+H：恢复当前楼层全部隐藏对象。只改可见性，几何不动 */
 function toggleHidden(show){
   if(!guardWrite(L(show?'显示':'隐藏'))) return;
@@ -1385,6 +1401,7 @@ function helpShortcutRows(){
     ['F6',L('在顶栏/工具栏/侧栏循环焦点（Tab 用于捕捉）')],
     ['F7 / F9',L('网格显隐 / 网格吸附')],
     ['H / Shift+H',L('隐藏选中 / 显示全部')],
+    ['S / I',L('选择同类 / 反向选择')],
     [L('空格 + 拖拽'),L('临时平移画布')],
     [L('方向键'),L('移动选中对象（Shift ×10）')],['F',L('适应窗口（显示整张场地）')],
     [L('滚轮 / 右键拖拽 / + / -'),L('缩放 / 平移画布 / 键盘缩放')],
@@ -1531,6 +1548,12 @@ window.addEventListener('keydown',e=>{
   }
   const tk=(!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey)?TOOL_KEYS[e.key.toLowerCase()]:null;
   if(tk){ e.preventDefault(); setTool(tk); return; }
+  /* S/I 选择命令：仅无修饰键时响应（输入框已在函数入口放行） */
+  if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey){
+    const k=e.key.toLowerCase();
+    if(k==='s'){ e.preventDefault(); selectSimilar(); return; }
+    if(k==='i'){ e.preventDefault(); invertSelection(); return; }
+  }
   if(onCanvas&&e.key==='F3'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
     e.preventDefault();
     state.settings.osnap=!state.settings.osnap;

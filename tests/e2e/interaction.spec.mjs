@@ -750,6 +750,41 @@ test('Ctrl+X 剪切：复制并移除，Ctrl+V 粘贴副本且两步可撤销', 
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
 });
 
+test('S 选择同类 / I 反向选择：限定可见可编辑对象', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'point');
+  await page.mouse.click(cx - 80, cy);
+  await page.mouse.click(cx + 80, cy);
+  await clickTool(page, 'rect');
+  await page.mouse.click(cx - 130, cy + 80);
+  await page.mouse.click(cx - 60, cy + 130);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(3);
+  await clickTool(page, 'select');
+
+  /* S：首个选中是点 → 选中全部可见点（区域不选） */
+  await page.evaluate(() => { selectedIds = new Set([state.objects[0].id]); refreshSelectionUI(); });
+  await page.locator('#canvas').focus();
+  await page.keyboard.press('s');
+  await expect.poll(() => page.evaluate(() => ({ n: selectedIds.size, kinds: [...selectedIds].map(id => state.objects.find(o => o.id === id).kind) })))
+    .toEqual({ n: 2, kinds: ['point', 'point'] });
+
+  /* I：反选后只剩区域 */
+  await page.keyboard.press('i');
+  await expect.poll(() => page.evaluate(() => ({ n: selectedIds.size, kinds: [...selectedIds].map(id => state.objects.find(o => o.id === id).kind) })))
+    .toEqual({ n: 1, kinds: ['rect'] });
+
+  /* 隐藏对象不参与同类选择与反选 */
+  await page.evaluate(() => { state.objects[0].visible = false; requestRender(); });
+  await page.evaluate(() => { selectedIds = new Set([state.objects[1].id]); refreshSelectionUI(); });
+  await page.keyboard.press('s');
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+  await page.keyboard.press('i');
+  await expect.poll(() => page.evaluate(() => ({ n: selectedIds.size, kinds: [...selectedIds].map(id => state.objects.find(o => o.id === id).kind) })))
+    .toEqual({ n: 1, kinds: ['rect'] });
+});
+
 test('Ctrl+] / Ctrl+[ 调整叠放层级：单步与 Shift 置顶/置底', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();

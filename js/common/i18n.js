@@ -528,6 +528,9 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     /* 常用操作反馈（toast 自动按整句匹配翻译） */
     '已撤销':'Undone', '已重做':'Redone', '已删除对象':'Objects deleted', '已复制对象':'Objects duplicated',
     '剪切':'Cut', '已剪切 {n} 个对象':'Cut {n} objects',
+    '选择同类 / 反向选择':'Select similar / invert',
+    '已选择 {n} 个同类对象':'Selected {n} similar objects',
+    '已反向选择 {n} 个对象':'Inverted: {n} objects selected',
     '隐藏选中 / 显示全部':'Hide selection / show all',
     '已隐藏 {n} 个对象':'Hid {n} objects', '已显示 {n} 个对象':'Restored {n} objects',
     '没有隐藏的对象':'No hidden objects',
