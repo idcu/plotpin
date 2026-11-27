@@ -116,8 +116,7 @@ async function openProjectLibrary(){
        <button id="projMerge">⇄ ${L('合并他人工程…')}</button>
      </div>
      <div class="proj-list">${safeHTML(rows)}</div>
-     <p class="hint-text">${L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。')}<br>
-       ${L(TX_OMERGE)}</p>`,
+     <p class="hint-text">${L('工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。')}</p>`,
     [{text:L('关闭'),click:closeModal}]);
   $('projSaveAs').onclick=async()=>{
     const v=await showPrompt({title:L('另存到工程库'),label:L('工程名称'),value:state.meta.name||L('未命名图纸工程')});

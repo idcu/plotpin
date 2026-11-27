@@ -1403,7 +1403,6 @@ function openCollabPanel(){
        <button id="collabStopBtn">${L('断开')}</button></div>
      </div>
      <div class="section"><h3>${L('跨设备邀请（WebRTC）')}</h3>
-       <div class="hint-text">${L(TX_STEPS)}</div>
        <div class="form-actions">
          <button id="collabOfferBtn">${L('生成邀请（主机）')}</button>
          <button id="collabAcceptBtn">${L('应用邀请 / 生成应答')}</button>

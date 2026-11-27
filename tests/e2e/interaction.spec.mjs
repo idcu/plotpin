@@ -543,3 +543,38 @@ test('双击文字就地编辑：确认写入并可一步撤销，取消不改�
   await expect.poll(() => page.evaluate(() => state.objects[0].text)).toBe('原始文字');
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
+
+test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+单击不留副本', async ({ page }) => {
+  await openApp(page);
+  const { cx, cy } = await drawPointAtCenter(page);
+  await clickTool(page, 'select');
+  const before = await page.evaluate(() => ({ n: state.objects.length, past: history.past.length, x: state.objects[0].x, y: state.objects[0].y }));
+
+  await page.keyboard.down('Alt');
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 90, cy + 50, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
+  const after = await page.evaluate(() => ({
+    src: [state.objects[0].x, state.objects[0].y],
+    moved: [state.objects[1].x, state.objects[1].y],
+    selected: [...selectedIds],
+    past: history.past.length
+  }));
+  expect(after.src).toEqual([before.x, before.y]);
+  expect(after.moved).not.toEqual([before.x, before.y]);
+  expect(after.selected).toEqual([await page.evaluate(() => state.objects[1].id)]);
+  expect(after.past).toBe(before.past + 1);
+
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+
+  const past = await page.evaluate(() => history.past.length);
+  await page.keyboard.down('Alt');
+  await page.mouse.click(cx, cy);
+  await page.keyboard.up('Alt');
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  expect(await page.evaluate(() => history.past.length)).toBe(past);
+});

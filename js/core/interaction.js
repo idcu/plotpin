@@ -374,7 +374,7 @@ canvas.addEventListener('pointerdown',e=>{
         if(e.shiftKey||e.ctrlKey||e.metaKey){ selectedIds.has(o.id)?selectedIds.delete(o.id):selectedIds.add(o.id); }
         else if(!selectedIds.has(o.id)){ selectedIds.clear(); selectedIds.add(o.id); }
         if(readOnly){ refreshSelectionUI(); requestRender(); return; }
-        drag={type:'move',start:wp,originals:new Map(),moved:false};
+        drag={type:'move',start:wp,originals:new Map(),moved:false,alt:e.altKey?Array.from(selectedIds):null};
         const idx=dragObjectIndex(drag);
         selectedIds.forEach(id=>{ const obj=idx.get(id); if(obj&&isEditable(obj)) drag.originals.set(id,deepClone(obj)); });
       }else{
@@ -516,7 +516,19 @@ canvas.addEventListener('pointermove',e=>{
     /* 屏幕位移阈值 2px：指针微抖/单击不进入拖拽，避免留下空撤销快照（审计 P1-1） */
     if(!drag.moved){
       if(Math.hypot(delta[0],delta[1])*state.viewport.zoom<2) return;
-      pushHistory(); drag.moved=true;
+      /* Alt+拖动：越过阈值才复制，未拖动不产生副本/历史 */
+      if(drag.alt){
+        const src=state.objects.filter(o=>drag.alt.includes(o.id)&&isEditable(o));
+        drag.alt=null;
+        if(src.length&&ensureObjectCapacity(src.length)){
+          pushHistory(); drag.altSource=src.map(o=>o.id);
+          selectedIds=new Set(cloneObjects(src,0));
+          drag.originals=new Map(); delete drag.index;
+          const idx=dragObjectIndex(drag);
+          selectedIds.forEach(id=>{ const o=idx.get(id); if(o) drag.originals.set(id,deepClone(o)); });
+        }else pushHistory();
+      }else pushHistory();
+      drag.moved=true;
     }
     const moveIdx=dragObjectIndex(drag);
     drag.originals.forEach((orig,id)=>{ moveObjectBy(moveIdx.get(id),orig,delta); });
@@ -607,6 +619,11 @@ canvas.addEventListener('pointerup',e=>{
     drag=null;
     if(changed) commitChange('图片已变换'); else { updateHistoryButtons(); refreshSelectionUI(); requestRender(); }
     return;
+  }
+  if(drag?.type==='move'&&drag.altSource&&!dragChanged(drag)){
+    /* Alt+拖动回到原位：删除副本并弹回复制前的唯一快照，不留空历史 */
+    dropAltCopies(drag); drag=null;
+    updateHistoryButtons(); callHook('ui.refresh'); requestRender(); return;
   }
   if(drag && ['move','node','rotate','rect','shapeHandle','siteHandle'].includes(drag.type)){
     const isSite=drag.type==='siteHandle';
@@ -840,6 +857,13 @@ function dragChanged(d){
   if(d.type==='calibPoint') return !!d.moved;
   return false;
 }
+/** Alt+拖动取消/回原位：删除拖拽期间创建的副本，恢复复制前选择并弹回快照 */
+function dropAltCopies(d){
+  const ids=new Set(d.originals.keys());
+  state.objects=state.objects.filter(o=>!ids.has(o.id));
+  selectedIds=new Set(d.altSource);
+  history.past.pop(); syncActiveFloor();
+}
 /** Esc/系统取消中指拖拽：把对象恢复到 pointerdown 前，并弹出当时压入的撤销快照（审计 P2-16） */
 function cancelActiveDrag(){
   if(!drag) return false;
@@ -849,6 +873,12 @@ function cancelActiveDrag(){
   if(d.type==='freehand'){ draft=null; requestRender(); return true; }
   const changed=dragChanged(d);
   if(d.type==='move'){
+    if(d.altSource){
+      /* Alt+拖动取消：删除已建副本，恢复复制前的选择并弹回快照 */
+      dropAltCopies(d);
+      updateHistoryButtons(); callHook('ui.refresh'); requestRender();
+      return true;
+    }
     const idx=dragObjectIndex(d);
     d.originals.forEach((orig,id)=>{ const o=idx.get(id); if(o) Object.assign(o,deepClone(orig)); });
     if(d.moved) history.past.pop();
@@ -1228,16 +1258,22 @@ function deleteSelected(){
     commitChange('已删除对象');
   });
 }
+/** 复制对象列表（Ctrl+D 偏移 1m，Alt+拖动偏移 0）：编号作用域一次建立，返回新 id */
+function cloneObjects(objs,offset){
+  const fresh=[];
+  withObjectNameScope(allObjectNames(), () => objs.forEach(o=>{
+    const n=deepClone(o); n.id=uid('OBJ'); n.name=nextObjectId();
+    n.x+=offset;n.y+=offset; if(n.points)n.points=n.points.map(p=>[p[0]+offset,p[1]+offset]);
+    n.z=state.objects.length; state.objects.push(n); fresh.push(n.id);
+  }));
+  return fresh;
+}
 function duplicateSelected(){
   if(!guardWrite(L('复制对象'))) return;
   const olds=state.objects.filter(o=>selectedIds.has(o.id)); if(!olds.length) return;
   if(!ensureObjectCapacity(olds.length)) return;   /* M-13：批量一次校验 */
   pushHistory();
-  const fresh=[];
-  /* 批量复制：编号作用域一次建立，避免每个副本都全量扫描 state.objects */
-  withObjectNameScope(allObjectNames(), () => olds.forEach(o=>{
-    const n=deepClone(o); n.id=uid('OBJ'); n.name=nextObjectId(); n.x+=1;n.y+=1; if(n.points)n.points=n.points.map(p=>[p[0]+1,p[1]+1]); n.z=state.objects.length; state.objects.push(n); fresh.push(n.id);
-  }));
+  const fresh=cloneObjects(olds,1);
   selectedIds=new Set(fresh); commitChange('已复制对象', fresh);
 }
 /** 选中对象按 a→b 轴生成镜像副本：位置/顶点/角度镜像，文字保持正向；

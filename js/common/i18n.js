@@ -22,7 +22,6 @@ const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底�
 const TX_CALIB='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
 const TX_LOD='交互画面在低缩放时按对象屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示全部标签。导出不受影响，任何缩放都带标签。';
 const TX_FLOOR='每层可独立设置底图/场地与对象；切换后画布只显示当前楼层。楼层共用图层与对象类型，工程库与 JSON 会保存全部楼层。';
-const TX_OMERGE='离线协作：双方各自编辑后，用「合并他人工程」选择对方导出的 JSON，按对象更新时间合并（较新者胜出），删除操作也会同步。';
 const TX_STATS='统计与画布缩放/像素/DPR 无关；区域面积用解析公式（圆/椭圆/扇形不再按采样多边形近似），与统计面板、报告同源。历史 v1/v2 报告数值不可直接对比。';
 const TX_LENS='镜头口径：张角取类型 fov（默认 90°，限制 10–360°，360° 视为全向）；有效距离取点设备「物理尺寸」phys(m)：扇形半径=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象与隐藏图层不进入分母。';
 const TX_DXFIMP='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
@@ -32,7 +31,6 @@ const TX_LDEL='图层「{layer}」在 {floors} 个楼层被 {count} 个对象使
 const TX_TDEL='类型「{type}」在 {floors} 个楼层被 {count} 个对象使用；删除后将迁移到「{target}」。是否继续？';
 const TX_PDFMP='多页按所选页升序横向并排，所选的第一个页锚定原点，页间距 {gap} m；每页对象归入「PDF 第 i 页」图层，便于区分来源页。底图只取所选页中第 1 页的内嵌图。';
 const TX_REST='恢复 = 一次新编辑（可 Ctrl+Z 撤销）；对端采纳前可能仍显示旧版本。旧值引用的底图/照片可能已被回收。';
-const TX_STEPS='三步建连：① 主机生成邀请；② 客机粘贴邀请并生成应答；③ 主机粘贴应答完成连接。邀请串含本机网络地址，仅发给可信协作方；连接后对方可编辑当前工程。';
 const TX_PEER='对端已连接并推送工程快照。确认后对方拥有本工程完整编辑权：可覆盖、删除、清空对象与楼层、修改配置。是否应用并继续同步？';
 const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不做多页合并；也可能是扫描图片无内嵌图或使用了不支持的压缩）';
 const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。';
@@ -427,8 +425,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     '把当前图纸另存到工程库':'Save current drawing to library', '合并他人工程…':'Merge another project…',
     '工程自动保存：绑定后每次修改都会同步到工程库；删除工程不影响已导出的 JSON 文件。':
       'Auto-save: once linked, every change syncs to the library; deleting a project does not affect exported JSON files.',
-    [TX_OMERGE]:
-      'Offline collaboration: each side edits, then use Merge another project to pick the other side’s JSON; objects merge by update time (newest wins), and deletions are synced.',
     '另存到工程库':'Save to library', '未命名图纸工程':'Untitled drawing project', '已存入工程库':'Saved to the library',
     '冲突':'conflicts',
     '新增':'added', '更新':'updated', '新增楼层':'floors added',
@@ -1004,8 +1000,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
 
 
     '跨设备邀请（WebRTC）':'Cross-device invite (WebRTC)',
-    [TX_STEPS]:
-      'Three steps: (1) host creates invite; (2) guest pastes it and creates an answer; (3) host pastes the answer to connect. The invite contains local network addresses; share only with trusted collaborators. Connected peers can edit this project.',
     '应用邀请 / 生成应答':'Apply invite / create answer',
     '复制本机邀请串':'Copy local invite string',
     '本机邀请串（发给对方）':'Local invite string (send to peer)',
