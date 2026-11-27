@@ -601,7 +601,7 @@ test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
 
-test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、F8、单键切工具', async ({ page }) => {
+test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、F8、F9、单键切工具', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -683,6 +683,13 @@ test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、F7、+/-、F8
   await page.locator('#canvas').focus();
   await page.keyboard.press('F8');
   await expect.poll(() => page.evaluate(() => orthoLock)).toBe(false);
+
+  /* F9：网格吸附开关（两次切回原值） */
+  const snap0 = await page.evaluate(() => state.settings.snap);
+  await page.keyboard.press('F9');
+  await expect.poll(() => page.evaluate(() => state.settings.snap)).toBe(!snap0);
+  await page.keyboard.press('F9');
+  await expect.poll(() => page.evaluate(() => state.settings.snap)).toBe(snap0);
 
   /* 单键切换工具：L→折线，V→选择 */
   await page.keyboard.press('l');

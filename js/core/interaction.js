@@ -1359,7 +1359,7 @@ function helpShortcutRows(){
     [L('对象捕捉')+' / F3',L(TX_OSNAP)],
     ['Tab / Shift+Tab',L(TX_SNAPC)],
     ['F6',L('在顶栏/工具栏/侧栏循环焦点（Tab 用于捕捉）')],
-    ['F7',L('显示/隐藏网格')],
+    ['F7 / F9',L('网格显隐 / 网格吸附')],
     [L('空格 + 拖拽'),L('临时平移画布')],
     [L('方向键'),L('移动选中对象（Shift ×10）')],['F',L('适应窗口（显示整张场地）')],
     [L('滚轮 / 右键拖拽 / + / -'),L('缩放 / 平移画布 / 键盘缩放')],
@@ -1524,6 +1524,13 @@ window.addEventListener('keydown',e=>{
     orthoLock=!orthoLock;
     callHook('ui.toast',L('水平/垂直约束')+(orthoLock?' ✓':' ✕'));
     return;
+  }
+  /* F9 网格吸附开关：与设置里的「启用捕捉」同一状态位 */
+  if(onCanvas&&e.key==='F9'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    e.preventDefault();
+    state.settings.snap=!state.settings.snap;
+    callHook('ui.toast',L('网格吸附')+(state.settings.snap?' ✓':' ✕'));
+    scheduleSave(); return;
   }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
