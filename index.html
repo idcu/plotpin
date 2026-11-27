@@ -119,6 +119,8 @@
             <option value="leader" data-x="dimLeader">引线标注</option>
             <option value="radius" data-x="dimRadius">半径标注</option>
             <option value="diameter" data-x="dimDiameter">直径标注</option>
+            <option value="coord" data-x="dimCoord">坐标</option>
+            <option value="elev" data-x="dimElev">标高</option>
           </select>
         </span>
       </span>
@@ -162,7 +164,10 @@
           <input id="batchAngle" type="number" step="1" value="0" title="旋转角度" aria-label="旋转角度" data-xa="ariaBatchAngle">
           <button class="mini" id="batchRotateBtn" data-x="batchRotate">旋转</button>
           <button class="mini" id="batchArrayBtn" data-x="batchArray">阵列</button>
+          <button class="mini" id="batchPolarBtn" data-x="batchPolar">环形</button>
           <button class="mini" id="batchOffsetBtn" data-x="batchOffset">偏移</button>
+          <button class="mini" id="batchCloseBtn" data-x="batchClose">闭合</button>
+          <button class="mini" id="batchReverseBtn" data-x="batchReverse">反向</button>
           <button class="mini danger" id="batchDeleteBtn" data-x="batchDelete">删除</button>
         </div>
         <div class="batch-row annot-batch-row">

@@ -107,7 +107,7 @@ export async function buildStandalone(html, readFile) {  /* 结构缩进在 HTML
        避免 plugins.js 按名探测的产品路径失效；不做属性改名、不生成 sourcemap。 */
     /* unsafe：只做 new Error→Error、String(x)→""+x、new RegExp(字面量)→RegExp 等
        在本仓库可证明等价的替换（已逐条比对产物，见 CHANGELOG）；不修改变量名与原型假设之外的行为。 */
-    const mini = await minify(body, { ecma: 2020, compress: { passes: 3, keep_fargs: false, pure_getters: true, unsafe: true }, mangle: { toplevel: false } });
+    const mini = await minify(body, { ecma: 2020, compress: { passes: 6, keep_fargs: false, pure_getters: true, unsafe: true, unsafe_arrows: true }, mangle: { toplevel: false } });
     if (typeof mini.code !== 'string') throw new Error('terser 未返回压缩结果');
     body = mini.code.replace(/<\/script/gi, '<\\/script');
     try { new vm.Script(body, { filename: 'bundle' }); }

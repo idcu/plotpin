@@ -41,7 +41,6 @@ const TX_PDFE='PDF 第 1 页未提取到可用图形（仅导入第 1 页，不�
 const TX_RELAY='默认只用直连。每行一条：地址 | 用户名 | 凭据；STUN 可只填地址，多个地址用逗号分隔。凭据以明文保存在本机浏览器，且不会进入邀请串、协作消息或工程文件。';
 const TX_ACOORD='坐标按世界坐标（米），可为负；区域随底图保持真实比例。三角形/任意多边形请用「折线」工具勾选「闭合区域」。';
 const TX_RECT='区域：上方选形状后按住左键拖画；按住 Shift 矩形=正方形、椭圆=正圆、扇形=45°吸附，Esc 取消';
-const TX_SPARA='绘制平行四边形场地：拖出底边×高，松开后按默认倾角 30° 生成（可在场地属性改倾角/尺寸）';
 const TX_OSNAP='自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪';
 const TX_ARC='含圆弧的工程请统一用 ≥ 当前版本打开；旧版打开会丢弃这些圆弧，旧版保存一次后弧永久消失。';
 const TX_ARCIMP='不勾选则按 24 段折线导入（与旧版一致，任何版本都能打开）。圆弧为纯描边几何，不参与面积与覆盖率统计。';
@@ -112,8 +111,8 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       shapeRect: '矩形', shapeCircle: '圆形', shapeEllipse: '椭圆', shapeSector: '扇形', shapeParallelogram: '平行四边形',
       areaNoFill: '仅描边', revCloud: '修订云线',
       dimDistance: '两点距离', dimRuler: '测距（多点总长）', dimArea: '面积', dimAngle: '角度', dimLeader: '引线标注',
-      dimRadius: '半径标注', dimDiameter: '直径标注', mirror: '镜像',
-      batchArray: '阵列', batchOffset: '偏移', arrayHint: '行,列,行距,列距', arrayDone: '已生成阵列',
+      dimRadius: '半径标注', dimDiameter: '直径标注', dimCoord: '坐标', dimElev: '标高', mirror: '镜像',
+      batchArray: '阵列', batchPolar: '环形', batchOffset: '偏移', batchClose: '闭合', batchReverse: '反向', arrayHint: '行,列,行距,列距', polarHint: '数量,角度(°)[,中心X,中心Y]', arrayDone: '已生成阵列',
       offsetHint: '距离(m)', badParam: '参数无效', opDone: '已创建副本',
       pickCircle: '请点击圆或圆弧',
       /* 设置面板 */
@@ -205,8 +204,8 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       shapeRect: 'Rectangle', shapeCircle: 'Circle', shapeEllipse: 'Ellipse', shapeSector: 'Sector', shapeParallelogram: 'Parallelogram',
       areaNoFill: 'Outline only', revCloud: 'Revision cloud',
       dimDistance: 'Two-point distance', dimRuler: 'Measure (total length)', dimArea: 'Area', dimAngle: 'Angle', dimLeader: 'Leader label',
-      dimRadius: 'Radius label', dimDiameter: 'Diameter label', mirror: 'Mirror',
-      batchArray: 'Array', batchOffset: 'Offset', arrayHint: 'rows, cols, dx, dy', arrayDone: 'Array created',
+      dimRadius: 'Radius label', dimDiameter: 'Diameter label', dimCoord: 'Coordinates', dimElev: 'Level', mirror: 'Mirror',
+      batchArray: 'Array', batchPolar: 'Polar', batchOffset: 'Offset', batchClose: 'Close', batchReverse: 'Reverse', arrayHint: 'rows, cols, dx, dy', polarHint: 'count, angle (°)[, centerX, centerY]', arrayDone: 'Array created',
       offsetHint: 'Distance (m)', badParam: 'Invalid parameters', opDone: 'Copies created',
       pickCircle: 'Click a circle or arc',
       projectName: 'Project name', gridSpacing: 'Grid spacing', enableSnap: 'Enable snapping', showGrid: 'Show grid',
@@ -339,10 +338,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Area: choose a shape above and drag; Shift makes a square/circle or snaps sectors to 45°; Esc cancels',
     [TX_POLY]:
       'Polyline: click point by point, double-click to finish; Shift constrains to horizontal/vertical; right-click/Esc cancels (enable Closed for triangles/polygons)',
-    '线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直':
-      'Segment: click start and end, finishes automatically; Shift constrains to horizontal/vertical',
-    '箭头：单击起点与终点，自动完成；按住 Shift 保持水平/垂直':
-      'Arrow: click start and end, finishes automatically; Shift constrains to horizontal/vertical',
     '圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消':
       'Circle/Arc: click the center, then the radius point (circle) or start/end points (arc); Esc cancels',
     '文字：单击输入文字内容':'Text: click to enter text',
@@ -354,18 +349,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
       'Scale: click two known points; drag to adjust, Delete to remove, Ctrl+Z to undo, press Enter or ✓ to apply',
     [TX_AFF]:
       'Affine calibration: click known points and enter real-world X,Y (2 points = rotation + uniform scale, 3+ = full affine); red/green control points are draggable, Delete removes, Ctrl+Z undoes, press Enter or ✓ to solve, right-click/Esc cancels',
-    '绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消':
-      'Draw rectangle site: drag the diagonal (Shift = square), release to finish, Esc cancels',
-    '绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消':
-      'Draw circle site: drag the radius from the center, release to finish, Esc cancels',
-    '绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消':
-      'Draw ellipse site: drag the bounding box (Shift = circle), release to finish, Esc cancels',
-    '绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消':
-      'Draw sector site: Shift snaps the radius to 45°; enter start/end angles after release; Esc cancels',
-    [TX_SPARA]:
-      'Draw parallelogram site: drag base × height; it is created with a default 30° skew (editable in Site properties)',
-    '绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消':
-      'Draw polygon site: click along the boundary, double-click/Enter or ✓ closes it, Esc cancels',
     [TX_SNODE]:'Site nodes: drag handles to reshape the vector site; enter exact coordinates/parameters in the panel; polygons support double-click edge insert and vertex delete',
     [TX_GUIDE]:
       'Guides: two clicks define an infinite guide (participates in intersection/perpendicular/parallel snapping); Backspace removes the last, Shift+G clears all, Esc exits',

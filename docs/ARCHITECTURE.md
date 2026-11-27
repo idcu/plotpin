@@ -213,7 +213,7 @@ s2w(p) = [(p.x - panX) / zoom + frame.minX, frame.maxY - (p.y - panY) / zoom]
 
 ### 符号库
 
-`js/common/symbols.js` 内置 36 个 24×24 线性图元、6 个分类。画布、SVG、PNG/PDF 共用同一 `path` 源；DXF 用 `symbolPolylinesInWorld()` 做折线近似。自有 SVG 导入走白名单解析：64KB / 200 元素 / 深度 16 / 200 条 path / 单 path 5000 字符，禁止 `script`、事件属性与外部引用。
+`js/common/symbols.js` 内置 37 个 24×24 线性图元、6 个分类。画布、SVG、PNG/PDF 共用同一 `path` 源；DXF 用 `symbolPolylinesInWorld()` 做折线近似。自有 SVG 导入走白名单解析：64KB / 200 元素 / 深度 16 / 200 条 path / 单 path 5000 字符，禁止 `script`、事件属性与外部引用。
 
 ## 10. 协作与安全现状
 

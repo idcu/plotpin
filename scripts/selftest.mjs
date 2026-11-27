@@ -6497,13 +6497,13 @@ await section("54. 方向约束（平行/垂直/等距/极轴）与临时参考�
 
 });
 
-/* 55. 符号库（C-04）：36 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden */
-await section("55. 符号库（C-04）：36 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden", async () => {
+/* 55. 符号库（C-04）：37 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden */
+await section("55. 符号库（C-04）：37 个六类图元、别名搜索、安全清洗、统一路径、DXF 降级、JSON、golden", async () => {
 {
   const lib=api.SYMBOL_LIBRARY;
-  eq('符号库-总数36', lib.length, 36);
+  eq('符号库-总数37', lib.length, 37);
   eq('符号库-分类固定六类', api.SYMBOL_CATEGORIES, ['视频监控','门禁','消防','网络','停车','其他']);
-  api.SYMBOL_CATEGORIES.forEach(cat=>eq('符号库-分类数量 '+cat, lib.filter(s=>s.cat===cat).length, 6));
+  api.SYMBOL_CATEGORIES.forEach(cat=>eq('符号库-分类数量 '+cat, lib.filter(s=>s.cat===cat).length, cat==='其他'?7:6));
   eq('符号库-id唯一', new Set(lib.map(s=>s.id)).size, lib.length);
   eq('符号库-名称唯一', new Set(lib.map(s=>s.name)).size, lib.length);
   ok('符号库-每条都有别名与路径', lib.every(s=>Array.isArray(s.aliases)&&s.aliases.length&&Array.isArray(s.paths)&&s.paths.length));
@@ -6511,7 +6511,7 @@ await section("55. 符号库（C-04）：36 个六类图元、别名搜索、安
   ok('符号库-别名搜索烟感', api.searchSymbols('烟感').some(s=>s.id==='sym.smoke'));
   ok('符号库-别名搜索NVR', api.searchSymbols('nvr').some(s=>s.id==='sym.nvr'));
   eq('符号库-分类筛选消防', api.searchSymbols('','消防').length, 6);
-  ok('符号库-引擎索引构建', api.buildSymbolIndex().length===36);
+  ok('符号库-引擎索引构建', api.buildSymbolIndex().length===37);
 
   /* SVG 导入：path/circle/rect/polygon/line + viewBox */
   const parsed=api.parseSvgSymbol('<svg viewBox="0 0 48 32"><path d="M0 0L10 10" fill="none"/><circle cx="5" cy="6" r="2"/><rect x="1" y="2" width="3" height="4"/><polygon points="0,0 1,0 1,1"/><line x1="0" y1="0" x2="2" y2="2"/></svg>');

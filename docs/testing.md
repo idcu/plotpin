@@ -11,7 +11,7 @@
 | 层 | 入口 | 运行环境 | 规模（2026-11-26 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **176 个分区 / 4,576 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **49 个 spec / 196 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地 2026-11-27 全量：**193 passed / 0 failed / 3 skipped**（3.8m，exit 0），含源码入口与 `file://` dist 用例；见 §3 |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **49 个 spec / 198 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地 2026-11-27 双入口全量：源码 **195 passed / 0 failed / 3 skipped**（3.8m）、dist **192 passed / 0 failed / 6 skipped**（3.6m），均 exit 0；见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
@@ -92,7 +92,7 @@
 
 | 功能域 | spec（用例数） |
 |---|---|
-| 冒烟/基础交互/加载 | smoke(4)、interaction(3)、load-audit(6)、world-transform(2) |
+| 冒烟/基础交互/加载 | smoke(4)、interaction(12)、load-audit(6)、world-transform(2) |
 | 持久化/历史/保存 | persistence(4)、history(7)、history-increment(4)、save-failure(2)、tab-lease(4)、snapshot(7)、project-copy(4)、undo-coverage(3) |
 | 协作 | collab(18)（含 1 个 soak 条件跳过） |
 | 导出与图面 | pdf-multipage(10)、pdf-dpi(1)、pdf-vector-option(1)、pdf-text-layer(2：V-6 图纸页 + V-6b 清单页，均含删 ToUnicode 负向)、title-block(1)、export-scope(4)、perf-render(4：基线 + 位移/放大/编辑 A 后 B 标签)、coverage(3)、publish-state(2) |
@@ -106,11 +106,11 @@
 | i18n/帮助/引导 | i18n-template(1)、help-center(1)、onboarding(3) |
 | 安全 | csp(5) |
 | DXF 导入 | dxf-version(4) |
-| 界面加固 | ui-hardening(4)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
+| 界面加固 | ui-hardening(5)、ghost(1)（幽灵参考层：会话级、不进 state/JSON） |
 | 本地批注 | comments(5)（新增即时渲染与独立本地键、编辑 Esc 取消/确认更新、删除二次确认、只读禁用、锚点对象删除后保留并标注） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **188** 个用例、**49** 个 spec（装 poppler 的环境：源码入口 187 跑 + 1 条件跳过，dist 入口 184 跑 + 4 跳过；没装 poppler 时源码入口再多 1 条跳过、dist 入口再多 1 条）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **198** 个用例、**49** 个 spec（源码入口 195 跑 + 3 条件跳过；dist 入口 192 跑 + 6 跳过；跳过为协作 soak 与 V-6/V-6b 缺 `pdftotext` 的条件分支）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 
@@ -228,6 +228,7 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 | 静态层局部补绘的边界 | 3 条像素采样只覆盖 **dpr=1 的 headless Chromium** 与**属性面板提交**路径；标签溢出超出 96 px pad 仍可能被擦，dpr=2、拖拽（走整层重建）与真实设备未实测 |
 | 状态写入口 / 耦合 / 钩子 | 由 `check.mjs` 9.1～9.4 静态判据与 `check-gates` 场景 14～17 反向验证；**无运行时 e2e**，动态别名、`globalThis[…]` 访问仍可能漏 |
 | 插件沙箱导出器权限 | 导出器未声明 `state:read` 时只收到空 `input`，目前是静态核对；无运行期 e2e |
+| 批量闭合/反向、环形阵列、坐标/标高 | e2e 覆盖 UI 行为；`rotateObjectAbout` / `createTextObject` 作为 DOM 入口内的纯函数无独立 selftest，几何边界（圆弧/多边形/文字）只有交互路径覆盖 |
 
 上表任一空白被补上时，必须同时更新本节、§3.2 矩阵与 [performance](performance.md)（如涉及性能读数）。
 

@@ -76,7 +76,7 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 
 ### 2.4 terser 局部 mangle、HTML 标记与 i18n 默认文案压缩（已接入）
 
-`pack-core.mjs` 合并出单脚本后交给 terser：`ecma: 2020` + `compress: { passes: 3, keep_fargs: false, pure_getters: true, unsafe: true }` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。
+`pack-core.mjs` 合并出单脚本后交给 terser：`ecma: 2020` + `compress: { passes: 6, keep_fargs: false, pure_getters: true, unsafe: true, unsafe_arrows: true }` + `mangle: { toplevel: false }`（顶层名全保留），再按压缩后内容重算 CSP 哈希；版本精确锁定（devDependency），发行包仍零运行时依赖。`unsafe_arrows` 只把不使用 `this`/`arguments`/`super`/`new.target` 的函数表达式改为箭头函数；`passes: 3 → 6` 仅增加等价压缩迭代。两者合计实测 **−948 B**，selftest 与双入口 e2e 全绿。
 
 - 保留顶层名是产品约束：`plugins.js` 按名探测 `state / toast / scheduleSave / commitChange` 等全局；全量改名会让插件路径失效。
 - 不启用 `compress.toplevel`：它会把未被静态引用的顶层声明当死代码删除（实测 dist 入口 40+ 用例 `ReferenceError`），与「顶层名全保留」的约束冲突。
@@ -86,6 +86,7 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 - i18n 默认文案去重（2026-11-26）：发行包里，`data-x` 节点的文本、以及 `data-xt` / `data-xa` / `data-xp` 对应的 `title` / `aria-label` / `placeholder` 值，**与 `DICT.zh` 逐字相同**时删除，启动时由 `I18N.apply` 从字典重新填充；源文件保持可读。实测 dist −2,730 B。代价：JS 未执行前这些标签/ARIA 为空（应用本身也依赖 JS）；值不一致时原样保留，不做模糊匹配。
 - 不采用「i18n 四张表重编码为前缀共享字符串」：实测 dist **+9,212 B**（对象字面量里 ASCII 键可省引号，已比带分隔符的表更紧凑），已回滚。
 - 不采用「i18n 五张表压成 HTML 扁平数据块」：实测 dist **+2,473 B**（terser 已去掉表字面量的引号/空白并合并重复键，扁平串的 2 B 分隔符反而更贵），已回滚。
+- 不采用 `unsafe_methods` + `unsafe_undefined`：实测 dist **+36 B**（属性简写/`void 0` 与 gzip 及 terser 既有输出叠加后反而变贵），已回滚；`booleans_as_integers` 因仓库存在大量 `x !== false` 语义检查（0 与 false 不能等同）而不启用。
 - 代价：构建耗时增加、生产栈帧变短名、对未文档化全局名的隐式依赖会静默失效。
 - 变更 terser 版本或配置会让产物 SHA256 漂移，进而使 `build --check` 与 SW 版本抖动；升级必须同批重跑构建、双入口 e2e 与 SW 校验。
 

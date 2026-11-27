@@ -296,6 +296,72 @@ test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({
   expect(off.dx).toBeCloseTo(0, 6);
 });
 
+test('批量闭合/反向：折线顶点顺序反转且闭合状态可切换', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'line');
+  await page.mouse.click(cx - 80, cy - 60);
+  await page.mouse.click(cx, cy - 100);
+  await page.mouse.dblclick(cx + 80, cy - 60);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  const before = await page.evaluate(() => state.objects[0].points.map(p => p.slice()));
+  expect(before.length).toBeGreaterThanOrEqual(3);
+  await clickTool(page, 'select');
+  await page.mouse.click(cx, cy - 100);
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+  await page.evaluate(() => switchTab('list'));
+
+  await page.click('#batchReverseBtn');
+  const rev = await page.evaluate(() => state.objects[0].points.map(p => p.slice()));
+  expect(rev[0]).toEqual(before[before.length - 1]);
+  expect(rev[rev.length - 1]).toEqual(before[0]);
+
+  await page.click('#batchCloseBtn');
+  expect(await page.evaluate(() => !!state.objects[0].closed)).toBe(true);
+  await page.click('#batchCloseBtn');
+  expect(await page.evaluate(() => !!state.objects[0].closed)).toBe(false);
+});
+
+test('环形阵列：绕指定中心复制；坐标/标高标注单击落文字', async ({ page }) => {
+  await openApp(page);
+  const box = await page.locator('#canvas').boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await clickTool(page, 'point');
+  await page.mouse.click(cx - 120, cy);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
+  await clickTool(page, 'select');
+  await page.mouse.click(cx - 120, cy);
+  await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
+  await page.evaluate(() => switchTab('list'));
+  const p = await page.evaluate(() => ({ x: state.objects[0].x, y: state.objects[0].y }));
+  const centerX = p.x + 10;
+  await page.click('#batchPolarBtn');
+  await page.fill('#promptInput', `4,90,${centerX},${p.y}`);
+  await page.locator('#modalFooter button.primary').click();
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(4);
+  const polar = await page.evaluate(({ centerX, y }) => {
+    const pts = state.objects.slice(1).map(o => [o.x, o.y]);
+    const radii = pts.map(q => Math.hypot(q[0] - centerX, q[1] - y));
+    return { n: pts.length, radii: radii.map(r => Math.round(r * 100) / 100), unique: new Set(pts.map(q => q.join(','))).size };
+  }, { centerX, y: p.y });
+  expect(polar.n).toBe(3);
+  expect(polar.unique).toBe(3);
+  expect(polar.radii.every(r => Math.abs(r - 10) < 0.01)).toBe(true);
+
+  await clickTool(page, 'dimension');
+  await page.selectOption('#dimensionType', 'coord');
+  await page.mouse.click(cx + 40, cy + 80);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(5);
+  let txt = await page.evaluate(() => state.objects[state.objects.length - 1].text);
+  expect(txt.startsWith('X ')).toBe(true);
+  await page.selectOption('#dimensionType', 'elev');
+  await page.mouse.click(cx + 120, cy + 80);
+  await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(6);
+  txt = await page.evaluate(() => state.objects[state.objects.length - 1].text);
+  expect(txt.startsWith('▽ ')).toBe(true);
+});
+
 test('折线模式与类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {

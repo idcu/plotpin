@@ -11,18 +11,12 @@ function syncToolButtons(tool){
 const TOOL_TITLES={
   select:L('选择：点击对象，框选多个对象；画线/拖点会自动捕捉端点、中点、圆心（设置可关）'),pan:L('平移：拖拽移动画布'),point:L('点设备：单击放置（自动捕捉特征点，设置可关）'),
   rect:L(TX_RECT),line:L(TX_POLY),
-  segment:L('线段：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
-  arrow:L('箭头：单击起点与终点，自动完成；按住 Shift 保持水平/垂直'),
   arc:L('圆/圆弧：先点圆心，再点半径端（圆）或起点/终点（圆弧）；Esc 取消'),
   text:L('文字：单击输入文字内容'),dimension:L('尺寸标注：测距逐点单击、双击结束（右键/Esc 取消）；其他类型按提示逐点单击'),
   calibrate:L(TX_CALIB),
   affine:L(TX_AFF),
-  'site-rect':L('绘制矩形场地：按住左键拖出对角（Shift=正方形），松开完成，Esc 取消'),
-  'site-circle':L('绘制圆形场地：按住左键从圆心拖出半径，松开完成，Esc 取消'),
-  'site-ellipse':L('绘制椭圆场地：拖包围盒（Shift=正圆），松开完成，Esc 取消'),
-  'site-sector':L('绘制扇形场地：拖半径时 Shift 吸附 45°，松开后输入起止角，Esc 取消'),
-  'site-parallelogram':L(TX_SPARA),
-  'site-polygon':L('绘制多边形场地：沿边界逐点单击，双击/Enter 或点左侧✓闭合，Esc 取消'),
+  'site-rect':L('矩形'), 'site-circle':L('圆形'), 'site-ellipse':L('椭圆'), 'site-sector':L('扇形'),
+  'site-parallelogram':L('平行四边形'), 'site-polygon':L('多边形场地'),
   'site-node':L(TX_SNODE),
   'image-transform':L(TX_IMG),
   'guide':L(TX_GUIDE),
@@ -83,16 +77,22 @@ $('toolFlyout').onclick=e=>{
   const g=GROUPS.find(x=>x.tools.includes(b.dataset.tool)); if(g) g.last=b.dataset.tool;
   closeFly(); setTool(b.dataset.tool);
 };
-$('lineMode').addEventListener('change',()=>{ if(currentTool==='line') updateToolTitle(); });
 document.addEventListener('pointerdown',e=>{
   if(flyG&&!e.target.closest('#toolFlyout')&&!e.target.closest('[data-group-main]')) closeFly();
 },true);
 /** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择）；弹出组已开则原地重建文案，不因后台刷新被关掉 */
 function updateToolTitle(){
-  const mode=currentTool==='line'?$('lineMode').value:'';
-  $('toolTitle').textContent=L(TOOL_TITLES[mode==='segment'||mode==='arrow'?mode:currentTool]||'');
+  $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||'');
   syncRail();
   if(flyG) openGroup(flyG);
+}
+/** 创建文字对象（文字工具与坐标/标高标注共用）：补齐内置文字类型并选中 */
+function createTextObject(wp,text){
+  const o=baseObject('text',null,{x:wp[0],y:wp[1],text,height:2.2,style:{color:'#111827'}});
+  o.typeId='text.builtin';
+  if(!state.objectTypes.some(t=>t.id===o.typeId)) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
+  state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
+  return o;
 }
 /** 草稿顶点入列：达到 SHAPE_POINTS_MAX 后拒绝并提示，避免病态点列拖垮包围盒/渲染 */
 function pushDraftPoint(points,wp){
@@ -444,6 +444,13 @@ canvas.addEventListener('pointerdown',e=>{
       state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id);
       commitChange(L('已添加尺寸标注')); return;
     }
+    /* 坐标/标高：单击即落文字，取当前点世界坐标（标高默认取 Y，可在属性面板改文字） */
+    if(subtype==='coord'||subtype==='elev'){
+      if(!ensureObjectCapacity(1)) return;
+      pushHistory();
+      createTextObject(wp,subtype==='coord'?'X '+fmt(wp[0])+'  Y '+fmt(wp[1]):'▽ '+fmt(wp[1])+' '+state.settings.unit);
+      commitChange(L('已添加尺寸标注')); return;
+    }
     if(!draft){ draft={kind:'dimension',subtype,points:[wp],current:wp}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
     /* distance/angle/leader 点数够了自动结束；ruler（测距链）与 area 手动 Enter/双击结束 */
@@ -460,10 +467,8 @@ canvas.addEventListener('pointerdown',e=>{
     showPrompt({title:L('添加文字'),label:L('文字内容'),value:L('标注文字')}).then(text=>{
       if(text===null) return;
       if(!ensureObjectCapacity(1)) return;
-      pushHistory();
-      const o=baseObject('text',null,{x:wp[0],y:wp[1],text,height:2.2,style:{color:'#111827'}});
-      o.typeId='text.builtin'; if(!state.objectTypes.some(t=>t.id===o.typeId)) state.objectTypes.push({id:'text.builtin',kind:'text',name:'文字',color:'#111827',icon:'text',builtin:true});
-      state.objects.push(o); selectedIds.clear(); selectedIds.add(o.id); commitChange(L('已添加文字')); switchTab('props');
+      pushHistory(); createTextObject(wp,text);
+      commitChange(L('已添加文字')); switchTab('props');
     });
   }
 });

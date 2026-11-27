@@ -10,7 +10,7 @@ test('C-04 符号库：别名搜索、分类筛选、放置与旋转/尺寸', as
   await openApp(page);
   await page.locator('#tabBtn-symbols').click();
   await expect(page.locator('#tab-symbols')).toHaveClass(/active/);
-  await expect(page.locator('#symbolCount')).toContainText('36');
+  await expect(page.locator('#symbolCount')).toContainText('37');
   await expect(page.locator('#symbolCat option')).toHaveCount(7);
 
   /* 名称/别名搜索 */

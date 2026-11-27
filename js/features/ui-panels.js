@@ -211,6 +211,37 @@ $('batchArrayBtn').onclick=async()=>{
   selectedIds=new Set(fresh);
   commitChange(I18N.t('arrayDone'),fresh);
 };
+/** 绕任意支点旋转对象（环形阵列用）：点列/多边形顶点逐点旋转，其余旋转锚点与自身角度 */
+function rotateObjectAbout(o,c,deg){
+  const r=deg*Math.PI/180, cs=Math.cos(r), sn=Math.sin(r);
+  const rt=p=>{ const dx=p[0]-c[0], dy=p[1]-c[1]; return [c[0]+dx*cs-dy*sn, c[1]+dx*sn+dy*cs]; };
+  if(o.points&&o.points.length){ o.points=o.points.map(rt); syncFirstPoint(o); }
+  if(o.shape&&Array.isArray(o.shape.points)) o.shape.points=o.shape.points.map(rt);
+  if(!(o.points&&o.points.length)){ const q=rt([o.x,o.y]); o.x=q[0]; o.y=q[1]; }
+  if(o.kind==='arc'&&o.shape){ o.shape.a0=normalizeAngle((o.shape.a0||0)+deg); o.shape.a1=(o.shape.a1||0)+deg; }
+  else if(!(o.points&&o.points.length)) o.angle=normalizeAngle((o.angle||0)+deg);
+}
+/** 环形阵列：绕选中对象包围盒中心按「数量,总角度」复制，含原位 */
+$('batchPolarBtn').onclick=async()=>{
+  const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
+  if(!items.length) return toast(L('先勾选对象'),'warn');
+  const v=await showPrompt({title:I18N.t('batchPolar'),label:I18N.t('polarHint'),value:'6,360'});
+  if(v===null) return;
+  const [n,total,cx,cy]=v.split(/[,，\s]+/).map(Number);
+  if(!(n>=2&&n<=1000&&Number.isFinite(total)&&total)) return toast(I18N.t('badParam'),'warn');
+  if(!ensureObjectCapacity(items.length*(n-1))) return;
+  const b=items.map(objectBounds).reduce((a,q)=>({minX:Math.min(a.minX,q.minX),minY:Math.min(a.minY,q.minY),maxX:Math.max(a.maxX,q.maxX),maxY:Math.max(a.maxY,q.maxY)}),{minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity});
+  const c=[Number.isFinite(cx)&&Number.isFinite(cy)?cx:(b.minX+b.maxX)/2,Number.isFinite(cx)&&Number.isFinite(cy)?cy:(b.minY+b.maxY)/2];
+  pushHistory(); const fresh=[];
+  withObjectNameScope(allObjectNames(),()=>items.forEach(o=>{
+    for(let i=1;i<n;i++){
+      const k=deepClone(o); k.id=uid('OBJ'); k.name=nextObjectId(); k.z=state.objects.length;
+      rotateObjectAbout(k,c,total*i/n);
+      state.objects.push(k); fresh.push(k.id);
+    }
+  }));
+  selectedIds=new Set(fresh); commitChange(I18N.t('arrayDone'),fresh);
+};
 /** 偏移单个对象：折线/多边形按 miter 平行偏移，区域参数形状按半径/宽高扩展；
  *  不支持点/文字/标注，返回 null。正距离=闭合区域向外、开放折线向左。 */
 function offsetObject(o,d){
@@ -258,6 +289,20 @@ $('batchOffsetBtn').onclick=async()=>{
   }));
   selectedIds=new Set(clones.map(n=>n.id));
   commitChange(I18N.t('opDone'),clones.map(n=>n.id));
+};
+/* 批量闭合/反向：只作用可编辑折线；反向同步首点锚，闭合要求 ≥3 点 */
+const editableLines=()=>state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)&&o.kind==='line');
+$('batchCloseBtn').onclick=()=>{
+  const items=editableLines().filter(o=>o.points.length>2);
+  if(!items.length) return toast(L('没有可修改的选中对象'),'warn');
+  pushHistory(); const all=items.every(o=>o.closed); items.forEach(o=>o.closed=!all);
+  commitChange(L('已更新'),items.map(o=>o.id));
+};
+$('batchReverseBtn').onclick=()=>{
+  const items=editableLines();
+  if(!items.length) return toast(L('没有可修改的选中对象'),'warn');
+  pushHistory(); items.forEach(o=>{ o.points.reverse(); syncFirstPoint(o); });
+  commitChange(L('已更新'),items.map(o=>o.id));
 };
 $('batchDeleteBtn').onclick=deleteSelected;
 /* -------------------- 批量标注显隐（按标识类型勾选） --------------------
