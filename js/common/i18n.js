@@ -20,7 +20,6 @@ const TX_POLY='折线：逐点单击，双击完成；按住 Shift 画水平/垂
 /* 界面提示与字典键共用同一份字符串：同一句在产物里只存一份（体积预算按原始字节计） */
 const TX_PTYPE='该类型仅标识位置（屏幕固定图标）。如需与底图成比例的覆盖范围，请在「图层/类型」中改用圆/方/扇形/杆型点类型。';
 const TX_CALIB='比例尺：依次点击图上两个已知点，可拖拽调整／Delete 删除／Ctrl+Z 撤销，按 Enter 或左侧 ✓ 应用';
-const TX_LOD='低缩放时按屏幕尺寸隐藏名称/面积/段长标签，点符号按密度隐藏；选中对象始终显示；导出始终带标签。';
 const TX_STATS='统计与缩放/像素/DPR 无关；面积用解析公式（圆/椭圆/扇形），与统计面板、报告同源。历史 v1/v2 报告不可直接对比。';
 const TX_LENS='镜头口径：张角取类型 fov（默认 90°，10–360°，360° 全向）；距离取点设备 phys(m)：扇形=phys，圆/方=phys/2；未填 phys 的图标点不计入。隐藏对象/图层不进分母。';
 const TX_DXFIMP='DXF 已导入：{line} 线 / {rect} 圆 / {point} 点 / {text} 文字{extra}';
@@ -367,9 +366,6 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',
     '矢量场地':'Vector site', '比例尺':'Scale', '仿射':'Affine', '覆盖率口径':'Coverage definition',
-    '低缩放标签':'Labels at low zoom',
-    [TX_LOD]:
-      'At low zoom, labels hide by on-screen size (points by density); selected objects always show all; exports always include labels.',
     '栅格图片（PNG/JPG/WebP）。先校准像素→米；只影响图片与业务对象，不改场地坐标。':
       'Raster image (PNG/JPG/WebP). Calibrate pixels to metres first; affects image objects only.',
     '按米制绘制的矩形/圆形/椭圆/扇形/平行四边形/多边形边界；无需校准。':

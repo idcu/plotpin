@@ -601,7 +601,7 @@ test('Alt+拖动复制：越过阈值才复制，一次撤销全部回退，Alt+
   expect(await page.evaluate(() => history.past.length)).toBe(past);
 });
 
-test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、单键切工具', async ({ page }) => {
+test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、F3、单键切工具', async ({ page }) => {
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
@@ -646,6 +646,13 @@ test('常用快捷键：Ctrl+A、Ctrl+Shift+V、Ctrl+0、F2、单键切工具', 
   await page.fill('#promptInput', '对象改名');
   await page.locator('#modalFooter button.primary').click();
   await expect.poll(() => page.evaluate(() => state.objects[0].name)).toBe('对象改名');
+
+  /* F3：开关对象捕捉（两次切回原值） */
+  const osnap = await page.evaluate(() => state.settings.osnap);
+  await page.keyboard.press('F3');
+  await expect.poll(() => page.evaluate(() => state.settings.osnap)).toBe(!osnap);
+  await page.keyboard.press('F3');
+  await expect.poll(() => page.evaluate(() => state.settings.osnap)).toBe(osnap);
 
   /* 单键切换工具：L→折线，V→选择 */
   await page.keyboard.press('l');

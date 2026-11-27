@@ -1347,7 +1347,7 @@ function helpShortcutRows(){
     [L('双击线段 / 双击节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
     [L('Shift（画线/标注/拖节点时）'),L('约束为水平/垂直线（正交）')],
     [L('Shift（拖矩形/椭圆/扇形时）'),L('正方形 / 正圆 / 45°方位吸附')],
-    [L('对象捕捉'),L(TX_OSNAP)],
+    [L('对象捕捉')+' / F3',L(TX_OSNAP)],
     ['Tab / Shift+Tab',L(TX_SNAPC)],
     ['F6',L('在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）')],
     [L('空格 + 拖拽'),L('临时平移画布')],
@@ -1364,8 +1364,7 @@ function helpGlossaryRows(){
     [L('楼层'), L('每层独立底图/场地与对象；图层、类型、工程库与 JSON 跨层共享。')],
     [L('比例尺'), L('用两点及其实距求像素→米比例与旋转；仅作用于图片底图。')],
     [L('仿射'), L('用已知点及真实 X,Y 求图片到世界的变换；2 点=相似，≥3 点=完整仿射。')],
-    [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')],
-    [L('低缩放标签'), L(TX_LOD)]
+    [L('覆盖率口径'), L('按摄像头视场角与安装高度投影，统计可见设备覆盖率与盲区。')]
   ];
 }
 function helpExportRows(){
@@ -1491,6 +1490,12 @@ window.addEventListener('keydown',e=>{
   }
   const tk=(!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey)?TOOL_KEYS[e.key.toLowerCase()]:null;
   if(tk){ e.preventDefault(); setTool(tk); return; }
+  if(e.key==='F3'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    e.preventDefault();
+    state.settings.osnap=!state.settings.osnap;
+    if(!state.settings.osnap) osnapMode=null;
+    updateOsnapChip(); scheduleSave(); requestRender(); return;
+  }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }
   if(e.key==='?'||(e.key==='/'&&e.shiftKey)){ openShortcutsHelp(); return; }

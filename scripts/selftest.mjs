@@ -10615,8 +10615,8 @@ await section("D-03 帮助中心：三页签与 i18n", async () => {
   eq('D-03 帮助页签数', tabs.length, 3);
   eq('D-03 页签顺序', tabs.map(t => t.label).join('|'), '快捷键|概念词典|导出检查清单');
   const gloss = api.helpGlossaryRows();
-  eq('D-03 概念词典 7 条', gloss.length, 7);
-  eq('D-03 概念词典主题', gloss.map(r => r[0]).join('|'), '图片底图|矢量场地|楼层|比例尺|仿射|覆盖率口径|低缩放标签');
+  eq('D-03 概念词典 6 条', gloss.length, 6);
+  eq('D-03 概念词典主题', gloss.map(r => r[0]).join('|'), '图片底图|矢量场地|楼层|比例尺|仿射|覆盖率口径');
   const exp = api.helpExportRows();
   eq('D-03 导出清单 9 种', exp.length, 9);
   eq('D-03 导出格式顺序', exp.map(r => r[0]).join('|'),
