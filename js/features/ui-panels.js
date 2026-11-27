@@ -70,8 +70,67 @@ $('markerScaleInput')?.addEventListener('input',e=>{
   scheduleSave(); requestRender();
 });
 $('filterText').addEventListener('input',renderList);
-$('filterKind').addEventListener('change',renderList);
-$('filterLayer').addEventListener('change',renderList);
+/* 清单筛选多选：空集合=全部；类型选项随对象类别联动 */
+const filterKinds=new Set(), filterTypes=new Set(), filterLayers=new Set();
+const FILTER_KINDS=['point','rect','line','arc','text','dimension'];
+const FILTER_KIND_LABEL={point:'filterPoint',rect:'filterArea',line:'filterLine',arc:'filterArc',text:'filterText',dimension:'filterDimension'};
+function closeFilterPops(){ document.querySelectorAll('#tab-list .ms-pop').forEach(p=>{ p.hidden=true; }); }
+function openFilterPopId(){
+  const pops=document.querySelectorAll('#tab-list .ms-pop');
+  for(const p of pops){ if(!p.hidden) return p.closest&&p.closest('.ms')?p.closest('.ms').id:''; }
+  return '';
+}
+function typeFilterOptions(){
+  const map=new Map();
+  state.objectTypes.forEach(t=>map.set(t.id,{id:t.id,name:typeDisplayName(t),kind:t.kind}));
+  state.objects.forEach(o=>{ if(o.typeId&&!map.has(o.typeId)) map.set(o.typeId,{id:o.typeId,name:o.typeId,kind:o.kind}); });
+  return [...map.values()]
+    .filter(t=>!filterKinds.size||filterKinds.has(t.kind))
+    .sort((a,b)=>a.kind.localeCompare(b.kind)||a.name.localeCompare(b.name));
+}
+function renderMs(id,items,selected,allLabel){
+  const el=$(id);
+  if(!el||typeof el.querySelector!=='function') return;
+  const pop=el.querySelector('.ms-pop'), lab=el.querySelector('[data-ms-label]');
+  if(!pop||!lab) return;
+  let summary=I18N.t(allLabel);
+  if(selected.size===1){ const hit=items.find(x=>selected.has(x.id)); if(hit) summary=hit.name; }
+  else if(selected.size>1) summary=L('已选 {n} 项',{n:selected.size});
+  lab.textContent=summary;
+  pop.innerHTML=items.map(it=>`<label class="ms-item"><input type="checkbox" value="${esc(it.id)}" ${selected.has(it.id)?'checked':''}> ${esc(it.name)}</label>`).join('')
+    +`<button type="button" class="mini" data-ms-clear>${esc(I18N.t(allLabel))}</button>`;
+  pop.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.onchange=()=>{
+    cb.checked?selected.add(cb.value):selected.delete(cb.value);
+    filterChanged();
+  });
+  const clear=pop.querySelector('[data-ms-clear]');
+  if(clear) clear.onclick=()=>{ selected.clear(); filterChanged(); };
+}
+function renderFilterMulti(){
+  const open=openFilterPopId();
+  renderMs('filterKindMs',FILTER_KINDS.map(k=>({id:k,name:I18N.t(FILTER_KIND_LABEL[k])})),filterKinds,'allObjects');
+  renderMs('filterTypeMs',typeFilterOptions(),filterTypes,'allTypes');
+  renderMs('filterLayerMs',state.layers.map(l=>({id:l.id,name:l.name})),filterLayers,'allLayers');
+  if(open){ const p=$(open)&&$(open).querySelector('.ms-pop'); if(p) p.hidden=false; }
+}
+function filterChanged(){
+  /* 类别变化后，已选类型若不再属于所选类别则自动剔除，避免出现永远 0 行的隐形条件 */
+  const valid=new Set(typeFilterOptions().map(t=>t.id));
+  [...filterTypes].forEach(id=>{ if(!valid.has(id)) filterTypes.delete(id); });
+  renderFilterMulti();
+  renderList();
+}
+document.querySelectorAll('#tab-list .ms').forEach(el=>{
+  el.querySelector('[data-ms-btn]').onclick=e=>{
+    e.stopPropagation();
+    const pop=el.querySelector('.ms-pop'), willOpen=pop.hidden;
+    closeFilterPops(); pop.hidden=!willOpen;
+  };
+});
+document.addEventListener('pointerdown',e=>{ if(!e.target.closest('#tab-list .ms')) closeFilterPops(); },true);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&openFilterPopId()){ e.stopPropagation(); closeFilterPops(); }
+},true);
 
 function populateSelects(){
   const fill=(sel,items,include='',fallback='')=>{
@@ -82,12 +141,13 @@ function populateSelects(){
   fill($('pointType'),typesOfKind('point'),'','point.marker');
   fill($('rectType'),typesOfKind('rect'),'','rect.area');
   fill($('lineType'),typesOfKind('line'),'','line.boundary');
-  fill($('filterLayer'),state.layers,I18N.t('allLayers'),'');
   fill($('batchLayer'),state.layers,'',state.layers[0]?.id||'');
-  const oldKind=$('filterKind').value;
-  const kindLabels=[I18N.t('allObjects'),I18N.t('filterPoint'),I18N.t('filterArea'),I18N.t('filterLine'),I18N.t('filterArc'),I18N.t('filterText'),I18N.t('filterDimension')];
-  $('filterKind').innerHTML=kindLabels.map((x,i)=>`<option value="${i?['','point','rect','line','arc','text','dimension'][i]:''}">${esc(x)}</option>`).join('');
-  $('filterKind').value=oldKind;
+  /* 图层/类型删除后清理筛选集合中的失效 id，避免残留条件造成永远 0 行 */
+  const layerIds=new Set(state.layers.map(l=>l.id));
+  [...filterLayers].forEach(id=>{ if(!layerIds.has(id)) filterLayers.delete(id); });
+  const typeIds=new Set(typeFilterOptions().map(t=>t.id));
+  [...filterTypes].forEach(id=>{ if(!typeIds.has(id)) filterTypes.delete(id); });
+  renderFilterMulti();
 }
 
 /* -------------------- 对象清单 -------------------- */
@@ -112,16 +172,20 @@ function syncListSelection(){
 }
 /** 选中集变化的最小 UI 刷新：属性面板 + 列表高亮（不重建 10k 行、不刷图层/统计） */
 function refreshSelectionUI(){ renderProps(); syncListSelection(); }
-/** 对象清单过滤条件（唯一读取点）：q 已小写，空串表示不过滤 */
+/** 对象清单过滤条件（唯一读取点）：q 已小写；三个集合为空表示该维度不过滤 */
 function listFilterState(){
-  return {q:$('filterText').value.trim().toLowerCase(), kf:$('filterKind').value, lf:$('filterLayer').value};
+  return {q:String($('filterText').value||'').trim().toLowerCase(), kf:[...filterKinds], tf:[...filterTypes], lf:[...filterLayers]};
 }
-/** 单个对象是否命中清单过滤条件（纯函数；f 必须来自 listFilterState） */
+/** 单个对象是否命中清单过滤条件（纯函数；f 必须来自 listFilterState）。
+ *  kf/tf/lf 兼容旧调用方的字符串值：空数组或空串表示不过滤。 */
 function objectMatchesFilter(o,f){
-  if(f.kf && o.kind!==f.kf) return false;
-  if(f.lf && o.layerId!==f.lf) return false;
-  if(!f.q) return true;
-  return [o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(f.q);
+  const hit=(sel,v)=>!sel||(Array.isArray(sel)?sel.length===0||sel.includes(v):sel===v);
+  if(!hit(f.kf,o.kind)) return false;
+  if(!hit(f.tf,o.typeId)) return false;
+  if(!hit(f.lf,o.layerId)) return false;
+  const q=String(f.q||'').toLowerCase();
+  if(!q) return true;
+  return [o.name,o.text,JSON.stringify(o.props),getType(o.typeId).name].join(' ').toLowerCase().includes(q);
 }
 /** 当前筛选命中的对象（每次按当下条件重算，不跨筛选复用旧结果） */
 function filteredObjects(f){

@@ -127,7 +127,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
       /* HUD / 清单 / 图层与类型 */
       typeLabel: '类型', shapeLabel: '形状', closedArea: '闭合区域', pointSize: '点大小',
       hintText: '滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉；按 ? 查看帮助；可拖拽文件导入',
-      allObjects: '全部对象', allLayers: '全部图层',
+      allObjects: '全部对象', allTypes: '全部类型', allLayers: '全部图层',
       filterPoint: '点设备', filterArea: '矩形/区域', filterLine: '线段/折线', filterArc: '圆弧', filterText: '文字', filterDimension: '尺寸标注',
       thId: '编号', thName: '名称', thType: '类型', thLayer: '图层', thParam: '参数', thVisible: '显隐', thLock: '锁',
       searchPlaceholder: '搜索编号/名称/备注',
@@ -220,7 +220,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
       ariaBatchLayer: 'Move selection to layer', ariaBatchDx: 'X offset', ariaBatchDy: 'Y offset', ariaBatchAngle: 'Rotation angle',
       typeLabel: 'Type', shapeLabel: 'Shape', closedArea: 'Closed area', pointSize: 'Marker size',
       hintText: 'Wheel zoom; right/middle/Space-drag pan; Delete; Tab snaps; ? help; drop to import',
-      allObjects: 'All objects', allLayers: 'All layers',
+      allObjects: 'All objects', allTypes: 'All types', allLayers: 'All layers',
       filterPoint: 'Point', filterArea: 'Rect/Area', filterLine: 'Polyline', filterArc: 'Arc', filterText: 'Text', filterDimension: 'Dimension',
       thId: 'ID', thName: 'Name', thType: 'Type', thLayer: 'Layer', thParam: 'Params', thVisible: 'Visible', thLock: 'Lock',
       searchPlaceholder: 'Search ID / name / note',
@@ -851,6 +851,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
       'Multi-page PDF ({n} pages). Page 1 default; choose a range.',
     '页码必须在 1–{n} 内，且起始页不大于结束页':
       'Page numbers must be 1–{n}, & start must not exceed end',
+    '已选 {n} 项':'{n} selected',
     '已选 {n} 页 · 图形 {e} 个 · 导入后对象 {o} / {max}':
       '{n} page(s) · {e} shapes · {o} / {max} objects after import',
     [TX_PDFMP]:

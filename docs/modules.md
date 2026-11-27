@@ -104,9 +104,9 @@
 | `lib/golden.mjs` | golden 写入闸门：`UPDATE_GOLDEN=1` 且 `ALLOW_GOLDEN=1` 且非 `CI` 三者同时满足才可写；拒绝时给出原因，写入时输出差异摘要并追加 `test-results/golden-change.log` | 环境变量 + 文件字节 → 写/拒 | `selftest.mjs`、`export-scope.spec.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-## tests（75 个）
+## tests（76 个）
 
-### e2e 用例（51 个 spec）
+### e2e 用例（52 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
@@ -130,6 +130,7 @@
 | `i18n-template.spec.mjs` | 英文界面整句插值生效；用户输入只作文本、不注入 DOM |
 | `import-errors.spec.mjs` | E3：截断 PDF / 坏 XLSX / 超 32 MB / MIME 伪装成 JSON 均给出可读错误，且对象数与撤销栈不被污染 |
 | `interaction.spec.mjs` | 单击选中不落盘、不清覆盖率、不留空撤销快照 |
+| `list-filters.spec.mjs` | 清单类别/类型/图层多选筛选、类型随类别联动、清空与组合筛选 |
 | `layers.spec.mjs` | 图层行 5 控件同排、当前图层决定新对象归属、命名去重与默认层保护、按层选择、删层迁移场地引用 |
 | `load-audit.spec.mjs` | D-07：损坏 current 时横幅、救援期间不覆盖、可导出原文 |
 | `mobile.spec.mjs` | 移动视口基本操作 |

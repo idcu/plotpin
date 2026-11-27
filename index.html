@@ -157,8 +157,18 @@
       <div class="section">
         <div class="filter-row">
           <input id="filterText" placeholder="搜索编号/名称/备注" aria-label="搜索编号/名称/备注" data-xp="searchPlaceholder" data-xa="searchPlaceholder">
-          <select id="filterKind" aria-label="按类型筛选"><option value="" data-x="allObjects">全部对象</option></select>
-          <select id="filterLayer" aria-label="按图层筛选"><option value="" data-x="allLayers">全部图层</option></select>
+          <div class="ms" id="filterKindMs">
+            <button type="button" class="ms-btn" data-ms-btn aria-label="按类型筛选"><span data-ms-label data-x="allObjects">全部对象</span> ▾</button>
+            <div class="ms-pop" hidden></div>
+          </div>
+          <div class="ms" id="filterTypeMs">
+            <button type="button" class="ms-btn" data-ms-btn aria-label="按对象类型筛选"><span data-ms-label data-x="allTypes">全部类型</span> ▾</button>
+            <div class="ms-pop" hidden></div>
+          </div>
+          <div class="ms" id="filterLayerMs">
+            <button type="button" class="ms-btn" data-ms-btn aria-label="按图层筛选"><span data-ms-label data-x="allLayers">全部图层</span> ▾</button>
+            <div class="ms-pop" hidden></div>
+          </div>
         </div>
         <div class="batch-row">
           <select id="batchLayer" title="批量移动到图层" aria-label="批量移动到图层" data-xa="ariaBatchLayer"></select>

@@ -11,7 +11,7 @@
 | 层 | 入口 | 运行环境 | 规模（2026-11-26 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
 | 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **176 个分区 / 4,576 条断言 / 加载 48 个脚本** | 是（`check.mjs --selftest`） |
-| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **51 个 spec / 213 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地 2026-11-28 双入口全量：源码 **210 passed / 0 failed / 3 skipped**（4.1m）、dist **207 passed / 0 failed / 6 skipped**（3.7m），均 exit 0；见 §3 |
+| 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **52 个 spec / 214 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地 2026-11-28 双入口全量：源码 **211 passed / 0 failed / 3 skipped**（4.0m）、dist **208 passed / 0 failed / 6 skipped**（3.8m），均 exit 0；见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
 | 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
 
@@ -110,7 +110,7 @@
 | 本地批注 | comments(5)（新增即时渲染与独立本地键、编辑 Esc 取消/确认更新、删除二次确认、只读禁用、锚点对象删除后保留并标注） |
 | 修订对比 | rev-compare(1)（参照版导入、三类差异标识、闪烁开关、标定不一致提示、清除/切工程无痕） |
 
-合计 **213** 个用例、**51** 个 spec（源码入口 210 跑 + 3 条件跳过；dist 入口 207 跑 + 6 跳过；跳过为协作 soak 与 V-6/V-6b 缺 `pdftotext` 的条件分支）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
+合计 **214** 个用例、**52** 个 spec（源码入口 211 跑 + 3 条件跳过；dist 入口 208 跑 + 6 跳过；跳过为协作 soak 与 V-6/V-6b 缺 `pdftotext` 的条件分支）。逐 spec 计数以 `playwright test --list` 为准；新增 spec 必须更新本表，只增用例不更新表格视为文档债。
 
 ### 3.3 常用命令
 

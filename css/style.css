@@ -124,7 +124,15 @@
   .form-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
   .mini{padding:4px 7px;font-size:12px}
   .hint-text{font-size:11px;color:var(--muted);line-height:1.5;white-space:normal}
-  .filter-row{display:grid;grid-template-columns:1fr 96px 96px;gap:6px;margin-bottom:8px}
+  .filter-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px}
+  .filter-row #filterText{grid-column:1/-1}
+  .ms{position:relative;min-width:0}
+  .ms-btn{width:100%;text-align:left;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:inherit;font:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ms-btn>span{display:inline-block;max-width:calc(100% - 14px);overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+  .ms-pop{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:160px;max-width:260px;max-height:240px;overflow:auto;padding:6px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 28px rgba(15,23,42,.16)}
+  .ms-item{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:5px;white-space:normal}
+  .ms-item:hover{background:#f1f5f9}
+  .ms-pop .mini{margin-top:4px;width:100%}
   .batch-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
   .batch-row select{min-width:0;max-width:100%}
   .batch-row input[type="number"]{width:92px;min-width:92px}
