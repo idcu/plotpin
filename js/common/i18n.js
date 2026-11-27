@@ -344,24 +344,26 @@ const TX_SSMALL='场地过小（不足 0.5m），可在底图弹窗中直接输�
     /* 快捷键帮助 */
     '撤销 / 重做':'Undo / Redo', '删除选中对象':'Delete selected objects',
     '原地复制选中对象':'Duplicate selection in place', '复制 / 粘贴对象（偏移 1m）':'Copy / paste objects (offset 1 m)',
-    '取消当前绘制 / 清除选择（右键取消测距等逐点录入，无草稿时平移）':
-      'Cancel drawing / clear selection (right-click cancels point entry; pans when idle)',
-    '完成测距、折线或面积标注（双击处不会产生重复节点）':
-      'Finish measure/polyline/area (double-click does not add a duplicate node)',
+    '取消绘制 / 清除选择（右键取消逐点录入；空闲时平移）':
+      'Cancel drawing / clear selection (right-click cancels picking; pans when idle)',
+    '完成测距/折线/面积（双击不重复落点）':
+      'Finish measure/polyline/area (double-click adds no duplicate node)',
     '删除上一个录入节点':'Remove the last entered node',
     '在折线上插入节点 / 删除节点':'Insert/delete a node on the polyline',
-    '约束为水平/垂直线（正交）':'Constrain to horizontal/vertical (ortho)',
+    '双击线段 / 节点（选择工具）':'Double-click segment/node (Select tool)',
+    '水平/垂直约束':'Horizontal/vertical constraint',
     '正方形 / 正圆 / 45°方位吸附':'Square / circle / 45° bearing snap',
     '自动吸附端点□ 中点△ 圆心◎ 象限◇ 垂足⊥ 交点× 切点；画线时橙色虚线=45°极轴/平行追踪':
       'Auto-snap endpoint □ midpoint △ center ◎ quadrant ◇ perpendicular ⊥ intersection × tangent; orange dashed = 45° polar/parallel tracking',
     [TX_SNAPC]:
       'Tab cycles snap types when the canvas is focused; click the bottom badge to restore Auto',
-    '在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）':
-      'Cycle focus across the top bar / tool rail / sidebar tabs (Tab inside the canvas cycles snapping; press F6 to leave)',
-    '临时平移画布':'Temporary canvas pan', '移动选中对象（Shift ×10 倍步距）':'Move selected objects (Shift ×10 step)',
+    '在顶栏/工具栏/侧栏循环焦点（Tab 用于捕捉）':
+      'Cycle focus across top bar/tool rail/sidebar tabs (Tab cycles snapping)',
+    '显示/隐藏网格':'Show/hide grid',
+    '临时平移画布':'Temporary canvas pan', '移动选中对象（Shift ×10）':'Move objects (Shift ×10)',
     '适应窗口（显示整张场地）':'Fit view (whole site)', '缩放 / 平移画布':'Zoom / pan canvas',
-    '单指绘制与移动；双指捏合缩放、双指拖动平移':'One finger draws/moves; pinch to zoom, two-finger drag to pan',
-    '导入 JSON / DXF / CSV·TSV·XLSX 表格或底图图片':'Import JSON/DXF/CSV·TSV·XLSX tables or a base-map image',
+    '单指绘制移动；双指缩放/平移':'One finger draws/moves; pinch zooms, two-finger pans',
+    '导入 JSON / DXF / 表格 / 图片':'Import JSON/DXF/tables/images',
     '显示本帮助':'Show this help', '知道了':'Got it',
     /* D-03 帮助中心：页签 / 概念词典 / 导出检查清单 */
     '帮助中心':'Help center', '快捷键':'Keyboard shortcuts', '概念词典':'Glossary', '导出检查清单':'Export checklist',

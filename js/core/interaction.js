@@ -1342,19 +1342,20 @@ function helpShortcutRows(){
   return [
     ['Ctrl + Z / Y',L('撤销 / 重做')],['Delete / Backspace',L('删除选中对象')],
     ['Ctrl + D',L('原地复制选中对象')],['Ctrl + C / V',L('复制 / 粘贴对象（偏移 1m）')],
-    [L('Esc / 右键（绘制中）'),L('取消当前绘制 / 清除选择（右键取消测距等逐点录入，无草稿时平移）')],[L('双击 / Enter'),L('完成测距、折线或面积标注（双击处不会产生重复节点）')],
+    [L('Esc / 右键（绘制中）'),L('取消绘制 / 清除选择（右键取消逐点录入；空闲时平移）')],[L('双击 / Enter'),L('完成测距/折线/面积（双击不重复落点）')],
     [L('Backspace（绘制中）'),L('删除上一个录入节点')],
-    [L('双击线段 / 双击节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
-    [L('Shift（画线/标注/拖节点时）'),L('约束为水平/垂直线（正交）')],
+    [L('双击线段 / 节点（选择工具）'),L('在折线上插入节点 / 删除节点')],
+    [L('Shift（画线/标注/拖节点时）'),L('水平/垂直约束')],
     [L('Shift（拖矩形/椭圆/扇形时）'),L('正方形 / 正圆 / 45°方位吸附')],
     [L('对象捕捉')+' / F3',L(TX_OSNAP)],
     ['Tab / Shift+Tab',L(TX_SNAPC)],
-    ['F6',L('在顶栏 / 左侧工具栏 / 侧栏页签之间循环焦点（画布内 Tab 用于捕捉，需离开画布时按 F6）')],
+    ['F6',L('在顶栏/工具栏/侧栏循环焦点（Tab 用于捕捉）')],
+    ['F7',L('显示/隐藏网格')],
     [L('空格 + 拖拽'),L('临时平移画布')],
-    [L('方向键'),L('移动选中对象（Shift ×10 倍步距）')],['F',L('适应窗口（显示整张场地）')],
+    [L('方向键'),L('移动选中对象（Shift ×10）')],['F',L('适应窗口（显示整张场地）')],
     [L('滚轮 / 右键拖拽'),L('缩放 / 平移画布')],
-    [L('触屏单指 / 双指'),L('单指绘制与移动；双指捏合缩放、双指拖动平移')],
-    [L('拖拽文件到画布'),L('导入 JSON / DXF / CSV·TSV·XLSX 表格或底图图片')],['?',L('显示本帮助')]
+    [L('触屏单指 / 双指'),L('单指绘制移动；双指缩放/平移')],
+    [L('拖拽文件到画布'),L('导入 JSON / DXF / 表格 / 图片')],['?',L('显示本帮助')]
   ];
 }
 function helpGlossaryRows(){
@@ -1495,6 +1496,12 @@ window.addEventListener('keydown',e=>{
     state.settings.osnap=!state.settings.osnap;
     if(!state.settings.osnap) osnapMode=null;
     updateOsnapChip(); scheduleSave(); requestRender(); return;
+  }
+  /* F7 网格显隐：视图设置，静态层签名含 settings，requestRender 即触发重建 */
+  if(e.key==='F7'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    e.preventDefault();
+    state.settings.gridVisible=!state.settings.gridVisible;
+    scheduleSave(); requestRender(); return;
   }
   if(e.key==='F6'){ e.preventDefault(); cycleKeyboardRegion(); return; }
   if(e.key==='Tab'&&onCanvas){ e.preventDefault(); cycleOsnapMode(e.shiftKey); return; }

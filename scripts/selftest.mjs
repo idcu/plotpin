@@ -10610,7 +10610,7 @@ await section("D-03 帮助中心：三页签与 i18n", async () => {
 {
   const orig = api.I18N.lang;
   api.I18N.setLang('zh');
-  eq('D-03 快捷键保留 20 行', api.helpShortcutRows().length, 20);
+  eq('D-03 快捷键保留 21 行', api.helpShortcutRows().length, 21);
   const tabs = api.helpTabDefs();
   eq('D-03 帮助页签数', tabs.length, 3);
   eq('D-03 页签顺序', tabs.map(t => t.label).join('|'), '快捷键|概念词典|导出检查清单');
