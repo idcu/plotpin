@@ -4,6 +4,21 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 长文案改为共享常量，回收 2,321 B
+
+- **Commit Hash**：`5279492`
+- **核心改动**：
+  - **长文案去重**：把 38 条同时出现在 `PHRASES` 键与业务脚本中的长文案收敛为 `js/common/i18n.js` 顶部的 `TX_*` 常量；`PHRASES` 改用 `[TX_*]:` 计算键，业务侧只留标识符。文案值不变，英文翻译不变。
+  - **覆盖范围**：锁定/批量选择、场地与图片说明、工程库/自动保存、导入保真度、工具标题、比例尺/仿射提示、统计/存储提示、帮助词汇等。
+  - **文档同步**：`docs/engineering.md` 的 i18n 口径数字按当前扫描更新，并把 `TXT_*` 笔误改为 `TX_*`。
+- **预算**（实测，基线 `fa555b9`）：dist **839,192 → 836,871 B（−2,321）**；gzip **273,776 → 272,749 B（−1,027）**；余量 **488 → 2,809 B**（gzip 余量 13,971 B）；SW `VERSION=315 → 316`；发行包 SHA256 `2983d9f8…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（selftest 4,576 / 0；i18n **46.81% = 852 / 1,820**，缺口 1，UI 硬编码 18，已字典待接入 76；门禁牙齿 10/10 + 20/20；dist 二次构建确定性一致）。
+  - 双入口全量 e2e（**204** 用例）：源码 **201 passed / 0 failed / 3 skipped**（4.0m），dist **198 passed / 0 failed / 6 skipped**（3.7m），均 exit 0。
+  - i18n 分母由 1,860 降到 1,820、分子由 892 降到 852：被去重的是同一句的第二份字面量，文案质量不变；[engineering](docs/engineering.md)§4.6 已注明。
+- **公共抽象清单**（新增 38 个共享常量）：`TX_QUICK` `TX_LOCKED` `TX_NOEDIT` `TX_PICKFIRST` `TX_PARA` `TX_IMGSCALE` `TX_AUTOSAVE` `TX_DXFLOSS` `TX_SELTITLE` `TX_NEWWARN` `TX_LIBEMPTY` `TX_DIMTITLE` `TX_PROPTIP` `TX_POLARHINT` `TX_NOAREA` `TX_STORAGE` `TX_STORAGE2` `TX_BADROWS` `TX_AFFHINT` `TX_ARCTITLE` `TX_CENTERTIP` `TX_NODETIP` `TX_FOVHINT` `TX_IMPORTFIRST` `TX_AFFPRE` `TX_LOCALCONV` `TX_DXFSAVE` `TX_PDFSAVE` `TX_TABLEOPS` `TX_POLYMIN` `TX_ALIGNTIP` `TX_SEGMIN` `TX_RO` `TX_FLOORGLOSS` `TX_GLOSSIMG` `TX_GLOSSSITE` `TX_GLOSSSCALE` `TX_GLOSSCOV`；无函数/API 变更。
+- **遗留风险**：余量 **2,809 B** 仍低于 6,000 B 强警告线，只够 1–2 个小批次；继续回收需在「精简英文/帮助内容」与「移除低频模块（插件/协作/停车/快照）」之间做取舍，纯文案去重已到边际；`TX_*` 是顶层常量，增加了全局名数量，但不在插件 API 面与耦合基线内。
+
 ## 2026-11-27 · 新增画布底部 ? 帮助入口与快速上手
 
 - **Commit Hash**：`fa555b9`
