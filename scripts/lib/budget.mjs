@@ -3,11 +3,12 @@
  * build.mjs 与 size-report.mjs 共用；改数值只改这里，并同步 dist-manifest.json
  * （build.mjs --check 会校验两者一致，避免「报告一套、门禁另一套」）。
  * 分级预警不阻断构建：余量跌破 8,000 B 警告、跌破 6,000 B 强警告；
- * gzip 超过 260 KiB 警告、超过 280 KiB 判红（发布指标的硬边界）。
+ * gzip 超过 272 KiB 警告、超过 288 KiB 判红（发布指标的硬边界）。
+ * 2026-11-28 经用户明确授权，raw 820→840 KiB、gzip 280→288 KiB、gzip 预警 260→272 KiB。
  */
-export const MAX_BYTES = 820 * 1024;
-export const GZIP_MAX_BYTES = 280 * 1024;
-export const GZIP_WARN_BYTES = 260 * 1024;
+export const MAX_BYTES = 840 * 1024;
+export const GZIP_MAX_BYTES = 288 * 1024;
+export const GZIP_WARN_BYTES = 272 * 1024;
 export const MARGIN_WARN_BYTES = 8000;
 export const MARGIN_CRITICAL_BYTES = 6000;
 
