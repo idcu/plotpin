@@ -4,6 +4,28 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-27 · 左侧工具栏改为 Photoshop 式分组弹出，合并重复入口，净增 678 B
+
+- **Commit Hash**：`待回填`
+- **核心改动**：
+  - **分组工具栏**：左侧由 15 个平铺按钮改为 5 个分组按钮 + `完成`（`基础`=选择/平移、`绘图`=点设备/区域/折线/圆·弧/文字、`标注`=标注、`场地`=场地节点/图片变换/参考线、`编辑`=镜像）。组按钮显示组内当前/上次工具的图标与短标签；非当前组点击先激活组内上次/默认工具，已是当前组时再次点击展开弹出组（`#toolFlyout`）；点击组外任意位置（capture `pointerdown`）关闭。多工具组右上角显示 `▸`，单工具组无角标、点击即激活。
+  - **重复入口合并**：`线段`/`箭头` 并入 `折线` 的「模式」下拉（`#lineMode`：polyline/segment/arrow），三者共用同一个 `#lineType` 与 `line` 对象；独立 `#segmentType` 删除。`测距` 撤销独立工具入口，保留在 `标注` 的 `#dimensionType` 中（`ruler` 子类型不变）。工具栏控件由 16 个减为 6 个可见按钮（收纳 12 个工具）。
+  - **运行时生成**：`#toolRail` 只保留空容器，按钮与弹出组由 `GROUPS`/`META` 配置生成；`完成` 按钮改为 `✓` 图标 + 内层 `data-x="finish"`，避免 `I18N.apply` 覆盖图标。`场地` 组标签复用既有 PHRASES `场地`（英文 `Site`），未新增字典键，保证 4 字标签不换行。
+  - **启动竞态修复**：`updateToolTitle()` 不再无条件 `closeFly()`；改为「已开则 `openGroup(flyG)` 原地重建文案」，工具切换时由 `setTool()` 显式关闭。修复了后台 `refreshI18nRuntimeText()`（启动/语言切换）在用户已展开工具组后把弹出组关掉、导致点击等待超时的 e2e 偶发失败。
+  - **模式化提示**：`#lineMode` 变化时刷新 HUD；折线工具的顶部提示按 `折线/线段/箭头` 分别复用既有 PHRASES 长文案，避免两种两点模式仍显示「双击完成」的错误引导（未新增字典键）。
+  - **测试**：新增 `tests/e2e/toolbar.mjs`（`clickTool` / `tapTool` 先 `openGroupFor(tool)` 再点击）；10 个 spec 改为统一 helper；`calibration-precheck` 在 boot 时展开并收起组以保留 `image-transform` 按钮；`mobile` 同时断言栏内组按钮与弹出组按钮 ≥44×44；`interaction` 的线段/箭头用例改为 `line` + `#lineMode`。
+- **预算**（实测）：dist **838,755 → 839,433 B（+678）**；gzip **274,189 → 274,501 B（+312）**；余量 **925 → 247 B**；SW `VERSION=286 → 290`（迭代期四次 bump，最终 290）；发行包 SHA256 `45d4456f…`。
+- **验证数据**：
+  - `npm run ci` 退出 0（13 步门禁 + 门禁牙齿 10/10 + 20/20；selftest 4,576 通过 / 0 失败；i18n 47.53% = 875 / 1,840，UI 硬编码 18，已字典待接入 76；dist 二次构建确定性一致）。
+  - 双入口 e2e 全量：源码 **196 用例，193 passed / 0 failed / 3 skipped**（4.0m，exit 0）；dist **190 passed / 0 failed / 6 skipped**（3.5m，exit 0）。迭代期间曾出现 dist 偶发超时（`history`/`interaction`/`persistence` 共 4 条），定位为上述启动竞态；修复后 `history.spec` 在 dist 连跑 8 轮 **56/56 passed**，再跑双入口全量均 0 失败。
+  - bench（Node 桩）：缓存帧 P50 0.05 / P95 0.08 ms，静态重建 15.58 ms，heapUsed 28.04 MB，覆盖率 6.1 ms，大场地覆盖率 14.4 ms；`mobile.spec` 同机实测 desktop 重建 P95 6.4 ms / mobile 2.3 ms，页面错误 0。
+  - 视觉核对：3× 截图确认 `场地` 组为单行标签、`▸` 位于图标右上不压文字、`完成` 带 `✓` 图标；弹出组定位紧贴栏右侧，文字无截断。
+- **公共抽象清单**：
+  - `js/core/interaction.js`：`GROUPS` / `META` 数据驱动配置；`syncRail()` / `openGroup(id)` / `openGroupFor(tool)` / `closeFly()` 为唯一栏与弹出组入口（`openGroupFor` 同时供测试与外部调用）。
+  - `tests/e2e/toolbar.mjs`：`clickTool(page, tool)` / `tapTool(page, tool)`，10 个 spec 共用；`docs/testing.md` §6.2 登记为新增用例的必用入口。
+  - 复用既有 `PHRASES['场地']` 与 `DICT` 键，无新增 i18n 键；既有 `TOOL_TITLES` / `syncToolButtons()` / `calibPrecheck()` 调用关系不变。
+- **遗留风险**：余量仅 **247 B**（强警告区），下一次功能改动前必须先回收；分组表在 JS 中写死，新增工具必须同时更新 `GROUPS`/`META`；弹出组为固定定位，组内工具过多时 `top` 仅按 160 px 夹取，未来加项需改定位；旧脚本/文档中若仍按 `data-tool="segment|arrow|ruler"` 定位会失效（仅影响测试与自动化，不影响持久化数据）；单工具组不显示展开角标，视觉上与多工具组区分；弹出组内按钮未挂 `title` 长提示（标签已可见，HUD 提供当前模式说明）。
+
 ## 2026-11-27 · 新增「半径/直径标注、镜像、阵列、偏移」，回收 3,071 B 后净增 1,498 B
 
 - **Commit Hash**：`26bfcf7`

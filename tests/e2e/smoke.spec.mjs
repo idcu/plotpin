@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* A-14 冒烟：页面加载 / 基础绘制与选择 / 导出入口 */
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -12,7 +13,7 @@ async function openApp(page) {
 }
 
 async function drawPointAtCanvasCenter(page) {
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -74,7 +75,7 @@ test('基础绘制/选择：点工具落点、选择工具命中并打开属性�
   expect(afterDraw.kind).toBe('point');
   expect(afterDraw.selected).toBe(1);
 
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(0);
 

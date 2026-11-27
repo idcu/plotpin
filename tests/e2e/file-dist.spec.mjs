@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* V-4b：dist 的 file:// 真实离线路径。
    与 http 入口的 e2e 不同，这里直接打开单文件发行版的绝对路径，
    用真实动作覆盖导入底图（图片 + PDF）、比例预设、新增点位与画几何、PDF/清单导出；
@@ -159,13 +160,13 @@ test('file:// 真实链路：导入图片底图 → 比例预设 → 新增点�
   expect(bg.height).toBe(48);
 
   const box = await page.locator('#canvas').boundingBox();
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => page.evaluate(() => state.objects.filter(o => o.kind === 'point').length)).toBe(1);
 
   /* 区域是「两次点击」画法（首点定起点，次点定对角并落盘），不是拖拽；
      新增点位后属性面板会重排布局，坐标必须重新量 */
-  await page.locator('.tool-btn[data-tool="rect"]').click();
+  await clickTool(page, 'rect');
   const box2 = await page.locator('#canvas').boundingBox();
   await page.mouse.click(box2.x + box2.width * 0.35, box2.y + box2.height * 0.35);
   await page.mouse.click(box2.x + box2.width * 0.65, box2.y + box2.height * 0.65);

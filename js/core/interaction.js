@@ -3,11 +3,7 @@
 /* 左侧按钮高亮：测距是标注工具的独立入口(ruler)，二者互斥点亮；切换下拉时也要同步 */
 function syncToolButtons(tool){
   document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
-    let on=b.dataset.tool===tool;
-    if(tool==='dimension'){
-      if(b.dataset.tool==='ruler') on=$('dimensionType').value==='ruler';
-      if(b.dataset.tool==='dimension') on=$('dimensionType').value!=='ruler';
-    }
+    const on=b.dataset.tool===tool;
     b.classList.toggle('active',on);
     b.setAttribute('aria-pressed',on?'true':'false');
   });
@@ -32,12 +28,69 @@ const TOOL_TITLES={
   'guide':L(TX_GUIDE),
   'mirror':L('镜像：选中后点两点定义轴')
 };
-/** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择） */
-function updateToolTitle(){
-  $('toolTitle').textContent=L(TOOL_TITLES[currentTool]||'');
-  /* 按钮 title / aria-pressed 与 HUD 提示同源（启动与语言切换都走这里），HTML 不再存一份 */
-  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{const t=TOOL_TITLES[b.dataset.tool]; if(t) b.title=L(t);});
+/* 左侧栏分组：组按钮显示组内当前/上次工具；再次点击当前组弹出组内工具（Photoshop 式） */
+const GROUPS=[
+  {id:'base',def:'select',tools:['select','pan']},
+  {id:'draw',def:'line',tools:['point','rect','line','arc','text']},
+  {id:'mark',def:'dimension',tools:['dimension']},
+  {id:'site',def:'site-node',tools:['site-node','image-transform','guide']},
+  {id:'edit',def:'mirror',tools:['mirror']}
+];
+const META={
+  select:['↖','select'],pan:['✥','pan'],point:['●','point'],rect:['▭','area'],line:['╱','line'],arc:['◯','circleArc'],text:['T','text'],
+  dimension:['⌁','dimension'],'site-node':['⊗','siteNode'],'image-transform':['🖼','imageXform'],guide:['╱','guide'],mirror:['⇋','mirror']
+};
+$('toolRail').innerHTML=GROUPS.map(g=>`<div class="tool-group"${g.tools[1]?' data-multi':''}><button class="tool-btn" data-group-main="${g.id}"></button></div>`).join('')
+  +'<div class="rail-sep"></div><button class="tool-btn" id="finishDraftBtn"><span class="ico">✓</span><span class="lbl" data-x="finish"></span></button>';
+let flyG=null;
+function closeFly(){ const f=$('toolFlyout'); if(f&&!f.hidden){ f.hidden=true; flyG=null; } }
+/** 组按钮显示组内当前工具并同步高亮 */
+function syncRail(){
+  GROUPS.forEach(g=>{
+    const b=document.querySelectorAll(`[data-group-main="${g.id}"]`)[0]; if(!b) return;
+    const on=g.tools.includes(currentTool);
+    let tool=on?currentTool:(g.last||g.def);
+    if(tool==='image-transform'&&!calibPrecheck(tool).ok) tool=g.def;
+    const m=META[tool]||META.select;
+    b.dataset.groupTool=tool;
+    b.innerHTML=`<span class="ico">${m[0]}</span><span class="lbl">${g.id==='site'?L('场地'):I18N.t(m[1])}</span>`;
+    b.classList.toggle('active',on);
+    b.setAttribute('aria-pressed',on?'true':'false');
+  });
+}
+function openGroup(id){
+  const g=GROUPS.find(x=>x.id===id), f=$('toolFlyout'); if(!g||!f) return;
+  f.innerHTML=g.tools.map(t=>{const m=META[t];return `<button class="tool-btn" data-tool="${t}"><span class="ico">${m[0]}</span><span class="lbl">${I18N.t(m[1])}</span></button>`}).join('');
+  f.hidden=false; flyG=id;
+  const b=document.querySelectorAll(`[data-group-main="${id}"]`)[0]; if(!b) return;
+  const r=b.getBoundingClientRect();
+  f.style.top=Math.max(8,Math.min(r.top,innerHeight-160))+'px';
+  f.style.left=(r.right+4)+'px';
   syncToolButtons(currentTool);
+  refreshCalibStatus();
+}
+/** 供测试/外部按工具名展开所在组（组按钮本身也可直接激活当前工具） */
+function openGroupFor(tool){ const g=GROUPS.find(x=>x.tools.includes(tool)); if(g){ g.last=tool; openGroup(g.id); } }
+document.querySelectorAll('[data-group-main]').forEach(b=>b.onclick=()=>{
+  const g=GROUPS.find(x=>x.id===b.dataset.groupMain);
+  if(!g.tools[1]||!g.tools.includes(currentTool)){ const t=b.dataset.groupTool; return isCalibTool(t)?startCalibTool(t):setTool(t); }
+  flyG===g.id?closeFly():openGroup(g.id);
+});
+$('toolFlyout').onclick=e=>{
+  const b=e.target.closest('[data-tool]'); if(!b) return;
+  const g=GROUPS.find(x=>x.tools.includes(b.dataset.tool)); if(g) g.last=b.dataset.tool;
+  closeFly(); setTool(b.dataset.tool);
+};
+$('lineMode').addEventListener('change',()=>{ if(currentTool==='line') updateToolTitle(); });
+document.addEventListener('pointerdown',e=>{
+  if(flyG&&!e.target.closest('#toolFlyout')&&!e.target.closest('[data-group-main]')) closeFly();
+},true);
+/** 语言切换或工具切换时刷新画布顶部提示（不重置草稿/选择）；弹出组已开则原地重建文案，不因后台刷新被关掉 */
+function updateToolTitle(){
+  const mode=currentTool==='line'?$('lineMode').value:'';
+  $('toolTitle').textContent=L(TOOL_TITLES[mode==='segment'||mode==='arrow'?mode:currentTool]||'');
+  syncRail();
+  if(flyG) openGroup(flyG);
 }
 /** 草稿顶点入列：达到 SHAPE_POINTS_MAX 后拒绝并提示，避免病态点列拖垮包围盒/渲染 */
 function pushDraftPoint(points,wp){
@@ -49,17 +102,16 @@ function pushDraftPoint(points,wp){
 }
 function setTool(tool){
   if(readOnly&&tool!=='select') return guardWrite(L('该工具'));
-  /* 独立「测距」按钮 = 标注工具的 ruler 子模式：复用 dimension 全部交互，仅入口更醒目；
-     点「标注」按钮时若上次停在测距则切回两点距离，保证两个入口高亮与语义一致 */
-  if(tool==='ruler'){ $('dimensionType').value='ruler'; tool='dimension'; }
-  else if(tool==='dimension'&&$('dimensionType').value==='ruler'){ $('dimensionType').value='distance'; }
+  /* 标注组只有一个入口：若上次停在测距，点组按钮时切回两点距离，避免“看起来是标注实为测距” */
+  if(tool==='dimension'&&$('dimensionType').value==='ruler'){ $('dimensionType').value='distance'; }
   /* 切回工具即恢复默认类型：折线与线段都不记忆上次选择（用户要求；下拉 id 均为 <tool>Type） */
-  if(tool!==currentTool&&(tool==='line'||tool==='segment')) $(tool+'Type').selectedIndex=0;
+  if(tool!==currentTool&&tool==='line'){ $('lineType').selectedIndex=0; $('lineMode').selectedIndex=0; }
   currentTool=tool; draft=null; calibPoints=[]; affinePairs=[]; rubber=null; drag=null;
   calibSelection=null; calibUndoStack=[];
   lastCanvasHandledAt=0; lastCanvasPointerUpAt=0;
   document.body.className='tool-'+tool+(spaceDown?' panning':'');
   syncToolButtons(tool);
+  closeFly();
   updateToolTitle();
   callHook('ui.refresh');
   requestRender();
@@ -85,7 +137,7 @@ function constrainWorldPoint(wp,e){
     return wp;
   }
   if(!draft) return wp;
-  if(draft.points && ['line','segment','arrow','dimension'].includes(currentTool) && draft.points.length){
+  if(draft.points && ['line','dimension'].includes(currentTool) && draft.points.length){
     /* 测距链(ruler)与普通折线一样约束；角度/面积/两点距离标注不约束 */
     if(currentTool==='dimension' && draft.subtype!=='ruler') return wp;
     const last=draft.points[draft.points.length-1];
@@ -145,7 +197,7 @@ function clearGuides(){ clearGuideLines(); guideDraft=null; }
  */
 function nearestReferenceEdge(raw,excl){
   if(!draft||!draft.points||!draft.points.length) return null;
-  if(!(currentTool==='line'||currentTool==='segment'||currentTool==='arrow'||(currentTool==='dimension'&&draft.subtype==='ruler'))) return null;
+  if(!(currentTool==='line'||(currentTool==='dimension'&&draft.subtype==='ruler'))) return null;
   const tol=14/state.viewport.zoom;
   let best=null,bd=tol;
   const box={minX:raw[0]-tol,maxX:raw[0]+tol,minY:raw[1]-tol,maxY:raw[1]+tol};
@@ -356,8 +408,8 @@ canvas.addEventListener('pointerdown',e=>{
     }
     return;
   }
-  if(currentTool==='line'||currentTool==='segment'||currentTool==='arrow'){
-    const seg=currentTool==='segment', arw=currentTool==='arrow';
+  if(currentTool==='line'){
+    const mode=$('lineMode').value, seg=mode==='segment', arw=mode==='arrow';
     if(!draft){ draft={kind:'line',points:[wp],current:wp,segment:seg,arrow:arw}; }
     else if(!pushDraftPoint(draft.points,wp)) return;
     /* 线段/箭头=两点折线：第二点落笔即完成，不需要双击/Enter */
@@ -866,7 +918,7 @@ function finishDraft(){
     if(ps.length<2){ toast('至少需要 2 个点','warn'); return; }
     if(closed&&ps.length<3){ toast('闭合区域至少需要 3 个点','warn'); return; }
     pushHistory();
-    const o=baseObject('line',draft.segment?$('segmentType').value:$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
+    const o=baseObject('line',$('lineType').value,{points:ps,closed,x:ps[0][0],y:ps[0][1]});
     if(arw) o.style.arrow=1;
     /* 修订云线：仅折线工具可勾选（线段/箭头不参与） */
     if(!seg&&!arw&&$('lineCloud').checked) o.style.cloud=1;

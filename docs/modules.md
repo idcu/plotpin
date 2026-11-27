@@ -104,7 +104,7 @@
 | `lib/golden.mjs` | golden 写入闸门：`UPDATE_GOLDEN=1` 且 `ALLOW_GOLDEN=1` 且非 `CI` 三者同时满足才可写；拒绝时给出原因，写入时输出差异摘要并追加 `test-results/golden-change.log` | 环境变量 + 文件字节 → 写/拒 | `selftest.mjs`、`export-scope.spec.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-## tests（72 个）
+## tests（73 个）
 
 ### e2e 用例（49 个 spec）
 

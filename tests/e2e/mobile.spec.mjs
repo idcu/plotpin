@@ -1,3 +1,4 @@
+import { tapTool } from './toolbar.mjs';
 /* B-15：移动端（真实 Chromium 移动模拟）—— 触控目标/安全区/基本操作 + 首屏与帧实测 */
 import { test, expect } from '@playwright/test';
 import { SCENE_A } from './helpers/scenes.mjs';
@@ -18,10 +19,13 @@ test.describe('移动视口基本操作', () => {
     expect(meta.touchAction).toBe('none');       /* 画布手势由 Pointer Events 接管，浏览器不滚动 */
     expect(meta.envSupported).toBe(true);        /* 安全区表达式被解析（模拟器内取值为 0） */
 
-    /* 触控目标：工具栏图标不小于 44×44 CSS px */
-    const box = await page.locator('.tool-btn[data-tool="point"]').boundingBox();
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    /* 触控目标：栏内组按钮与弹出组内工具均不小于 44×44 CSS px */
+    await page.evaluate(() => openGroupFor('point'));
+    for (const sel of ['[data-group-main="draw"]', '.tool-flyout .tool-btn[data-tool="point"]']) {
+      const box = await page.locator(sel).boundingBox();
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
 
     /* 侧栏开关：☰ 打开 → 点画布关闭 */
     await page.locator('#sidebarToggle').tap();
@@ -30,7 +34,7 @@ test.describe('移动视口基本操作', () => {
     await expect(page.locator('body')).not.toHaveClass(/sidebar-open/);
 
     /* 触屏点选工具 + 轻触画布落点 */
-    await page.locator('.tool-btn[data-tool="point"]').tap();
+    await tapTool(page, 'point');
     const cbox = await page.locator('#canvas').boundingBox();
     await page.touchscreen.tap(cbox.x + cbox.width / 2, cbox.y + cbox.height / 2);
     await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);

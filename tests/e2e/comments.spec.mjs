@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 import { test, expect } from '@playwright/test';
 
 /* 本地批注（comments.js）：独立 localStorage，不进工程 JSON、不同步协作。
@@ -12,9 +13,9 @@ async function open(page) {
 async function drawAndSelectPoint(page) {
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await page.mouse.click(cx, cy);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.mouse.click(cx, cy);
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
 }
@@ -105,7 +106,7 @@ test('批注：锚定对象删除后评论保留并标注「对象已删除」',
   await drawAndSelectPoint(page);
   await addComment(page, '锚点会消失');
 
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   const box = await page.locator('#canvas').boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);

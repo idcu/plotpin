@@ -9,6 +9,8 @@ const TINY_PNG = Buffer.from(
 async function boot(page) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof state === 'object' && typeof afterStateLoaded === 'function');
+  /* 图片变换按钮在弹出组内按需生成：先展开再收起，保留按钮供状态断言与程序化点击 */
+  await page.evaluate(() => { openGroupFor('image-transform'); closeFly(); });
   await page.waitForTimeout(300);
 }
 const calib = (page) => page.locator('#calibBtn');

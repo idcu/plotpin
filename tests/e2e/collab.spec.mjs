@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* B-06 协作易用性：双标签建连/状态、消息层护栏、冲突回滚、离线重连、邀请串与二维码容量 */
 import { test, expect } from '@playwright/test';
 import { clickCanvasCenter, DB, idb, firstRunSeenStorage } from './helpers.mjs';
@@ -51,7 +52,7 @@ async function waitState(page, wanted, timeout = 6000) {
 }
 
 async function drawPoint(page) {
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await clickCanvasCenter(page);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
 }
@@ -207,7 +208,7 @@ test('N-04：对端清空场地可见可撤销；场地拖点实时同步；旧�
   await expect.poll(() => p2.evaluate(() => !!state.site), { timeout: 4000 }).toBe(true);
 
   /* ④ 场地拖点：真实鼠标拖动右上角手柄，p2 收到并合并 */
-  await page.locator('.tool-btn[data-tool="site-node"]').click();
+  await clickTool(page, 'site-node');
   const pt = await page.evaluate(() => {
     const s = w2s([20, 10]);
     const r = document.getElementById('canvas').getBoundingClientRect();
@@ -221,7 +222,7 @@ test('N-04：对端清空场地可见可撤销；场地拖点实时同步；旧�
   expect(draggedW).toBeGreaterThan(20);
   await expect.poll(() => p2.evaluate(() => state.site && Math.round(state.site.shape.w)), { timeout: 5000 })
     .toBeGreaterThan(20);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.waitForTimeout(700);   /* 等拖点产生的 500ms 防抖广播发完，隔离属性面板自身的广播 */
 
   /* ④b 属性面板精确输入：走 commitObjectEdit，同样实时广播给对端（N-04 修复的静默路径） */
@@ -268,7 +269,7 @@ test('N-06：拖动只给变化对象打点；拖动与对端属性编辑合并�
   const created = await p2.evaluate(() => state.objects[0].updatedAt);
 
   /* 单击空白不产生新时间戳（幂等） */
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   const box = await page.evaluate(() => {
     const r = document.getElementById('canvas').getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
@@ -731,7 +732,7 @@ test('跨 context WebRTC 本地回环：offer/answer 建连、首帧快照、对
     await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 5000 }).toBe(1);
 
     /* 确认后仍能继续双向同步（不是只吃首帧就断） */
-    await p2.locator('.tool-btn[data-tool="point"]').click();
+    await clickTool(p2, 'point');
     await clickCanvasCenter(p2);
     await expect.poll(() => p1.evaluate(() => state.objects.length), { timeout: 5000 }).toBe(2);
 
@@ -850,7 +851,7 @@ test('B2：切工程后旧工程快照不写入新现场', async ({ page, contex
   expect(await page.evaluate(() => state.objects.length)).toBe(0);
 
   /* 对端仍停留在旧工程并继续编辑：消息层同样拦住，快照不得写入新现场 */
-  await p2.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(p2, 'point');
   await clickCanvasCenter(p2);
   await expect.poll(() => p2.evaluate(() => state.objects.length), { timeout: 4000 }).toBe(2);
   await expect.poll(() => page.evaluate(() => String(window.__collabLastError || '')), { timeout: 6000 })

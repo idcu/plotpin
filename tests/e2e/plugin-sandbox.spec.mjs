@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* C-01 插件沙箱：版本协商 / 能力白名单 / 恶意用例隔离 / 示例插件 */
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -27,7 +28,7 @@ async function waitDisabled(page, id) {
 }
 
 async function drawPoint(page) {
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   const box = await page.locator('#canvas').boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBeGreaterThan(0);

@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* A-14 浏览器真实验证：撤销/重做、新增楼层、删除当前楼层后刷新一致 */
 import { test, expect } from '@playwright/test';
 import { DB, idb } from './helpers.mjs';
@@ -13,7 +14,7 @@ async function clickCanvas(page, dx = 0, dy = 0) {
 }
 
 async function drawPoint(page, dx = 0, dy = 0) {
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await clickCanvas(page, dx, dy);
 }
 
@@ -236,7 +237,7 @@ test('删除当前楼层：删除后刷新不复活，活动层回到 1F', async
 test('N-19：属性面板切换 5 个字段不入栈，拖动后一次撤销回原位；场地面板一致', async ({ page }) => {
   await openApp(page);
   await drawPoint(page);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   const c = await page.evaluate(() => {
     const r = document.getElementById('canvas').getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

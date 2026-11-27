@@ -200,8 +200,9 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 1. 在 `tests/e2e/` 新建或追加 `*.spec.mjs`，场景状态放 `helpers/scenes.mjs`。
 2. 只断言用户可见结果（DOM 文本、下载字节、弹窗、错误提示），不要断言内部变量名。
 3. 需要固定数据的用例用 `page.route` 拦截外部请求，禁止真实联网。
-4. `node scripts/e2e.mjs <spec>` 本地全绿；**没有可依赖的 CI 兜底**，所以必须本地双入口各跑一遍，不能只跑单 spec。
-5. 更新本文 §3.2 矩阵与 [facts](facts.md) 的 spec 计数。
+4. 左侧工具位于弹出的工具组内：统一用 `tests/e2e/toolbar.mjs` 的 `clickTool(page, tool)` / `tapTool(page, tool)`（内部先 `openGroupFor(tool)` 展开分组再点击），不要直接定位 `.tool-btn[data-tool]`。
+5. `node scripts/e2e.mjs <spec>` 本地全绿；**没有可依赖的 CI 兜底**，所以必须本地双入口各跑一遍，不能只跑单 spec。
+6. 更新本文 §3.2 矩阵与 [facts](facts.md) 的 spec 计数。
 
 ### 6.3 新增判据
 

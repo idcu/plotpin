@@ -21,9 +21,9 @@
   <div class="brand">📌 图钉<span class="brand-en">PlotPin</span></div>
   <div class="tb-group">
     <button id="newBtn" title="新建工程" data-x="new">新建</button>
-    <button id="projBtn" title="把当前工程存入工程库，或打开/管理本机多个工程" data-x="projects">📁 工程库</button>
-    <button id="floorBtn" title="多楼层 / 多底图：每层独立底图与对象，可切换、重命名、删除" data-x="floors">🏢 楼层</button>
-    <button id="importBtn" title="导入 JSON / DXF / CSV·TSV·XLSX；也可直接拖拽文件到画布" data-x="import">导入</button>
+    <button id="projBtn" title="工程库：保存/打开/管理本机工程" data-x="projects">📁 工程库</button>
+    <button id="floorBtn" title="多楼层：每层独立底图与对象" data-x="floors">🏢 楼层</button>
+    <button id="importBtn" title="导入 JSON/DXF/表格，或拖文件到画布" data-x="import">导入</button>
     <select id="exportKind" title="选择导出格式" aria-label="选择导出格式" data-xa="ariaExport">
       <option value="json" data-x="exportJson">JSON 工程</option>
       <option value="png" data-x="exportPng">PNG 高清图</option>
@@ -31,7 +31,7 @@
       <option value="pdf" data-x="exportPdf">PDF（图纸位图+清单）</option>
       <option value="pdf-vector" data-x="exportPdfVector">PDF（矢量）· 文字可选中·可搜索（视觉仍为位图，放大会发虚）</option>
       <option value="dxf" data-x="exportDxf">DXF（CAD 互通）</option>
-      <option value="dxf-fidelity" data-x="exportDxfFidelity" title="默认与旧版一致；保真导出椭圆/圆弧为原生曲线">DXF（保真：椭圆+圆弧）</option>
+      <option value="dxf-fidelity" data-x="exportDxfFidelity" title="默认与旧版一致；保真导出原生曲线">DXF（保真：椭圆+圆弧）</option>
       <option value="csv" data-x="exportCsv">CSV 表格</option>
       <option value="tsv" data-x="exportTsv">TSV 表格</option>
       <option value="xlsx" data-x="exportXlsx">Excel (.xlsx)</option>
@@ -44,16 +44,16 @@
       <option value="title-block" data-x="exportTitleBlock">图框模板…</option>
     </select>
     <button id="exportBtn" class="primary" data-x="export">导出</button>
-    <button id="printBtn" title="生成图纸报告并调用浏览器打印（可另存为 PDF）" data-x="print">打印/PDF</button>
+    <button id="printBtn" title="生成图纸报告并打印（可存 PDF）" data-x="print">打印/PDF</button>
   </div>
   <div class="tb-group">
-    <button id="bgBtn" title="上传图片底图，或用矩形/圆形/椭圆/扇形/平行四边形/多边形绘制矢量场地" data-x="baseSite">底图/场地</button>
-    <button id="calibBtn" title="仅图片底图需要：指定两点的实际距离校准米/像素" aria-describedby="calibStatus" data-x="scaleBtn">比例尺</button>
-    <button id="affineBtn" title="仅图片底图需要：在图上依次点击已知点并输入其实地坐标 X,Y，纠正底图倾斜与不等比缩放（2 点=旋转+等比相似，≥3 点=最小二乘完整仿射）" aria-describedby="calibStatus" data-x="affineBtn">仿射校准</button>
+    <button id="bgBtn" title="上传图片底图，或绘制矢量场地" data-x="baseSite">底图/场地</button>
+    <button id="calibBtn" title="两点实际距离校准米/像素" aria-describedby="calibStatus" data-x="scaleBtn">比例尺</button>
+    <button id="affineBtn" title="按已知点校正底图倾斜/缩放（2 点相似，≥3 点完整仿射）" aria-describedby="calibStatus" data-x="affineBtn">仿射校准</button>
     <span id="calibStatus" class="hint-text" role="status" aria-live="polite" hidden></span>
-    <button id="coverageBtn" title="统计摄像头/球机等点设备的视场对区域与闭合折线的覆盖率，并高亮盲区" data-x="coverageBtn">覆盖率分析</button>
-    <button id="parkingBtn" title="按当前场地范围自动排布双面停车位与通道，并检查通道净宽" data-x="parkingBtn">停车规划</button>
-    <button id="collabBtn" title="本机多标签页或跨设备 WebRTC 实时协作，无需服务器" data-x="collabBtn">协作</button><span id="collabBadge" style="display:none;margin-left:-2px;padding:0 5px;border-radius:9px;background:#c62828;color:#fff;font-size:10px;line-height:16px"></span>
+    <button id="coverageBtn" title="统计点设备视场覆盖率并高亮盲区" data-x="coverageBtn">覆盖率分析</button>
+    <button id="parkingBtn" title="按场地自动排布停车位并检查通道" data-x="parkingBtn">停车规划</button>
+    <button id="collabBtn" title="本机/跨设备 WebRTC 实时协作" data-x="collabBtn">协作</button><span id="collabBadge" style="display:none;margin-left:-2px;padding:0 5px;border-radius:9px;background:#c62828;color:#fff;font-size:10px;line-height:16px"></span>
     <button id="sidebarToggle" title="在窄屏显示/隐藏属性面板" aria-label="显示或隐藏属性面板" data-xa="ariaSidebar" data-x="panelToggle">☰ 面板</button>
     <button id="settingsBtn" title="工程名称、网格、捕捉、精度等设置" data-x="settings">设置</button>
     <button id="clearFloorBtn" class="danger" title="清空当前楼层的图片底图、矢量场地、全部业务对象与标注；可 Ctrl+Z 撤销" data-xt="clearAllTitle" data-x="clearAll">清空</button>
@@ -65,7 +65,7 @@
     <button id="zoomOutBtn" title="缩小" aria-label="缩小" data-xa="ariaZoomOut">−</button>
     <button id="zoomFitBtn" title="适应窗口显示整张场地" aria-label="适应窗口显示整张场地" data-xa="ariaZoomFit" data-x="fitBtn">适应</button>
     <button id="zoomInBtn" title="放大" aria-label="放大" data-xa="ariaZoomIn">＋</button>
-    <label title="点设备图标显示大小（仅屏幕醒目程度，不代表实际尺寸/比例）" style="color:#cbd5e1;display:flex;align-items:center;gap:4px"><span data-x="pointSize">点大小</span>
+    <label title="图标显示倍率（非实际尺寸）" style="color:#cbd5e1;display:flex;align-items:center;gap:4px"><span data-x="pointSize">点大小</span>
       <input type="range" id="markerScaleInput" min="0.5" max="2.5" step="0.1" value="1" style="width:74px" aria-label="点设备图标显示大小" data-xa="ariaMarkerScale"><span id="markerScaleLabel" style="width:32px;color:#e2e8f0">1.0×</span>
     </label>
   </div>
@@ -73,26 +73,9 @@
 </header>
 
 <div class="app-shell">
-  <aside class="tool-rail" role="toolbar" aria-label="绘图工具" data-xa="ariaTools">
-    <button class="tool-btn active" data-tool="select"><span class="ico">↖</span><span data-x="select">选择</span></button>
-    <button class="tool-btn" data-tool="pan"><span class="ico">✥</span><span data-x="pan">平移</span></button>
-    <div class="rail-sep"></div>
-    <button class="tool-btn" data-tool="point"><span class="ico">●</span><span data-x="point">点设备</span></button>
-    <button class="tool-btn" data-tool="rect"><span class="ico">▭</span><span data-x="area">区域</span></button>
-    <button class="tool-btn" data-tool="line"><span class="ico">╱</span><span data-x="line">折线</span></button>
-    <button class="tool-btn" data-tool="segment"><span class="ico">—</span><span data-x="segment">线段</span></button>
-    <button class="tool-btn" data-tool="arrow"><span class="ico">➤</span><span data-x="arrow">箭头</span></button>
-    <button class="tool-btn" data-tool="arc"><span class="ico">◯</span><span data-x="circleArc">圆/弧</span></button>
-    <button class="tool-btn" data-tool="text"><span class="ico">T</span><span data-x="text">文字</span></button>
-    <button class="tool-btn" data-tool="ruler"><span class="ico">📏</span><span data-x="ruler">测距</span></button>
-    <button class="tool-btn" data-tool="dimension"><span class="ico">⌁</span><span data-x="dimension">标注</span></button>
-    <button class="tool-btn" data-tool="site-node"><span class="ico">⊗</span><span data-x="siteNode">场地节点</span></button>
-    <button class="tool-btn" data-tool="image-transform" aria-describedby="calibStatus"><span class="ico">🖼</span><span data-x="imageXform">图片变换</span></button>
-    <button class="tool-btn" data-tool="guide"><span class="ico">╱</span><span data-x="guide">参考线</span></button>
-    <button class="tool-btn" data-tool="mirror"><span class="ico">⇋</span><span data-x="mirror">镜像</span></button>
-    <div class="rail-sep"></div>
-    <button class="tool-btn" id="finishDraftBtn" title="完成折线/面积标注" data-x="finish">完成</button>
+  <aside class="tool-rail" id="toolRail" role="toolbar" aria-label="绘图工具" data-xa="ariaTools">
   </aside>
+  <div class="tool-flyout" id="toolFlyout" hidden></div>
 
   <main class="canvas-wrap" id="canvasWrap">
     <canvas id="canvas" role="application" tabindex="0" aria-label="绘图画布：使用左侧工具在此绘制和选择对象" data-xa="ariaCanvas"></canvas>
@@ -114,13 +97,14 @@
           <span data-x="typeLabel">类型</span>
           <select id="rectType" aria-label="区域类型"></select>
         </span>
-        <span data-for="line"><span data-x="typeLabel">类型</span>
+        <span data-for="line"><select id="lineMode" aria-label="折线/线段/箭头">
+          <option value="polyline" data-x="line">折线</option>
+          <option value="segment" data-x="segment">线段</option>
+          <option value="arrow" data-x="arrow">箭头</option>
+        </select><span data-x="typeLabel">类型</span>
           <select id="lineType" aria-label="折线类型"></select>
           <label><input type="checkbox" id="lineClosed"><span data-x="closedArea">闭合区域</span></label>
           <label><input type="checkbox" id="lineCloud"><span data-x="revCloud">修订云线</span></label>
-        </span>
-        <span data-for="segment"><span data-x="typeLabel">类型</span>
-          <select id="segmentType" aria-label="线段类型"></select>
         </span>
         <span data-for="arc"><select id="arcMode" aria-label="圆或圆弧">
           <option value="circle" data-x="shapeCircle">圆形</option>
@@ -142,7 +126,7 @@
     <div class="hud hud-bottom">
       <span class="coord" id="coordText">鼠标：-, -</span>
       <span class="hint" id="hintText" data-x="hintText">滚轮缩放；右键/中键或空格拖拽画布；Delete 删除；Tab 切换捕捉类型；可拖拽文件到画布导入；按 ? 查看全部快捷键</span>
-      <span class="osnap-chip" id="osnapChip" title="Tab / Shift+Tab 循环切换捕捉类型；点击恢复自动" hidden></span>
+      <span class="osnap-chip" id="osnapChip" title="Tab 循环捕捉类型；点击恢复自动" hidden></span>
       <span class="zoom-label" id="zoomLabel">100%</span>
     </div>
   </main>
@@ -222,18 +206,18 @@
             <option value="light" data-x="iconLight">路灯</option><option value="gate" data-x="iconGate">道闸</option><option value="charger" data-x="iconCharger">充电桩</option>
             <option value="warning" data-x="iconWarning">警示</option><option value="custom" data-x="iconCustom">菱形</option>
           </select>
-          <label title="点设备设置“物理尺寸(m)”后按世界比例渲染的图形；仅点设备类型生效" data-x="scaleShapeLabel">尺寸图形</label>
-          <select id="newTypeShape" title="点设备设置物理尺寸后渲染的图形">
+          <label title="点设备按物理尺寸(m)渲染" data-x="scaleShapeLabel">尺寸图形</label>
+          <select id="newTypeShape" title="按物理尺寸渲染">
             <option value="none" data-x="scaleNone">仅位置图标（不缩放）</option>
             <option value="circle" data-x="scaleCircle">圆形覆盖区</option>
             <option value="square" data-x="scaleSquare">方形区域</option>
             <option value="sector" selected data-x="scaleSector">扇形视场（如摄像头）</option>
             <option value="bar" data-x="scaleBar">杆/线段（如道闸）</option>
           </select>
-          <label title="该类型点设备的默认图标屏幕大小倍率（仅显示醒目程度，非实际尺寸）" data-icon-row="point" data-x="iconSizeLabel">图标大小</label>
-          <input type="number" min="0.5" max="5" step="0.1" value="1" id="newTypeIconSize" data-icon-row="point" title="默认图标大小（屏幕倍率）">
+          <label title="类型默认图标屏幕倍率" data-icon-row="point" data-x="iconSizeLabel">图标大小</label>
+          <input type="number" min="0.5" max="5" step="0.1" value="1" id="newTypeIconSize" data-icon-row="point" title="默认图标倍率">
           <button class="primary span2" id="addTypeBtn" data-x="addType">新增类型</button>
-          <button class="span2" id="importSymBtn" title="导入自定义 SVG 图元：提取 path/circle/rect/polygon/line/polyline，自动进入类型列表" data-x="importSvg">导入 SVG 图元…</button>
+          <button class="span2" id="importSymBtn" title="导入自定义 SVG 图元到类型列表" data-x="importSvg">导入 SVG 图元…</button>
           <input type="file" id="symFileInput" accept=".svg,image/svg+xml" style="display:none">
         </div>
       </div>

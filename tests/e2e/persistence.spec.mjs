@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* A-14 真实 IndexedDB：v1→v2 回写 + 资产回收命名空间（A-01 六条路径） */
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -53,7 +54,7 @@ test('IndexedDB v1→v2：迁移后写回 v2，楼层补 updatedAt 且不丢楼�
   expect(migrated.floors[1]).toEqual({ id: 'floor.f2', updatedAt: '' });
 
   /* 真实交互触发 scheduleSave（450ms 防抖） */
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await clickCanvasCenter(page);
   await expect.poll(async () => {
     const rec = await idb(page, { store: DB.projects, op: 'get', key: 'current' });
@@ -72,7 +73,7 @@ test('IndexedDB v1→v2：迁移后写回 v2，楼层补 updatedAt 且不丢楼�
 
 test('导入事务化：非法 JSON 失败后当前工程、撤销栈与选择不变', async ({ page }) => {
   await openApp(page);
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await clickCanvasCenter(page);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
 

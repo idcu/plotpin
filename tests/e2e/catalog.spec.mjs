@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* B-05 产品目录 → 型号绑定 → 跨楼层 BOM → CSV/XLSX 报价 全链路
    追加：报价快照（替换目录后重导仍一致/改数量后重算）、跨厂商重名不静默错绑 */
 import { test, expect } from '@playwright/test';
@@ -39,7 +40,7 @@ test('导入目录 → 绑定型号/数量 → 跨楼层 BOM → 导出 CSV/XLSX
   await openApp(page);
 
   /* 1. 画一个点并导入厂商目录（2 个型号） */
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await clickCanvasCenter(page);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
 
@@ -175,7 +176,7 @@ test('导入目录 → 绑定型号/数量 → 跨楼层 BOM → 导出 CSV/XLSX
 
 test('G1 厂商目录 CSV：识别列 → 确认导入 → 绑定报价；台账表头不命中', async ({ page }) => {
   await openApp(page);
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await clickCanvasCenter(page);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
 

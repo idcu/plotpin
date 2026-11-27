@@ -1,3 +1,4 @@
+import { clickTool } from './toolbar.mjs';
 /* A-06 浏览器验证：单击对象不落盘/不清覆盖率、拖拽 Esc 回滚 */
 import { test, expect } from '@playwright/test';
 import { DB, idb } from './helpers.mjs';
@@ -8,7 +9,7 @@ async function openApp(page) {
 }
 
 async function drawPointAtCenter(page) {
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -35,7 +36,7 @@ test('单击选中对象：不落盘、不清覆盖率、不留空撤销快照',
     scheduleSave = function () { window.__saveCalls++; return real.apply(this, arguments); };
   });
 
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   const before = await page.evaluate(() => {
     coverageResult = { regions: [], cameraCount: 0, ratio: 0 };
     return { updated: state.meta.updatedAt, hist: history.past.length };
@@ -60,7 +61,7 @@ test('单击选中对象：不落盘、不清覆盖率、不留空撤销快照',
 test('拖拽中 Esc：对象回到原位，撤销栈不留空快照', async ({ page }) => {
   await openApp(page);
   const { cx, cy } = await drawPointAtCenter(page);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
 
   const before = await page.evaluate(() => {
     const o = state.objects[0];
@@ -97,7 +98,7 @@ test('拖拽中 Esc：对象回到原位，撤销栈不留空快照', async ({ p
 test('B7：删除对象后活动楼层条目立即与现场同一数组', async ({ page }) => {
   await openApp(page);
   const { cx, cy } = await drawPointAtCenter(page);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.mouse.click(cx, cy);
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
 
@@ -115,7 +116,8 @@ test('B7：删除对象后活动楼层条目立即与现场同一数组', async 
 
 test('线段工具：两点落笔自动完成，生成 2 点开放折线，第三点另起一段', async ({ page }) => {
   await openApp(page);
-  await page.locator('.tool-btn[data-tool="segment"]').click();
+  await clickTool(page, 'line');
+  await page.selectOption('#lineMode', 'segment');
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
   await page.mouse.click(cx - 100, cy);
@@ -129,13 +131,14 @@ test('线段工具：两点落笔自动完成，生成 2 点开放折线，第�
     tool: currentTool,
     draft: draft
   }));
-  expect(seg).toEqual({ kind: 'line', points: 2, closed: false, tool: 'segment', draft: null });
+  expect(seg).toEqual({ kind: 'line', points: 2, closed: false, tool: 'line', draft: null });
   /* 完成后第三点不会追加到上一段：先起新草稿，第二次落点才产生第二条 */
   await page.mouse.click(cx + 150, cy - 80);
   expect(await page.evaluate(() => ({ n: state.objects.length, draftPoints: draft && draft.points.length }))).toEqual({ n: 1, draftPoints: 1 });
 
-  /* 箭头工具：两点自动完成，style.arrow 经对象清洗后仍保留 */
-  await page.locator('.tool-btn[data-tool="arrow"]').click();
+  /* 箭头模式：两点自动完成，style.arrow 经对象清洗后仍保留 */
+  await clickTool(page, 'line');
+  await page.selectOption('#lineMode', 'arrow');
   await page.mouse.click(cx - 150, cy + 80);
   await page.mouse.click(cx - 60, cy + 80);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
@@ -153,7 +156,7 @@ test('仅描边区域、修订云线、引线标注：落笔即生效且清洗�
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
 
   /* 区域「仅描边」：落笔 fillAlpha=0（仍可选中与导出） */
-  await page.locator('.tool-btn[data-tool="rect"]').click();
+  await clickTool(page, 'rect');
   await page.locator('#areaNoFill').check();
   await page.mouse.click(cx - 130, cy - 90);
   await page.mouse.click(cx - 50, cy - 30);
@@ -165,7 +168,7 @@ test('仅描边区域、修订云线、引线标注：落笔即生效且清洗�
   /* 修订云线：折线 + style.cloud；扇贝点串多于原顶点，清洗后标记保留 */
   const box2 = await page.locator('#canvas').boundingBox();
   const cx2 = box2.x + box2.width / 2, cy2 = box2.y + box2.height / 2;
-  await page.locator('.tool-btn[data-tool="line"]').click();
+  await clickTool(page, 'line');
   await page.locator('#lineCloud').check();
   await page.locator('#lineClosed').check();
   await page.mouse.click(cx2 + 30, cy2 - 70);
@@ -185,7 +188,7 @@ test('仅描边区域、修订云线、引线标注：落笔即生效且清洗�
   /* 引线标注：两点自动完成，默认文字可编辑，subtype 经清洗保留 */
   const box3 = await page.locator('#canvas').boundingBox();
   const cx3 = box3.x + box3.width / 2, cy3 = box3.y + box3.height / 2;
-  await page.locator('.tool-btn[data-tool="dimension"]').click();
+  await clickTool(page, 'dimension');
   await page.selectOption('#dimensionType', 'leader');
   await page.mouse.click(cx3 - 170, cy3 + 40);
   await page.mouse.click(cx3 - 60, cy3 + 100);
@@ -202,12 +205,12 @@ test('半径标注：点选圆落成带 R 文字的引线', async ({ page }) => 
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.locator('.tool-btn[data-tool="arc"]').click();
+  await clickTool(page, 'arc');
   await page.selectOption('#arcMode', 'circle');
   await page.mouse.click(cx, cy);
   await page.mouse.click(cx + 70, cy);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
-  await page.locator('.tool-btn[data-tool="dimension"]').click();
+  await clickTool(page, 'dimension');
   await page.selectOption('#dimensionType', 'radius');
   await page.mouse.click(cx, cy);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
@@ -226,13 +229,13 @@ test('镜像：选中点后两点定轴，生成对称副本且原对象不动',
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await page.mouse.click(cx, cy);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.mouse.click(cx, cy);
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
-  await page.locator('.tool-btn[data-tool="mirror"]').click();
+  await clickTool(page, 'mirror');
   await page.mouse.click(cx - 60, cy - 80);
   await page.mouse.click(cx - 60, cy + 80);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(2);
@@ -255,10 +258,10 @@ test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({
   await openApp(page);
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.locator('.tool-btn[data-tool="point"]').click();
+  await clickTool(page, 'point');
   await page.mouse.click(cx - 60, cy - 40);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(1);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.mouse.click(cx - 60, cy - 40);
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
   await page.evaluate(() => switchTab('list'));
@@ -270,11 +273,12 @@ test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({
   expect(new Set(arr.map(p => p.join(','))).size).toBe(4);
 
   /* 偏移：先画一条水平线段，选中后偏移 1m；新线应与原线平行且相距 1m */
-  await page.locator('.tool-btn[data-tool="segment"]').click();
+  await clickTool(page, 'line');
+  await page.selectOption('#lineMode', 'segment');
   await page.mouse.click(cx - 100, cy + 60);
   await page.mouse.click(cx + 100, cy + 60);
   await expect.poll(() => page.evaluate(() => state.objects.length)).toBe(5);
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   await page.mouse.click(cx, cy + 60);
   await expect.poll(() => page.evaluate(() => selectedIds.size)).toBe(1);
   await page.evaluate(() => switchTab('list'));
@@ -292,25 +296,27 @@ test('阵列与偏移：批量复制 2×2、折线按 1m 等距偏移', async ({
   expect(off.dx).toBeCloseTo(0, 6);
 });
 
-test('线段类型与折线类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
+test('折线模式与类型互不影响；选择模式可直接拖场地顶点', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {
     state.objectTypes.push({ id: 'line.customseg', kind: 'line', name: '自定义线段', color: '#ff0000', builtin: false });
     populateSelects();
-    $('lineType').value = 'line.customseg';
   });
-  await page.locator('.tool-btn[data-tool="segment"]').click();
-  expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
-    .toEqual({ seg: 'line.boundary', line: 'line.customseg' });
+  await clickTool(page, 'line');
+  await page.selectOption('#lineMode', 'segment');
+  await page.evaluate(() => { $('lineType').value = 'line.customseg'; });
+  expect(await page.evaluate(() => ({ mode: $('lineMode').value, type: $('lineType').value })))
+    .toEqual({ mode: 'segment', type: 'line.customseg' });
+  /* 切换模式不改写类型 */
+  await page.selectOption('#lineMode', 'arrow');
+  expect(await page.evaluate(() => ({ mode: $('lineMode').value, type: $('lineType').value })))
+    .toEqual({ mode: 'arrow', type: 'line.customseg' });
 
-  /* 切回工具恢复默认类型：折线与线段都不记忆上次选择 */
-  await page.evaluate(() => { $('segmentType').value = 'line.customseg'; });
-  await page.locator('.tool-btn[data-tool="line"]').click();
-  expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
-    .toEqual({ seg: 'line.customseg', line: 'line.boundary' });
-  await page.locator('.tool-btn[data-tool="segment"]').click();
-  expect(await page.evaluate(() => ({ seg: $('segmentType').value, line: $('lineType').value })))
-    .toEqual({ seg: 'line.boundary', line: 'line.boundary' });
+  /* 切回工具恢复默认：模式与类型都不记忆上次选择 */
+  await clickTool(page, 'select');
+  await clickTool(page, 'line');
+  expect(await page.evaluate(() => ({ mode: $('lineMode').value, type: $('lineType').value })))
+    .toEqual({ mode: 'polyline', type: 'line.boundary' });
 
   /* 选择模式：指针靠近场地顶点时出现手柄，按下拖动即可改形（无需切「场地节点」） */
   await page.evaluate(() => {
@@ -318,7 +324,7 @@ test('线段类型与折线类型互不影响；选择模式可直接拖场地�
     commitChange();
     fitView();
   });
-  await page.locator('.tool-btn[data-tool="select"]').click();
+  await clickTool(page, 'select');
   const pt = await page.evaluate(() => {
     const s = w2s([20, 10]);
     const r = document.getElementById('canvas').getBoundingClientRect();
@@ -369,7 +375,7 @@ test('线段类型与折线类型互不影响；选择模式可直接拖场地�
 
 test('圆/弧工具：圆生成描边圆对象，圆弧生成 arc 对象', async ({ page }) => {
   await openApp(page);
-  await page.locator('.tool-btn[data-tool="arc"]').click();
+  await clickTool(page, 'arc');
   const box = await page.locator('#canvas').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
   await page.mouse.click(cx - 120, cy - 60);
