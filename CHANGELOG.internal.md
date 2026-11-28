@@ -4,6 +4,19 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 修复 4 项 P1（保存定时器/取景框/表格名称/钩子门禁）
+
+- **Commit Hash**：`f1c86a7`
+- **核心改动**：
+  - **A2** `persistence.flushPendingSave`：先判断救援/租约 block 再清定时器；取消切换后保留待保存定时器，不再丢最后一次自动保存机会。
+  - **A4** `interaction` 图片变换提交：`syncFramePan()` 刷新取景框缓存，PNG/SVG/PDF 导出覆盖图片新四角。
+  - **C5** `io-table` 新增行：把「名称」写入 `o.text`，与更新行一致；点/矩形/折线/标注新增不再丢名称。
+  - **E3** `check.mjs`：`REQUIRED_HOOKS` 解析为空时 fail-closed；**E2** 复核为设计如此（`###` 是功能级删除，不入结构性账本），仅补注释。
+- **预算**（实测）：dist **849,619 → 849,662 B（+43）**；gzip **276,652 → 276,660 B（+8）**；上限 840 KiB 下余量 **10,498 B**（gzip 余量 18,252 B）；SW `VERSION=333 → 334`；发行包 SHA256 `3d4bbf21…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,578 / 0**（+2 条表格新增名称断言）；e2e **217** 用例，源码 **214 passed / 0 failed / 3 skipped**（4.4m）、dist **211 passed / 0 failed / 6 skipped**（4.2m）；check-gates 10/10 + 20/20；bench 缓存 P95 **0.06ms** / 重建 **16.55ms** / heap **29.51MB**；discipline 13/13 L4；`REQUIRED_HOOKS` 改名负例实跑 `check.mjs` 退出 1 并命中新错误。
+- **公共抽象清单**：无新增；`check-deletions` 仅补注释；selftest 新增 2 条断言。
+- **遗留风险**：A1（撤销/回滚时间戳与墓碑）、A3（未绑定草稿租约互锁）、B1–B3（只读绕过）、C1（PDF Flate 图非法 PNG）、C6/C7/C8（XLSX 多表/引号往返/严格更新校验）、E1（插件导入器字节）仍未修。
+
 ## 2026-11-28 · 修复图片变换手柄 pointerdown 崩溃
 
 - **Commit Hash**：`12f7bf6`
