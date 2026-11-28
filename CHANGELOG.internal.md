@@ -4,6 +4,27 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 修复剩余 P1（C1/C6/C7/C8/E1/E4–E7/B4）并提取 @local/core-svg-sanitize
+
+- **Commit Hash**：`4ba1456`
+- **体积上限（经用户授权）**：raw **840 → 880 KiB（901,120 B）**、gzip **288 → 300 KiB（307,200 B）**、gzip 预警 **272 → 284 KiB（290,816 B）**；预算常量仍只在 `scripts/lib/budget.mjs`，`dist-manifest.json` 的 `maxBytes/gzipMaxBytes` 同步。理由：剩余 P1 与公共包提取会净增代码，保留 ≥8,000 B 余量。
+- **核心改动**：
+  - **C1** `pdf-read`：Flate 内嵌图重组 PNG 时，IDAT 由裸 filter+像素改为 zlib stored-block 流（header + deflate stored + adler32）；selftest 用 `inflateSync` 解 IDAT，断言长度、filter=0 与像素保真。
+  - **C6** `io-import`/`io-table`：XLSX 改用 `readSheets` + `pickTableSheet`，只导入第一张非空表并提示其余 `ignored` 数；不再把第二张表头当数据行。
+  - **C7** `rowsToObjectsPlan(rows,{unguard})`：XLSX inlineStr 导出未做公式防护，导入时 `unguard:false`，保留用户前导单引号；CSV/TSV 仍还原一层。
+  - **C8** 严格模式更新行校验 X/Y/角度/宽高/节点坐标；本行出错时不进入 `updates`，整批拒绝。非法形状提示改为 `problem()`，非严格仍是 warning。
+  - **E1** 沙箱导入器 `ctx` 注入 `bytes`；`file.size` 之外再按 `arrayBuffer().byteLength` 拦截 32 MB；e2e 用 4 字节真实 File 断言 `BYTES:4`，再用伪造 `size:1` 的 32 MB+1 假 File 断言拒绝。
+  - **E4** `i18n-scan` 词法器：识别正则字面量（含字符类/flags），模板 `${...}` 内字符串递归扫描并按原偏移判定包裹；补 50 条既有缺口翻译，UI 硬编码从 25 降至 17；`uiInDict` 因词法修复暴露「先定义中文标签、使用时才 L()」的存量，一次性校正为 **150**（只降不升，缺口/UI/模板阈值不变）。
+  - **E5** `check-gates` TURN 场景改为 `--filter=ICE`，同时执行 ICE-1 与 ICE-2 的零泄露断言。
+  - **E6** selftest 用真实 LOD 对象（100×10 矩形）断言「选中即豁免」，不再用不存在的 `X1`。
+  - **E7** selftest 新增 ghost 进入静态签名/不透明度变化/清除后归零，以及 refSig 与闪烁相位进入 `sceneStaticKey` 的断言；暴露 `ghostLayer` 测试句柄。
+  - **B4** `contracts/adapters.json` 补登 `pdf-read.js`/`geometry.js`；`ADAPTER_MARK` 识别「委托 @idcu/」，check-ngm 从 6 条增至 8 条。
+  - **公共代码提取**：新增 `@local/core-svg-sanitize`（UMD + ESM/CJS + 20 项测试），`js/common/symbols.js` 改为适配层，保留 `normalizeSymbolPaths / parseSvgSymbol / sanitizeSymbolBundle` 等旧全局名；`index.html` 增至 51 个脚本。
+- **预算**（实测）：dist **853,628 → 862,309 B（+8,681）**；gzip **277,617 → 280,884 B（+3,267）**；上限 880 KiB 下余量 **38,811 B**（gzip 余量 26,316 B）；SW `VERSION=337 → 338`；发行包 SHA256 `e576a5bf…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,611 / 0**（+21，加载 51 脚本）；e2e **222** 用例，源码 **219 passed / 0 failed / 3 skipped**（4.9m）、dist **216 passed / 0 failed / 6 skipped**（4.5m）；check-gates 基线 10/10 + 人为破坏 20/20（ICE 场景 42 通过/2 失败均命中）；bench 缓存 P95 **0.1ms** / 重建 **19.79ms** / heap **18.92MB**；discipline 13/13 L4；check-ngm 10 vendor + **3 local**（8 适配层）；test-local **3 包 / 54 断言**；build --check 二次构建一致；badge 文档计数一致。
+- **公共抽象清单**：新增 `@local/core-svg-sanitize.createSymbolSanitizer({limits,viewBox,categories,defaultColor})`；新增 `pickTableSheet(sheets)`、`rowsToObjectsPlan(rows,{unguard})`；`markTombstone/stampObject` 沿用上一批的 `notBefore`；i18n 新增 51 条短语（50 缺口 + 1 模板）；`uiInDict` 基线 76 → 150。
+- **遗留风险**：审计表 4.2 中 **A6、C2、C3、C4、D1、E8–E11** 仍未处理（其中 A6 为隐藏页全量克隆、C2/C3/C4 为导入预算、D1 为布点优化性能、E8–E11 为性能/断言门禁口径）；`uiInDict=150` 是词法器修复后的真实存量，后续只允许下降；gzip 余量 26,316 B，继续新增代码需关注。
+
 ## 2026-11-28 · 撤销/回滚按新编辑推进时间戳与墓碑（A1/A3）
 
 - **Commit Hash**：`a280147`
