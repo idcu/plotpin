@@ -4,6 +4,24 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 收口审计剩余项（A6/C2/C3/C4/D1/E8–E11）
+
+- **Commit Hash**：`a0243a4`
+- **核心改动**：
+  - **A6** `flushBeforeUnload`：先判 pending + 救援/租约 block，再决定是否 `persistableState()`；无待保存内容直接返回。`visibilitychange→hidden` 不再每次克隆整个工程（旧路径 10k 对象约 6.3MB/64ms）。
+  - **C2** `pdf-read`：内嵌图在单图上限外增加总量预算（最多 200 张 / 32 MP 像素 / 64 MB 输出字节）；超限只跳过并累计 `imageSkipped`，导入提示「N 张超过总量预算」。
+  - **C3** `io-import.assertXlsxColumnRefs()`：vendor 只检查 cells 数量、不检查 `r` 列号；导入前扫工作表 XML 的列引用，>1000 列直接拒绝（`ZZZ1` 这类稀疏列引用不再进入解析器）。vendor 字节锁定，上游修复仍需发版。
+  - **C4** `applyDxfImport` 与单页 `importPdfFile` 提交前调用 `ensureObjectCapacity(新增数)`，与多页 PDF/表格同一口径，避免 10 万上限被推到 20 万。
+  - **D1** `optimizeCameraPlacement`：新增二维前缀和（积分图）计算候选增益上界；上界不超过当前最优时跳过该位置全部角度，`markCovered` 后重建积分图。`bench.mjs` 新增默认 14×14×12 场景（阈值 1500ms，实测 989ms）。
+  - **E8** `speed.perf` 的 N-22/N-23 改用同机绝对上限（帧 P95 ≤50ms、点选 P95 ≤900ms、重建 P95 ≤300ms），移除跨机硬编码 BASELINE 与“下降 30%”门禁；N-24 仍是同机同 run 的 A/B 对照，保留相对判据。
+  - **E9** `p2-render` 形状密集负载固定 2000 个，只在 2000 档记录/判定；删除 5000/10000 的不匹配阈值。
+  - **E10** `e2e/perf-render` 去除耗时断言，只保留对象数与裁剪率；耗时归 `bench.mjs` 与 `tests/perf/`。
+  - **E11** `check-gates` 新增第 21 个破坏：删除一条真实 selftest 断言，`badge.mjs --check` 必须因断言数不一致而红。
+- **预算**（实测）：dist **862,309 → 864,099 B（+1,790）**；gzip **280,884 → 281,641 B（+757）**；上限 880 KiB 下余量 **37,021 B**（gzip 余量 25,559 B）；SW `VERSION=338 → 339`；发行包 SHA256 `23432c4a…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,613 / 0**（+2，C3 正常/超限）；check-gates 基线 10/10 + 破坏 **21/21**；e2e **222** 用例，源码 **219 passed / 0 failed / 3 skipped**（4.8m）、dist **216 passed / 0 failed / 6 skipped**（4.3m）；bench 缓存 P95 **0.06ms** / 重建 **16.2ms** / heap **36.39MB** / 布点优化 **989ms**；check-ngm 10 vendor + 3 local；test-local 54 断言；discipline 13/13；build --check 二次构建一致；badge 文档计数一致。
+- **公共抽象清单**：新增 `assertXlsxColumnRefs(buf)`（适配层，导出给 selftest）；`optimizeCameraPlacement` 内部 `buildIntegral/gainUpper`；无新增全局 API；`imageSkipped` 为 PDF 解析结果新增只读计数。门禁破坏场景 20 → 21，相关计数文档同步。
+- **遗留风险**：C3 是适配层缓解，不是 vendor 根因修复；上游 `@idcu/format-xlsx-read` 发版后应删除双重扫描。D1 最坏情况仍是「候选位置 × 角度 × 窗口格数」，积分图只降低常数与提前剪枝，复杂场地仍需实测。E8 绝对阈值需按 runner 规格定期复核；E9/E10 只调整测试口径，不改变产品行为；`perf-nightly` 仍为 0 次运行，浏览器性能门禁主要靠本地手动。
+
 ## 2026-11-28 · 修复剩余 P1（C1/C6/C7/C8/E1/E4–E7/B4）并提取 @local/core-svg-sanitize
 
 - **Commit Hash**：`4ba1456`
