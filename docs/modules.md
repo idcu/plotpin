@@ -94,10 +94,10 @@
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
 | `check.mjs` | 零依赖工程质量门禁（13 步）：9.1 状态直赋值、9.2 耦合计数、9.3 钩子配对、9.4 软调用登记 | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
-| `selftest.mjs` | 逻辑层自测（当前 4,611 断言 / 176 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
+| `selftest.mjs` | 逻辑层自测（当前 4,613 断言 / 176 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
-| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（10 条，未破坏副本必须全绿），再构造 **20 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失、CSP 哈希错位、i18n 覆盖率跌破、TURN 凭据脱敏失守）；`--only` 可分批跑 | 仓库副本 → 通过/失败 | CI |
+| `check-gates.mjs` | 门禁的牙齿：先跑正面基线（10 条，未破坏副本必须全绿），再构造 **21 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失、CSP 哈希错位、i18n 覆盖率跌破、TURN 凭据脱敏失守、删除断言）；`--only` 可分批跑 | 仓库副本 → 通过/失败 | CI |
 | `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性、消费方导出，以及 vendor 实际字节 ↔ `scripts/ngm-vendor-digest.json` 逐文件 sha256；同时核对 `ngm.local` 本地包的 manifest、入口、adapter 与 `contracts/adapters.json` 的 `localAdapters`；`--update-vendor-digest` 重写清单 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor / ngm.local` → 报告 | CI、`npm test` |
 | `test-local.mjs` | 发现并运行 `ngm.local/**/test/*.test.mjs`；无本地包时直接通过 | `ngm.local/` → PASS/FAIL | `npm test`、`npm run ci`、`npm run test:local` |
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致；另配 `contracts/coupling.json` 的计数基线 | 仓库 → 报告 | `check.mjs` |

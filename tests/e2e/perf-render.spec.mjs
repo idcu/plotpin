@@ -105,13 +105,10 @@ test('B-11：真实 Chromium 渲染基线（2000 对象 / 1600×900，A 基础�
   console.log('[B-11][A] ' + JSON.stringify(a));
   console.log('[B-11][B] ' + JSON.stringify(b));
 
-  /* 宽松上限：只做防回归，不替代人工前后对比 */
+  /* E10：功能 e2e 只断言功能正确性；耗时阈值归 perf harness
+     （scripts/bench.mjs 与 tests/perf/p2-render.perf.mjs），避免 runner 抖动把功能用例染红。 */
   for (const m of [a, b]) {
     expect(m.objects).toBe(2000);
-    expect(m.rebuild.p95).toBeLessThan(160);
-    expect(m.cached.p50).toBeLessThan(8);
-    expect(m.cached.p95).toBeLessThan(12);
-    expect(m.direct.p95).toBeLessThan(160);
     expect(m.culled).toBeGreaterThan(0.6);
   }
 });

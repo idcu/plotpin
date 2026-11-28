@@ -12,13 +12,13 @@
 | gzip 字节 | 275,940 B（269.5 KB） | 同上（`gzipBytes`） | 上限 294,912 B；272 KiB 预警 |
 | 体积上限 | 901,120 B（880 KiB） | `Select-String -Path scripts/lib/budget.mjs -Pattern 'MAX_BYTES'` | 唯一来源；`dist-manifest.json` 的 `maxBytes` 必须一致；2026-11-28 经两次授权从 820 KiB 调至 880 KiB |
 | 体积余量 | 11,902 B（gzip 余量 18,972 B） | 上限 − 当前字节 | <8,000 B 警告、<6,000 B 强警告 |
-| Service Worker 版本 | `VERSION=338` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
+| Service Worker 版本 | `VERSION=339` | `node scripts/check-sw.mjs` | 预缓存输入与 `scripts/sw-inputs.sha256` 一致 |
 
 ## 2. 测试与门禁
 
 | 指标 | 2026-11-28 快照 | 取数命令 | 说明 |
 |---|---|---|---|
-| selftest 断言 | 4,611 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；2026-11-28 在 4,578 上补 A1 12 条、C1/C6/C7/C8/E6/E7 21 条 |
+| selftest 断言 | 4,613 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；2026-11-28 在 4,578 上补 A1 12 条、C1/C3/C6/C7/C8/E6/E7 23 条 |
 | selftest 分区 | 176 个 | `node scripts/selftest.mjs --list` | 输出 177 行（含 1 行标题） |
 | 加载脚本 | 51 个（38 项目 + 10 vendor + 3 本地 ngm 包） | `node scripts/check.mjs --selftest` 输出「加载 51 个脚本」 | `js/` 下 38 个 `.js`，`ngm.local/` 下 3 个包入口 |
 | 本地包测试 | 3 个包 / 54 项断言 | `node scripts/test-local.mjs` | `@local/format-pdf-vector` 11 项 + `@local/core-lease` 23 项 + `@local/core-svg-sanitize` 20 项；不计入 selftest 断言数 |
@@ -28,7 +28,7 @@
 | 插件 API 面 | 31 键 / 31 条清单 / 0 泄漏 / 0 落空 | `node scripts/check-plugin-api.mjs` | 词法器 + fail-closed；API 1.1.0 / 8 项能力 |
 | 耦合基线 | `core→features` 21 条（合计 91 次）/ `common→core` 3 条 / 软调用 13 条（5+2+5+1） | `node -e "const c=require('./contracts/coupling.json');…"`；以文件为准 | 按文件+符号+次数严格相等，只减不增 |
 | 必需钩子 | 13 个提供方 / 13 个被调钩子 / 43 处调用 / 8 个必需 | `node scripts/check.mjs`（9.3） | 缺注册时 `assertHooksReady()` 启动即抛错 |
-| 门禁牙齿 | 正面基线 10/10 + 人为破坏 20/20 | `node scripts/check-gates.mjs` | 只断言非 0 且命中目标关键字；i18n 探针数按当前覆盖率动态计算 |
+| 门禁牙齿 | 正面基线 10/10 + 人为破坏 21/21 | `node scripts/check-gates.mjs` | 只断言非 0 且命中目标关键字；i18n 探针数按当前覆盖率动态计算 |
 | 方法论纪律 | 13/13（L4） | `node scripts/check-discipline.mjs --strict` | 含文档命令可解析、单文件 ≤60KB/600 行 |
 | i18n 扫描 | 覆盖率 47.54% = 878 / 1,847 / 缺口 1 / UI 硬编码 18（全仓未走入口 968，未字典化 571，UI 已字典待接入 76，阈值 76） | `node scripts/i18n-scan.mjs --check` 或 `--json` | 口径见 [engineering](engineering.md)§4.6：分母是含 CJK 的出现次数，18 只是 968 的 UI 子集；缺口 1 是 `collab.js` 的拼接片段 `' 等 {n} 项'`，非整句文案；阈值 ≥40%、缺口 ≤10、UI 硬编码 ≤20、已字典待接入 ≤76、模板内 =0 |
 | Node bench（桩） | 以命令为准 | `node scripts/bench.mjs` | Node 桩数据，不能替代浏览器性能结论 |

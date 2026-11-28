@@ -94,7 +94,7 @@ code += `\n;globalThis.__bench = {
   get state(){ return state; },
   resetState(){ state=createInitialState(); resetFrameRef(); return state; },
   baseObject, drawScene, invalidateStatic, visibleWorldRect, objectBounds, boundsIntersect, selectedIds,
-  resetFrameRef, worldDims, analyzeCoverage, runRuleCheck, listRules, buildSymbolIndex, parseSvgSymbol,
+  resetFrameRef, worldDims, analyzeCoverage, optimizeCameraPlacement, runRuleCheck, listRules, buildSymbolIndex, parseSvgSymbol,
   doriRows
 };`;
 vm.runInContext(code, sandbox, { filename: 'index.html<scripts>', displayErrors: true });
@@ -177,6 +177,21 @@ const tCov = now();
 const cov = api.analyzeCoverage(api.state, { targetCells: 36000 });
 out.coverageMs = +(now() - tCov).toFixed(1);
 out.coverageRatio = +(cov.ratio * 100).toFixed(1);
+
+/* 5a) 布点优化（D1）：默认 14×14 网格 × 12 角度 × 最多 5 台；取 3 次最小值，防止单次抖动。 */
+{
+  const times = [];
+  let last = null;
+  for (let i = 0; i < 3; i++) {
+    const t0 = now();
+    last = api.optimizeCameraPlacement(api.state);
+    times.push(now() - t0);
+  }
+  out.optimizerMs = +Math.min(...times).toFixed(1);
+  out.optimizerSuggestions = last.suggestions.length;
+  out.optimizerBeforeRatio = +(last.beforeRatio * 100).toFixed(1);
+  out.optimizerAfterRatio = +(last.afterRatio * 100).toFixed(1);
+}
 
 /* 5b) 大场地：5000×5000m + 30 摄像头，固定目标格数（B-09 验收口径） */
 api.resetState();
@@ -408,6 +423,7 @@ function gateList(out) {
     { name: '直接全量帧', value: out.directMs, limit: 60, op: '≤', unit: 'ms' },
     { name: 'heapUsed', value: out.heapUsedMB, limit: 64, op: '≤', unit: 'MB' },
     { name: '覆盖率分析', value: out.coverageMs, limit: 300, op: '≤', unit: 'ms' },
+    { name: '布点优化(默认14×14×12)', value: out.optimizerMs, limit: 1500, op: '≤', unit: 'ms' },
     { name: '大场地覆盖率分析', value: out.coverageBigMs, limit: 300, op: '≤', unit: 'ms' },
     { name: '覆盖率缩放差异', value: out.coverageZoomSpreadPp, limit: 1, op: '≤', unit: 'pp' },
     { name: '规则检查(2000对象/30类型)', value: out.ruleCheckMs, limit: 500, op: '≤', unit: 'ms' },
@@ -432,6 +448,7 @@ function printHuman(out, rounds) {
   console.log(`  视口裁剪：放大 6 倍时绘制 ${out.drawnObjects} / 2000 个对象（裁剪 ${(out.culledRatio * 100).toFixed(1)}%）`);
   console.log(`  默认视图绘制对象：${out.baseDrawn} / 2000`);
   console.log(`  覆盖率分析：1000×1000m + 30 摄像头 ${out.coverageMs} ms（覆盖率 ${out.coverageRatio}%，目标 < 300ms）`);
+  console.log(`  布点优化：默认 14×14 网格 × 12 角度 ${out.optimizerMs} ms（建议 ${out.optimizerSuggestions} 台，覆盖率 ${out.optimizerBeforeRatio}% → ${out.optimizerAfterRatio}%，目标 < 1500ms）`);
   console.log(`  大场地覆盖率：5000×5000m + 30 摄像头 ${out.coverageBigMs} ms（${out.coverageBigCells} 格，覆盖率 ${out.coverageBigRatio}%，目标 < 300ms）`);
   console.log(`  缩放无关性：zoom 0.25/1/4/16 覆盖率 ${out.coverageZoomRatios.join(' / ')}%，差异 ${out.coverageZoomSpreadPp} 个百分点（目标 ≤ 1）`);
   console.log(`  规则检查：2000 对象 / ${out.ruleTypeCount} 类型阈值 ${out.ruleCheckMs} ms（候选对 ${out.rulePairs} / 理论 ${out.ruleTheoretical}，${(out.rulePairRatio * 100).toFixed(2)}%，违规 ${out.ruleViolations} 条，目标 ≤ 500ms）`);

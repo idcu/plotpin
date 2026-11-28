@@ -1666,12 +1666,14 @@ window.addEventListener('keyup',e=>{
    本地兜底草稿仍写入，并复用自动保存的状态提示，返回 false 表示未写 IndexedDB。 */
 function flushBeforeUnload(){
   try{
-    /* 先记录是否有待保存内容，再清定时器（清完就无法判断是否真的需要落盘） */
+    /* A6：先判 pending/救援/租约，再决定是否全量克隆。visibilitychange→hidden 在移动端很频繁，
+       旧实现每次隐藏都 structuredClone 整个工程（10k 对象约 6.3MB / 64ms）。 */
     const pending=!!saveTimer||!!saveRetryTimer||saveInFlight>0;
+    const block=saveBlockState();
+    if(!pending&&block==='') return false;
     clearTimeout(saveTimer); saveTimer=null;
     clearTimeout(saveRetryTimer); saveRetryTimer=null;
     const snapshot=persistableState();
-    const block=saveBlockState();
     if(block==='rescue'){
       writeRescueDraft(snapshot);
       saveStatus(L('救援模式：仅写救援副本，原记录未被覆盖'));

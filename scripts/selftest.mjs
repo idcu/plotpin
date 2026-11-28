@@ -103,7 +103,7 @@ code += `\n;globalThis.__api = {
   get draft(){ return draft; }, set draft(v){ draft=v; },
   resetState(){ state = createInitialState(); resetFrameRef(); return state; },
   replaceState,
-  importJsonFile, importPdfFile, openProjectById,
+  importJsonFile, importPdfFile, openProjectById, assertXlsxColumnRefs,
   createInitialState, migrateProject, buildProject, buildDemoProject, firstRunGuideState, markFirstRunGuide, savedProjectHasContent, countProjectObjects, ensureObjectCapacity, assertProjectWithinLimits, baseObject,
   SETTINGS_KEYS, sanitizeSettings, settingsForStorage, applyLocalSettings,
   importLimitErrors, importLimitMessage, dsvRowsExceed, handleImportFile,
@@ -629,6 +629,14 @@ await section("8.1 B-08 原义：批量布点 + 条件批量替换（严格模�
   eq('C7-XLSX 前导单引号保留', xlsxCell.creates[0] && xlsxCell.creates[0].cell('名称'), "'=SUM(A1)");
   const csvCellPlan = api.rowsToObjectsPlan([['对象类型','X','Y','名称'], ['文字','1','2',"'=SUM(A1)"]]);
   eq('C7-CSV 公式引号还原', csvCellPlan.creates[0] && csvCellPlan.creates[0].cell('名称'), '=SUM(A1)');
+  /* C3：vendor 不检查单元格 r 的列号；适配层在解析前先扫 XML，A1000000 直接拒绝 */
+  const cellXml=r=>'<worksheet><sheetData><row r="1"><c r="'+r+'" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>';
+  const badColZip=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:cellXml('ZZZ1')}]);
+  let colErr=''; try{ await api.assertXlsxColumnRefs(badColZip); }catch(e){ colErr=e.message; }
+  ok('C3-XLSX 列号超限提前拒绝', /列号超过/.test(colErr));
+  const okColZip=api.Zip.build([{name:'xl/worksheets/sheet1.xml',text:cellXml('GR1')}]);
+  let colOk=true; try{ await api.assertXlsxColumnRefs(okColZip); }catch(_){ colOk=false; }
+  ok('C3-XLSX 正常列号通过（GR=200）', colOk);
   const badLedger = api.rowsToObjectsPlan([H, row({ 操作:'替换', 匹配图层:'默认图层', 安装高度:'abc' })]);
   ok('B-08-非法台账值报错', badLedger.errors.length >= 1);
   const noCond = api.rowsToObjectsPlan([H, row({ 操作:'替换', 名称:'X' })]);

@@ -410,12 +410,16 @@ async function parsePdf(input,opt){
     merged.textErrors+=interp.undecoded;
     merged.badOps+=interp.badOps;
   });
-  /* 内嵌图像（每页资源）：收集 /Subtype /Image 对象，选最大者 */
-  const images=[]; let imageErrors=0;
+  /* 内嵌图像（每页资源）：收集 /Subtype /Image 对象，选最大者。
+     C2：单图上限之外再加总预算（张数/像素/输出字节），超限只跳过并计数，不整体失败。 */
+  const IMG_BUDGET={count:200,pixels:32*1024*1024,bytes:64*1024*1024};
+  const images=[]; let imageErrors=0, imageSkipped=0, imagePixels=0, imageBytes=0;
   for(const [num,o] of parsed.objects){
     if(!/\/Subtype\s*\/Image/.test(o.dict)||o.data===null) continue;
     const w=dictNumber(o.dict,'Width'), h=dictNumber(o.dict,'Height');
-    if(!w||!h) continue;
+    if(!Number.isFinite(w)||!Number.isFinite(h)||!w||!h) continue;
+    const px=w*h;
+    if(images.length+imageSkipped>=IMG_BUDGET.count||!(px>0)||imagePixels+px>IMG_BUDGET.pixels){ imageSkipped++; continue; }
     const filters=o.dict.match(/\/Filter\s*\[([^\]]*)\]/);
     const f=dictName(o.dict,'Filter');
     const isJpeg=(f==='DCTDecode')||(filters&&/DCTDecode/.test(filters[1]));
@@ -423,8 +427,11 @@ async function parsePdf(input,opt){
     try{
       if(isJpeg){
         const b=binaryToBytes(o.data);
-        if(b[0]===0xFF&&b[1]===0xD8) images.push({num,mime:'image/jpeg',bytes:b,width:w,height:h});
-        else imageErrors++;
+        if(b[0]===0xFF&&b[1]===0xD8){
+          if(imageBytes+b.length>IMG_BUDGET.bytes){ imageSkipped++; continue; }
+          imagePixels+=px; imageBytes+=b.length;
+          images.push({num,mime:'image/jpeg',bytes:b,width:w,height:h});
+        } else imageErrors++;
       }else if(isFlate){
         const cs=dictName(o.dict,'ColorSpace');
         const bpc=dictNumber(o.dict,'BitsPerComponent')||8;
@@ -449,7 +456,12 @@ async function parsePdf(input,opt){
           rgb=new Uint8Array(h*w*3);
           for(let i=0;i<w*h;i++){ rgb[i*3]=gray[i];rgb[i*3+1]=gray[i];rgb[i*3+2]=gray[i]; }
         }
-        if(rgb&&rgb.length>=h*w*3) images.push({num,mime:'image/png',bytes:buildPng(w,h,rgb),width:w,height:h});
+        if(rgb&&rgb.length>=h*w*3){
+          const png=buildPng(w,h,rgb);
+          if(imageBytes+png.length>IMG_BUDGET.bytes){ imageSkipped++; continue; }
+          imagePixels+=px; imageBytes+=png.length;
+          images.push({num,mime:'image/png',bytes:png,width:w,height:h});
+        }
       }
     }catch(e){ imageErrors++; /* E2：解码失败计数，由导入报告如实提示 */ }
   }
@@ -457,7 +469,7 @@ async function parsePdf(input,opt){
   return {pageWidth:firstBox?.w||0,pageHeight:firstBox?.h||0,
     pageCount:pages.length,pages,
     paths:merged.paths,texts:merged.texts,textErrors:merged.textErrors,badOps:merged.badOps,
-    imageErrors,images,
+    imageErrors,imageSkipped,images,
     unitMeter:PT_TO_METER};
 }
 

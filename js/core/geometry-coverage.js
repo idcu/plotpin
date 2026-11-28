@@ -287,6 +287,39 @@ function optimizeCameraPlacement(st,opt){
   const angles=fov>=360?[0]:Array.from({length:Math.round(360/angleStep)},(_,i)=>Math.round(i*angleStep));
   const mkCam=(x,y,angle)=>({kind:fov>=360?CIR:SEC,x,y,r:phys,fov,angle});
 
+  /* D1：候选角度的增益上界 = 外接圆内「区内且未覆盖」格子的折算面积。
+     用二维前缀和（积分图）做 O(1) 矩形求和；每次 markCovered 后重建一次（O(格数)）。
+     单个位置若上界都不超过当前最优，直接跳过该位置的全部角度（通常省 10/12 次足迹判定）。
+     上界与 gainOf/markCovered 用同一套格子窗口，保证只会少算候选、不会误杀更优解。 */
+  let integral=null;
+  const buildIntegral=()=>{
+    integral=regions.map((reg,ri)=>{
+      const w=reg.nx+1, I=new Uint32Array(w*(reg.ny+1)), cov=covered[ri], grid=reg.grid;
+      for(let j=0;j<reg.ny;j++){
+        let rowSum=0;
+        for(let i=0;i<reg.nx;i++){
+          const idx=j*reg.nx+i;
+          rowSum+=(grid[idx]===0&&!cov[idx])?1:0;
+          I[(j+1)*w+(i+1)]=I[j*w+(i+1)]+rowSum;
+        }
+      }
+      return I;
+    });
+  };
+  const gainUpper=(x,y)=>{
+    let sum=0, r=phys;
+    for(let ri=0;ri<regions.length;ri++){
+      const reg=regions[ri], I=integral[ri], w=reg.nx+1;
+      if(x+r<reg.minX||x-r>reg.minX+reg.nx*reg.cell||y+r<reg.minY||y-r>reg.minY+reg.ny*reg.cell) continue;
+      const i0=Math.max(0,Math.floor((x-r-reg.minX)/reg.cell)), i1=Math.min(reg.nx-1,Math.ceil((x+r-reg.minX)/reg.cell));
+      const j0=Math.max(0,Math.floor((y-r-reg.minY)/reg.cell)), j1=Math.min(reg.ny-1,Math.ceil((y+r-reg.minY)/reg.cell));
+      const n=I[(j1+1)*w+(i1+1)]-I[j0*w+(i1+1)]-I[(j1+1)*w+i0]+I[j0*w+i0];
+      sum+=n*cellReal[ri];
+    }
+    return sum;
+  };
+  buildIntegral();
+
   /* 单个候选的新增覆盖面积：只遍历其外接圆覆盖到的格子 */
   const gainOf=(x,y,angle)=>{
     const cam=mkCam(x,y,angle), r=phys;
@@ -326,12 +359,16 @@ function optimizeCameraPlacement(st,opt){
   for(let step=0;step<maxAdd;step++){
     if(ratioNow()>=targetRatio-1e-9) break;
     let best=null;
-    for(const [x,y] of positions) for(const angle of angles){
-      const g=gainOf(x,y,angle);
-      if(!best||g>best.gain) best={x,y,angle,gain:g};
+    for(const [x,y] of positions){
+      if(best&&gainUpper(x,y)<=best.gain) continue;
+      for(const angle of angles){
+        const g=gainOf(x,y,angle);
+        if(!best||g>best.gain) best={x,y,angle,gain:g};
+      }
     }
     if(!best||best.gain<=0) break;
     markCovered(best.x,best.y,best.angle);
+    buildIntegral();
     addedArea+=best.gain;
     suggestions.push({x:best.x,y:best.y,angle:best.angle,phys,fov,
       gain:best.gain,gainRatio:best.gain/insideArea,ratioAfter:ratioNow()});

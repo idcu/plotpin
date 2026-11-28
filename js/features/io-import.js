@@ -61,6 +61,23 @@ async function importJsonFile(f){
     else toast(L('工程导入失败（已回滚）：{msg}',{msg}),'error');
   }
 }
+/* C3：@idcu/format-xlsx-read 只检查 cells.length，不检查单元格 r 的列号；
+   `r="A1000000"` 会撑出百万长度稀疏数组。vendor 字节锁定不能在本仓改，
+   导入前先扫工作表 XML 的列引用，超过 1000 列直接拒绝（与 vendor XLSX_LIMITS.maxCols 同口径）。 */
+const XLSX_COLS_MAX=1000;
+async function assertXlsxColumnRefs(buf){
+  const Zip=ensureVendor('Zip');
+  const entries=await Zip.readEntries(buf);
+  for(const name of Object.keys(entries||{})){
+    if(!/^xl\/worksheets\/[^/]+\.xml$/.test(name)) continue;
+    const xml=Zip.readText(entries,name)||'';
+    for(const m of xml.matchAll(/<c\b[^>]*\br="([A-Za-z]+)\d+"/g)){
+      let idx=0;
+      for(const ch of m[1].toUpperCase()) idx=idx*26+(ch.charCodeAt(0)-64);
+      if(idx>XLSX_COLS_MAX) throw new Error('XLSX 单元格列号超过 '+XLSX_COLS_MAX+' 列上限，请精简后导入');
+    }
+  }
+}
 async function handleImportFile(f){
   const ext=extOfFile(f.name);
   const fileErrs=importLimitErrors({bytes:f.size});
@@ -90,7 +107,9 @@ async function handleImportFile(f){
     try{
       /* C6：多工作表不再无差别拼接（第二张表头会被当成数据行）；只取第一张非空表并明确提示。
          C7：XLSX inlineStr 未做公式引号防护，导入时不剥前导单引号。 */
-      const sheets=await ensureVendor('Xlsx').readSheets(await f.arrayBuffer(),{skipOversizedSheets:true});
+      const buf=await f.arrayBuffer();
+      await assertXlsxColumnRefs(buf);
+      const sheets=await ensureVendor('Xlsx').readSheets(buf,{skipOversizedSheets:true});
       if(sheets.skippedSheets) toast(L('已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表',{n:sheets.skippedSheets}),'warn');
       const picked=pickTableSheet(sheets);
       if(!picked.rows.length) return toast('XLSX 中没有可导入的工作表','warn');
@@ -255,6 +274,8 @@ function applyDxfImport(fileName,text,meta,opts){
   if(!ents.length) return toast('DXF 中没有可导入实体','error');
   const entErrs=importLimitErrors({entities:ents.length});
   if(entErrs.length) return toast(L('DXF 导入失败：{msg}',{msg:importLimitMessage(entErrs)}),'error');
+  /* C4：实体上限之外还要校验「现有对象 + 新增」；否则 10 万上限可被推到 20 万 */
+  if(!ensureObjectCapacity(ents.length)) return;
   const backup=snapshotHistoryState(state), prevFuture=history.future;
   pushHistory();
   try{
@@ -621,7 +642,7 @@ async function importPdfFile(f){
   const pageTextErrors=page1?(page1.textErrors||0):(pdf.textErrors||0);
   /* E2：非法绘制算子与解码失败的图像同样只统计第 1 页范围 */
   const pageBadOps=page1?(page1.badOps||0):(pdf.badOps||0);
-  const imageErrors=pdf.imageErrors||0;
+  const imageErrors=pdf.imageErrors||0, imageSkipped=pdf.imageSkipped||0;
   const page1Nums=page1&&Array.isArray(page1.imageNums)?new Set(page1.imageNums):null;
   /* 底图只认第 1 页实际绘制的内嵌图；仅 1 张图时允许兜底，避免资源映射缺失导致整页丢图 */
   let img=null;
@@ -634,6 +655,8 @@ async function importPdfFile(f){
   }
   const pdfErrs=importLimitErrors({entities:pagePaths.length+pageTexts.length});
   if(pdfErrs.length) return toast(L('PDF 导入失败：{msg}',{msg:importLimitMessage(pdfErrs)}),'error');
+  /* C4：单页 PDF 与 DXF 一样，提交前校验「现有对象 + 新增」总量 */
+  if(!ensureObjectCapacity(pagePaths.length+pageTexts.length)) return;
   /* P3-20：解析与限额校验通过后，提交阶段整体事务化；失败回滚到导入前现场 */
   const backup=snapshotHistoryState(state), prevFuture=history.future;
   pushHistory();
@@ -665,6 +688,7 @@ async function importPdfFile(f){
   if(pageTextErrors) toast(L('文字 {n} 条无法解码，已跳过',{n:pageTextErrors}),'warn');
   if(pageBadOps) toast(L('已跳过 {n} 个非法绘制操作',{n:pageBadOps}),'warn');
   if(imageErrors) toast(L('{n} 张内嵌图无法解码，已跳过',{n:imageErrors}),'warn');
+  if(imageSkipped) toast(L('{n} 张内嵌图超过总量预算，已跳过',{n:imageSkipped}),'warn');
   if(!bgStored) toast(TX_PDFST,'warn');
   const scaleHints=pdfScaleHints(pageTexts);
   if(scaleHints.length) toast(L(TX_DSCALE,{a:scaleHints[0],more:scaleHints.length>1?L('、1:{b}',{b:scaleHints[1]}):''}),'warn');

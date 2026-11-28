@@ -296,6 +296,7 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '修改属性':'Edit property', '修改节点':'Edit node', '修改标记大小':'Change marker size', '修改规则':'Edit rules',
     '合并工程':'Merge project', '回滚快照':'Restore snapshot', '调整叠放顺序':'Reorder', '导入图元':'Import symbol', '导入符号':'Import symbols',
     'XLSX 有多张非空工作表，仅导入第一张「{name}」，其余 {n} 张已忽略':'XLSX has multiple non-empty sheets; importing only "{name}", ignoring {n} others',
+    '{n} 张内嵌图超过总量预算，已跳过':'{n} embedded images exceeded the total budget and were skipped',
     /* E4 词法修复后（模板 ${} 内字符串不再丢弃）暴露的既有缺口：补齐翻译，不抬高缺口阈值 */
     '插件导入失败：':'Plugin import failed: ', '插件不可用：':'Plugin unavailable: ', '插件导出失败：':'Plugin export failed: ',
     '插件已禁用：':'Plugin disabled: ', '插件未加载：':'Plugin not loaded: ', '插件导出器不存在：':'Plugin exporter not found: ',

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* check-gates.mjs —— 门禁的牙齿：正面基线 + 20 种人为破坏，断言对应门禁会红
+/* check-gates.mjs —— 门禁的牙齿：正面基线 + 21 种人为破坏，断言对应门禁会红
  *
  * 为什么需要它：门禁脚本本身也会假绿（只打印不比对、缺文件退 0、模板缺失空操作、把 --selftest 透传给
  * 只跑解析器自检的分支）。一条从未红过的判据，与没有判据的区别只在于它更贵。这里把「会红」这件事本身
@@ -365,6 +365,21 @@ const scenarios = [
       if (!src.includes(needle)) throw new Error('collab.js 找不到 collabIceRedact 凭据掩码注入点');
       writeFileSync(p, src.replace(needle,
         "if(sv.credential) s=s+' '+sv.credential; /* 门禁牙齿：把凭据拼回对外文案 */"));
+    }
+  },
+  {
+    name: '删除一条 selftest 断言（断言数门禁必须变红）',
+    expected: 'node scripts/badge.mjs --check 退出码非 0',
+    args: ['scripts/badge.mjs', '--check'],
+    expect: /断言数|不一致/,
+    sabotage(dir) {
+      /* E11：「断言数不得减少」原先只有等值校验，没有删除判据。
+         这里删掉一条真实断言：selftest 计数下降而 README 未同步，badge --check 必须红。 */
+      const p = join(dir, 'scripts', 'selftest.mjs');
+      const src = readFileSync(p, 'utf8');
+      const needle = "  eq('B-08-严格模式识别', plan.strict, true);\n";
+      if (!src.includes(needle)) throw new Error('selftest.mjs 找不到可删除的断言锚点');
+      writeFileSync(p, src.replace(needle, ''));
     }
   }
 ];

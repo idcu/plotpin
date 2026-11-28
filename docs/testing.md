@@ -10,11 +10,11 @@
 
 | 层 | 入口 | 运行环境 | 规模（2026-11-26 记录） | `ci.yml` 定义中的归属（Actions 已运行；`test` 已绿，`e2e` 一绿一红，仍不作门禁） |
 |---|---|---|---|---|
-| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **176 个分区 / 4,611 条断言 / 加载 51 个脚本** | 是（`check.mjs --selftest`） |
+| 逻辑自测 | `scripts/selftest.mjs` | Node（真实 `js/` 源码 + canvas/DOM 桩） | **176 个分区 / 4,613 条断言 / 加载 51 个脚本** | 是（`check.mjs --selftest`） |
 | 本地包测试 | `scripts/test-local.mjs` | Node（`ngm.local/**/test/*.test.mjs`） | **3 个包 / 54 项断言**（不计入 selftest） | 是（`npm test` / `npm run ci`） |
 | 浏览器 e2e | `scripts/e2e.mjs` → Playwright | 真实 Chromium（headless）；Firefox 5 条核心为非门禁 | **53 个 spec / 222 个用例**（V-6 / V-6b 提取对比依赖 `pdftotext`；CI 的 e2e job 已装 poppler-utils，仅缺二进制的机器上条件跳过） | 本地 2026-11-28 双入口全量：源码 **219 passed / 0 failed / 3 skipped**、dist **216 passed / 0 failed / 6 skipped**，均 exit 0；见 §3 |
 | 真实浏览器性能 | `scripts/perf-browser.mjs` | Chromium + 真实 Canvas2D（本机为 SwiftShader） | 4 个场景（DPR1 三档 + DPR2 一档） | 否（`perf-nightly.yml` schedule 已挂载但 0 次运行；需要时本地手动 `node scripts/perf-browser.mjs`） |
-| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 20 种人为破坏 | 是 |
+| 门禁自检 | `scripts/check-gates.mjs` | 临时目录整仓副本 | 正面基线 10 条 + 21 种人为破坏 | 是 |
 
 > **Actions 现状（2026-11-15 核查，来源 `gh api` / `gh run view`）**：`ci.yml`/`perf-nightly.yml` 已挂载并实际运行。2026-11-13 的 60 次全红中，`test` job 缺 `npm ci` 的结构性根因已于 2026-11-14 修复，并在 run `43626940476` 转绿。两个 `e2e` job 的红是 `dist/` 不入库且 job 内不构建（源码入口 3 条 `file-dist` 用例 `net::ERR_FILE_NOT_FOUND`、dist 入口 webServer 20 s 超时），已在 `e2e` job 内补 `node scripts/build.mjs` 步骤——只补构建前提，未改用例、判定或常量。复跑结果：源码入口 175 passed / 1 skipped（绿）；dist 入口 webServer 正常、171 passed / 4 skipped / 1 failed，失败为 `tests/e2e/perf-render.spec.mjs:198` 像素采样 `inside1` 断言 false（同一 spec 本地 dist 入口全绿，原因未定位）；紧随其后的文档提交 run `43628042812` 仍是 dist 入口 1 failed，但换成 `perf-render.spec.mjs:202`（M6-P3，第 246 行取样值 0）——两次失败用例不同，说明是像素采样在 runner 上的不稳定，而非单一产品缺陷；判定与常量一律不放宽。第三次 run `43628476139`（仅文档改动）源码入口也出现 1 failed（同一 spec 的 M6-P3，取样值 0），dist 入口 2 failed（M6-P2 位移 + M6-P3），进一步印证该 spec 的像素采样在 runner 上不稳定。**Actions 仍不作发布门禁**，发布以本地门禁为准，逐条清单见 [release-checklist](release-checklist.md)。
 
@@ -23,6 +23,7 @@
 - selftest 证明“函数/数据/导出字节”正确，但 DOM/Canvas 是桩，不能证明真实渲染；
 - e2e 证明“用户路径能走通”，但不能替代逐字节 golden 与大对象性能；
 - perf-browser 只采真实浏览器读数，不证明业务正确性；SwiftShader 数据不能当真实 GPU 结论；
+- E8/E9/E10 口径修正：`speed.perf` 的 N-22/N-23 改用同机绝对上限（不再用跨机硬编码基线算“下降 30%”）；`p2-render` 形状密集负载固定 2000 个，只在 2000 档判定；功能 `e2e/perf-render.spec.mjs` 只保留对象数与裁剪率，耗时阈值归 `bench.mjs` / `tests/perf/`；
 - check-gates 证明“判据本身会红”，不证明产品功能。
 
 缺依赖时的退出码约定：`e2e.mjs` / `perf-browser.mjs` 打印 `[SKIP]` 并**退 2**（不是 0），因此“跳过”不会伪装成“通过”。
@@ -179,7 +180,7 @@ Get-ChildItem tests/golden | Select-Object Name, Length
 
 ## 5. 门禁自检（破坏性验证）
 
-`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（10 条，未破坏副本必须全绿），再构造 20 种“应当失败”的改动，断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
+`node scripts/check-gates.mjs` 在临时目录复制整仓，先跑正面基线（10 条，未破坏副本必须全绿），再构造 21 种“应当失败”的改动（含删除一条 selftest 断言），断言对应门禁非 0 退出且输出命中目标错误关键字。完整表见 [engineering](engineering.md)§4.4；关键点：
 
 - 场景 14～17 专测新增结构判据：`replaceState` 外直赋值、未登记跨层调用、未分类软调用、缺失必需钩子；任何一条“破坏后仍绿”都说明判据失效。
 - 场景 6/9 的基线是**提交入库**的 `scripts/sw-inputs.sha256`（预缓存输入内容指纹），与 git 工作区状态无关，干净检出同样生效；

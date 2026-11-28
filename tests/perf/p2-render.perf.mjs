@@ -31,13 +31,13 @@ const GATES = {
     dragSelectScanAll: 0.6, dragSelectById: 0.2, findIssues1000pt: 2, heapUsedMB: 8
   },
   5000: {
-    staticRebuild: 280, staticRebuildShapes: 190, panFrame: 12, zoomFrame: 270,
+    staticRebuild: 280, panFrame: 12, zoomFrame: 270,
     staticKeyCost: 0.5, staticKeyCostBigSite: 0.8, objectIndexById: 1.2,
     dragMoveRebuildIndex: 1, dragMoveCachedIndex: 0.2, dragFrame: 8,
     dragSelectScanAll: 2.2, dragSelectById: 0.2, heapUsedMB: 12
   },
   10000: {
-    staticRebuild: 450, staticRebuildShapes: 220, panFrame: 13, zoomFrame: 450,
+    staticRebuild: 450, panFrame: 13, zoomFrame: 450,
     staticKeyCost: 0.5, staticKeyCostBigSite: 0.8, objectIndexById: 2.2,
     dragMoveRebuildIndex: 2, dragMoveCachedIndex: 0.2, dragFrame: 8,
     dragSelectScanAll: 1.8, dragSelectById: 0.2, heapUsedMB: 19
@@ -151,36 +151,40 @@ test.describe('P2 批次 12–16 · 渲染热路径基线', () => {
       });
       record('staticRebuild', size, rebuild);
 
-      /* 1b) 形状密集场景重建（P2-3）：全部为圆/椭圆/扇形，objectBounds 需 72 段采样 */
-      const rebuildShapes = await page.evaluate(() => {
-        const prev = state.objects;
-        const tpl = baseObject('rect', 'rect.area', {});
-        const list = [];
-        for (let i = 0; i < 2000; i++) {
-          const x = (i * 37) % 1900 + 20, y = (i * 53) % 1400 + 20;
-          const r = i % 3;
-          const o = Object.assign({}, tpl, {
-            id: 'OBJ_SHAPE_' + i, name: 'S' + i, z: i, x, y,
-            shape: r === 0 ? { type: 'circle', r: 6 }
-              : r === 1 ? { type: 'ellipse', rx: 8, ry: 4, angle: 0.6 }
-                : { type: 'sector', r: 7, a0: 20, a1: 160 }
-          });
-          list.push(o);
-        }
-        state.objects = list;
-        invalidateStatic();
-        const out = [];
-        for (let i = 0; i < 20; i++) {
+      /* 1b) 形状密集场景重建（P2-3）：全部为圆/椭圆/扇形，objectBounds 需 72 段采样。
+         E9：该负载固定 2000 个形状，只在 2000 档判定；旧实现按 size 记录 5000/10000，
+         阈值与真实负载不匹配（永远 2000 却套更大规模的阈值）。 */
+      if (size === 2000) {
+        const rebuildShapes = await page.evaluate(() => {
+          const prev = state.objects;
+          const tpl = baseObject('rect', 'rect.area', {});
+          const list = [];
+          for (let i = 0; i < 2000; i++) {
+            const x = (i * 37) % 1900 + 20, y = (i * 53) % 1400 + 20;
+            const r = i % 3;
+            const o = Object.assign({}, tpl, {
+              id: 'OBJ_SHAPE_' + i, name: 'S' + i, z: i, x, y,
+              shape: r === 0 ? { type: 'circle', r: 6 }
+                : r === 1 ? { type: 'ellipse', rx: 8, ry: 4, angle: 0.6 }
+                  : { type: 'sector', r: 7, a0: 20, a1: 160 }
+            });
+            list.push(o);
+          }
+          state.objects = list;
           invalidateStatic();
-          const t0 = performance.now();
-          drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
-          out.push(performance.now() - t0);
-        }
-        state.objects = prev;
-        invalidateStatic();
-        return out;
-      });
-      record('staticRebuildShapes', size === 2000 ? 2000 : size, rebuildShapes);
+          const out = [];
+          for (let i = 0; i < 20; i++) {
+            invalidateStatic();
+            const t0 = performance.now();
+            drawScene(ctx, state.viewport, wrap.clientWidth, wrap.clientHeight, { interactive: true, markerScale: 1 });
+            out.push(performance.now() - t0);
+          }
+          state.objects = prev;
+          invalidateStatic();
+          return out;
+        });
+        record('staticRebuildShapes', 2000, rebuildShapes);
+      }
 
       /* 2) 平移帧：每帧改 pan 触发静态层重建（现状），60 帧 */
       const pan = await page.evaluate(() => {

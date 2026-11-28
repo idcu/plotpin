@@ -42,7 +42,7 @@ jobs:
         run: node scripts/bench.mjs
       - name: 单文件发行包校验（源重建 ↔ dist-manifest 登记哈希）
         run: node scripts/build.mjs --check
-      - name: 门禁牙齿自测（正面基线 10 条 + 20 种人为破坏）
+      - name: 门禁牙齿自测（正面基线 10 条 + 21 种人为破坏）
         run: node scripts/check-gates.mjs
 
   e2e:
