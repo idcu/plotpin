@@ -2,7 +2,7 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=331
+version=332
 b275f8ed7f89ff9e1167384a67cf08e25c5bba819541459c91d99c220bb58788  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
 c5d13d1ac9103322720de78ef9a4bb87aa1f2fcbb7ebc20828127c0235f5ac56  index.html
@@ -24,10 +24,10 @@ fb7387cc7ecc95bf3761980a073d10d7ff2bd96fcd667fa18405dd186011352e  js/core/geomet
 4c479ff9269a46f66b1c6e587aeb5e3f2605532987b623ecf70e9fe5f3b79499  js/core/ghost.js
 36018ca3ed037482c15cfe50a4153a4cb837785014bb5579d11677a030d325dd  js/core/interaction.js
 732197349b0cf53ac9e973919cd75d11bc5a231688e345137f865a62740d7689  js/core/model.js
-6ee2103c15f0aa764f534d65f08d7d225299935e955ad8628c44b302deb5df86  js/core/persistence.js
+34a2b333882861391a5a8e146ac2bc945e2a53e822722e8e8023a5665f9126a3  js/core/persistence.js
 f37caadf2d2945cf15542be1d2d2a749f7fe87239f5851b72cc97dbd175242dd  js/core/render.js
 dd77b4e851ac5a38754a5527c9217b8ba703cd7fef37eba32cf75da71de3020f  js/core/snapshot.js
-3ab5fca70fd5bf19da9f1397344eb3755f99923b220e6e6627b4524e9e8fa23c  js/core/tab-lease.js
+17ca22c49b3ca20b3d3b22990d2767aaeef2a032ac28df920636ff4572898609  js/core/tab-lease.js
 e1ef575c0dc5ad1889d238464ad468ef093ec3f987c01d80749b8a2cc5f0c2f8  js/core/viewport.js
 375ee417d4b6ff072d9eace9e72f601d42e410749b1382bd6ab1af09fa9f3c9f  js/features/catalog.js
 01bcf831dedacc9da04539fb3c03626d4b6d04fefbf264630e0fa89dbd04d918  js/features/collab.js
@@ -57,4 +57,4 @@ a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/git
 1be284fb8b54201feef446fb0ad41e59f794f9ca8499eb122c290d49886451c4  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-0b4b1093d4bf8b93e575cc95a48680a3ccacd88298986cfb45b2c0661ad2cb16  sw.js
+a82a4223f347fe08c7ea3ad4e97fa42839bb3fd8d35264a272627d28eced798a  sw.js

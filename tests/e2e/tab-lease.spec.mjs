@@ -32,6 +32,24 @@ test('D-09 同工程双标签：6s 内横幅、暂缓保存、确认租约与释
   expect(await page.evaluate(() => leaseStatus().conflict)).toBe(false);
 });
 
+test('D-09 冲突期间编辑在 claim 后补落盘，关闭前不丢', async ({ page, context }) => {
+  await boot(page, 'D09-SAVE');
+  const p2 = await context.newPage();
+  await boot(p2, 'D09-SAVE');
+  await expect(p2.locator('#leaseBanner')).toBeVisible({ timeout: 6000 });
+  /* 冲突期间编辑只进内存：自动保存被暂缓 */
+  await p2.evaluate(() => { state.meta.name = 'D09-CLAIM-SAVED'; markDirty('object'); });
+  await expect(p2.locator('#saveState')).toContainText('已暂停自动保存');
+  /* 点「仍以本页为准」后必须补落盘 */
+  p2.once('dialog', d => d.accept());
+  await p2.locator('#leaseClaimBtn').click();
+  await expect(p2.locator('#leaseBanner')).toHaveCount(0);
+  await expect(p2.locator('#saveState')).toContainText(/已保存|已自动保存/, { timeout: 5000 });
+  const rec = await idb(p2, { store: DB.projects, op: 'get', key: 'current' });
+  expect(rec).not.toBeNull();
+  expect(rec.meta.name).toBe('D09-CLAIM-SAVED');
+});
+
 test('D-09 不同工程双标签：互不触发冲突', async ({ page, context }) => {
   await boot(page, 'D09-A');
   const p2 = await context.newPage();

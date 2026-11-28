@@ -36,11 +36,24 @@ function leaseEmit(active, lastBeat) { return __lease.emit(active, lastBeat); }
 function leaseApply(now) { return __lease.apply(now); }
 function leaseIngest(msg, now) { return __lease.ingest(msg, now); }
 function leaseConflictAt(now) { return __lease.conflictAt(now); }
-function leaseClaim(now) { return __lease.claim(now); }
+function leaseClaim(now) {
+  const r = __lease.claim(now);
+  /* P0-2：claim 后补一次被租约阻断的保存；无待保存编辑时为空操作。 */
+  resumeLeasePendingSave();
+  return r;
+}
 function leaseSyncProject(now) { return __lease.syncProject(now); }
 function leaseSaveBlocked() { return __lease.saveBlocked(); }
 function leaseStatus() { return __lease.status(); }
-function onLeaseConflict(fn) { __lease.setOnChange(typeof fn === 'function' ? fn : null); }
+function onLeaseConflict(fn) {
+  const handler = typeof fn === 'function' ? fn : null;
+  if (!handler) { __lease.setOnChange(null); return; }
+  __lease.setOnChange((info) => {
+    /* 冲突自然解除（对端离开/切工程）时也补一次保存，不只依赖 claim。 */
+    if (!info.active) resumeLeasePendingSave();
+    handler(info);
+  });
+}
 function leaseTick() { return __lease.tick(); }
 
 function acquireEditorLease() {

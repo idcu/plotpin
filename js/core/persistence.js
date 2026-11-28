@@ -924,6 +924,8 @@ function reportSaveFailure(e,phase){
 /* R-05：保存串行化。同一时刻只允许一条写链路（saveChain），并用递增序号丢弃过期结果，
    防止两次保存并发时"旧快照后落盘"覆盖新数据。flushPendingSave 依据 saveInFlight 判断是否有在途写。 */
 let saveSeq=0,lastSavedSeq=0,saveInFlight=0,saveChain=Promise.resolve();
+/* P0-2：租约冲突期间 scheduleSave 被阻断，但编辑仍在内存里；claim 或冲突解除后必须补一次保存。 */
+let leasePendingSave=false;
 async function runSave(){
   const seq=++saveSeq;
   saveInFlight++;
@@ -954,6 +956,7 @@ async function saveOnce(seq){
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(snapshot.settings)));
     if(seq<lastSavedSeq) return false;
     lastSavedSeq=seq;
+    leasePendingSave=false;
     saveRetry=0; saveHealth={state:'ok',errorCode:'',lastOkAt:nowISO(),retry:0}; hideSaveFailureBanner();
     const pid=snapshot.meta&&snapshot.meta.projectId;
     saveStatus((pid?'📁 '+L('已保存')+' ':L('已自动保存')+' ')+new Date().toLocaleTimeString());
@@ -970,11 +973,18 @@ async function saveOnce(seq){
 function scheduleSave(){
   const block=saveBlockState();
   if(block==='rescue'){ saveStatus('救援模式：原记录未被覆盖'); return; }
-  if(block==='lease'){ saveStatus(L('另一标签页正在编辑，已暂停自动保存')); return; }
+  if(block==='lease'){ leasePendingSave=true; saveStatus(L('另一标签页正在编辑，已暂停自动保存')); return; }
   saveStatus(L('待保存…'));
   clearTimeout(saveTimer);
   clearTimeout(saveRetryTimer); saveRetryTimer=null;
   saveTimer=setTimeout(runSave,450);
+}
+/** P0-2：租约冲突解除（claim 或对端离开）后，把被阻断的保存补上；无待保存编辑时为空操作。 */
+function resumeLeasePendingSave(){
+  if(!leasePendingSave) return false;
+  leasePendingSave=false;
+  scheduleSave();
+  return true;
 }
 /* B5：对象列表审计（顶层与各楼层复用）。label 为空串时输出与旧版逐字一致。
    st.n 为全局检查总量，超上限即停止并标记，避免超大工程在载入路径上卡死。 */
