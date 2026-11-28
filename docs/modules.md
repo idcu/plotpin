@@ -3,13 +3,13 @@
 > **读者**：要定位、修改或替换某个文件的开发者。
 > **回答**：每个文件负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑。
 > **不回答**：设计取舍见 [ARCHITECTURE](ARCHITECTURE.md)，数据与持久化见 [DATA-MODEL](DATA-MODEL.md)，功能边界见 [features](features.md)。
-> **口径**：49 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 1 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 72 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
+> **口径**：50 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 2 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 72 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
 
 ## 分层与加载顺序
 
 | 顺序 | 层 | 目录 | 文件数 | 说明 |
 | --- | --- | --- | --- | --- |
-| 0 | 本地包 | `ngm.local/` | 1 个直接加载 | 尚未上游的本地 ngm 包，UMD + 适配层；不进 `ngm.lock` |
+| 0 | 本地包 | `ngm.local/` | 2 个直接加载 | 尚未上游的本地 ngm 包，UMD + 适配层；不进 `ngm.lock` |
 | 1 | vendor | `ngm.vendor/` | 10 个直接加载 | `@idcu/*` 源码，挂到 `__idcu*` 全局；只许经 `ensureVendor` 取用 |
 | 2 | 公共 | `js/common/` | 9 | 零 DOM 的算法、协议与适配器 |
 | 3 | 核心 | `js/core/` | 13 + `app.js` | 常量、状态、几何、渲染、交互、持久化 |
@@ -32,12 +32,13 @@
 | `qr.js` | 二维码编码与 SVG 渲染（协作邀请、导出标签复用） | `Qr`（含 `MAX_BYTES`、`byteLength`） | 纯算法 → 协作、导出 | 容量按固定 Version 3-M，`MAX_BYTES=42`；超出时必须由调用方改用可粘贴文本，禁止渲染不可扫描的假二维码。 |
 | `symbols.js` | 内置 36 个线性符号、分类/别名搜索、自定义 SVG 清洗、DXF 折线近似 | `SYMBOL_LIBRARY / SYMBOL_CATEGORIES / SYMBOL_LIMITS / parseSvgSymbol / buildSymbolIndex / searchSymbols / symbolPathsFor / symbolPolylinesInWorld / customSymbolsFromTypes / sanitizeSymbolBundle` | 纯函数 + SVG 解析 → 渲染、导出、类型面板 | 自有 SVG 上限 64KB / 200 元素 / 深度 16 / 200 path / 单 path 5000 字符；禁止 `script`、事件属性、外部引用。DXF 用 `symbolPolylinesInWorld` 做折线降级，必须在导出报告中说明。 |
 
-## ngm.local（1 个）
+## ngm.local（2 个）
 
 本地 ngm 包先：目录形状与 `ngm.vendor` 一致，但不写入 `ngm.json` / `ngm.lock` / `ngm-vendor-digest.json`，便于后续原样提升到 `gitee:idcu/ngm-repo`。
 
 | 包 | 入口 | 适配层 | 测试 | 说明 |
 | --- | --- | --- | --- | --- |
+| `@local/core-lease` | `ngm.local/core/lease/src/core.js`（UMD，挂 `__localLease`）；ESM/CJS 入口同目录 | `js/core/tab-lease.js` | `ngm.local/core/lease/test/lease.test.mjs` | 同工程多标签编辑租约；BroadcastChannel/storage 降级，心跳 5s、租约 15s，pagehide 释放。 |
 | `@local/format-pdf-vector` | `ngm.local/format/pdf-vector/src/core.js`（UMD，挂 `__localPdfVector`）；ESM/CJS 入口同目录 | `js/common/pdf-vector.js` | `ngm.local/format/pdf-vector/test/pdf-vector.test.mjs` | 矢量 PDF 写入器；`flate` 需要 `CompressionStream`，`textBitmap` 需要 Canvas。提升到上游后删除本地目录。 |
 
 登记与校验：`scripts/check-ngm.mjs` 核对 manifest、`browser` 入口被 `index.html` 加载、adapter 顺序、`contracts/adapters.json` 的 `localAdapters`；`scripts/test-local.mjs` 运行本地包测试；`npm run test` 与 `npm run ci` 都已接入。
@@ -58,8 +59,8 @@
 | `ghost.js` | 会话级幽灵参考层（G-1/G-2）与图纸修订参照版（V-5）：图片/PDF 第 1 页光栅化、落位、静态层绘制；参照工程 JSON 载入、标定判定、按楼层垫底与 A/B 闪烁 | `ghostLayer / ghostSig / ghostPaint / ghostClear / ghostLoadFile / ghostRasterImage / ghostRasterPdf / ghostSet / refSig / revPaint / revCalibCheck / revLoad / revFile / revBlinkSet / revClear` | `pdf-read`、`viewport`、`render`、`snapshot` → `render` 静态层 + 差异叠加 | 幽灵图与参照版都**只在运行时变量里**（`ghostLayer` / `rRef` / `rOp` / `rBl`），**禁止写入 state/JSON/协作/导出**；签名必须进 `sceneStaticKey`（`ghostSig` + `refSig`），否则改透明度/位置/闪烁相位会留残影。参照版只比图片底图三要素（mpp/宽高/是否仿射），mpp 相对差 ≤0.1% 视为一致，其余给出“标定不一致/画布不一致”提示，不自动对位；对象按世界坐标垫底，导出路径不调用。 |
 | `render.js` | Canvas 渲染、静态层缓存、覆盖率/标注/手柄/差异叠加、静态层局部补绘 | `drawScene / requestRender / invalidateStatic / sceneStaticKey / ensureStaticLayer / visibleWorldRect / markSurfaceSize / surfaceCssSize / patchUnionRect / applyPatchRect / drawBackground / drawSite / drawCoverage / drawSiteAnnotations / drawObject / drawDimension / drawDiffOverlay / drawCalibration` | 状态、视口、几何、符号、i18n → 启动、交互、导出 | `sceneStaticKey` 必须包含 `site`、底图 transform、设置、选中态、覆盖率摘要、`ghostSig` 与 `refSig`；漏字段会留下过期像素。V-5 参照版垫底在 `drawStaticContent` 里、网格与对象之前调用 `revPaint`。导出走 `interactive=false` 的全量路径，不读缓存；`markerScale!=1` 也强制全量。静态层重建后必须 `markSurfaceSize()`。局部补绘（M6）用**旧 `staticBounds` ∪ 新 `objectSnapBounds`** 求并集，`clip`/`clearRect` 恒等于该矩形，重绘 `view` 再按 96 px `pad` 外扩；旧包围盒缺失或对象已删除时返回 false，调用方整层重建。边界：标签溢出超出 pad 仍可能被擦；拖拽期走整层重建。 |
 | `snapshot.js` | 版本快照的序列化/存取/淘汰/差异分类/叠加数据 | `SNAPSHOT_PREFIX / snapshotKey / snapshotProjectData / snapshotAssetRefs / diffSnapshots / diffOverlay / setDiffOverlay / diffCategoryOf / objectDiffFields` | `persistence`、`model` → 快照面板、导出 | 快照存 `assetId` 引用，不能复制 base64。上限 20 条 / 16MB，超出淘汰最旧且至少留 1 条。差异按对象 id 匹配，分类优先级为新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改；场景级追加场地/底图/楼层名/图层名/类型表结构；旧快照缺 `objectTypes` 时跳过类型表对比；内部不可变字段必须忽略。 |
-| `tab-lease.js` | 同工程多标签的编辑租约（BroadcastChannel + localStorage 心跳） | `acquireEditorLease / releaseEditorLease / leaseSaveBlocked / leaseStatus / onLeaseConflict / LEASE_TTL_MS / LEASE_HEARTBEAT_MS` | `model`、持久化 → 启动、保存 | 租约按 `state.meta.projectId`（工程库绑定 id）归组；未绑定工程为空串，多个未绑定标签会被视为同一工程——是否符合预期**待确认**。租约冲突时只暂缓保存，不丢内存编辑。 |
-| `app.js` | 启动编排：设置、恢复工程、首启引导、能力探测、SW、租约、卸载前落盘 | 无对外函数（`DOMContentLoaded` 执行） | 全部 | 必须最后加载。启动顺序改变会影响 `afterStateLoaded`、首启引导与 SW 注册；新增启动步骤要同步 selftest/e2e 的“加载 49 个脚本”断言。 |
+| `tab-lease.js` | 本地包适配层：把 `@local/core-lease` 接回旧全局常量、函数与 `leaseActive` | `acquireEditorLease / releaseEditorLease / leaseSaveBlocked / leaseStatus / onLeaseConflict / LEASE_TTL_MS / LEASE_HEARTBEAT_MS` | `ngm.local/core/lease`、`model`、持久化 → 启动、保存 | 实现在 `ngm.local`；租约按 `state.meta.projectId` 归组，未绑定工程为空串（多标签互视为同工程，待确认）。租约冲突只暂缓保存，不丢内存编辑。 |
+| `app.js` | 启动编排：设置、恢复工程、首启引导、能力探测、SW、租约、卸载前落盘 | 无对外函数（`DOMContentLoaded` 执行） | 全部 | 必须最后加载。启动顺序改变会影响 `afterStateLoaded`、首启引导与 SW 注册；新增启动步骤要同步 selftest/e2e 的“加载 50 个脚本”断言。 |
 
 ## js/features（15 个）
 

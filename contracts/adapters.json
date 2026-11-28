@@ -51,6 +51,18 @@
         "global.PdfVec=",
         "__localPdfVector"
       ]
+    },
+    {
+      "file": "js/core/tab-lease.js",
+      "package": "@local/core-lease",
+      "keeps": [
+        "acquireEditorLease",
+        "releaseEditorLease",
+        "leaseIngest",
+        "leaseClaim",
+        "leaseSaveBlocked",
+        "leaseActive"
+      ]
     }
   ]
 }

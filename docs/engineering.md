@@ -43,7 +43,7 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 | 形态 | 入口 | 说明 |
 |---|---|---|
 | 源码直开 | `index.html` | 双击即可用；脚本逐文件加载，便于调试 |
-| 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成：内联全部 CSS/JS，49 段脚本合并为 1 段、CSP 只签 1 条 sha256，可离线分发 |
+| 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成：内联全部 CSS/JS，50 段脚本合并为 1 段、CSP 只签 1 条 sha256，可离线分发 |
 
 `scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；字符串/模板字面量/正则逐字节保留；标点相邻空格、自终止词法单位后的换行可省（连续正负号之间例外）；`}` 前的语句分号可省；`return/throw/typeof` 等关键字与紧随的 `(`/`[`/`{`/字面量引号之间无空格；`0.5→.5`；`}` 后换行接标识符时可省（块结束或同表达式的 `in/instanceof`；接 `(`/`[` 仍保留换行）。**源文件不压缩**。
 

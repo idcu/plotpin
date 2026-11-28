@@ -19,7 +19,7 @@ PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或
 - **数据留在本机**：工程写入 IndexedDB（不可用时降级 localStorage），底图与照片按内容哈希存入资产库。默认不上传任何数据；实时协作只在手动建连时通过浏览器通道传输工程快照。
 - **运行时零外部依赖**：不引用 npm、CDN 或后端。第三方能力以 `@idcu/*` 源码放在 `ngm.vendor/`，版本由 `ngm.lock` 与 `.ngm-version` 锁定（工具链钉住 ngm 正式版 `0.103.0`，并启用 `supplyChain.trustPolicy: no-downgrade`）；门禁会校验入口没有远程资源。`npm run ngm:explain` 可在不执行脚本的前提下预览 `test` 的 pre/main/post 计划（需 PATH 上有 ngm）。
 
-`index.html` 是唯一入口：38 个项目脚本（`js/common` → `js/core` → `js/features`）加 10 个 vendor 脚本与 1 个本地 ngm 模块，共 49 个 classic `<script>`，按顺序加载并共享全局作用域，不使用 ES Module；`js/core/app.js` 最后加载并完成启动。
+`index.html` 是唯一入口：38 个项目脚本（`js/common` → `js/core` → `js/features`）加 10 个 vendor 脚本与 2 个本地 ngm 模块，共 50 个 classic `<script>`，按顺序加载并共享全局作用域，不使用 ES Module；`js/core/app.js` 最后加载并完成启动。
 
 ## 快速开始
 
@@ -88,7 +88,7 @@ npm run discipline    # 方法论自检看板
 ## 目录结构
 
 ```text
-index.html                 唯一入口（页面 + 49 个脚本加载顺序）
+index.html                 唯一入口（页面 + 50 个脚本加载顺序）
 sw.js                      离线缓存（仅 http/https 注册；file:// 不注册）
 manifest.webmanifest       PWA 清单
 icon.svg                   应用图标
@@ -96,7 +96,7 @@ js/common/                 公共层：零 DOM 的纯逻辑与 vendor 适配器�
 js/core/                   核心层：状态、几何、渲染、交互、持久化、启动（14 个）
 js/features/               特性层：UI、导入导出、规则、协作、插件等（15 个）
 ngm.vendor/                @idcu/* 源码形式的第三方能力（10 个直接加载，另有 1 个间接依赖）
-ngm.local/                 本地 ngm 包（先本地后上游；1 个直接加载）
+ngm.local/                 本地 ngm 包（先本地后上游；2 个直接加载）
 ngm.json / ngm.lock / .ngm-version
                            第三方依赖声明、字节锁与工具链版本
 scripts/                   零依赖工程脚本（22 个 .mjs + lib/ 4 个 + 3 个数据文件）

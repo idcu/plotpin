@@ -20,8 +20,8 @@
 |---|---|---|---|
 | selftest 断言 | 4,576 通过 / 0 失败 | `node scripts/check.mjs --selftest` | 断言数不得减少；2026-11-26 在 4,567 上补场地顶点 9 条（抓手排序生效 / 锁定后几何入口拒绝且锁定开关可用） |
 | selftest 分区 | 176 个 | `node scripts/selftest.mjs --list` | 输出 177 行（含 1 行标题） |
-| 加载脚本 | 49 个（38 项目 + 10 vendor + 1 本地 ngm 包） | `node scripts/check.mjs --selftest` 输出「加载 49 个脚本」 | `js/` 下 38 个 `.js`，`ngm.local/` 下 1 个包入口 |
-| 本地包测试 | 1 个包 / 11 项断言 | `node scripts/test-local.mjs` | 首次接入 `@local/format-pdf-vector`；不计入 selftest 断言数 |
+| 加载脚本 | 50 个（38 项目 + 10 vendor + 2 本地 ngm 包） | `node scripts/check.mjs --selftest` 输出「加载 50 个脚本」 | `js/` 下 38 个 `.js`，`ngm.local/` 下 2 个包入口 |
+| 本地包测试 | 2 个包 / 34 项断言 | `node scripts/test-local.mjs` | `@local/format-pdf-vector` 11 项 + `@local/core-lease` 23 项；不计入 selftest 断言数 |
 | e2e spec 文件 | 52 个 | `Get-ChildItem tests/e2e -Filter *.spec.mjs` | `tests/e2e/` 顶层共 54 个 `.mjs`（52 spec + `helpers.mjs` + `toolbar.mjs`） |
 | e2e 用例 | 214 个（源码 211 通过 + 0 失败 + 3 条件跳过；dist 208 通过 + 6 跳过） | `node scripts/e2e.mjs`；`$env:E2E_ENTRY='dist'; node scripts/e2e.mjs` | 2026-11-28 双入口全量实跑：源码 4.0m、dist 3.8m，均 exit 0；跳过为协作 soak（需 `COLLAB_SOAK=1`）与 V-6/V-6b（缺 `pdftotext`）；dist 额外跳过 3 条依赖源码结构的用例。默认 Chromium；Firefox 5 条核心为非门禁证据（[testing](testing.md)§3.4），不构成支持承诺 |
 | 契约判据 | 11 项核对 / 0 违约 | `node scripts/check-contracts.mjs` | 规则删空即红 |

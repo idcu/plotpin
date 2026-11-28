@@ -7,10 +7,10 @@
 
 ## 1. 运行形态与启动链
 
-PlotPin 是**无构建单页应用**：`index.html` 用 49 个 classic `<script>` 顺序加载 38 个项目脚本、10 个 vendor 模块和 1 个本地 ngm 包，共享同一个全局词法作用域；不使用 ES Module、打包器或运行时依赖。**加载顺序就是依赖顺序**，`scripts/check.mjs` 会校验目录归属和加载顺序。
+PlotPin 是**无构建单页应用**：`index.html` 用 50 个 classic `<script>` 顺序加载 38 个项目脚本、10 个 vendor 模块和 2 个本地 ngm 包，共享同一个全局词法作用域；不使用 ES Module、打包器或运行时依赖。**加载顺序就是依赖顺序**，`scripts/check.mjs` 会校验目录归属和加载顺序。
 
 ```
-vendor（10）与本地包（1：ngm.local/format/pdf-vector）按依赖插入
+vendor（10）与本地包（2：ngm.local/format/pdf-vector、ngm.local/core/lease）按依赖插入
   → js/common（9）：dxf / pdf / pdf-read / pdf-vector / i18n / content-assets / merge / qr / symbols
   → js/core（14）：config → model → geometry* → persistence → tab-lease → snapshot
                    → viewport → ghost → render → interaction
@@ -35,8 +35,7 @@ vendor（10）与本地包（1：ngm.local/format/pdf-vector）按依赖插入
 
 | 层 | 目录 | 职责 | 允许依赖 |
 |---|---|---|---|
-| 本地包 | `ngm.local/` | 尚未上游的本地 ngm 包：UMD `core.js` + ESM/CJS 包装 + 适配层 | 自身 + vendor |
-| 公共层 | `js/common/` | 零 DOM、可纯函数测试的算法/协议/vendor 适配：内容寻址资产、DXF、i18n、离线合并、PDF 读写、二维码、符号库 | 同层 + vendor + 本地包 |
+| 本地包 | `ngm.local/` | 尚未上游的本地 ngm 包：UMD `core.js` + ESM/CJS 包装 + 适配层 | 自身 + vendor || 公共层 | `js/common/` | 零 DOM、可纯函数测试的算法/协议/vendor 适配：内容寻址资产、DXF、i18n、离线合并、PDF 读写、二维码、符号库 | 同层 + vendor + 本地包 |
 | 核心层 | `js/core/` | 常量与类型、运行时状态、几何、坐标变换、渲染、交互、持久化、快照、租约、启动 | common + 同层 |
 | 特性层 | `js/features/` | 面向用户的功能与面板：导入导出、工程库、报价、规则、插件、协作、快照 UI、属性、外壳、停车 | common + core（少量同层回调） |
 | 启动 | `js/core/app.js` | 组装启动顺序 | 全部 |
