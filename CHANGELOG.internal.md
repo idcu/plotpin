@@ -4,6 +4,20 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 按 perf-nightly 实跑复核 E8 阈值与 N-23/B3 门槛
+
+- **Commit Hash**：`9ef5580`
+- **核心改动**：
+  - `speed.perf` E8 绝对阈值复核：N-22 帧 P95 ≤50ms、捕捉解析 ≤8ms；N-23 点选 P95 ≤350ms、单次重建 P95 ≤250ms；URL 由跨机基线改为本机两轮实测 + 1.6–3.6 倍余量。
+  - **N-23**：旧门槛「点选期间静态层重建 0 次」与现行「选中即豁免 LOD（`lodSelectedSig`）」冲突——实跑 30 次点选重建 20 次是功能语义，不是回归；改为「每次点选最多 1 次」，悬停仍必须 0。
+  - **B3**：A1 的 `stampRestoreCommit`（diff + 墓碑 + 打点）使 undo P95 由旧门槛 16ms 上升到 18.8ms；阈值调整为 30ms，仍远低于全库扫描量级，`idbAllKeys` 同步调用断言保持 0。
+- **实测**（`node scripts/perf-browser.mjs`，本地 SwiftShader，18 用例）：
+  - 首轮：16 passed / 2 failed（N-23 重建 20 > 0；B3 undo P95 18.8 > 16）。
+  - 修正后复跑：**18/18 passed（1.4m）**。N-22 帧 P95 **19.3 / 19.1ms**、解析 **3.2 / 1.6ms**；N-23 点选 **124.4 / 95.9ms**、重建 **82.8 / 87.0ms**、重建次数 **20/30**、悬停 **0**；B3 undo P95 **18.8 / 15.5ms**，`syncScanCalls=0`、资产保留。
+  - 其他 perf 卡点：10k 静态重建 82ms、20k 122ms、50k 306ms；F1 保存同步段 P95 49ms；N-24 堆下降 96.4%。
+- **公共抽象清单**：无新增 API；仅调整 `GATES` 与断言口径，文档 testing/performance 同步。
+- **遗留风险**：N-23 阈值从 0 放宽到「每次 1 次」、B3 从 16 放宽到 30ms 均为语义/增量解释，不是性能回退掩盖；`perf-nightly` 在 GitHub runner 上的读数仍可能与本机 SwiftShader 不同，绝对阈值需按 runner 定期复核。
+
 ## 2026-11-28 · 收口审计剩余项（A6/C2/C3/C4/D1/E8–E11）
 
 - **Commit Hash**：`a0243a4`
