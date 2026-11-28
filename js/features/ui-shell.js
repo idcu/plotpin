@@ -328,14 +328,14 @@ function showLoadAuditBanner(result){
   const pending=!!(result&&result.source==='collabPending');
   const srcLabel=pending?'协作待发':(result&&result.source==='rescue'?'救援副本':(result&&result.source==='localStorage'?'本地备份':''));
   const fallback=pending?L('已恢复离线协作待发的最新改动；重连后会补发')
-    :(result.fallback?(srcLabel?'已从'+srcLabel+'恢复':'已从本地备份恢复'):'');
-  const newer=(!pending&&result.newerThanIdb?'已采用较新草稿，原自动保存仍在本地':'');
+    :(result.fallback?(srcLabel?L('已从{src}恢复',{src:srcLabel}):L('已从本地备份恢复')):'');
+  const newer=(!pending&&result.newerThanIdb?L('已采用较新草稿，原自动保存仍在本地'):'');
   const err=result.audit.level==='error';
   const msgs=(err?result.audit.errors:result.audit.warnings).slice(0,3);
   if(!err&&!fallback&&!newer&&!msgs.length) return;
   rescueText=result.rescue?result.rescue.text:null;
   setRescueHold(err);
-  const text=[err?'工程加载异常':'',fallback,newer,msgs.join('；')].filter(Boolean).join('：');
+  const text=[err?L('工程加载异常'):'',fallback,newer,msgs.join('；')].filter(Boolean).join('：');
   const bar=document.createElement('div');
   bar.id='loadBanner'; bar.className='load-banner '+(err?'error':'warn');
   bar.innerHTML='<span>'+esc(text)+'</span>'+(rescueText
@@ -389,7 +389,7 @@ function showLeaseConflictBanner(info){
   bar.querySelector('span').textContent=L('另一标签页正在编辑（最后心跳 {time}）',{time:t});
 }
 const SAVE_FAIL_TEXT={
-  quota:'保存失败：存储空间不足，请导出 JSON 并清理空间',
+  quota:L('保存失败：存储空间不足，请导出 JSON 并清理空间'),
   idb:'保存失败：IndexedDB 不可用，已降级 localStorage（容量有限）',
   io:'保存失败：自动重试 3 次仍未成功，请导出 JSON'
 };

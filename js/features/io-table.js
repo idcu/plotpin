@@ -224,7 +224,20 @@ function checkRowGeom(where,c,cnd){
   }
   return warns;
 }
-function rowsToObjectsPlan(rows){
+/** C6：XLSX 多工作表选择——只取第一张有数据的表；返回被忽略的非空表数，由调用方提示。 */
+function pickTableSheet(sheets){
+  const list=Array.isArray(sheets)?sheets:[];
+  const nonEmpty=list.filter(s=>s&&Array.isArray(s.rows)&&s.rows.length);
+  if(!nonEmpty.length) return {rows:[],name:'',ignored:0};
+  return {rows:nonEmpty[0].rows,name:String(nonEmpty[0].name||''),ignored:nonEmpty.length-1};
+}
+/**
+ * @param {Array<Array<string>>} rows
+ * @param {{unguard?:boolean}} [opts] C7：XLSX 的 inlineStr 导出未做公式引号防护，
+ *   导入时不得再剥一层前导单引号；CSV/TSV 仍按旧行为还原。
+ */
+function rowsToObjectsPlan(rows,opts){
+  const unguard=!opts||opts.unguard!==false;
   const warnings=[],errors=[];
   if(!rows||!rows.length) return {updates:[],creates:[],replaces:[],warnings:['文件内容为空，未导入任何行'],errors,strict:false};
   const header=rows[0].map(h=>String(h||'').trim().replace(/^\ufeff/,''));
@@ -235,8 +248,13 @@ function rowsToObjectsPlan(rows){
      !TABLE_MATCH_COLUMNS.some(k=>idx[k]!==undefined)){
     return {updates:[],creates:[],replaces:[],warnings:['首行未找到「编号/对象类型」表头，请使用本工具导出的 CSV/TSV/XLSX 模板'],errors,strict};
   }
-  /* 公式防护的导引号在导入侧还原，保证「导出→再导入」名称/备注等文本不变形 */
-  const cell=(r,name)=>idx[name]!==undefined?formulaUnguard(String(r[idx[name]]??'').trim()):'';
+  /* 公式防护的导引号在导入侧还原，保证「导出→再导入」名称/备注等文本不变形；
+     XLSX 的 inlineStr 不做公式防护，因此由调用方传 unguard=false，避免吃掉用户输入的前导单引号。 */
+  const cell=(r,name)=>{
+    if(idx[name]===undefined) return '';
+    const v=String(r[idx[name]]??'').trim();
+    return unguard?formulaUnguard(v):v;
+  };
   syncActiveFloor();
   const floors=(state.floors||[]).map(f=>({id:f.id,name:f.name,active:f.id===state.activeFloorId,objects:Array.isArray(f.objects)?f.objects:null}));
   const current=floors.find(f=>f.active);
@@ -332,17 +350,42 @@ function rowsToObjectsPlan(rows){
         return;
       }
       const obj=floorCodes.get(code);
-      /* IO-P2-8：形状列参数非法时提前告警；applyRowShape 先校验后写入，失败不会留下半套几何 */
-      const shapeLabel=c('形状');
-      if(obj.kind==='rect'&&shapeLabel){
-        const sx=tableNum(c('X')), sy=tableNum(c('Y')), sa=tableNum(c('角度'));
-        const probe=deepClone(obj);
-        if(!applyRowShape(probe,shapeLabel,{x:Number.isFinite(sx)?sx:obj.x,y:Number.isFinite(sy)?sy:obj.y,
-            w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(sa)?sa:obj.angle,params:parseShapeParams(c('形状参数'))}))
-          warnings.push(where+'：形状「'+shapeLabel+'」参数非法（宽度/高度需>0），已保留原几何');
+      /* C8：更新行与新增行同一口径校验目标字段，禁止 X='abc'/宽度='0' 被静默忽略 */
+      const errBefore=errors.length;
+      const badNum=label=>{
+        const v=c(label);
+        if(v!==''&&!Number.isFinite(tableNum(v))) problem(where+'：'+label+'「'+v+'」非法（需为数字）');
+      };
+      badNum('X'); badNum('Y'); badNum('角度');
+      if(obj.kind==='line'||obj.kind==='dimension'){
+        const txt=c('节点坐标');
+        if(txt!==''){
+          const pts=parseNodeCoords(txt);
+          const sub=obj.kind==='dimension'?(DIM_SUB_BY_LABEL[c('标注类型')]||obj.subtype):'';
+          const minPts=(obj.kind==='dimension'&&sub!=='ruler'&&sub!=='distance')?3:2;
+          if(pts.length<minPts) problem(where+'：节点坐标至少需要 '+minPts+' 点，当前「'+txt.slice(0,40)+'」无法解析');
+        }
       }
+      const shapeLabel=c('形状');
+      if(obj.kind==='rect'){
+        if(shapeLabel){
+          /* IO-P2-8：形状列参数非法时提前告警；applyRowShape 先校验后写入，失败不会留下半套几何 */
+          const sx=tableNum(c('X')), sy=tableNum(c('Y')), sa=tableNum(c('角度'));
+          const probe=deepClone(obj);
+          if(!applyRowShape(probe,shapeLabel,{x:Number.isFinite(sx)?sx:obj.x,y:Number.isFinite(sy)?sy:obj.y,
+              w:tableNum(c('宽度')),h:tableNum(c('高度')),angle:Number.isFinite(sa)?sa:obj.angle,params:parseShapeParams(c('形状参数'))}))
+            problem(where+'：形状「'+shapeLabel+'」参数非法（宽度/高度需>0）');
+        }else if(areaShapeType(obj)==='rect'){
+          ['宽度','高度'].forEach(k=>{
+            const v=c(k);
+            if(v!==''&&!(tableNum(v)>0)) problem(where+'：'+k+'「'+v+'」非法（需>0）');
+          });
+        }
+      }
+      if(strict&&errors.length>errBefore) return;   /* 本行有错：整批拒绝，绝不把半合法更新放进计划 */
       check(where,c,previewGeomCandidate(obj,c));
       checkTargets(where,c,[obj]);
+      if(strict&&errors.length>errBefore) return;
       updates.push({obj,cell:c,floorId:ctx.id});
       return;
     }

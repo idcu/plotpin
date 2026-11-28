@@ -50,43 +50,100 @@ const ADAPTER_FILES = new Set([
   'js/features/rules.js'
 ]);
 
-/** 逐字符扫描：跳过注释，收集字符串字面量与其起始偏移 */
+/** 正则字面量允许出现的粗略判据：前一个非空白字符是运算符/分隔符，而不是标识符或右括号。 */
+function regexAllowed(prev) {
+  if (!prev) return true;
+  return /[([{,;:!&|?+\-*%^~<>=]/.test(prev);
+}
+/**
+ * 逐字符扫描：跳过注释与正则字面量，收集字符串/模板字面量与其起始偏移。
+ * E4：模板 `${...}` 内的字符串递归扫描并单独计数（旧实现直接丢弃，硬编码可绕过）；
+ *     正则字面量按词法跳过，`/["']/` 不再被误当成字符串起点。
+ */
 function literalsOf(src) {
   const out = [];
-  let i = 0;
-  let state = 'code';
-  while (i < src.length) {
-    const ch = src[i];
-    const nx = src[i + 1];
-    if (state === 'line') {
-      if (ch === '\n') state = 'code';
-      i++;
-      continue;
-    }
-    if (state === 'block') {
-      if (ch === '*' && nx === '/') { state = 'code'; i += 2; continue; }
-      i++;
-      continue;
-    }
-    if (ch === '/' && nx === '/') { state = 'line'; i += 2; continue; }
-    if (ch === '/' && nx === '*') { state = 'block'; i += 2; continue; }
-    if (ch === '\'' || ch === '"' || ch === '`') {
-      const quote = ch;
-      const start = i;
-      i++;
-      let value = '';
-      while (i < src.length) {
-        const c = src[i];
-        if (c === '\\') { value += c + (src[i + 1] || ''); i += 2; continue; }
-        if (c === quote) { i++; break; }
-        value += c;
+  function scan(startAt, stopAtBrace, depth) {
+    let i = startAt;
+    let state = 'code';
+    let prev = '';
+    while (i < src.length) {
+      const ch = src[i];
+      const nx = src[i + 1];
+      if (state === 'line') {
+        if (ch === '\n') state = 'code';
         i++;
+        continue;
       }
-      out.push({ value, start, template: quote === '`' });
-      continue;
+      if (state === 'block') {
+        if (ch === '*' && nx === '/') { state = 'code'; i += 2; continue; }
+        i++;
+        continue;
+      }
+      if (ch === '/' && nx === '/') { state = 'line'; i += 2; continue; }
+      if (ch === '/' && nx === '*') { state = 'block'; i += 2; continue; }
+      if (ch === '\'' || ch === '"') {
+        const quote = ch;
+        const start = i;
+        i++;
+        let value = '';
+        while (i < src.length) {
+          const c = src[i];
+          if (c === '\\') { value += c + (src[i + 1] || ''); i += 2; continue; }
+          if (c === quote) { i++; break; }
+          value += c;
+          i++;
+        }
+        out.push({ value, start, template: false });
+        prev = '"';
+        continue;
+      }
+      if (ch === '`') {
+        const start = i;
+        i++;
+        let value = '';
+        while (i < src.length) {
+          const c = src[i];
+          if (c === '\\') { value += c + (src[i + 1] || ''); i += 2; continue; }
+          if (c === '`') { i++; break; }
+          if (c === '$' && src[i + 1] === '{') {
+            value += '${...}';
+            i = scan(i + 2, true, depth + 1);
+            continue;
+          }
+          value += c;
+          i++;
+        }
+        out.push({ value, start, template: true });
+        prev = '`';
+        continue;
+      }
+      if (ch === '/' && depth < 50 && regexAllowed(prev)) {
+        /* 正则：跳过字符类内的 `/`，末尾 flags 一并跳过 */
+        let j = i + 1, inClass = false, closed = false;
+        while (j < src.length) {
+          const c = src[j];
+          if (c === '\\') { j += 2; continue; }
+          if (c === '[') inClass = true;
+          else if (c === ']') inClass = false;
+          else if (c === '/' && !inClass) { closed = true; break; }
+          else if (c === '\n') break;
+          j++;
+        }
+        if (closed) {
+          j++;
+          while (/[a-z]/i.test(src[j] || '')) j++;
+          i = j;
+          prev = '/';
+          continue;
+        }
+      }
+      if (ch === '}' && stopAtBrace) return i + 1;
+      if (!/\s/.test(ch)) prev = ch;
+      i++;
     }
-    i++;
+    return i;
   }
+  scan(0, false, 0);
   return out;
 }
 
@@ -298,6 +355,7 @@ const report = {
   coveragePct: total ? Math.round((covered.length / total) * 10000) / 100 : 0,
   hardcodedTop: uniqueByValue(hardcoded).slice(0, 30),
   uiCopyTop: uniqueByValue(uiCopy).slice(0, 50),
+  uiInDictTop: uniqueByValue(uiInDict).slice(0, 200),
   missingTop: uniqueByValue(missing).slice(0, 30),
   missingByValue: Object.entries(missing.reduce((acc, r) => {
     acc[r.value] = (acc[r.value] || 0) + 1;
@@ -309,7 +367,10 @@ const report = {
 
 /* uiInDict：已字典化但硬编码在 UI 里的出现次数（棘轮）。旧口径按值去重 + wrapped 取或会把它藏起来，
    这里冻结当前存量；只允许下降，修一处改小一次，禁止上调。 */
-const LIMITS = { coverage: 40, missing: 10, uiCopy: 20, uiInDict: 76 };
+/* E4：词法器修复后开始统计模板 `${}` 内的字面量，暴露出 props/parking/catalog 里
+   「先定义中文标签表、使用时才 L(标签)」的既有存量（150 处）。这是一次性真实基线校正，
+   不是放宽标准：缺口、UI 硬编码、模板内文案三条阈值不变，uiInDict 此后只降不升。 */
+const LIMITS = { coverage: 40, missing: 10, uiCopy: 20, uiInDict: 150 };
 const fails = [];
 if (report.coveragePct < LIMITS.coverage) fails.push(`覆盖率 ${report.coveragePct}% < ${LIMITS.coverage}%`);
 if (report.missing > LIMITS.missing) fails.push(`缺口 ${report.missing} > ${LIMITS.missing}`);

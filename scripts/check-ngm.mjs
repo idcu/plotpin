@@ -360,7 +360,9 @@ if (project && lock) {
     /* 适配层清单：公共模块升级改了导出名，适配层仍保留旧名字，调用方拿到 undefined，
        而没有任何东西会红。清单声明每个适配层依赖哪个公共模块、保留了哪些名字。
        反向扫全仓，保证新增适配层不会漏登记。 */
-    const ADAPTER_MARK = /适配层|实现已抽到|实现由公共模块|保留原有.{0,20}全局导出名|适配 @idcu\//;
+    /* B4：除「适配层/实现已抽到」外，「委托 @idcu/」也是适配层的真实写法
+       （pdf-read / geometry 只把容器/纯数学委托给 vendor，业务语义留在本仓）。 */
+    const ADAPTER_MARK = /适配层|实现已抽到|实现由公共模块|保留原有.{0,20}全局导出名|适配 @idcu\/|委托 @idcu\//;
     const SKIP_SCAN = new Set(['node_modules', 'ngm.vendor', 'scripts', 'test', 'tests',
       'legacy', 'data', 'dist', 'analysis', '.trae', 'public', 'coverage', '.tmp', 'backup']);
     const adapterFiles = [];

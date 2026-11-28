@@ -247,6 +247,27 @@ function unfilterPngPredictors(raw,w,h,colors){
   }
   return out;
 }
+/** C1：PNG 的 IDAT 必须是 zlib 流（header + deflate + adler32）。
+ *  这里用 stored block 包装：不压缩但字节完全合法，同步、无外部依赖，避免把裸 filter+pixel 写进 IDAT。 */
+function zlibStore(raw){
+  const blocks=Math.max(1,Math.ceil(raw.length/65535));
+  const out=new Uint8Array(2+blocks*5+raw.length+4);
+  out[0]=0x78; out[1]=0x01;                 /* CMF/FLG：deflate, 32K window, 无字典 */
+  let off=2;
+  for(let i=0;i<blocks;i++){
+    const start=i*65535, len=Math.min(65535,raw.length-start);
+    out[off++]=i===blocks-1?1:0;             /* BFINAL + BTYPE=00（stored） */
+    out[off++]=len&0xff; out[off++]=(len>>8)&0xff;
+    const nlen=(~len)&0xffff;
+    out[off++]=nlen&0xff; out[off++]=(nlen>>8)&0xff;
+    out.set(raw.subarray(start,start+len),off); off+=len;
+  }
+  let a=1,b=0;
+  for(let i=0;i<raw.length;i++){ a=(a+raw[i])%65521; b=(b+a)%65521; }
+  const ad=((b<<16)|a)>>>0;
+  out[off++]=ad>>>24; out[off++]=(ad>>>16)&0xff; out[off++]=(ad>>>8)&0xff; out[off++]=ad&0xff;
+  return out;
+}
 function buildPng(w,h,rgb){
   const u8=(s)=>{const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i)&0xff;return a;};
   const chunk=(type,data)=>{
@@ -268,7 +289,7 @@ function buildPng(w,h,rgb){
     withFilter[r*(w*3+1)]=0;
     withFilter.set(rgb.subarray(r*w*3,(r+1)*w*3),r*(w*3+1)+1);
   }
-  let pos=0; const parts=[sig,chunk('IHDR',ihdr),chunk('IDAT',withFilter),chunk('IEND',new Uint8Array(0))];
+  let pos=0; const parts=[sig,chunk('IHDR',ihdr),chunk('IDAT',zlibStore(withFilter)),chunk('IEND',new Uint8Array(0))];
   const total=parts.reduce((s,p)=>s+p.length,0);
   const png=new Uint8Array(total);
   parts.forEach(p=>{ png.set(p,pos); pos+=p.length; });

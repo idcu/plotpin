@@ -4,11 +4,12 @@
  * （build.mjs --check 会校验两者一致，避免「报告一套、门禁另一套」）。
  * 分级预警不阻断构建：余量跌破 8,000 B 警告、跌破 6,000 B 强警告；
  * gzip 超过 272 KiB 警告、超过 288 KiB 判红（发布指标的硬边界）。
- * 2026-11-28 经用户明确授权，raw 820→840 KiB、gzip 280→288 KiB、gzip 预警 260→272 KiB。
+ * 2026-11-28 经用户明确授权，raw 820→840 KiB、gzip 280→288 KiB、gzip 预警 260→272 KiB；
+ * 同日再次授权为剩余 P1 与公共包提取留出空间：raw 840→880 KiB、gzip 288→300 KiB、预警 272→284 KiB。
  */
-export const MAX_BYTES = 840 * 1024;
-export const GZIP_MAX_BYTES = 288 * 1024;
-export const GZIP_WARN_BYTES = 272 * 1024;
+export const MAX_BYTES = 880 * 1024;
+export const GZIP_MAX_BYTES = 300 * 1024;
+export const GZIP_WARN_BYTES = 284 * 1024;
 export const MARGIN_WARN_BYTES = 8000;
 export const MARGIN_CRITICAL_BYTES = 6000;
 

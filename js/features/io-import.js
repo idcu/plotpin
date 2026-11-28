@@ -88,12 +88,17 @@ async function handleImportFile(f){
   }
   if(ext==='xlsx'){
     try{
-      const rows=await ensureVendor('Xlsx').readRows(await f.arrayBuffer(),{skipOversizedSheets:true});
-      if(rows.skippedSheets) toast(L('已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表',{n:rows.skippedSheets}),'warn');
-      if(!rows.length) return toast('XLSX 中没有可导入的工作表','warn');
+      /* C6：多工作表不再无差别拼接（第二张表头会被当成数据行）；只取第一张非空表并明确提示。
+         C7：XLSX inlineStr 未做公式引号防护，导入时不剥前导单引号。 */
+      const sheets=await ensureVendor('Xlsx').readSheets(await f.arrayBuffer(),{skipOversizedSheets:true});
+      if(sheets.skippedSheets) toast(L('已跳过 {n} 个超过 5 万行的附表，仅导入可用工作表',{n:sheets.skippedSheets}),'warn');
+      const picked=pickTableSheet(sheets);
+      if(!picked.rows.length) return toast('XLSX 中没有可导入的工作表','warn');
+      if(picked.ignored>0) toast(L('XLSX 有多张非空工作表，仅导入第一张「{name}」，其余 {n} 张已忽略',{name:picked.name,n:picked.ignored}),'warn');
+      const rows=picked.rows;
       const rowErrs=importLimitErrors({rows:rows.length});
       if(rowErrs.length) return toast(L('表格导入失败：{msg}',{msg:importLimitMessage(rowErrs)}),'error');
-      showTableImportPreview(f.name,rowsToObjectsPlan(rows));
+      showTableImportPreview(f.name,rowsToObjectsPlan(rows,{unguard:false}));
     }catch(e){ toast(L('XLSX 解析失败：{msg}',{msg:e.message}),'error'); }
     return;
   }

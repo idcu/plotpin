@@ -1674,7 +1674,7 @@ function flushBeforeUnload(){
     const block=saveBlockState();
     if(block==='rescue'){
       writeRescueDraft(snapshot);
-      saveStatus('救援模式：仅写救援副本，原记录未被覆盖');
+      saveStatus(L('救援模式：仅写救援副本，原记录未被覆盖'));
       return false;
     }
     if(block==='lease'){

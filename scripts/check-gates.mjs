@@ -339,17 +339,20 @@ const scenarios = [
       const total = (m.covered || 0) + (m.hardcoded || 0) + (m.missing || 0);
       const need = Math.max(220, Math.ceil((m.covered || 0) / 0.39 - total) + 10);
       const p = join(dir, 'js', 'core', 'render.js');
-      let block = '\n/* 门禁牙齿：覆盖率回归探针（不属于 UI 文件，只影响覆盖率） */\n';
-      for (let i = 0; i < need; i++) block += `var __gateCovProbe${i} = '覆盖探针文案${i}';\n`;
+      let block = '\n/* 门禁牙齿：覆盖率回归探针（不属于 UI 文件，只影响覆盖率）；'
+        + ' 文案放在模板 ${} 内，顺带验证 E4：词法器不能丢弃插值里的字符串，否则探针不被计数、本场景不会变红 */\n';
+      for (let i = 0; i < need; i++)
+        block += "var __gateCovProbe" + i + " = `x${'覆盖探针文案" + i + "'}y`;\n";
       appendFileSync(p, block);
       /* --json --check 的退出码修复（H-07）：旧实现只打印不置退出码，
          这条场景同时证明「JSON 模式下 fails 非空 → 退出码 1」。 */
     }
   },
   {
-    name: 'TURN 凭据脱敏被破坏（错误/状态出口回带凭据）',
-    expected: 'node scripts/selftest.mjs --filter=ICE-1 退出码非 0',
-    args: ['scripts/selftest.mjs', '--filter=ICE-1'],
+    name: 'TURN 凭据脱敏被破坏（错误/状态/诊断出口回带凭据）',
+    /* E5：ICE-1 与 ICE-2 都要执行——ICE-2 的诊断文本零泄露断言同样必须被本场景覆盖。 */
+    expected: 'node scripts/selftest.mjs --filter=ICE 退出码非 0',
+    args: ['scripts/selftest.mjs', '--filter=ICE'],
     expect: /零泄露|脱敏/,
     sabotage(dir) {
       /* 安全红线：凭据只允许进 RTCPeerConnection 配置，不得进任何对外文案。

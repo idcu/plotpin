@@ -233,6 +233,29 @@ test('RT-P2-11：复用旧 callId 的下载被拒并禁用插件，给出明确�
   await expect.poll(() => page.locator('#toastWrap').innerText()).toContain('插件已禁用');
 });
 
+test('E1 沙箱导入器读到 ctx.bytes 与文件名；伪造 size 的超大文件仍被真实字节拦截', async ({ page }) => {
+  await openApp(page);
+  const r = await loadPlugin(page, {
+    id: 'demo.bytes.import',
+    apiVersion: '1.0',
+    capabilities: ['import'],
+    code: 'PlotPin.registerImporter({ext:"byteimp",label:"Byte",run:function(ctx){PlotPin.toast("BYTES:"+((ctx.bytes&&ctx.bytes.byteLength)||0)+":"+((ctx.file&&ctx.file.name)||""));}});'
+  });
+  expect(r.ok).toBe(true);
+  await page.evaluate(async () => {
+    const imp = window.PlotPin.findImporter('byteimp');
+    const file = new File([new Uint8Array([1, 2, 3, 4])], 'x.byteimp');
+    await window.importViaPlugin(imp, file);
+  });
+  await expect(page.locator('#toastWrap')).toContainText('BYTES:4:x.byteimp');
+  await page.evaluate(async () => {
+    const imp = window.PlotPin.findImporter('byteimp');
+    const fake = { name: 'lying.byteimp', size: 1, type: '', arrayBuffer: async () => new ArrayBuffer(32 * 1024 * 1024 + 1) };
+    await window.importViaPlugin(imp, fake);
+  });
+  await expect(page.locator('#toastWrap')).toContainText('文件过大');
+});
+
 test('RT-P2-11：超过 32 MB 的下载被拒并禁用插件', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => { window.__dlCount = 0; window.downloadBlob = () => { window.__dlCount++; }; });

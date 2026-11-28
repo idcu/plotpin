@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 3,
+  "name": "@local/core-svg-sanitize",
+  "version": "0.1.0",
+  "runtime": "node",
+  "main": "./src/index.mjs",
+  "cjs": "./src/index.cjs",
+  "browser": "./src/core.js",
+  "global": "__localSvgSanitize",
+  "adapter": "js/common/symbols.js",
+  "test": "./test/svg-sanitize.test.mjs",
+  "dependencies": []
+}

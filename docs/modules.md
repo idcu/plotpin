@@ -3,7 +3,7 @@
 > **读者**：要定位、修改或替换某个文件的开发者。
 > **回答**：每个文件负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑。
 > **不回答**：设计取舍见 [ARCHITECTURE](ARCHITECTURE.md)，数据与持久化见 [DATA-MODEL](DATA-MODEL.md)，功能边界见 [features](features.md)。
-> **口径**：50 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 2 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 77 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
+> **口径**：51 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 3 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 77 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
 
 ## 分层与加载顺序
 
@@ -30,9 +30,9 @@
 | `pdf-vector.js` | 本地包适配层：把 `@local/format-pdf-vector` 接回 `global.PdfVec` | `PdfVec.stream / docPages / fit / mapPt / path / image / flate / textBitmap` | `ngm.local/format/pdf-vector` → `io-export` 的矢量 PDF | 实现在 `ngm.local`，本文件只做全局接线；`check-ngm` 的 `localAdapters.keeps` 守 `global.PdfVec=` 与 `__localPdfVector`。 |
 | `pdf.js` | 将 vendor PDF 图像能力适配为 `global.Pdf` | `Pdf` | vendor `pdf-image` → `io-export` 的位图 PDF | 薄适配层，本身不含逻辑。`io-export` 经 `ensureVendor('Pdf')` 调用；PDF 默认导出是整页位图。 |
 | `qr.js` | 二维码编码与 SVG 渲染（协作邀请、导出标签复用） | `Qr`（含 `MAX_BYTES`、`byteLength`） | 纯算法 → 协作、导出 | 容量按固定 Version 3-M，`MAX_BYTES=42`；超出时必须由调用方改用可粘贴文本，禁止渲染不可扫描的假二维码。 |
-| `symbols.js` | 内置 36 个线性符号、分类/别名搜索、自定义 SVG 清洗、DXF 折线近似 | `SYMBOL_LIBRARY / SYMBOL_CATEGORIES / SYMBOL_LIMITS / parseSvgSymbol / buildSymbolIndex / searchSymbols / symbolPathsFor / symbolPolylinesInWorld / customSymbolsFromTypes / sanitizeSymbolBundle` | 纯函数 + SVG 解析 → 渲染、导出、类型面板 | 自有 SVG 上限 64KB / 200 元素 / 深度 16 / 200 path / 单 path 5000 字符；禁止 `script`、事件属性、外部引用。DXF 用 `symbolPolylinesInWorld` 做折线降级，必须在导出报告中说明。 |
+| `symbols.js` | 内置 36 个线性符号、分类/别名搜索、DXF 折线近似；SVG 清洗与符号包导入委托 `@local/core-svg-sanitize`（适配层） | `SYMBOL_LIBRARY / SYMBOL_CATEGORIES / SYMBOL_LIMITS / parseSvgSymbol / buildSymbolIndex / searchSymbols / symbolPathsFor / symbolPolylinesInWorld / customSymbolsFromTypes / sanitizeSymbolBundle` | 纯函数 + SVG 解析 → 渲染、导出、类型面板 | 自有 SVG 上限 64KB / 200 元素 / 深度 16 / 200 path / 单 path 5000 字符；禁止 `script`、事件属性、外部引用。DXF 用 `symbolPolylinesInWorld` 做折线降级，必须在导出报告中说明。 |
 
-## ngm.local（2 个）
+## ngm.local（3 个）
 
 本地 ngm 包先：目录形状与 `ngm.vendor` 一致，但不写入 `ngm.json` / `ngm.lock` / `ngm-vendor-digest.json`，便于后续原样提升到 `gitee:idcu/ngm-repo`。
 
@@ -40,6 +40,7 @@
 | --- | --- | --- | --- | --- |
 | `@local/core-lease` | `ngm.local/core/lease/src/core.js`（UMD，挂 `__localLease`）；ESM/CJS 入口同目录 | `js/core/tab-lease.js` | `ngm.local/core/lease/test/lease.test.mjs` | 同工程多标签编辑租约；BroadcastChannel/storage 降级，心跳 5s、租约 15s，pagehide 释放。 |
 | `@local/format-pdf-vector` | `ngm.local/format/pdf-vector/src/core.js`（UMD，挂 `__localPdfVector`）；ESM/CJS 入口同目录 | `js/common/pdf-vector.js` | `ngm.local/format/pdf-vector/test/pdf-vector.test.mjs` | 矢量 PDF 写入器；`flate` 需要 `CompressionStream`，`textBitmap` 需要 Canvas。提升到上游后删除本地目录。 |
+| `@local/core-svg-sanitize` | `ngm.local/core/svg-sanitize/src/core.js`（UMD，挂 `__localSvgSanitize`）；ESM/CJS 入口同目录 | `js/common/symbols.js` | `ngm.local/core/svg-sanitize/test/svg-sanitize.test.mjs` | 符号 SVG 安全清洗：路径白名单、viewBox/别名归一、脚本/事件/外链拦截、符号包 id 冲突改名；上限/分类/默认色由适配层注入。 |
 
 登记与校验：`scripts/check-ngm.mjs` 核对 manifest、`browser` 入口被 `index.html` 加载、adapter 顺序、`contracts/adapters.json` 的 `localAdapters`；`scripts/test-local.mjs` 运行本地包测试；`npm run test` 与 `npm run ci` 都已接入。
 
@@ -93,7 +94,7 @@
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
 | `check.mjs` | 零依赖工程质量门禁（13 步）：9.1 状态直赋值、9.2 耦合计数、9.3 钩子配对、9.4 软调用登记 | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
-| `selftest.mjs` | 逻辑层自测（当前 4,590 断言 / 176 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
+| `selftest.mjs` | 逻辑层自测（当前 4,611 断言 / 176 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
 | `check-gates.mjs` | 门禁的牙齿：先跑正面基线（10 条，未破坏副本必须全绿），再构造 **20 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失、CSP 哈希错位、i18n 覆盖率跌破、TURN 凭据脱敏失守）；`--only` 可分批跑 | 仓库副本 → 通过/失败 | CI |

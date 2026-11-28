@@ -7,10 +7,10 @@
 
 ## 1. 运行形态与启动链
 
-PlotPin 是**无构建单页应用**：`index.html` 用 50 个 classic `<script>` 顺序加载 38 个项目脚本、10 个 vendor 模块和 2 个本地 ngm 包，共享同一个全局词法作用域；不使用 ES Module、打包器或运行时依赖。**加载顺序就是依赖顺序**，`scripts/check.mjs` 会校验目录归属和加载顺序。
+PlotPin 是**无构建单页应用**：`index.html` 用 51 个 classic `<script>` 顺序加载 38 个项目脚本、10 个 vendor 模块和 3 个本地 ngm 包，共享同一个全局词法作用域；不使用 ES Module、打包器或运行时依赖。**加载顺序就是依赖顺序**，`scripts/check.mjs` 会校验目录归属和加载顺序。
 
 ```
-vendor（10）与本地包（2：ngm.local/format/pdf-vector、ngm.local/core/lease）按依赖插入
+vendor（10）与本地包（3：ngm.local/format/pdf-vector、ngm.local/core/lease、ngm.local/core/svg-sanitize）按依赖插入
   → js/common（9）：dxf / pdf / pdf-read / pdf-vector / i18n / content-assets / merge / qr / symbols
   → js/core（14）：config → model → geometry* → persistence → tab-lease → snapshot
                    → viewport → ghost → render → interaction

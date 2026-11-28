@@ -53,7 +53,7 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 
 | 判据 | 失败条件 |
 |---|---|
-| 体积上限 | 产物 > 860,160 B（840 KiB，`scripts/lib/budget.mjs`） |
+| 体积上限 | 产物 > 901,120 B（880 KiB，`scripts/lib/budget.mjs`） |
 | 构建确定性 | 同一份源连续两次构建的 SHA256 或字节数不同 |
 | CSP 存在 | 发行包缺少 `Content-Security-Policy` |
 | CSP 脚本策略 | `script-src` 含 `'unsafe-inline'` |
@@ -61,14 +61,14 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 | 登记哈希 | 构建结果的 SHA256 / 字节数 / gzip 字节数与 `scripts/dist-manifest.json` 不一致 |
 | 登记缺失 | `scripts/dist-manifest.json` 不存在或不是合法 JSON |
 | 本地产物 | `dist/` 存在时，其字节或哈希与源重建不一致 |
-| gzip 体积 | gzip > 294,912 B（288 KiB）；> 278,528 B（272 KiB）只预警 |
+| gzip 体积 | gzip > 307,200 B（300 KiB）；> 290,816 B（284 KiB）只预警 |
 | 预算常量 | `dist-manifest.json` 的 `maxBytes / gzipMaxBytes` 与 `scripts/lib/budget.mjs` 不一致 |
 
 改 `js/**`、`css/**`、`index.html` 后必须运行 `node scripts/build.mjs` 刷新登记值，否则门禁必红。`dist/` 与 gzip 体积都会打印；gzip 阈值留了 zlib 版本差异余量。体积余量分级预警（不阻断）：<8,000 B 警告，<6,000 B 强警告。阈值常量只在 `scripts/lib/budget.mjs` 维护。
 
 ### 2.3 体积预算与红线
 
-- 硬上限 **860,160 B（840 KiB）**；gzip 硬上限 **294,912 B（288 KiB）**；gzip 预警 **278,528 B（272 KiB）**；分级预警常量见 `scripts/lib/budget.mjs`。2026-11-28 经用户明确授权，从 820/280 KiB 调高到 840/288 KiB（gzip 预警 260→272 KiB），作为新的硬边界。
+- 硬上限 **901,120 B（880 KiB）**；gzip 硬上限 **307,200 B（300 KiB）**；gzip 预警 **290,816 B（284 KiB）**；分级预警常量见 `scripts/lib/budget.mjs`。2026-11-28 经用户两次明确授权：先从 820/280 KiB 调高到 840/288 KiB（gzip 预警 260→272 KiB），再为剩余 P1 与公共包提取调高到 880/300 KiB（gzip 预警 272→284 KiB），作为新的硬边界。
 - 当前字节/gzip/余量以 `scripts/dist-manifest.json` 与 `node scripts/build.mjs --check` 为准，汇总见 [facts](facts.md)。
 - 改造期红线（逐任务执行，任一触发即停并上报）：单任务 raw ≤3,000 B、单阶段 ≤5,000 B、单任务 gzip ≤1,200 B；余量 <8,000 B 时不得开新功能，必须先用实测（raw 与 gzip 各自降幅）证明有可兑现的回收来源，或先砍口径。
 - **不得自行调高上限**：2026-11-28 的 840/288 KiB 是用户明确授权后的新边界；此后若需再调，必须再次获得明确授权，并同批记录理由与实测余量。不得改预算常数来规避回收，也不得把 `size-report` 的账面值当回收承诺。`size-report` 的重复字符串/重复行是压缩前账面值，只能当线索；dist 可回收应为 0。

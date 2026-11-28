@@ -446,7 +446,7 @@
       'if(d.type==="rpc-result"){var p=pend[d.id];if(!p)return;delete pend[d.id];if(d.ok)p.ok(d.value);else p.no(new Error(String(d.error||"调用失败")));return;}',
       'if(d.type!=="invoke")return;var fn=runs[d.kind]&&runs[d.kind][d.id];',
       'if(!fn){send({type:"invoke-result",callId:d.callId,ok:false,error:"未找到"+String(d.kind)+"："+String(d.id)});return;}',
-      'var input=d.input||{},ctx={state:input.state,projectName:input.projectName,site:input.site,file:input.file,toast:toast,download:function(data,name){return dl(d.callId,name,data);}};',
+      'var input=d.input||{},ctx={state:input.state,projectName:input.projectName,site:input.site,file:input.file,bytes:input.bytes,toast:toast,download:function(data,name){return dl(d.callId,name,data);}};',
       'try{var r=fn.call(api,ctx);Promise.resolve(r).then(function(){return Promise.all(dls);}).then(function(){dls=[];send({type:"invoke-result",callId:d.callId,ok:true});},function(err){dls=[];send({type:"invoke-result",callId:d.callId,ok:false,error:String(err&&err.message||err)});});}catch(err){dls=[];send({type:"invoke-result",callId:d.callId,ok:false,error:String(err&&err.message||err)});}',
       '});',
       /* 全局硬化：直连 API 与原型链一起删；bootstrap 用的引用已提前绑定。
@@ -918,6 +918,8 @@
       if (file && file.size > max) return global.toast('插件导入失败：文件过大（上限 ' + Math.round(max / 1048576) + ' MB）', 'error');
       const read = rec.caps.includes('state:read');
       return Promise.resolve(file && typeof file.arrayBuffer === 'function' ? file.arrayBuffer() : new ArrayBuffer(0)).then(buf => {
+        /* E1：file.size 可被伪造；读出的真实字节同样按上限拦截，再注入 ctx.bytes 供沙箱导入器使用。 */
+        if (!buf || buf.byteLength > max) throw new Error('文件过大（上限 ' + Math.round(max / 1048576) + ' MB）');
         const input = {
           file: { name: String(file && file.name || ''), size: Number(file && file.size || 0), type: String(file && file.type || '') },
           bytes: buf,

@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
-import { deflateSync, deflateRawSync } from 'node:zlib';
+import { deflateSync, deflateRawSync, inflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { buildStandalone } from './pack-core.mjs';
@@ -175,6 +175,7 @@ code += `\n;globalThis.__api = {
   effectiveVisible, isVisible, exportScope, isDelivered, setDelivered, deliveryGuard, pdfDrawObjectsFor, pdfPagePlan, pdfPagePixels,
   EXPORT_FIELD_DEFS, PDF_COLS, REPORT_LIST_COLS,
   formatNodeCoords, parseNodeCoords,
+  rowsToObjectsPlan, pickTableSheet,
   previewGeomCandidate, checkRowGeom, geomRoundingTol,
   buildSceneSvg, exportFooterText, siteDxfEntities, siteOutlinePoints, dxfEntitiesForExport, arcPdfSegments,
   normalizeExportColor, dxfSanitizeName, runExport,
@@ -263,6 +264,9 @@ code += `\n;globalThis.__api = {
   revCalibCheck, revInfoText, revLoad, revDiff, revClear, revBlinkSet, refSig,
   get rRef(){ return rRef; }, get rOp(){ return rOp; }, set rOp(v){ rOp=v; },
   get rBl(){ return rBl; },
+  /* E7：幽灵参考层只在运行时；暴露签名与可控句柄供静态层签名回归断言 */
+  ghostSig, ghostClear,
+  get ghostLayer(){ return ghostLayer; }, set ghostLayer(v){ ghostLayer=v; },
   get scheduleSave(){ return scheduleSave; }, set scheduleSave(fn){ scheduleSave=fn; },
   get runSave(){ return runSave; }, set runSave(fn){ runSave=fn; },
   flushPendingSave, guardRescueSwitch,
@@ -603,6 +607,28 @@ await section("8.1 B-08 原义：批量布点 + 条件批量替换（严格模�
   eq('B-08-非法计划无待更新', bad.updates.length, 0);
   api.applyTableImport(bad);
   eq('B-08-非法计划不修改对象', api.state.objects.length, 1);
+  /* C8：更新行的目标几何字段同样校验，不再静默忽略非法 X/Y/角度/宽高 */
+  const badX = api.rowsToObjectsPlan([H, row({ 操作:'更新', 编号:'O0100', X:'abc' })]);
+  ok('C8-更新X非法报错', badX.errors.some(e => e.includes('X「abc」')));
+  eq('C8-更新X非法不产生更新', badX.updates.length, 0);
+  const badAng = api.rowsToObjectsPlan([['操作','编号','角度'], ['更新','O0100','x']]);
+  ok('C8-更新角度非法报错', badAng.errors.some(e => e.includes('角度「x」')));
+  api.resetState();
+  api.state.objects.push(api.baseObject('rect', 'rect.area', { name: 'O0101', x: 0, y: 0, width: 5, height: 6 }));
+  const badW = api.rowsToObjectsPlan([['操作','编号','宽度'], ['更新','O0101','0']]);
+  ok('C8-更新宽度非法报错', badW.errors.some(e => e.includes('宽度「0」')));
+  eq('C8-更新宽度非法不产生更新', badW.updates.length, 0);
+  api.resetState();
+  api.state.objects.push(api.baseObject('point', 'point.marker', { name: 'O0100', x: 0, y: 0 }));
+  /* C6：多工作表只取第一张非空表；C7：XLSX inlineStr 不剥前导单引号 */
+  const picked = api.pickTableSheet([{ name:'A', rows:[] }, { name:'B', rows:[['x']] }, { name:'C', rows:[['y']] }]);
+  eq('C6-选第一张非空表', [picked.name, picked.rows[0][0], picked.ignored], ['B', 'x', 1]);
+  const noneSheet = api.pickTableSheet([{ name:'A', rows:[] }]);
+  eq('C6-全空表返回空', [noneSheet.name, noneSheet.rows.length, noneSheet.ignored], ['', 0, 0]);
+  const xlsxCell = api.rowsToObjectsPlan([['对象类型','X','Y','名称'], ['文字','1','2',"'=SUM(A1)"]], { unguard:false });
+  eq('C7-XLSX 前导单引号保留', xlsxCell.creates[0] && xlsxCell.creates[0].cell('名称'), "'=SUM(A1)");
+  const csvCellPlan = api.rowsToObjectsPlan([['对象类型','X','Y','名称'], ['文字','1','2',"'=SUM(A1)"]]);
+  eq('C7-CSV 公式引号还原', csvCellPlan.creates[0] && csvCellPlan.creates[0].cell('名称'), '=SUM(A1)');
   const badLedger = api.rowsToObjectsPlan([H, row({ 操作:'替换', 匹配图层:'默认图层', 安装高度:'abc' })]);
   ok('B-08-非法台账值报错', badLedger.errors.length >= 1);
   const noCond = api.rowsToObjectsPlan([H, row({ 操作:'替换', 名称:'X' })]);
@@ -622,7 +648,7 @@ await section("8.1 B-08 原义：批量布点 + 条件批量替换（严格模�
   api.state.objects.push(api.baseObject('rect', 'rect.area', { name: 'O0300', x: 1, y: 2, width: 5, height: 6, angle: 0 }));
   const badShapeRow = api.TABLE_COLUMNS.map(k => ({ 编号: 'O0300', 对象类型: '矩形/区域', 形状: '圆形', X: '99', Y: '98', 宽度: '0' }[k] ?? ''));
   const badShapePlan = api.rowsToObjectsPlan([api.TABLE_COLUMNS.slice(), badShapeRow]);
-  ok('非法形状-规划告警', badShapePlan.warnings.some(w => w.includes('O0300') && w.includes('保留原几何')));
+  ok('非法形状-规划告警', badShapePlan.warnings.some(w => w.includes('O0300') && w.includes('参数非法')));
   api.applyTableImport(badShapePlan);
   const keepGeom = api.state.objects.find(o => o.name === 'O0300');
   eq('非法形状-几何不变', [keepGeom.x, keepGeom.y, keepGeom.width, keepGeom.height], [1, 2, 5, 6]);
@@ -3998,8 +4024,19 @@ asyncSuites.push((async()=>{
   const dv=new DataView(png.bytes.buffer,png.bytes.byteOffset,png.bytes.byteLength);
   eq('PDF-PNG宽2', dv.getUint32(16), 2);
   eq('PDF-PNG高1', dv.getUint32(20), 1);
-  /* 像素保真：重组后 IDAT 前的扫描行 filter=0 + 原 6 像素字节（取首个 IDAT 之外不便定位，验证长度=2行*(1+6)） */
-  ok('PDF-PNG含像素字节', png.bytes.length>14+14);
+  /* C1：IDAT 必须是合法 zlib 流（裸 filter+像素会被 PNG 解码器判非法）。解压后应为 filter=0 + 6 像素字节。 */
+  let idat=null;
+  for(let off=8;off+12<=png.bytes.length;){
+    const len=dv.getUint32(off);
+    const type=String.fromCharCode(png.bytes[off+4],png.bytes[off+5],png.bytes[off+6],png.bytes[off+7]);
+    if(type==='IDAT') idat=png.bytes.subarray(off+8,off+8+len);
+    off+=12+len;
+  }
+  ok('PDF-PNG含 IDAT', !!idat);
+  const raw=idat?new Uint8Array(inflateSync(Buffer.from(idat))):new Uint8Array(0);
+  eq('PDF-IDAT 解压后长度=filter+像素', raw.length, 1+2*3);
+  eq('PDF-IDAT 首字节 filter=0', raw[0], 0);
+  ok('PDF-IDAT 像素保真', raw.length===7&&raw[1]===255&&raw[2]===0&&raw[3]===0&&raw[4]===0&&raw[5]===255&&raw[6]===0);
   /* 次大图为 DCT JPEG */
   const jpg=r.images[1];
   eq('PDF-JPEG魔数', jpg.bytes[0]===0xFF&&jpg.bytes[1]===0xD8, true);
@@ -5705,6 +5742,32 @@ await section("47. 分层渲染：视口裁剪矩形与静态层缓存签名", a
   ok('缓存-控制点改形后排除对象使签名失效', api.sceneStaticKey(v,dims,800,600)!==k2);
   api.setDrag(null);
   eq('缓存-结束拖拽后恢复包含全部对象', api.sceneStaticKey(v,dims,800,600), k2);
+
+  /* E6：旧断言用不存在的 id，lodSelectedSig() 恒空；这里用真实 LOD 对象验证「选中即豁免」 */
+  api.selectedIds.delete('X1');
+  const lodObj=api.baseObject('rect','rect.area',{name:'LOD',x:0,y:0,width:100,height:10,angle:0});
+  api.state.objects=[lodObj]; api.syncActiveFloor(); api.invalidateStatic();
+  const kLod=api.sceneStaticKey(v,dims,800,600);
+  api.selectedIds.add(lodObj.id);
+  ok('缓存-选中 LOD 对象使签名失效（E6）', api.sceneStaticKey(v,dims,800,600)!==kLod);
+  api.selectedIds.delete(lodObj.id);
+  eq('缓存-取消选中 LOD 对象恢复签名（E6）', api.sceneStaticKey(v,dims,800,600), kLod);
+  api.state.objects=[]; api.syncActiveFloor(); api.invalidateStatic();
+
+  /* E7：幽灵参考层参数必须进静态签名；清除后归零回基线 */
+  api.invalidateStatic();
+  const kGhostBase=api.sceneStaticKey(v,dims,800,600);
+  api.ghostLayer={canvas:{width:1,height:1},x:1,y:2,wm:10,hm:8,opacity:.5,sig:'G1'};
+  api.invalidateStatic();
+  const kGhost=api.sceneStaticKey(v,dims,800,600);
+  ok('ghost-进入静态签名', kGhost!==kGhostBase&&kGhost.includes('G1|1|2|10|8|0.5'));
+  api.ghostLayer.opacity=.3;
+  ok('ghost-不透明度变化改签名', api.sceneStaticKey(v,dims,800,600)!==kGhost);
+  api.ghostClear();
+  eq('ghost-清除后签名项归零', api.ghostSig(), '0');
+  const kClean=api.sceneStaticKey(v,dims,800,600);
+  ok('ghost-清除后静态签名不再含幽灵', !kClean.includes('G1|'));
+  eq('ghost-清除后签名稳定', api.sceneStaticKey(v,dims,800,600), kClean);
 
   /* P2-1 平移搬移：内容签名不随视口变化，仅整数设备像素平移才可搬移位图 */
   const ck0=api.sceneStaticContentKey(800,600,dims);
@@ -11496,6 +11559,13 @@ await section("V-5 参照版：标定判定/三类差异/清除无痕", async ()
 
   const sig0=api.refSig();
   ok('V-5 载入后静态层签名非基线', sig0!=='|0');
+  const v5v=api.state.viewport, v5dims=api.worldDims();
+  ok('V-5 参照版签名进入静态层键（E7）', api.sceneStaticKey(v5v,v5dims,800,600).includes(sig0));
+  api.revBlinkSet(true);
+  const keyPhaseA=api.sceneStaticKey(v5v,v5dims,800,600);
+  api.rBl.phase=true;
+  ok('V-5 闪烁相位进入静态层键（E7）', api.sceneStaticKey(v5v,v5dims,800,600)!==keyPhaseA);
+  api.revBlinkSet(false);
   api.rOp=.6;
   ok('V-5 不透明度变化改签名', api.refSig()!==sig0);
   api.rOp=.45;

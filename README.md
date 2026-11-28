@@ -4,11 +4,11 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![offline](https://img.shields.io/badge/offline-100%25-orange.svg)](#)
-[![test](https://img.shields.io/badge/selftest-4590%20assertions-brightgreen.svg)](scripts/selftest.mjs)
+[![test](https://img.shields.io/badge/selftest-4611%20assertions-brightgreen.svg)](scripts/selftest.mjs)
 
 PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或矢量场地上放置设备点位、按真实比例绘制区域与折线、测量与标注尺寸，并把图纸和台账导出为常见格式。运行时不安装、不连服务器、不依赖网络；入口是根目录的 `index.html`，托管到静态服务器时由 `sw.js` 提供离线缓存。
 
-当前共 **4590 项断言全部通过**。
+当前共 **4611 项断言全部通过**。
 
 > 文档口径：行为以代码为准。本文只做入口索引；易漂移的数字统一放 [docs/facts.md](docs/facts.md)，正文只给命令或带日期的快照。最后核对：2026-11-26（合并 `origin/main` 后，基线哈希待回填）。
 
@@ -19,7 +19,7 @@ PlotPin 是一个在浏览器里运行的图纸标注工具：在图片底图或
 - **数据留在本机**：工程写入 IndexedDB（不可用时降级 localStorage），底图与照片按内容哈希存入资产库。默认不上传任何数据；实时协作只在手动建连时通过浏览器通道传输工程快照。
 - **运行时零外部依赖**：不引用 npm、CDN 或后端。第三方能力以 `@idcu/*` 源码放在 `ngm.vendor/`，版本由 `ngm.lock` 与 `.ngm-version` 锁定（工具链钉住 ngm 正式版 `0.103.0`，并启用 `supplyChain.trustPolicy: no-downgrade`）；门禁会校验入口没有远程资源。`npm run ngm:explain` 可在不执行脚本的前提下预览 `test` 的 pre/main/post 计划（需 PATH 上有 ngm）。
 
-`index.html` 是唯一入口：38 个项目脚本（`js/common` → `js/core` → `js/features`）加 10 个 vendor 脚本与 2 个本地 ngm 模块，共 50 个 classic `<script>`，按顺序加载并共享全局作用域，不使用 ES Module；`js/core/app.js` 最后加载并完成启动。
+`index.html` 是唯一入口：38 个项目脚本（`js/common` → `js/core` → `js/features`）加 10 个 vendor 脚本与 3 个本地 ngm 模块，共 51 个 classic `<script>`，按顺序加载并共享全局作用域，不使用 ES Module；`js/core/app.js` 最后加载并完成启动。
 
 ## 快速开始
 
@@ -71,7 +71,7 @@ npm run ci            # check --selftest → bench → build --check → gates
 npm run test:e2e      # 真实 Chromium e2e（需先装 Playwright）
 npm run perf:browser  # 真实 Chromium 性能基线（可选）
 npm run discipline    # 方法论自检看板
-# 4590 assertions, no dependencies
+# 4611 assertions, no dependencies
 ```
 
 `node scripts/check.mjs` 当前覆盖 13 步：语法、入口资源完整性、脚本被入口引用、离线承诺、断言数一致、契约判据、对外 API 面、删除账本、状态写入口 / 跨层耦合计数 / 必需钩子配对 / 软调用登记（第 9 步拆为 9.1～9.4）、`--selftest`、i18n 覆盖率、Service Worker 缓存版本、CSS 结构。
@@ -88,7 +88,7 @@ npm run discipline    # 方法论自检看板
 ## 目录结构
 
 ```text
-index.html                 唯一入口（页面 + 50 个脚本加载顺序）
+index.html                 唯一入口（页面 + 51 个脚本加载顺序）
 sw.js                      离线缓存（仅 http/https 注册；file:// 不注册）
 manifest.webmanifest       PWA 清单
 icon.svg                   应用图标
@@ -132,7 +132,7 @@ CHANGELOG.internal.md      内部追溯：提交、改动点、实测数据、�
 
 ## 仓库红线
 
-- **单文件产物上限 860,160 B（840 KiB）**。超出必须压缩或回收；2026-11-28 经明确授权从 820 KiB 调高，后续不得自行再调。余量低于 8,000 B 时先停功能开发做回收。
+- **单文件产物上限 901,120 B（880 KiB）**。超出必须压缩或回收；2026-11-28 经明确授权从 820 KiB 调高到 840 KiB，同日再次授权调高到 880 KiB 以容纳剩余 P1 与公共包提取，后续不得自行再调。余量低于 8,000 B 时先停功能开发做回收。
 - **只允许本地提交，禁止 `git push`**，除非当前任务被明确授权。
 - **禁止读取或修改仓库根目录的 `camera-*` 文件**。
 - **门禁不达标不得提交**：不伪造日志、不伪造测试数据、不为转绿放宽阈值。

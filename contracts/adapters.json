@@ -41,6 +41,25 @@
         "global.ContentAssets=",
         "__idcuAssets"
       ]
+    },
+    {
+      "file": "js/common/pdf-read.js",
+      "modules": [
+        "packages/format/pdf"
+      ],
+      "keeps": [
+        "global.PdfRead=",
+        "__idcuPdf"
+      ]
+    },
+    {
+      "file": "js/core/geometry.js",
+      "modules": [
+        "packages/core/geometry"
+      ],
+      "keeps": [
+        "__idcuGeometry"
+      ]
     }
   ],
   "localAdapters": [
@@ -62,6 +81,16 @@
         "leaseClaim",
         "leaseSaveBlocked",
         "leaseActive"
+      ]
+    },
+    {
+      "file": "js/common/symbols.js",
+      "package": "@local/core-svg-sanitize",
+      "keeps": [
+        "__localSvgSanitize",
+        "normalizeSymbolPaths",
+        "parseSvgSymbol",
+        "sanitizeSymbolBundle"
       ]
     }
   ]
