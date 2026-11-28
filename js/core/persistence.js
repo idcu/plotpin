@@ -488,12 +488,14 @@ function ensureObjectCapacity(add=1){
 async function flushPendingSave(){
   /* R-05：在途写也算 pending，否则切换工程会与上一条保存并发，旧快照可能后落盘 */
   const pending=!!saveTimer||!!saveRetryTimer||saveInFlight>0;
-  clearTimeout(saveTimer); saveTimer=null;
-  clearTimeout(saveRetryTimer); saveRetryTimer=null;
   if(!pending) return;
   /* P0-04：救援模式下不做静默返回——有未落盘编辑时必须让调用方停下并要用户确认 */
   if(rescueHold) throw new Error('救援模式：未落盘编辑尚未导出，已取消切换');
   if(leaseSaveBlocked()) throw new Error('另一标签页正在编辑，已取消切换以保护草稿');
+  /* 只有确定要继续保存时才清定时器；上面的 block 分支抛错后必须保留定时器，
+     否则调用方取消切换后，旧工程的待保存内容再也没有自动保存机会（P1-A2）。 */
+  clearTimeout(saveTimer); saveTimer=null;
+  clearTimeout(saveRetryTimer); saveRetryTimer=null;
   try{ await runSave(); }
   catch(e){ reportSaveFailure(e,'idb'); throw new Error('旧工程保存失败，已取消切换'); }
   if(saveHealth.state==='failed') throw new Error('旧工程保存失败，已取消切换');

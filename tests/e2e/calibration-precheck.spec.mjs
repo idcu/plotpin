@@ -105,6 +105,20 @@ test('D-02 图片变换手柄拖动可用（P0-1 回归）', async ({ page }) =>
   expect(['a', 'b', 'c', 'd', 'e', 'f'].every(k => Number.isFinite(r.transform[k]))).toBe(true);
   expect(Math.abs(r.transform.c - before.c) + Math.abs(r.transform.f - before.f)).toBeGreaterThan(0.01);
   expect(r.history).toBeGreaterThan(0);
+  /* P1-A4：变换提交后取景框缓存必须覆盖图片新四角，否则导出按旧 worldDims 裁切 */
+  const frame = await page.evaluate(() => {
+    const cs = imageCornerWorld(state.background);
+    const f = worldFrame();
+    return {
+      f,
+      minX: Math.min(...cs.map(p => p[0])), maxX: Math.max(...cs.map(p => p[0])),
+      minY: Math.min(...cs.map(p => p[1])), maxY: Math.max(...cs.map(p => p[1]))
+    };
+  });
+  expect(frame.f.minX).toBeLessThanOrEqual(frame.minX + 1e-6);
+  expect(frame.f.maxX).toBeGreaterThanOrEqual(frame.maxX - 1e-6);
+  expect(frame.f.minY).toBeLessThanOrEqual(frame.minY + 1e-6);
+  expect(frame.f.maxY).toBeGreaterThanOrEqual(frame.maxY - 1e-6);
   expect(errors).toEqual([]);
 });
 

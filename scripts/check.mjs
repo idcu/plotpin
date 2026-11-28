@@ -370,6 +370,8 @@ const cfgSrc = (jsSrcKeepStrings.find(([rel]) => rel === 'js/core/config.js') ||
 const reqMatch = cfgSrc.match(/REQUIRED_HOOKS\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\)/);
 const requiredHooks = reqMatch
   ? [...reqMatch[1].matchAll(/['"]([\w.:-]+)['"]/g)].map(m => m[1]) : [];
+/* P1-E3：解析失败/为空时不能静默跳过，否则 REQUIRED_HOOKS 被改名或清空后门禁恒绿。 */
+if (!requiredHooks.length) errors.push('REQUIRED_HOOKS 解析为空：js/core/config.js 的必需钩子契约缺失或被改写');
 for (const id of requiredHooks) {
   if (!hookRegs.has(id)) errors.push(`必需钩子未注册：${id}（features 层缺少 registerHook）`);
   if (!hookCalls.has(id)) errors.push(`必需钩子无调用方：${id}（core 层缺少 callHook）`);

@@ -627,6 +627,8 @@ canvas.addEventListener('pointerup',e=>{
   if(drag?.type==='imageHandle'){
     const changed=dragChanged(drag);
     if(drag.moved && !changed) history.past.pop();   /* 拖回原位：不落盘、不留空快照 */
+    /* 图片变换改变底图包围盒：提交时同步取景框缓存，否则导出按旧 worldDims 裁切（P1-A4） */
+    if(changed) syncFramePan();
     drag=null;
     if(changed) commitChange('图片已变换'); else { updateHistoryButtons(); refreshSelectionUI(); requestRender(); }
     return;

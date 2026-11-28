@@ -519,8 +519,8 @@ await section("8. 表格导入规划与应用", async () => {
   const row = obj => C.map(k => obj[k] ?? '');
   const header = C.slice();
   const updateRow = row({ 编号: 'O0001', 对象类型: '点设备', 业务类型: '摄像头', 图层: '默认图层', X: '8.5', Y: '9.2', 角度: '45', 显示: '是', 锁定: '否' });
-  const newPoint = row({ 编号: 'O0009', 对象类型: '点设备', 业务类型: '通用标记', X: '1', Y: '2' });
-  const newRect = row({ 编号: 'O0010', 对象类型: '矩形/区域', X: '0', Y: '0', 宽度: '3', 高度: '4' });
+  const newPoint = row({ 编号: 'O0009', 名称: '点位名称', 对象类型: '点设备', 业务类型: '通用标记', X: '1', Y: '2' });
+  const newRect = row({ 编号: 'O0010', 名称: '区域名称', 对象类型: '矩形/区域', X: '0', Y: '0', 宽度: '3', 高度: '4' });
   const badRect = row({ 编号: 'O0011', 对象类型: '矩形/区域', X: '0', Y: '0', 宽度: '0', 高度: '4' });
   const lineRow = row({ 编号: 'O0012', 对象类型: '线段/折线', X: '0', Y: '0' });
   const weirdRow = row({ 编号: 'O0013', 对象类型: '飞船', X: '0', Y: '0' });
@@ -547,6 +547,10 @@ await section("8. 表格导入规划与应用", async () => {
   eq('更新业务类型生效', o1.typeId, 'point.camera');
   const o10 = after.objects.find(o => o.name !== 'O0001' && o.kind === 'rect');
   ok('矩形新建成功', !!o10 && o10.width === 3 && o10.height === 4);
+  /* P1-C5：新增行必须与更新行一样把「名称」写入 o.text；新增对象名由统一编号作用域生成，不能按编号找 */
+  const createdPoint = after.objects.find(o => o.kind === 'point' && o.x === 1 && o.y === 2);
+  eq('新增点名称写入 text', createdPoint.text, '点位名称');
+  eq('新增区域名称写入 text', o10.text, '区域名称');
   const allEmpty = api.rowsToObjectsPlan([header, emptyRow]);
   eq('全空数据行跳过且不告警', [allEmpty.updates.length, allEmpty.creates.length, allEmpty.warnings.length], [0, 0, 0]);
   const noHeader = api.rowsToObjectsPlan([['foo', 'bar'], ['1', '2']]);

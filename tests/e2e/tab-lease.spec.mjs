@@ -50,6 +50,26 @@ test('D-09 冲突期间编辑在 claim 后补落盘，关闭前不丢', async ({
   expect(rec.meta.name).toBe('D09-CLAIM-SAVED');
 });
 
+test('D-09 flushPendingSave 被租约阻断时保留待保存定时器', async ({ page }) => {
+  await page.goto('/index.html');
+  await expect(page.locator('#canvas')).toBeVisible();
+  const r = await page.evaluate(async () => {
+    state.meta.projectId = 'A2-TIMER';
+    leaseSyncProject();
+    markDirty('object');
+    const before = !!saveTimer;
+    const now = Date.now();
+    leaseIngest({ type: 'lease', tabId: 'PEER_A2', projectId: 'A2-TIMER', ts: now }, now);
+    let error = '';
+    try { await flushPendingSave(); } catch (e) { error = String(e && e.message || e); }
+    return { before, after: !!saveTimer || !!saveRetryTimer, error, blocked: leaseSaveBlocked() };
+  });
+  expect(r.before).toBe(true);
+  expect(r.blocked).toBe(true);
+  expect(r.after).toBe(true);
+  expect(r.error).toContain('另一标签页');
+});
+
 test('D-09 不同工程双标签：互不触发冲突', async ({ page, context }) => {
   await boot(page, 'D09-A');
   const p2 = await context.newPage();

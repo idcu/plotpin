@@ -524,6 +524,8 @@ function applyTableImport(plan){
         if(Number.isFinite(ang)) o.angle=normalizeAngle(ang);
         if(cr.kind==='text'){ o.text=c('名称')||'文字'; o.height=2.2; }
       }
+      /* P1-C5：新增行与更新行共用「名称」语义；点/矩形/折线/标注不能只更新时不丢、新增时丢。 */
+      const name=c('名称'); if(name!=='') o.text=name;
       applyTableCommonCells(o,c);
       const target=cr.floorId&&cr.floorId!==state.activeFloorId?floorObjects.get(cr.floorId):null;
       const list=target||state.objects;

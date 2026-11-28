@@ -12,7 +12,7 @@
 ## 0. 结论摘要
 
 1. **工程成熟度高，产品完成度高，但存在 2 个 P0 与约 29 个 P1。** 2 个 P0 分别是：图片变换工具 pointerdown 必崩（`interaction.js:343`）；多标签租约冲突期间点「仍以本页为准」后不补落盘，关闭页面会永久丢失编辑（`tab-lease.js:72` + `persistence.js:970`）。
-2. **测试与门禁设计在全行业属于上游水平**：4,576 条 selftest 断言、52 个 Playwright spec、13 步总闸、10 条正面基线 + 20 种人为破坏、vendor 字节锚定、CSP 双向哈希。但仍有 5 处「门禁给出错误结论」的盲区：`check-deletions` 只认 `##`，账本只解析到 1 条占位记录（`## 建立账本`），所有 `###` 真实条目被当作正文；`REQUIRED_HOOKS` 解析失败会静默跳过；i18n 扫描不识别正则字面量与模板 `${}` 内字符串；适配层清单漏登记 `pdf-read.js` / `geometry.js`；删断言没有机器门禁。
+2. **测试与门禁设计在全行业属于上游水平**：4,576 条 selftest 断言、52 个 Playwright spec、13 步总闸、10 条正面基线 + 20 种人为破坏、vendor 字节锚定、CSP 双向哈希。但仍有 4 处「门禁给出错误结论」的盲区：`REQUIRED_HOOKS` 解析失败会静默跳过；i18n 扫描不识别正则字面量与模板 `${}` 内字符串；适配层清单漏登记 `pdf-read.js` / `geometry.js`；删断言没有机器门禁。
 3. **全维度工程评分约 3.7/5（未加权）**。强项是文档、交付、功能广度、测试设计；弱项是核心正确性、数据可靠性、性能最坏情况、国际化与生态能力。若把正确性/可靠性权重加倍，约 3.4/5。
 4. **竞品定位清晰但不在主战场**：PlotPin 是「离线、零安装、免费、通用图纸标注 + CCTV 覆盖辅助」；CCTVplanner / CCTV Design Tool / IPVM / JVSG 的主战场是「真实镜头参数 + DORI 分区 + 相机库 + 3D + 自动布线 + 品牌化提案」。PlotPin 在离线与数据主权上领先，在相机库、3D、DORI 分区、自动布线、云端团队协作、移动端与多语言上明显落后。
 5. **ngm 提取可行，但本轮不能执行**：已识别 12 个候选包，其中 5 个 Tier-1 低风险候选（`core-lease`、`format-pdf-vector`、`core-svg-sanitize`、`core-history`、`format-sheet`）。硬阻塞是：本机没有 `ngm` CLI（`ngm --version` 不存在）；新包必须在 `gitee:idcu/ngm-repo` 打 tag 后重新 lock/vendor/digest；单文件产物只剩 **11,902 B** 余量，提取会净增字节；工作区不受信任，无法跑五道门禁做闭环验证。
@@ -187,7 +187,7 @@ origin: imageTransformOf(state.background).slice(),
 | ID | 位置 | 问题与影响 | 证据 | 修复 |
 |---|---|---|---|---|
 | E1 | `plugins.js:449`、`:917-923` | `importViaPlugin` 发送 `input.bytes`，Worker `ctx` 只注入 `state/projectName/site/file`，没有 `bytes`，`file` 也不是 `File`；沙箱导入器读不到任何内容 | 代码可证 | `ctx` 注入 `bytes`，校验 `byteLength` 上限；补 e2e 真实字节导入 |
-| E2 | `check-deletions.mjs:82` | 只识别 `## ` 标题，`docs/deletions.md` 真实条目全是 `###`；账本只解析到 1 条占位记录（`## 建立账本`），真实条目被当作正文 | 代码可证；`check-deletions` 实跑输出 1 条记录 | 同时识别 `##/###`，或统一账本标题层级 |
+| E2 | `check-deletions.mjs:82` | 复核不成立：`docs/deletions.md` 约定 `###` 是功能级删除/复核说明，不入结构性账本；`##` 占位记录六个字段齐全，门禁行为正确 | 实跑 1 条记录 / 0 违约 | 仅补注释说明，不改解析 |
 | E3 | `check.mjs:363-370` | `REQUIRED_HOOKS` 正则解析失败时 `requiredHooks=[]`，循环静默跳过，必需钩子校验形同虚设 | 代码可证 | 解析为空直接报错；断言 `requiredHooks.length===8` |
 | E4 | `i18n-scan.mjs` | 不识别正则字面量，丢弃模板 `${...}` 内字符串；新增硬编码可绕过 | 审计静态结论 | 用轻量词法器/正则状态机；或把规则写成负例门禁 |
 | E5 | `check-gates.mjs:350` | ICE 破坏场景只跑 `--filter=ICE-1`，ICE-2 的零泄露断言不被该场景执行 | 审计静态结论 | 场景覆盖 ICE-1+ICE-2，或拆两条破坏 |

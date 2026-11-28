@@ -79,6 +79,7 @@ const flush = () => {
 for (const line of fs.readFileSync(LOG, 'utf8').replace(/\r\n/g, '\n').split('\n')) {
   if (/^\s*```/.test(line)) { inFence = !inFence; continue; }
   if (inFence) continue; // 模板块里的示例不算账
+  /* 只解析 ##：### 是功能级删除/复核说明，按 docs/deletions.md 的约定不计入结构性账本。 */
   if (line.startsWith('## ')) {
     flush();
     title = line.slice(3).trim();
