@@ -4,6 +4,17 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 修复图片变换手柄 pointerdown 崩溃
+
+- **Commit Hash**：`12f7bf6`
+- **核心改动**：
+  - `interaction.js` 的 `origin` 改为 `Object.assign({}, imageTransformOf(...))`，不再对 `{a..f}` 对象调用 `.slice()`；与 `imageHandleDragTo` 的对象契约一致。
+  - 新增 e2e：导入 64×48 PNG → `image-transform` → 拖 move 手柄 → transform 有限且 `c/f` 改变、history+1、无 pageerror。
+- **预算**（实测）：dist **849,609 → 849,619 B（+10）**；gzip **276,646 → 276,652 B（+6）**；上限 840 KiB 下余量 **10,541 B**（gzip 余量 18,260 B）；SW `VERSION=332 → 333`；发行包 SHA256 `c3306a2d…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,576 / 0**；e2e 源码 **213 passed / 0 failed / 3 skipped**（4.5m）、dist **210 passed / 0 failed / 6 skipped**（4.3m）；check-gates 10/10 + 20/20；bench 缓存 P95 **0.07ms** / 重建 **16.77ms** / heap **30.29MB**；discipline 13/13 L4。
+- **公共抽象清单**：无新增；沿用 `imageTransformOf` / `imageHandleDragTo` 的对象契约。
+- **遗留风险**：图片变换仍走 `resolveWorldPoint`，网格/对象捕捉开启时可能吸附；e2e 关闭 snap 验证纯拖动，未改变产品吸附行为。
+
 ## 2026-11-28 · 修复 leaseClaim 后不补落盘
 
 - **Commit Hash**：`d250a18`
