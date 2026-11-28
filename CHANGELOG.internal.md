@@ -4,6 +4,37 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 提取 @local/core-lease 本地包
+
+- **Commit Hash**：`d4f65a6`
+- **核心改动**：
+  - `js/core/tab-lease.js` 改为适配层，实现迁入 `ngm.local/core/lease`；`createLease(opts)` 注入 `projectId / now / storage / BroadcastChannel / setInterval / addEventListener`。
+  - 保留 `LEASE_*` 常量、`acquireEditorLease / releaseEditorLease / leaseIngest / leaseConflictAt / leaseClaim / leaseSyncProject / leaseSaveBlocked / leaseStatus / onLeaseConflict` 与 `leaseActive`；心跳 5s、租约 15s、pagehide/pageshow 逻辑不变。
+  - 新增 23 项本地包断言；`scripts/test-local.mjs` 自动发现并运行；`check-ngm` 识别 2 个本地包 / 2 个适配层。
+- **预算**（实测）：dist **848,478 → 849,332 B（+854）**；gzip **275,969 → 276,574 B（+605）**；上限 840 KiB 下余量 **10,828 B**（gzip 余量 18,338 B）；SW `VERSION=330 → 331`；发行包 SHA256 `c5c42028…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,576 / 0**（加载 50 个脚本）；e2e **211 passed / 0 failed / 3 skipped**（4.0m）；check-gates 正面 10/10 + 人为破坏 20/20；bench 缓存 P95 **0.06ms** / 重建 **15.87ms** / heap **30.03MB**；discipline 13/13 L4；check-ngm 10 vendor + 2 local；build --check 通过。
+- **公共抽象清单**：`@local/core-lease` 的 `createLease(opts)` 与 `LEASE_*`；`ngm.local/core/lease` 包；适配层 `js/core/tab-lease.js`；`scripts/test-local.mjs` 复用。
+- **遗留风险**：本地包不在 `ngm.lock` / vendor digest 内，供应链由 git + SW 指纹守；`leaseClaim` 的 P0-2（claim 后不补落盘）仍未修复，本次只做行为等价提取。
+
+## 2026-11-28 · 接入首个本地 ngm 包 @local/format-pdf-vector
+
+- **Commit Hash**：`587cbd8`
+- **核心改动**：
+  - 新增 `ngm.local` 本地包格式与 `@local/format-pdf-vector`；`js/common/pdf-vector.js` 改为适配层，保留 `global.PdfVec` 与全部导出名。
+  - `check-ngm` 增加本地包 manifest / browser / adapter / 顺序 / `localAdapters` 校验；`check.mjs` 将 `ngm.local` 纳入语法与离线扫描。
+  - 新增 `scripts/test-local.mjs`，`npm test` 与 `npm run ci` 接入本地包测试。
+- **预算**（实测）：dist **848,258 → 848,478 B（+220）**；gzip **275,940 → 275,969 B（+29）**；余量 **11,682 B**（gzip 18,943 B）；SW `VERSION=329 → 330`；发行包 SHA256 `c345d526…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,576 / 0**（加载 49 个脚本）；e2e **211 passed / 0 failed / 3 skipped**（4.0m）；check-gates 10/10 + 20/20；bench 缓存 P95 0.08ms / 重建 15.48ms / heap 29.41MB；discipline 13/13 L4；check-ngm 10 vendor + 1 local。
+- **公共抽象清单**：`@local/format-pdf-vector`（`stream / docPages / fit / mapPt / path / image / flate / textBitmap`）；本地包格式字段 `browser / global / adapter / cjs / test`；`contracts/adapters.json.localAdapters`。
+- **遗留风险**：本地包不在 `ngm.lock` / vendor digest 内；`ngm.local` 只做结构与顺序校验，不做来源证明；后续需提升到 `gitee:idcu/ngm-repo` 并删除本地目录。
+
+## 2026-11-28 · 全维度代码审计与竞品对标报告
+
+- **Commit Hash**：`ddb4579`
+- **核心改动**：新增 `docs/assessment-2026-11-28-full-audit.md`，覆盖 38 个浏览器脚本、10 个 vendor 模块、工程脚本与测试；8 路只读审计，输出 2 个 P0、约 29 个 P1、88+ 个 P2，竞品对照 15+ 产品，并给出 12 个 ngm 提取候选。
+- **验证数据**：只读审计，未运行仓库脚本；selftest/e2e/bench 数字引用 `docs/facts.md`，性能最坏情况为静态推算并标「未实测」。
+- **遗留风险**：竞品价格为公开资料，未做商务询价；部分结论为代码可证但未运行验证。
+
 ## 2026-11-28 · 清单筛选新增对象类型并改为多选联动
 
 - **Commit Hash**：`5528182`
