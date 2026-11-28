@@ -4,6 +4,19 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 打通 B1–B3 只读写入绕过
+
+- **Commit Hash**：`d28a23d`
+- **核心改动**：
+  - **B1 批量/属性/插件**：`ui-panels` 的批量图层、平移、阵列、环形、偏移、闭合、反向、样式、批量标注、图层/类型增删改、SVG/符号导入、覆盖率应用建议；`props` 的输入、节点增删排序、显隐/锁定/交付、属性键值、照片上传/清除、场地节点、`applyField`、旋转与多选批量；`plugins` 的 `pushHistory()` 失败即不落对象——均前置 `guardWrite()`，只读直接拒绝且不改 `state`。
+  - **B2 快照/合并**：`snapshot.restoreSnapshotById`、`snapshot-ui` 恢复按钮、`io.projMerge` 读文件后统一 guard；协作合并显式传 `remote:true` 旁路，本端只读不阻断远端同步。
+  - **B3 规则**：防抖提交先 `guardWrite` 再 `pushHistory`，写入成功后才 `collabBroadcastRules`；只读不广播。`collabBroadcastRules` 自检 `isReadOnly()`。
+  - 新增 `tests/e2e/read-only.spec.mjs` 3 例：只读批量移动/清单显隐、只读改规则、只读 `mergeProjectJSON` 返回 `{ignored:'read-only'}`。
+- **预算**（实测）：dist **849,662 → 851,790 B（+2,128）**；gzip **276,660 → 277,079 B（+419）**；上限 840 KiB 下余量 **8,370 B**（gzip 余量 17,833 B）；SW `VERSION=334 → 336`；发行包 SHA256 `3147be1c…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,578 / 0**（加载 50 脚本，i18n 缺口 1）；e2e **220** 用例，源码 **217 passed / 0 failed / 3 skipped**（4.6m）、dist **214 passed / 0 failed / 6 skipped**（4.4m）；check-gates 基线 10/10 + 人为破坏 20/20；bench 缓存 P95 **0.09ms** / 重建 **19.28ms** / heap **32.93MB**；discipline 13/13 L4；check-ngm 10 vendor + 2 local；test-local 2 包 / 34 断言；build --check 通过且二次构建一致。
+- **公共抽象清单**：未新增公共 API；扩大 `guardWrite(what)` 的调用面，契约不变（`false` = 已拒绝且已提示）；`mergeProjectJSON` 明确 `remote:true` 为受信旁路；`i18n.js` 新增 9 个动作短语（缺口 12 → 1）。
+- **遗留风险**：仍属**本端自律**，伪造协作消息仍可写入；规则只读拒绝会 `renderRuleConfig()` 回滚 UI；A1（撤销/回滚时间戳与墓碑）、A3（未绑定草稿租约互锁）、C1（PDF Flate 图非法 PNG）、C6/C7/C8、E1、E4–E7、B4 未修；dist 余量 8,370 B，后续新增代码需先回收体积。
+
 ## 2026-11-28 · 修复 4 项 P1（保存定时器/取景框/表格名称/钩子门禁）
 
 - **Commit Hash**：`f1c86a7`
