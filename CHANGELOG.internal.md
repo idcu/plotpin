@@ -4,6 +4,19 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 撤销/回滚按新编辑推进时间戳与墓碑（A1/A3）
+
+- **Commit Hash**：`a280147`
+- **核心改动**：
+  - **A1** 新增 `stampRestoreCommit(prev)`：复用 `diffSnapshots(prev, state)` 对比恢复前后现场——目标中消失的对象写对象墓碑、消失的楼层写楼层墓碑（删除时间不早于其最后写入），恢复/内容变化的对象单调打点，楼层增删/场地/底图变化推进对应楼层时间，最后推进 `meta.updatedAt`；`undo()/redo()/restoreSnapshotById()` 均在 `replaceState` 后调用。
+  - **A1 边界**：`stampObject(o, notBefore)` 与 `markTombstone(id, kind, notBefore)` 增加可选下界，保证撤销恢复的对象严格晚于旧墓碑、同毫秒内重做删除不早于对象当前时间，避免 LWW 把恢复当旧版或让删除失效。
+  - **A3** 适配层新增 `leaseCurProject()`：已绑定工程仍用 `meta.projectId`，未绑定草稿改用 `D:<meta.id>`；不同草稿不再共用空串而互相锁死自动保存，同一草稿（current/同一导出文件）仍共享同一键，冲突提示语义不变。
+  - 新增 e2e `tab-lease.spec.mjs` A3 用例：两个不同草稿互不冲突 → 改成同一 `meta.id` 后冲突重现。
+- **预算**（实测）：dist **851,790 → 853,628 B（+1,838）**；gzip **277,079 → 277,617 B（+538）**；上限 840 KiB 下余量 **6,532 B**（gzip 余量 17,295 B）。余量已低于 8,000 B 预警线，但未破硬上限；后续新增功能需先回收体积。SW `VERSION=336 → 337`；发行包 SHA256 `38992eb0…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,590 / 0**（+12 条 A1 时间戳/墓碑断言）；e2e **221** 用例，源码 **218 passed / 0 failed / 3 skipped**（4.4m）、dist **215 passed / 0 failed / 6 skipped**（3.9m）；check-gates 基线 10/10 + 人为破坏 20/20；bench 缓存 P95 **0.07ms** / 重建 **16.64ms** / heap **32.21MB**；discipline 13/13 L4；check-ngm 10 vendor + 2 local；test-local 2 包 / 34 断言；build --check 通过且二次构建一致；badge 文档计数一致（断言 4590 / 分区 176 / spec 53 / 门禁 13 步）。
+- **公共抽象清单**：新增 `stampRestoreCommit(prev)`、`floorWriteTimeOf(f)`、`leaseCurProject()`；`stampObject` 与 `markTombstone` 增加可选 `notBefore` 参数（现有调用方不传，行为不变）。影响面：撤销/重做/快照回滚；租约仅改变未绑定草稿的归组键。
+- **遗留风险**：A1 的场地/底图时间推进只覆盖活动楼层（`diffSnapshots` 的场景项口径）；整工程快照回滚中非活动楼层的底图/楼层名变化仍依赖对象打点与楼层时间，未被单独推进。A1 未覆盖协作「恢复我的版本」之外的其它整状态替换入口（当前仅 undo/redo/快照回滚）。体积余量 6,532 B，下批功能前需回收。C1/C6/C7/C8/E1/E4–E7/B4 未修。
+
 ## 2026-11-28 · 打通 B1–B3 只读写入绕过
 
 - **Commit Hash**：`d28a23d`
