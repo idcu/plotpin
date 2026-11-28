@@ -138,7 +138,7 @@ heapUsed 25.17–28.05 MB，缓存帧 P95 0.11–0.14 ms；5 次均未越过 60 
 | 主题 | 命令 | 关键结果 |
 |---|---|---|
 | 10k 拖动捕捉（N-22） | `node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-22"` | 捕捉解析 P95 18.5/14.1 → 3.1~4.0 ms；拖动帧 P95 −34%~−36%；heap 增量 ≤0.63% |
-| 10k 连续点选（N-23） | `node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-23"` | 点选帧 P95 661.1/710.2 → 20.0/20.9/22.1 ms；30 次点选静态重建 30 → 0；静态层单次重建未回退 |
+| 10k 连续点选（N-23） | `node scripts/perf-browser.mjs tests/perf/speed.perf.mjs -g "N-23"` | 点选帧 P95 661.1/710.2 → 95.9/124.4 ms（SwiftShader 两轮）；30 次点选静态重建 30 → 20（选中即豁免 LOD，每点最多 1 次）；静态层单次重建 82.8/87.0 ms |
 | 场地手柄拖拽（R-07） | `node scripts/perf-browser.mjs tests/perf/p2-perf.perf.mjs -g "R-07"` | 40 次拖动重建 40 → 0；整帧 P95 224.8 → 18.2 ms |
 | 历史快照别名（CORE-P2-3） | `node scripts/perf-browser.mjs --no-gate tests/perf/p2-perf.perf.mjs -g "CORE-P2-3" --repeat-each=2` | 20 条历史堆增量 19.657 → 8.912 MB（−54.7%）；`pushHistory` 826/840 → 505/488 ms |
 | 快照列表 IDB 读取（CORE-P2-4） | 同上 `-g "CORE-P2-4"` | 列表/淘汰各 1 次 `idbGetKey`（P95 0.9/0.6、0.3/0.3 ms）；全量读 20 次（P95 360/350 ms） |
