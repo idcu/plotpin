@@ -340,7 +340,7 @@ canvas.addEventListener('pointerdown',e=>{
     if(!pre.ok){ toast(pre.reason,'warn'); return; }
     const h=imageHandleAt(sp);
     if(h) drag={type:'imageHandle',mode:h.mode,start:wp,moved:false,snap:null,
-      origin:imageTransformOf(state.background).slice(),originCorners:imageCornerWorld(state.background)};
+      origin:Object.assign({},imageTransformOf(state.background)),originCorners:imageCornerWorld(state.background)};
     return;
   }
   if(['site-rect','site-circle','site-ellipse','site-sector','site-parallelogram'].includes(currentTool)){

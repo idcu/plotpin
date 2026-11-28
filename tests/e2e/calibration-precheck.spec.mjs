@@ -5,6 +5,11 @@ const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64'
 );
+/* 64×48 底图：足够大，四类图片变换手柄不会互相重叠 */
+const PLAN_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAwCAIAAAAuKetIAAAAVklEQVR4nO3PQQ3AIAAAMeQgAiX4/+2DhMm4QJrUQMdc+2pjrn3OdymBmkBNoCZQE6gJ1ARqAjWBmkBNoCZQE6gJ1ARqAjWBmkBNoCZQE6gJ1F4JXO0H2MLCpr8dF+kAAAAASUVORK5CYII=',
+  'base64'
+);
 
 async function boot(page) {
   await page.goto('/index.html');
@@ -59,6 +64,48 @@ test('D-02 仅矢量场地：提示场地按米绘制，无需校准', async ({ 
   const r = await page.evaluate(() => ({ started: startCalibTool('calibrate'), tool: currentTool }));
   expect(r.started).toBe(false);
   expect(r.tool).toBe('select');
+});
+
+test('D-02 图片变换手柄拖动可用（P0-1 回归）', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  await boot(page);
+  await page.evaluate(async () => {
+    state.site = null;
+    state.objects = [];
+    state.background = { kind: 'image', width: 64, height: 48, metersPerPixel: 0.05, assetId: '', dataUrl: '' };
+    bgImage = null;
+    await afterStateLoaded(false);
+  });
+  await page.setInputFiles('#bgInput', { name: 'plan64.png', mimeType: 'image/png', buffer: PLAN_PNG });
+  await expect(xform(page)).toBeEnabled();
+  const started = await page.evaluate(() => startCalibTool('image-transform'));
+  expect(started).toBe(true);
+  expect(await page.evaluate(() => currentTool)).toBe('image-transform');
+
+  const box = await page.locator('#canvas').boundingBox();
+  const p = await page.evaluate(() => {
+    const h = imageHandleList(state.background).find(x => x.mode === 'move');
+    return w2s([h.x, h.y]);
+  });
+  const before = await page.evaluate(() => Object.assign({}, imageTransformOf(state.background)));
+  await page.evaluate(() => { state.settings.snap = false; state.settings.osnap = false; });
+  await page.mouse.move(box.x + p[0], box.y + p[1]);
+  await page.mouse.down();
+  await page.mouse.move(box.x + p[0] + 60, box.y + p[1] + 30, { steps: 6 });
+  await page.mouse.up();
+
+  const r = await page.evaluate(() => ({
+    tool: currentTool,
+    transform: state.background.transform,
+    history: history.past.length
+  }));
+  expect(r.tool).toBe('image-transform');
+  expect(r.transform).toBeTruthy();
+  expect(['a', 'b', 'c', 'd', 'e', 'f'].every(k => Number.isFinite(r.transform[k]))).toBe(true);
+  expect(Math.abs(r.transform.c - before.c) + Math.abs(r.transform.f - before.f)).toBeGreaterThan(0.01);
+  expect(r.history).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
 });
 
 test('D-02 图片资产缺失：禁用并提示原因，重新导入后自动恢复步骤指示', async ({ page }) => {

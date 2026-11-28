@@ -125,7 +125,7 @@
 | --- | --- |
 | `batch-annot.spec.mjs` | 批次标注显隐：勾选两对象统一隐藏→撤销→统一显示，SVG 同步变化 |
 | `batch-layout.spec.mjs` | 1280×800 桌面布局：控件不挤压、数值输入可读 |
-| `calibration-precheck.spec.mjs` | D-02：无底图无场地时三个校准入口禁用且无点击路径 |
+| `calibration-precheck.spec.mjs` | D-02：无底图无场地时三个校准入口禁用且无点击路径；图片变换手柄拖动回归 |
 | `catalog.spec.mjs` | 目录 JSON/CSV 导入→绑定型号/数量→跨楼层 BOM→CSV/XLSX→报价快照与重名防护 |
 | `collab.spec.mjs` | 双标签建连、状态从等待→已连接→对端断开可见 |
 | `comments.spec.mjs` | 本地批注：新增即时渲染并写入独立键、工程 JSON 不含正文、编辑（Esc 取消/确认更新）、删除二次确认、只读禁用、锚点删除后标注 |
