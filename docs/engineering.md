@@ -43,7 +43,7 @@ PDF 出图两条路径：默认 `pdf` 是整页位图（JPEG）+ 清单页；显
 | 形态 | 入口 | 说明 |
 |---|---|---|
 | 源码直开 | `index.html` | 双击即可用；脚本逐文件加载，便于调试 |
-| 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成：内联全部 CSS/JS，47 段脚本合并为 1 段、CSP 只签 1 条 sha256，可离线分发 |
+| 单文件发行包 | `dist/plotpin-standalone.html` | `node scripts/build.mjs` 生成：内联全部 CSS/JS，49 段脚本合并为 1 段、CSP 只签 1 条 sha256，可离线分发 |
 
 `scripts/pack-core.mjs` 负责内联（先删 HTML 注释，再折叠标签行首缩进），`scripts/minify-core.mjs` 只做**语义安全**的压缩：删注释、行首缩进、空行与行尾空白；字符串/模板字面量/正则逐字节保留；标点相邻空格、自终止词法单位后的换行可省（连续正负号之间例外）；`}` 前的语句分号可省；`return/throw/typeof` 等关键字与紧随的 `(`/`[`/`{`/字面量引号之间无空格；`0.5→.5`；`}` 后换行接标识符时可省（块结束或同表达式的 `in/instanceof`；接 `(`/`[` 仍保留换行）。**源文件不压缩**。
 
@@ -158,10 +158,10 @@ vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件�
 
 | # | 检查 | 执行条件 | 判据要点 |
 |---|---|---|---|
-| 1 | 语法 | 总是 | `node --check` 覆盖 `js/**`、`scripts/*.mjs`、`sw.js`；并校验 `app.js` 注册路径指向根目录 `sw.js` |
+| 1 | 语法 | 总是 | `node --check` 覆盖 `js/**`、`ngm.local/**/*.js`、`scripts/*.mjs`、`sw.js`；并校验 `app.js` 注册路径指向根目录 `sw.js` |
 | 2 | 入口资源存在 | 总是 | `index.html` 引用的本地脚本/样式/manifest 必须存在 |
-| 3 | 入口引用完整 | 总是 | `js/**` 每个脚本都必须被 `index.html` 引用 |
-| 4 | 离线承诺 | 总是 | 入口不得出现 `http(s)://` 远程脚本/样式/资源 |
+| 3 | 入口引用完整 | 总是 | `js/**` 每个脚本都必须被 `index.html` 引用；本地 ngm 包的 `browser`/`adapter`/`test` 由 `check-ngm` 核对 |
+| 4 | 离线承诺 | 总是 | 入口、CSS、JS 与本地 ngm 包不得出现 `http(s)://` 远程脚本/样式/资源 |
 | 5 | 断言数一致 | 总是 | `scripts/badge.mjs --check`：README 三处锚点存在且等于 selftest 实际断言数；同时校验 facts/testing/engineering/modules 计数 |
 | 6 | 契约 | 总是 | `check-contracts.mjs` 先校验契约结构（规则被删空即红），再真实核对四类约定 |
 | 7 | 插件 API 面 | 总是 | `check-plugin-api.mjs`：`PlotPin` 顶层键 ↔ 契约双向一致 |
@@ -174,6 +174,8 @@ vendor 摘要口径：`check-ngm.mjs` 对 `ngm.vendor/**` 实际字节逐文件�
 | 11 | i18n | 仅 `--selftest` | 覆盖率 ≥40%（2026-11-13 实测 44.09%，按出现次数逐次判定）、缺口 ≤10（当前 0）、UI 硬编码 ≤20、已字典待接入 ≤81、模板内 UI 文案 =0 |
 | 12 | SW 缓存版本 | 总是 | 预缓存输入内容指纹必须与 `scripts/sw-inputs.sha256` 一致，清单 `version` 等于 `sw.js` 的 `VERSION` |
 | 13 | CSS 结构 | 总是 | 去注释/字符串后花括号必须配平（未闭合的 `@media` 会静默吞掉其后所有规则） |
+
+`check-ngm` 在 vendor 之外还核对 `ngm.local` 本地包：manifest 合法、`browser` 入口被 `index.html` 加载且排在自包 adapter 之前、`contracts/adapters.json` 的 `localAdapters` 已登记并保留承诺名；`scripts/test-local.mjs` 运行本地包测试，已接入 `npm test` 与 `npm run ci`。
 
 注意：第 5 步 `badge.mjs --check` 内部会先跑一次 selftest，第 10 步再跑一次；`--selftest` 下 selftest 实际执行两次。这是刻意保留的“README 断言数必须与真实断言数同源”判据，不是重复浪费。
 

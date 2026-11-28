@@ -1,10 +1,10 @@
 /**
  * check.mjs —— 零依赖工程质量门禁（CI 前置）
  *
- * 1) 语法校验：对 js/ 与 scripts/（含 lib/）下每个脚本执行 `node --check`
+ * 1) 语法校验：对 js/、ngm.local/ 与 scripts/（含 lib/）下每个脚本执行 `node --check`
  * 2) 资源完整性：index.html 引用的本地脚本/样式/manifest 必须存在
- * 3) 入口完整性：js/ 下每个脚本都必须被 index.html 引用（Service Worker 例外）
- * 4) 离线承诺：入口 / CSS / JS 不得引用会发起网络请求的远程资源（白名单集中在 lib/offline-scan.mjs）
+ * 3) 入口完整性：js/ 下每个脚本都必须被 index.html 引用（Service Worker 例外；本地 ngm 包由 check-ngm 核对）
+ * 4) 离线承诺：入口 / CSS / JS / 本地 ngm 包不得引用会发起网络请求的远程资源（白名单集中在 lib/offline-scan.mjs）
  * 5) 断言数一致：README 徽章/正文/命令注释与 selftest 实际断言数一致
  * 6) 契约判据：contracts/conventions.json 里列出的约定（版本三处一致 / i18n 键对齐 /
  *    文件头唯一 / 枚举同源）由 scripts/check-contracts.mjs 逐条核对（总是真实核对）
@@ -36,12 +36,15 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 
 /* 1. 语法校验 */
 const jsFiles = walkFiles(join(root, 'js'), { ext: '.js' });
+/* 本地 ngm 包的浏览器入口同样是 classic script：纳入语法与离线扫描，但入口引用由 check-ngm 按包核验。 */
+const localJsFiles = existsSync(join(root, 'ngm.local'))
+  ? walkFiles(join(root, 'ngm.local'), { ext: '.js' }) : [];
 /* 工程脚本（开发工具）只需语法校验，不参与入口引用检查；scripts/lib 递归纳入，避免共享库语法错误逃逸 */
 const toolFiles = walkFiles(join(root, 'scripts'), { ext: '.mjs' });
 /* Service Worker 必须在站点根目录：放在 js/ 下默认 scope 仅 /js/，无法接管 index.html 与全站离线缓存 */
 const swFile = join(root, 'sw.js');
 if (!existsSync(swFile)) errors.push('Service Worker 缺失：sw.js 必须位于站点根目录');
-for (const f of [...jsFiles, ...toolFiles, ...(existsSync(swFile) ? [swFile] : [])]) {
+for (const f of [...jsFiles, ...localJsFiles, ...toolFiles, ...(existsSync(swFile) ? [swFile] : [])]) {
   const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   if (r.status !== 0) errors.push(`语法错误：${relative(root, f)}\n${(r.stderr || '').trim()}`);
 }
@@ -70,6 +73,9 @@ for (const { file, kind, text } of [
     { file: relative(root, f).replace(/\\/g, '/'), kind: 'css', text: readFileSync(f, 'utf8') }
   )),
   ...jsFiles.map(f => (
+    { file: relative(root, f).replace(/\\/g, '/'), kind: 'js', text: readFileSync(f, 'utf8') }
+  )),
+  ...localJsFiles.map(f => (
     { file: relative(root, f).replace(/\\/g, '/'), kind: 'js', text: readFileSync(f, 'utf8') }
   ))
 ]) {
@@ -461,4 +467,4 @@ if (errors.length) {
   errors.forEach(e => console.error('  - ' + e));
   process.exit(1);
 }
-console.log(`✅ 工程自检通过：${jsFiles.length} 个脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、状态写入口守约、i18n 覆盖率守约、SW 缓存版本守约、CSS 结构配平`);
+console.log(`✅ 工程自检通过：${jsFiles.length} 个项目脚本 + ${localJsFiles.length} 个本地包脚本语法正确、入口资源完整、离线引用合规、断言数一致、契约守约、插件 API 面守约、模块分层守约、状态写入口守约、i18n 覆盖率守约、SW 缓存版本守约、CSS 结构配平`);

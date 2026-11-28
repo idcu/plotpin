@@ -393,13 +393,119 @@ if (project && lock) {
           if (!keepsName(src, k)) fail(`适配层 ${a.file} 没有保留承诺的名字：${k}`);
         }
       }
+      /* 本地包适配层也纳入「已登记」集合，否则反向扫描会把它们当成漏登记。 */
+      for (const a of adaptersDoc.localAdapters || []) listed.add(a.file);
       for (const f of adapterFiles) {
         if (!listed.has(f)) fail(`发现未登记的适配层：${f}（公共模块升级时它会静默失效）`);
       }
       console.log(`check-ngm: adapters ${listed.size} 条登记 / ${adapterFiles.length} 个实际适配层`);
     }
 
-    console.log(`check-ngm: OK (${declared.size} declared, ${locked.size} locked, ${found.size} vendor modules, ${refCount.size} referenced modules, ngm ${ngmVersion})`);
+    /* ---- 7. 本地 ngm 包（ngm.local）：格式 + 接线 + 适配层 ----
+       本地包不进 ngm.lock / vendor digest，但必须与 vendor 包同形：
+       manifest 合法、browser 入口被 index.html 加载、adapters.json 有登记、test 存在。
+       提升到 ngm-repo 后应删除本地目录，避免两份实现。 */
+    const LOCAL_ROOT = 'ngm.local';
+    const LOCAL_PREFIX = '@local/';
+    const localRoot = path.join(ROOT, LOCAL_ROOT);
+    const localManifests = [];
+    if (fs.existsSync(localRoot)) {
+      const walkLocal = (dir) => {
+        for (const name of fs.readdirSync(dir).sort()) {
+          const abs = path.join(dir, name);
+          if (fs.statSync(abs).isDirectory()) walkLocal(abs);
+          else if (name === 'ngm.json') localManifests.push(abs);
+        }
+      };
+      walkLocal(localRoot);
+    }
+    const htmlPath = path.join(ROOT, 'index.html');
+    const htmlText = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : '';
+    const htmlScripts = [...htmlText.matchAll(/<script\s+src=["']([^"']+)["']><\/script>/g)].map((m) => m[1]);
+    const localAdapters = (() => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(ROOT, 'contracts', 'adapters.json'), 'utf8')).localAdapters || [];
+      } catch (_) { return []; }
+    })();
+    const localAdapterFiles = new Set();
+    for (const manifestPath of localManifests) {
+      const relManifest = rel(manifestPath);
+      let doc;
+      try { doc = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
+      catch (e) { fail(`${relManifest} 不是合法 JSON：${e.message}`); continue; }
+
+      const pkgDir = path.dirname(manifestPath);
+      const sub = path.relative(localRoot, pkgDir).replace(/\\/g, '/');
+      const wantName = LOCAL_PREFIX + sub.split('/').join('-');
+      if (doc.schemaVersion !== 3) fail(`${relManifest} schemaVersion 应为 3，实际 ${doc.schemaVersion}`);
+      if (doc.name !== wantName) fail(`${relManifest} 的 name 应为 ${wantName}，实际 ${doc.name}`);
+      if (!isSemver(doc.version)) fail(`${relManifest} 的 version 不可用：${doc.version}`);
+      if (!Array.isArray(doc.dependencies) || doc.dependencies.length) {
+        fail(`${relManifest} 的 dependencies 必须为空数组（本地包先只允许零依赖）`);
+      }
+
+      const entries = [
+        ['main', doc.main],
+        ['cjs', doc.cjs],
+        ['browser', doc.browser],
+        ['test', doc.test]
+      ];
+      for (const [label, relPath] of entries) {
+        if (!relPath) { fail(`${relManifest} 缺少 ${label} 入口`); continue; }
+        if (!fs.existsSync(path.join(pkgDir, relPath))) fail(`${relManifest} 的 ${label} 不存在：${relPath}`);
+      }
+      if (!/^__local[A-Za-z0-9]+$/.test(String(doc.global || ''))) {
+        fail(`${relManifest} 的 global 必须形如 __localXxx：${doc.global || '(空)'}`);
+      } else if (doc.browser) {
+        const browserAbs = path.join(pkgDir, doc.browser);
+        if (fs.existsSync(browserAbs)
+          && !squash(fs.readFileSync(browserAbs, 'utf8')).includes(squash(doc.global))) {
+          fail(`${relManifest} 的 browser 入口没有挂载 ${doc.global}`);
+        }
+      }
+      if (doc.browser) {
+        const browserRel = path.relative(ROOT, path.join(pkgDir, doc.browser)).replace(/\\/g, '/');
+        if (!htmlScripts.includes(browserRel)) fail(`${relManifest} 的 browser 入口未被 index.html 加载：${browserRel}`);
+      }
+      if (!doc.adapter) {
+        fail(`${relManifest} 缺少 adapter（旧全局名适配层）`);
+      } else {
+        const adapterAbs = path.join(ROOT, doc.adapter);
+        localAdapterFiles.add(doc.adapter);
+        if (!fs.existsSync(adapterAbs)) fail(`${relManifest} 的 adapter 不存在：${doc.adapter}`);
+        if (!htmlScripts.includes(doc.adapter)) fail(`${relManifest} 的 adapter 未被 index.html 加载：${doc.adapter}`);
+        if (doc.browser) {
+          const browserRel = path.relative(ROOT, path.join(pkgDir, doc.browser)).replace(/\\/g, '/');
+          const bi = htmlScripts.indexOf(browserRel), ai = htmlScripts.indexOf(doc.adapter);
+          if (bi >= 0 && ai >= 0 && ai < bi) fail(`${relManifest} 的 adapter 必须排在同包 browser 入口之后`);
+        }
+        const entry = localAdapters.find((a) => a.file === doc.adapter);
+        if (!entry) {
+          fail(`contracts/adapters.json 的 localAdapters 未登记 ${doc.adapter}`);
+        } else {
+          if (entry.package !== doc.name) fail(`localAdapters ${doc.adapter} 的 package 应为 ${doc.name}`);
+          const src = fs.existsSync(adapterAbs) ? fs.readFileSync(adapterAbs, 'utf8') : '';
+          for (const k of entry.keeps || []) {
+            if (!keepsName(src, k)) fail(`localAdapters ${doc.adapter} 没有保留承诺的名字：${k}`);
+          }
+        }
+      }
+      /* 本地包不得混入 vendor 清单 / 锁 / vendor 目录，避免同名两份实现。 */
+      if ((project.dependencies || []).some((d) => d.name === doc.name)) fail(`本地包不得出现在 ngm.json：${doc.name}`);
+      if ((lock.dependencies || []).some((d) => d.name === doc.name)) fail(`本地包不得出现在 ngm.lock：${doc.name}`);
+      if (fs.existsSync(path.join(ROOT, 'ngm.vendor', VENDOR_REPO, 'packages', sub))) {
+        fail(`本地包不得同时存在于 ngm.vendor：packages/${sub}`);
+      }
+    }
+    for (const a of localAdapters) {
+      if (!localAdapterFiles.has(a.file)) fail(`localAdapters 登记了未被本地包引用的适配层：${a.file}`);
+      if (!fs.existsSync(path.join(ROOT, a.file))) fail(`localAdapters 文件不存在：${a.file}`);
+    }
+    if (localManifests.length) {
+      console.log(`check-ngm: local ${localManifests.length} packages / ${localAdapters.length} adapters`);
+    }
+
+    console.log(`check-ngm: OK (${declared.size} declared, ${locked.size} locked, ${found.size} vendor modules, ${refCount.size} referenced modules, ${localManifests.length} local packages, ngm ${ngmVersion})`);
     for (const w of warnings) console.log(`  ! ${w}`);
   }
 }

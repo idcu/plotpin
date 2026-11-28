@@ -42,5 +42,15 @@
         "__idcuAssets"
       ]
     }
+  ],
+  "localAdapters": [
+    {
+      "file": "js/common/pdf-vector.js",
+      "package": "@local/format-pdf-vector",
+      "keeps": [
+        "global.PdfVec=",
+        "__localPdfVector"
+      ]
+    }
   ]
 }

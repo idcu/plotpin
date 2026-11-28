@@ -5,7 +5,7 @@
  *
  * 脚本内联后仍然是「内联脚本」：CSP 的 script-src 不含 'unsafe-inline'，
  * 因此这里把内联脚本合并为单段，只对合并体追加 1 条 sha256（hash 高熵、gzip 几乎不缩，
- * 47 条哈希是发行包里最贵的一块固定成本；hash 由内容确定性计算，构建可复现）。
+ * 49 条哈希是发行包里最贵的一块固定成本；hash 由内容确定性计算，构建可复现）。
  */
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
@@ -92,7 +92,7 @@ export async function buildStandalone(html, readFile) {  /* 结构缩进在 HTML
     (_, href) => `<style>${inner(minifyCss(readFile(href)))}</style>`);
 
   /* 脚本内联（保持原有顺序）；先做构建期无损压缩，再转义 </script> 防止提前闭合。
-     47 段合并为 1 段：CSP 只需 1 条哈希；合并体用 `;` + 换行分隔（显式终止上一条语句，
+     49 段合并为 1 段：CSP 只需 1 条哈希；合并体用 `;` + 换行分隔（显式终止上一条语句，
      防尾注释/ASI 粘连；比 `\n;\n` 每处少 1 B）。
      合并后立刻做语法解析：顶层 let/const 重名等词法冲突会在这里直接让构建失败。 */
   const SLOT = '<!--PLOTPIN_SCRIPT_BUNDLE-->';

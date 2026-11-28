@@ -2,16 +2,16 @@
 # 生成：node scripts/check-sw.mjs --update（bump sw.js VERSION 后必须执行）
 # 指纹：UTF-8 读取、CRLF→LF 归一后取 sha256；路径字典序、统一 / 分隔
 # 合并冲突：不要手工合并哈希行，取合并后的工作树重新执行 --update
-version=329
+version=330
 b275f8ed7f89ff9e1167384a67cf08e25c5bba819541459c91d99c220bb58788  css/style.css
 03fa8ea34816f5b6fb57dd5a1908019ab93691f34ecd02c1027b705ceb3d7cb0  icon.svg
-150d6d4e0ffb19aec9c6bbf372a348a647f35b718ba7237658bff42af8714cc4  index.html
+23b551bb28076b62d506a6818322110f44107e02ab853970937fe0266deb267e  index.html
 ac1a25e9004be7c200e0724a2ab7c45f173b054712d321f2f4df9d49b9bcb5fe  js/common/content-assets.js
 538ade5b75e5a6fed346f13dbd393ad1b7cd14003f591d8a6ab5581f34554ec6  js/common/dxf.js
 d5ddc34a040447db84642fb9f50322ee8e93ee8e16ca471ff8f6bab0d8eeae69  js/common/i18n.js
 fbcecd984677bac15092e2ab969204c5546c1356ba7584896c2175dfdb9cefdf  js/common/merge.js
 2dcab8d66ebc264bdce18eb1099cd7c3e255299090efcf7a06b1cc7be1d53c72  js/common/pdf-read.js
-3c1f00f47dacaf693a7f016f7f47bd86282f52b45218ff78a068499b41bbc5f0  js/common/pdf-vector.js
+8f58aa1b53116e00d46d88c15856c3aa9b24dfa6110f4856b7da982b51df91ec  js/common/pdf-vector.js
 0c65f04786e41c13878d9acc22de2dbe8ab87a6593063155f291e75c7a1fed55  js/common/pdf.js
 2b64520f255a3e712eec295380877150b9193988ad29b35914cf75480685fc7c  js/common/qr.js
 c836f5c7d09e4a3a4363171cfad8422180f624d46ebec0fc256a52cab910b9c1  js/common/symbols.js
@@ -45,6 +45,7 @@ f2a9022baa2a8f57b7370feb1d694a16adf43872d4cdab440fe8effdd7de5dbc  js/features/sn
 a395f00d8f5b6c26872397536805025d6385202ce619c91f421872d8d02a6b72  js/features/ui-panels.js
 132c31d2befb24da2c601b012b74f49106a7004e2683caeaa835cc98ca960698  js/features/ui-shell.js
 34d4ca019bf4e3e7f7e8bb648d46a2c7d9ebe6b4eca0a11f9e1203ceeba47e40  manifest.webmanifest
+3d3492d34a3d6d573a3eeb836d1120460be7cef273771bbbe5898130edce1225  ngm.local/format/pdf-vector/src/core.js
 5e1137eca399e2bd0a85e1890268b319aec2fffd3c20354fd8664ff079ad7909  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/assets/src/core.js
 4c6e26b341a211b76218e26fc9fa5f644077bc0136e28348b4b529558b42bd02  ngm.vendor/gitee.com/idcu/ngm-repo/packages/core/geometry/src/core.js
 8f893da7e2a131e5795628f813b1999879a7cbe67a57812de0072b3ede63a21a  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/dsv/src/vendor/dsv.js
@@ -55,4 +56,4 @@ a8ea2ff4d2ce03822a1a00f192ac2b76faf3f58181289bb2344e0d79417a78c7  ngm.vendor/git
 1be284fb8b54201feef446fb0ad41e59f794f9ca8499eb122c290d49886451c4  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xlsx-read/src/vendor/xlsx.js
 8a3aaf175de715dc299c259922c976bff16fca6f7956ba31032496048f636e23  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/xml-lite/src/vendor/xml-lite.js
 8bee1e6a1e46fcf5f24289579a93475319f95c8a4534682642c40e6952b940aa  ngm.vendor/gitee.com/idcu/ngm-repo/packages/format/zip/src/vendor/zip.js
-f14976e1f131c5217d62fda27aa0be63af9371b6b640d83795fda33f70bc9bbc  sw.js
+53199d403584962f33969768f2450f0c9d0a7f58d8e3923db938a0d210fb6c59  sw.js

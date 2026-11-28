@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 3,
+  "name": "@local/format-pdf-vector",
+  "version": "0.1.0",
+  "runtime": "node",
+  "main": "./src/index.mjs",
+  "cjs": "./src/index.cjs",
+  "browser": "./src/core.js",
+  "global": "__localPdfVector",
+  "adapter": "js/common/pdf-vector.js",
+  "test": "./test/pdf-vector.test.mjs",
+  "dependencies": []
+}

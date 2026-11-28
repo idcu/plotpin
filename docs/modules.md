@@ -3,12 +3,13 @@
 > **读者**：要定位、修改或替换某个文件的开发者。
 > **回答**：每个文件负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑。
 > **不回答**：设计取舍见 [ARCHITECTURE](ARCHITECTURE.md)，数据与持久化见 [DATA-MODEL](DATA-MODEL.md)，功能边界见 [features](features.md)。
-> **口径**：48 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载）+ `scripts/` 19 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 72 个文件。除插件外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-15。
+> **口径**：49 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 1 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 72 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
 
 ## 分层与加载顺序
 
 | 顺序 | 层 | 目录 | 文件数 | 说明 |
 | --- | --- | --- | --- | --- |
+| 0 | 本地包 | `ngm.local/` | 1 个直接加载 | 尚未上游的本地 ngm 包，UMD + 适配层；不进 `ngm.lock` |
 | 1 | vendor | `ngm.vendor/` | 10 个直接加载 | `@idcu/*` 源码，挂到 `__idcu*` 全局；只许经 `ensureVendor` 取用 |
 | 2 | 公共 | `js/common/` | 9 | 零 DOM 的算法、协议与适配器 |
 | 3 | 核心 | `js/core/` | 13 + `app.js` | 常量、状态、几何、渲染、交互、持久化 |
@@ -26,10 +27,20 @@
 | `i18n.js` | 中英文案、插值、运行时替换 | `I18N.t / p / fmt / setLang / apply / dict / phrases / templates / lang`；全局简写 `L` | 纯数据 → 全仓 UI | `L` 只做文本插值，**不转义 HTML**；插入 `innerHTML` 前必须过 `esc` / `xmlEscape`。缺键时回退原文，可能把中文带到英文界面；i18n 扫描门禁拦截新增硬编码。 |
 | `merge.js` | 离线工程合并：对象/楼层/场地/图层/类型的 LWW + 墓碑；M2 配置差异报告 | `mergeProjectData(currentRaw, incomingRaw) → {project, stats, config}`、`mergeConfigText(stats)`；内部 `mergeFloorMeta / mergeFloorObjects / mergeObjectSig / mergeStable / mergePrunedList / mergeClampTimestamps` | 纯函数 → `mergeProjectJSON`、协作 | `A=当前`、`B=导入/远端`；对象签名忽略 `z`；不修改入参。楼层墓碑 `deletedAt >= 两侧最后写入` 时整层删除；至少保留一层。图层/类型墓碑删除定义，内置类型与 `layer.default` 受保护；悬空引用留给 `migrateProject`。`config` 只报告“远端未采纳/已补缺”，不改变合并结果；空报告不挂 `stats.config`。 |
 | `pdf-read.js` | PDF 解析、页序恢复、逐页内嵌图映射（像素流） | `PdfRead.parsePdf / layoutPdfPages / PT_TO_METER / tokenizeContent / looksLikeCidGarbage / LIMITS` | vendor PDF 核心 + `Zip` → `io-import` | 文本按 UTF-16 BOM → GBK 严格 → ASCII 解码，解不开按 `textErrors` 计数；不解析 ToUnicode/CID 字形映射。导入默认只取第 1 页；用户在预检里显式选页范围时按页取用，解码链与计数口径不因多页而改变。`layoutPdfPages` 保留为通用工具但导入不再使用。 |
-| `pdf-vector.js` | 矢量 PDF 写入器：多页页面对象 / 内容流 / xref / 世界→pt 适配 / 图片 XObject / 文字位图 / Type3 不可见文字层 | `PdfVec.stream / docPages / fit / mapPt / path / image / flate / textBitmap` | 纯字符串与字节生成 → `io-export` 的矢量 PDF | 内容流只接受 ASCII 数字与运算符；文字视觉必须走 `textBitmap` + `flate` 的 RGB/SMask 图片，可选中/搜索由独立的 Type3 空字形文字流承担（图纸页与清单页同机制，`a:'l'` 左对齐 + `b:1` 基线落位供清单页表格使用）。世界与 PDF 同为 Y 向上，`fit` 只做等比缩放+平移+居中。`flate` 不可用时调用方必须回退位图，不得产出坏文件。 |
+| `pdf-vector.js` | 本地包适配层：把 `@local/format-pdf-vector` 接回 `global.PdfVec` | `PdfVec.stream / docPages / fit / mapPt / path / image / flate / textBitmap` | `ngm.local/format/pdf-vector` → `io-export` 的矢量 PDF | 实现在 `ngm.local`，本文件只做全局接线；`check-ngm` 的 `localAdapters.keeps` 守 `global.PdfVec=` 与 `__localPdfVector`。 |
 | `pdf.js` | 将 vendor PDF 图像能力适配为 `global.Pdf` | `Pdf` | vendor `pdf-image` → `io-export` 的位图 PDF | 薄适配层，本身不含逻辑。`io-export` 经 `ensureVendor('Pdf')` 调用；PDF 默认导出是整页位图。 |
 | `qr.js` | 二维码编码与 SVG 渲染（协作邀请、导出标签复用） | `Qr`（含 `MAX_BYTES`、`byteLength`） | 纯算法 → 协作、导出 | 容量按固定 Version 3-M，`MAX_BYTES=42`；超出时必须由调用方改用可粘贴文本，禁止渲染不可扫描的假二维码。 |
 | `symbols.js` | 内置 36 个线性符号、分类/别名搜索、自定义 SVG 清洗、DXF 折线近似 | `SYMBOL_LIBRARY / SYMBOL_CATEGORIES / SYMBOL_LIMITS / parseSvgSymbol / buildSymbolIndex / searchSymbols / symbolPathsFor / symbolPolylinesInWorld / customSymbolsFromTypes / sanitizeSymbolBundle` | 纯函数 + SVG 解析 → 渲染、导出、类型面板 | 自有 SVG 上限 64KB / 200 元素 / 深度 16 / 200 path / 单 path 5000 字符；禁止 `script`、事件属性、外部引用。DXF 用 `symbolPolylinesInWorld` 做折线降级，必须在导出报告中说明。 |
+
+## ngm.local（1 个）
+
+本地 ngm 包先：目录形状与 `ngm.vendor` 一致，但不写入 `ngm.json` / `ngm.lock` / `ngm-vendor-digest.json`，便于后续原样提升到 `gitee:idcu/ngm-repo`。
+
+| 包 | 入口 | 适配层 | 测试 | 说明 |
+| --- | --- | --- | --- | --- |
+| `@local/format-pdf-vector` | `ngm.local/format/pdf-vector/src/core.js`（UMD，挂 `__localPdfVector`）；ESM/CJS 入口同目录 | `js/common/pdf-vector.js` | `ngm.local/format/pdf-vector/test/pdf-vector.test.mjs` | 矢量 PDF 写入器；`flate` 需要 `CompressionStream`，`textBitmap` 需要 Canvas。提升到上游后删除本地目录。 |
+
+登记与校验：`scripts/check-ngm.mjs` 核对 manifest、`browser` 入口被 `index.html` 加载、adapter 顺序、`contracts/adapters.json` 的 `localAdapters`；`scripts/test-local.mjs` 运行本地包测试；`npm run test` 与 `npm run ci` 都已接入。
 
 ## js/core（14 个）
 
@@ -48,7 +59,7 @@
 | `render.js` | Canvas 渲染、静态层缓存、覆盖率/标注/手柄/差异叠加、静态层局部补绘 | `drawScene / requestRender / invalidateStatic / sceneStaticKey / ensureStaticLayer / visibleWorldRect / markSurfaceSize / surfaceCssSize / patchUnionRect / applyPatchRect / drawBackground / drawSite / drawCoverage / drawSiteAnnotations / drawObject / drawDimension / drawDiffOverlay / drawCalibration` | 状态、视口、几何、符号、i18n → 启动、交互、导出 | `sceneStaticKey` 必须包含 `site`、底图 transform、设置、选中态、覆盖率摘要、`ghostSig` 与 `refSig`；漏字段会留下过期像素。V-5 参照版垫底在 `drawStaticContent` 里、网格与对象之前调用 `revPaint`。导出走 `interactive=false` 的全量路径，不读缓存；`markerScale!=1` 也强制全量。静态层重建后必须 `markSurfaceSize()`。局部补绘（M6）用**旧 `staticBounds` ∪ 新 `objectSnapBounds`** 求并集，`clip`/`clearRect` 恒等于该矩形，重绘 `view` 再按 96 px `pad` 外扩；旧包围盒缺失或对象已删除时返回 false，调用方整层重建。边界：标签溢出超出 pad 仍可能被擦；拖拽期走整层重建。 |
 | `snapshot.js` | 版本快照的序列化/存取/淘汰/差异分类/叠加数据 | `SNAPSHOT_PREFIX / snapshotKey / snapshotProjectData / snapshotAssetRefs / diffSnapshots / diffOverlay / setDiffOverlay / diffCategoryOf / objectDiffFields` | `persistence`、`model` → 快照面板、导出 | 快照存 `assetId` 引用，不能复制 base64。上限 20 条 / 16MB，超出淘汰最旧且至少留 1 条。差异按对象 id 匹配，分类优先级为新增 > 删除 > 换楼层 > 类型变更 > 移动 > 属性修改；场景级追加场地/底图/楼层名/图层名/类型表结构；旧快照缺 `objectTypes` 时跳过类型表对比；内部不可变字段必须忽略。 |
 | `tab-lease.js` | 同工程多标签的编辑租约（BroadcastChannel + localStorage 心跳） | `acquireEditorLease / releaseEditorLease / leaseSaveBlocked / leaseStatus / onLeaseConflict / LEASE_TTL_MS / LEASE_HEARTBEAT_MS` | `model`、持久化 → 启动、保存 | 租约按 `state.meta.projectId`（工程库绑定 id）归组；未绑定工程为空串，多个未绑定标签会被视为同一工程——是否符合预期**待确认**。租约冲突时只暂缓保存，不丢内存编辑。 |
-| `app.js` | 启动编排：设置、恢复工程、首启引导、能力探测、SW、租约、卸载前落盘 | 无对外函数（`DOMContentLoaded` 执行） | 全部 | 必须最后加载。启动顺序改变会影响 `afterStateLoaded`、首启引导与 SW 注册；新增启动步骤要同步 selftest/e2e 的“加载 48 个脚本”断言。 |
+| `app.js` | 启动编排：设置、恢复工程、首启引导、能力探测、SW、租约、卸载前落盘 | 无对外函数（`DOMContentLoaded` 执行） | 全部 | 必须最后加载。启动顺序改变会影响 `afterStateLoaded`、首启引导与 SW 注册；新增启动步骤要同步 selftest/e2e 的“加载 49 个脚本”断言。 |
 
 ## js/features（15 个）
 
@@ -76,7 +87,7 @@
 
 ## scripts（26 个文件）
 
-`scripts/*.mjs` 19 个 + `scripts/lib/*.mjs` 4 个 + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）。
+`scripts/*.mjs` 22 个 + `scripts/lib/*.mjs` 4 个 + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）。
 
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
@@ -85,7 +96,8 @@
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
 | `check-gates.mjs` | 门禁的牙齿：先跑正面基线（10 条，未破坏副本必须全绿），再构造 **20 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失、CSP 哈希错位、i18n 覆盖率跌破、TURN 凭据脱敏失守）；`--only` 可分批跑 | 仓库副本 → 通过/失败 | CI |
-| `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性、消费方导出，以及 vendor 实际字节 ↔ `scripts/ngm-vendor-digest.json` 逐文件 sha256；`--update-vendor-digest` 重写清单 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor` → 报告 | CI、`npm test` |
+| `check-ngm.mjs` | vendor 接线自检：清单/锁/版本文件/模块存在性、消费方导出，以及 vendor 实际字节 ↔ `scripts/ngm-vendor-digest.json` 逐文件 sha256；同时核对 `ngm.local` 本地包的 manifest、入口、adapter 与 `contracts/adapters.json` 的 `localAdapters`；`--update-vendor-digest` 重写清单 | `ngm.json / ngm.lock / .ngm-version / ngm.vendor / ngm.local` → 报告 | CI、`npm test` |
+| `test-local.mjs` | 发现并运行 `ngm.local/**/test/*.test.mjs`；无本地包时直接通过 | `ngm.local/` → PASS/FAIL | `npm test`、`npm run ci`、`npm run test:local` |
 | `check-contracts.mjs` | 契约判据：版本源、i18n 键、文件头、枚举与 `contracts/conventions.json` 一致；另配 `contracts/coupling.json` 的计数基线 | 仓库 → 报告 | `check.mjs` |
 | `check-plugin-api.mjs` | 用词法器抽取 `PlotPin` 顶层键与 `contracts/plugin-api.json` 严格比对；无法静态确认时 **fail-closed**（报错退出，不猜） | 源码/契约 → 报告 | `check.mjs` |
 | `check-deletions.mjs` | 结构性删除账本：`docs/deletions.md` 与代码中删除标记一致 | 文档+代码 → 报告 | `check.mjs` |
@@ -173,8 +185,8 @@
 
 ## 新增模块的登记规则
 
-1. 放进正确层：零 DOM 放 `common`，状态/几何/渲染/持久化放 `core`，UI/业务流程放 `features`。
-2. 在 `index.html` 的对应位置插入 `<script>`，`check.mjs` 会校验入口引用与分层。
+1. 放进正确层：零 DOM 放 `common`，状态/几何/渲染/持久化放 `core`，UI/业务流程放 `features`；尚未上游的通用能力放 `ngm.local/<domain>/<name>/`。
+2. 在 `index.html` 的对应位置插入 `<script>`，`check.mjs` 会校验入口引用与分层；本地包入口需排在自包 adapter 之前，由 `check-ngm` 核对。
 3. 复用既有公共抽象（`APP_LIMITS`、`siteBounds`、`outlineOf`、`EXPORT_FIELD_DEFS`、`objectIndexById`、`ensureVendor`），不得复制粘贴第二份。
 4. 在本文件补一行；若改变公共 API 或行为，同时在 [ARCHITECTURE](ARCHITECTURE.md) 与 `CHANGELOG.internal.md` 记录影响范围。
-5. 修改 `js/**` 或 `index.html` 后同步递增 `sw.js` 的 `VERSION`，并运行 `node scripts/check-sw.mjs --update`。
+5. 修改 `js/**`、`ngm.local/**` 或 `index.html` 后同步递增 `sw.js` 的 `VERSION`，并运行 `node scripts/check-sw.mjs --update`。
