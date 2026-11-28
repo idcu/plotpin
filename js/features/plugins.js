@@ -548,9 +548,12 @@
     if (countProjectObjects(st) + clean.length > objectsMax) {
       throw new Error('对象数量超过上限 ' + objectsMax);
     }
-    /* N-18：插件写入与手动绘制走同一撤销语义——先压历史再改状态，Ctrl+Z 可完全移除。 */
-    if (typeof global.pushHistory === 'function') global.pushHistory();
-    else if (typeof pushHistory === 'function') pushHistory();
+    /* N-18：插件写入与手动绘制走同一撤销语义——先压历史再改状态，Ctrl+Z 可完全移除。
+       P1-B1：pushHistory 返回 false 表示只读/锁定，此时必须拒绝写入，不能先改状态。 */
+    let pushed = true;
+    if (typeof global.pushHistory === 'function') pushed = global.pushHistory();
+    else if (typeof pushHistory === 'function') pushed = pushHistory();
+    if (pushed === false) return [];
     st.objects.push(...clean);
     if (typeof global.commitChange === 'function') global.commitChange(String(msg || '').slice(0, 80));
     return clean.map(o => o.id);

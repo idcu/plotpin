@@ -927,7 +927,7 @@ function collabBroadcastFloor(op){
 /** C2：规则配置显式广播。合并的 mergeRuleSide 仍保持本地优先；本通道只在用户提交规则改动时发一次，
  *  接收端直接应用并压历史，且应用后不再外发（避免两端来回推）。 */
 function collabBroadcastRules(rules){
-  if(!collabMode||!collabTransportReady()) return false;
+  if(isReadOnly()||!collabMode||!collabTransportReady()) return false;
   return collabSendObject({t:'rules-apply',rules});
 }
 function collabReceiveRaw(raw){
@@ -1048,7 +1048,7 @@ function collabDrainApply(){
       if(job.epoch!==collabEpoch){ collabRecordError(L('已忽略旧工程同步快照')); return; }
       /* 撤销栈隔离：一次连接最多让远端写一条历史，持续推送不会把本地 20 条撤销记录冲掉 */
       const useHistory=!collabRemoteHistoryUsed;
-      const stats=await mergeProjectJSON(raw,Object.assign({expectProjectId:job.pid,base:collabConflictBase()},useHistory?{history:'overwrite'}:{history:false}));
+      const stats=await mergeProjectJSON(raw,Object.assign({expectProjectId:job.pid,base:collabConflictBase(),remote:true},useHistory?{history:'overwrite'}:{history:false}));
       if(stats&&stats.ignored){
         collabRecordError(L('已忽略其他工程的同步快照'));
         collabSetStatus(L('已忽略其他工程的同步快照'),'warn');

@@ -293,6 +293,8 @@ const TX_GLOSSCOV='按视场角与安装高度投影，统计可见设备覆盖�
     '已退出本地只读':'Read-only off',
     [TX_RO]:'Read-only: {what} denied (local only; peers can still edit)',
     '编辑':'Edit', '撤销':'Undo', '重做':'Redo', '拖拽':'drag', '该工具':'this tool', '属性写入':'property edit',
+    '修改属性':'Edit property', '修改节点':'Edit node', '修改标记大小':'Change marker size', '修改规则':'Edit rules',
+    '合并工程':'Merge project', '回滚快照':'Restore snapshot', '调整叠放顺序':'Reorder', '导入图元':'Import symbol', '导入符号':'Import symbols',
     '编辑快捷键':'edit shortcut', '复制对象':'duplicate', '粘贴':'paste', '清空楼层':'clear floor',
     '批量属性':'Batch properties', '移动到':'Move to', '应用图层':'Apply layer', '批量旋转':'Rotate all', '全部删除':'Delete all',
     '图上标注':'On-drawing labels', '场地属性':'Site properties', '场地节点':'Site nodes', '图片底图':'Image base map',

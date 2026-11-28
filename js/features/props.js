@@ -43,16 +43,19 @@ function layerOptionsHTML(currentId){
 function bindNodeEditorEvents(box, spec){
   const pts=()=>spec.points()||[];
   box.querySelectorAll('[data-node-axis]').forEach(el=>{
-    el.addEventListener('input',()=>{ if(spec.setCoord(Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) spec.changed(); });
+    el.addEventListener('input',()=>{
+      if(!guardWrite(L('修改节点'))){ renderProps(); return; }
+      if(spec.setCoord(Number(el.dataset.nodeIndex),el.dataset.axis,el.value)) spec.changed();
+    });
     if(spec.focusNode){
       el.addEventListener('focus',()=>spec.focusNode(Number(el.dataset.nodeIndex)));
       el.addEventListener('blur',()=>spec.focusNode(null));
     }
   });
-  box.querySelectorAll('[data-node-add]').forEach(b=>b.onclick=()=>spec.insert(Number(b.dataset.nodeAdd)));
-  box.querySelectorAll('[data-node-del]').forEach(b=>b.onclick=()=>spec.remove(Number(b.dataset.nodeDel)));
-  box.querySelectorAll('[data-node-up]').forEach(b=>b.onclick=()=>spec.move(Number(b.dataset.nodeUp),-1));
-  box.querySelectorAll('[data-node-down]').forEach(b=>b.onclick=()=>spec.move(Number(b.dataset.nodeDown),1));
+  box.querySelectorAll('[data-node-add]').forEach(b=>b.onclick=()=>{ if(!guardWrite()) return; spec.insert(Number(b.dataset.nodeAdd)); });
+  box.querySelectorAll('[data-node-del]').forEach(b=>b.onclick=()=>{ if(!guardWrite()) return; spec.remove(Number(b.dataset.nodeDel)); });
+  box.querySelectorAll('[data-node-up]').forEach(b=>b.onclick=()=>{ if(!guardWrite()) return; spec.move(Number(b.dataset.nodeUp),-1); });
+  box.querySelectorAll('[data-node-down]').forEach(b=>b.onclick=()=>{ if(!guardWrite()) return; spec.move(Number(b.dataset.nodeDown),1); });
 }
 /**
  * 逐对象「图上标注」开关组（跨满两列）：点设备=编号/点坐标；区域=编号/基点/半径/边长/顶点/周长/面积；
@@ -94,6 +97,7 @@ function annotToggleGroupHTML(items, opts){
 function bindAnnotToggleInputs(box, spec){
   const attr=spec.attr||'data-annot';
   box.querySelectorAll('['+attr+']').forEach(el=>el.addEventListener('change',()=>{
+    if(!guardWrite()){ el.checked=!el.checked; return; }
     if(spec.apply(el.getAttribute(attr),el.checked)) spec.changed();
   }));
 }
@@ -318,6 +322,7 @@ function applySiteField(field,v){
 }
 /* 场地多边形顶点增删排序（闭合环；操作后同步取景框并提交） */
 function siteInsertNode(at){
+  if(!guardWrite()) return;
   const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
   const a=pts[at], c=pts[(at+1)%pts.length];
   pushHistory();
@@ -325,12 +330,14 @@ function siteInsertNode(at){
   state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已插入场地顶点');
 }
 function siteRemoveNode(i){
+  if(!guardWrite()) return;
   const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
   if(pts.length<=3) return toast(TX_POLYMIN,'warn');
   pushHistory(); pts.splice(i,1); state.site.updatedAt=nowISO(); syncFramePan(); commitChange('已删除场地顶点');
 }
 /** 顶点移动到指定下标（抓手拖拽与 ↑↓ 共用；越界/未移动不产生历史） */
 function siteMoveNodeTo(from,to){
+  if(!guardWrite()) return;
   const pts=state.site?.shape?.points; if(!pts||siteIsLocked(state.site)) return;
   if(!(from>=0)||from>=pts.length||!(to>=0)||to>=pts.length||from===to) return;
   pushHistory();
@@ -505,12 +512,13 @@ function renderMultiProps(box,objs){
       </div>
       <p class="hint-text">${esc(L('编号跨楼层自动避让；置顶/置底改变叠放顺序。'))}</p>
     </div>`;
-  $('multiLayerBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层', items.map(o=>o.id)); };
+  $('multiLayerBtn').onclick=()=>{ if(!guardWrite()) return; const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.layerId=$('multiLayer').value); commitChange('已修改图层', items.map(o=>o.id)); };
   $('multiRotateBtn').onclick=()=>{ rotateSelected(Number($('multiAngle').value)||0); };
-  $('multiHideBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
-  $('multiLockBtn').onclick=()=>{ const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
+  $('multiHideBtn').onclick=()=>{ if(!guardWrite()) return; const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.visible=false); commitChange('已隐藏对象', items.map(o=>o.id)); };
+  $('multiLockBtn').onclick=()=>{ if(!guardWrite()) return; const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn'); pushHistory(); items.forEach(o=>o.locked=true); commitChange('已锁定对象', items.map(o=>o.id)); };
   /* 批量交付：全选都已交付时整体取消，否则整体标记（一键切换，不额外增加按钮） */
   $('multiPublishBtn').onclick=()=>{
+    if(!guardWrite()) return;
     const items=objs.filter(isEditable); if(!items.length) return toast(TX_LOCKED,'warn');
     const all=items.every(isDelivered); pushHistory(); setDelivered(items,!all);
     commitChange(all?'已取消交付':'已标记交付', items.map(o=>o.id));
@@ -518,6 +526,7 @@ function renderMultiProps(box,objs){
   $('multiDeleteBtn').onclick=deleteSelected;
   box.querySelectorAll('[data-align]').forEach(b=>{
     b.onclick=()=>{
+      if(!guardWrite()) return;
       const items=objs.filter(isEditable);
       if(items.length<2) return toast(L('至少选择两个对象'),'warn');
       pushHistory();
@@ -527,6 +536,7 @@ function renderMultiProps(box,objs){
   });
   box.querySelectorAll('[data-distribute]').forEach(b=>{
     b.onclick=()=>{
+      if(!guardWrite()) return;
       const items=objs.filter(isEditable);
       if(items.length<3) return toast(L('至少选择三个对象'),'warn');
       pushHistory();
@@ -535,6 +545,7 @@ function renderMultiProps(box,objs){
     };
   });
   if($('multiRenumberBtn')) $('multiRenumberBtn').onclick=()=>{
+    if(!guardWrite()) return;
     const items=objs.filter(isEditable);
     if(!items.length) return toast(L(TX_LOCKED),'warn');
     const prefix=String($('multiPrefix').value||'').trim()||'P';
@@ -547,6 +558,7 @@ function renderMultiProps(box,objs){
     commitChange(L('已重新编号 {n} 个对象',{n}), n?items.map(o=>o.id):[]);
   };
   const restack=mode=>{
+    if(!guardWrite()) return;
     const items=objs.filter(isEditable);
     if(!items.length) return toast(L(TX_LOCKED),'warn');
     pushHistory();
@@ -572,17 +584,20 @@ function bindPropEvents(box,o){
   /* 逐对象「图上标注」开关：勾选即写入对象 annot 并重绘（与场地面板共用同一绑定实现） */
   bindAnnotToggleInputs(box,{apply:(key,val)=>setAnnot(o,key,val),changed});
   box.querySelectorAll('[data-style]').forEach(el=>el.addEventListener('input',()=>{
+    if(!guardWrite()){ renderProps(); return; }
     const k=el.dataset.style; o.style=o.style||{};
     if(k==='noFill'){ o.style.fillAlpha=el.checked?0:.15; }
     else o.style[k]=el.type==='checkbox'?el.checked:(el.type==='number'?Number(el.value):el.value);
     changed();
   }));
   box.querySelectorAll('[data-prop-key]').forEach(el=>el.addEventListener('change',()=>{
+    if(!guardWrite()){ renderProps(); return; }
     const entries=Object.entries(o.props||{}), idx=Number(el.dataset.propKey), newKey=el.value.trim();
     if(!entries[idx]||!newKey) return;
     const next={}; entries.forEach(([k,v],i)=>{ next[i===idx?newKey:k]=v; }); o.props=next; changed();
   }));
   box.querySelectorAll('[data-prop-val]').forEach(el=>el.addEventListener('change',()=>{
+    if(!guardWrite()){ renderProps(); return; }
     const key=Object.keys(o.props||{})[Number(el.dataset.propVal)];
     if(key!==undefined){ o.props[key]=el.value; changed(); }
   }));
@@ -609,25 +624,29 @@ function bindPropEvents(box,o){
     focusNode:i=>setFocusNode(i===null?null:{id:o.id,index:i})
   });
   if(o.kind==='line') bindNodeRowDrag(box,{move:(from,to)=>{
+    if(!guardWrite()) return;
     pushHistory(); moveNode(o,from,to); commitChange('节点顺序已调整');
   }});
   box.querySelector('[data-action="duplicate"]').onclick=()=>duplicateSelected();
   box.querySelector('[data-action="delete"]').onclick=()=>deleteSelected();
   box.querySelector('[data-action="raise"]').onclick=()=>reorderSelected(1);
   box.querySelector('[data-action="lower"]').onclick=()=>reorderSelected(-1);
-  box.querySelector('[data-action="visibility"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); };
-  box.querySelector('[data-action="lock"]').onclick=()=>{ if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); };
-  box.querySelector('[data-action="publish"]').onclick=()=>{ if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); setDelivered([o],!isDelivered(o)); commitChange(isDelivered(o)?'已标记交付':'已取消交付',[o.id]); };
+  box.querySelector('[data-action="visibility"]').onclick=()=>{ if(!guardWrite()) return; if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); };
+  box.querySelector('[data-action="lock"]').onclick=()=>{ if(!guardWrite()) return; if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); };
+  box.querySelector('[data-action="publish"]').onclick=()=>{ if(!guardWrite()) return; if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); setDelivered([o],!isDelivered(o)); commitChange(isDelivered(o)?'已标记交付':'已取消交付',[o.id]); };
   $('propAdd')?.addEventListener('click',()=>{
+    if(!guardWrite()) return;
     const k=$('propKey').value.trim(),v=$('propValue').value.trim(); if(!k) return;
     pushHistory(); o.props[k]=v; commitChange(undefined,[o.id]);
   });
   box.querySelectorAll('[data-prop-del]').forEach(btn=>btn.onclick=()=>{
+    if(!guardWrite()) return;
     const k=Object.keys(o.props)[Number(btn.dataset.propDel)]; if(k===undefined) return;
     pushHistory(); delete o.props[k]; commitChange(undefined,[o.id]);
   });
   /* 设备照片：复用内容寻址资产库（与底图同一 storage），照片随撤销栈可达集合保留 */
   box.querySelectorAll('[data-photo-input]').forEach(inp=>inp.addEventListener('change',async()=>{
+    if(!guardWrite()){ inp.value=''; return; }
     const f=inp.files&&inp.files[0]; if(!f) return;
     if(!isEditable(o)) return toast('对象或图层已锁定','warn');
     try{
@@ -639,6 +658,7 @@ function bindPropEvents(box,o){
     }catch(e){ toast(L('照片保存失败：{msg}',{msg:e.message}),'error'); }
   }));
   box.querySelectorAll('[data-photo-clear]').forEach(btn=>btn.onclick=()=>{
+    if(!guardWrite()) return;
     if(!isEditable(o)) return toast('对象或图层已锁定','warn');
     if(!o.props.photoId) return;
     pushHistory(); delete o.props.photoId; commitObjectEdit([o.id]); renderProps();
@@ -692,6 +712,7 @@ function markFieldInvalid(el){
   el.__invalidTimer=setTimeout(()=>el.classList.remove('field-invalid'),1500);
 }
 function applyField(el,o,changed){
+  if(!guardWrite(L('修改属性'))){ renderProps(); return false; }
   const k=el.dataset.field;
   /* 基点坐标允许负值（可在场地外，与拖拽移动同一基准）；尺寸类字段仍非负 */
   if(k==='x'||k==='y'){
@@ -759,7 +780,7 @@ function applyField(el,o,changed){
   changed();
 }
 function rotateSelected(delta){
-  if(!delta) return;
+  if(!guardWrite(L('旋转')) || !delta) return;
   const objs=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!objs.length) return toast('没有可旋转的选中对象','warn');
   pushHistory();

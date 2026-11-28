@@ -3,7 +3,7 @@
 > **读者**：要定位、修改或替换某个文件的开发者。
 > **回答**：每个文件负责什么、对外暴露什么、依赖谁、被谁调用、必须守住什么、哪里容易踩坑。
 > **不回答**：设计取舍见 [ARCHITECTURE](ARCHITECTURE.md)，数据与持久化见 [DATA-MODEL](DATA-MODEL.md)，功能边界见 [features](features.md)。
-> **口径**：50 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 2 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 72 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
+> **口径**：50 个浏览器脚本（`js/` 38 + `ngm.vendor/` 10 个直接加载 + `ngm.local/` 2 个本地包）+ `scripts/` 22 个 `.mjs` + 4 个 `scripts/lib/*.mjs` + 3 个数据文件（`dist-manifest.json` / `ngm-vendor-digest.json` / `sw-inputs.sha256`）+ `tests/` 77 个文件。除插件与 `ngm.local` 本地包外没有模块系统，脚本按 `index.html` 顺序加载，顶层 `function/const/let` 都是全局符号；下表的“接口”即这些全局符号。最后核对：2026-11-28。
 
 ## 分层与加载顺序
 
@@ -93,7 +93,7 @@
 | 文件 | 作用 | 输入/输出 | 调用位置 |
 | --- | --- | --- | --- |
 | `check.mjs` | 零依赖工程质量门禁（13 步）：9.1 状态直赋值、9.2 耦合计数、9.3 钩子配对、9.4 软调用登记 | 读仓库 → 退出码；`--selftest` 追加逻辑自测 | CI、`npm run lint` |
-| `selftest.mjs` | 逻辑层自测（当前 4,576 断言 / 176 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
+| `selftest.mjs` | 逻辑层自测（当前 4,578 断言 / 176 分区，覆盖几何/迁移/导出/合并/安全等；数字见 `docs/facts.md`） | 读源码/构造状态 → PASS/FAIL | `check --selftest`、`npm test` |
 | `bench.mjs` | 渲染性能基准（Node 桩 + P95/heapUsed/静态重建阈值） | 2000 对象场景 → 指标与门禁 | CI、`npm run ci` |
 | `build.mjs` | 单文件 HTML 打包、体积上限、`--check` 字节比对、SHA256、dist-manifest | `index.html` → `plotpin.html` + manifest | CI、`npm run build` |
 | `check-gates.mjs` | 门禁的牙齿：先跑正面基线（10 条，未破坏副本必须全绿），再构造 **20 种**人为破坏并断言对应门禁变红（含状态直赋值、耦合增减、软调用增减、钩子缺失、CSP 哈希错位、i18n 覆盖率跌破、TURN 凭据脱敏失守）；`--only` 可分批跑 | 仓库副本 → 通过/失败 | CI |
@@ -117,15 +117,16 @@
 | `lib/golden.mjs` | golden 写入闸门：`UPDATE_GOLDEN=1` 且 `ALLOW_GOLDEN=1` 且非 `CI` 三者同时满足才可写；拒绝时给出原因，写入时输出差异摘要并追加 `test-results/golden-change.log` | 环境变量 + 文件字节 → 写/拒 | `selftest.mjs`、`export-scope.spec.mjs` |
 | `dist-manifest.json` | 构建产物清单：入口、字节、gzip、sha256、上限 | `build.mjs` 写入 | README 体积口径、CI 比对 |
 
-## tests（76 个）
+## tests（77 个）
 
-### e2e 用例（52 个 spec）
+### e2e 用例（53 个 spec）
 
 | 文件 | 覆盖场景 |
 | --- | --- |
 | `batch-annot.spec.mjs` | 批次标注显隐：勾选两对象统一隐藏→撤销→统一显示，SVG 同步变化 |
 | `batch-layout.spec.mjs` | 1280×800 桌面布局：控件不挤压、数值输入可读 |
 | `calibration-precheck.spec.mjs` | D-02：无底图无场地时三个校准入口禁用且无点击路径；图片变换手柄拖动回归 |
+| `read-only.spec.mjs` | P1-B1/B2/B3：只读下批量/属性/规则/合并入口不改 state |
 | `catalog.spec.mjs` | 目录 JSON/CSV 导入→绑定型号/数量→跨楼层 BOM→CSV/XLSX→报价快照与重名防护 |
 | `collab.spec.mjs` | 双标签建连、状态从等待→已连接→对端断开可见 |
 | `comments.spec.mjs` | 本地批注：新增即时渲染并写入独立键、工程 JSON 不含正文、编辑（Esc 取消/确认更新）、删除二次确认、只读禁用、锚点删除后标注 |

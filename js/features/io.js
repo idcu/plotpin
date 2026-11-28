@@ -129,6 +129,7 @@ async function openProjectLibrary(){
     input.onchange=async()=>{
       const f=input.files&&input.files[0];
       if(!f) return;
+      if(!guardWrite(L('合并工程'))) return;
       if(!await guardRescueSwitch()) return;
       try{
         const fileErrs=importLimitErrors({bytes:f.size});

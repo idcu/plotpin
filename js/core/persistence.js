@@ -162,7 +162,7 @@ function setReadOnly(on){
 }
 /** pushHistory(remote=true) 仅供协作远端应用旁路；本地写入一律受只读守卫 */
 function pushHistory(remote){
-  if(readOnly&&!remote) return guardWrite(L('编辑'));
+  if(readOnly&&!remote) return guardWrite();
   /* 结构共享快照：与上一帧比较，未变子树/字符串（照片 base64）直接复用 */
   const prev=history.past.length?history.past[history.past.length-1]:null;
   history.past.push(snapshotHistoryState(state,prev));
@@ -275,7 +275,7 @@ function stampObjectsIn(objs){
 }
 /** @param {string} [floorId] 需要打点的楼层；缺省当前楼层（CORE-P2-8：重命名非当前楼层时也要刷新该层） */
 function commitChange(message, ids, floorId){
-  if(!guardWrite(L('编辑'))) return false;
+  if(!guardWrite()) return false;
   assertActiveFloorAlias('commit');
   stampObjects(ids);
   touchFloor(floorId);
@@ -1379,6 +1379,7 @@ function mergeHistoryNeeded(stats){
  *  schema 不符或结构损坏时抛错，由调用方提示；合并无变化时不写历史栈。 */
 async function mergeProjectJSON(raw,opts={}){
   if(!raw||typeof raw!=='object') throw new Error('不是有效的工程 JSON');
+  if(!opts.remote && !guardWrite(L('合并工程'))) return {ignored:'read-only'};
   if(!isReadableSchema(raw.schema)) throw new Error('schema 不匹配，不是本工具的工程文件');
   assertProjectWithinLimits(raw,'合并工程');          /* CORE-P2-20：协作/离线合并复用导入限额 */
   syncActiveFloor();
@@ -1410,7 +1411,7 @@ async function mergeProjectJSON(raw,opts={}){
   if(mergeStable(project)===mergeStable(currentRaw)) return stats;
   /* history:'overwrite' 供实时协作：只有远端覆盖本地内容时才入撤销栈，
    * 纯新增/纯同步不挤占 20 条历史上限；默认行为仍是「有变化就写历史」。 */
-  if(opts.history==='overwrite' ? mergeHistoryNeeded(stats) : opts.history!==false) pushHistory();
+  if(opts.history==='overwrite' ? mergeHistoryNeeded(stats) : opts.history!==false) pushHistory(!!opts.remote);
   /* 合并不接管对方的工程库绑定：只有本地已绑定才继续绑定 */
   project.meta.projectId=(currentRaw.meta&&currentRaw.meta.projectId)||'';
   selectedIds.clear(); draft=null;

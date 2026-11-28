@@ -63,6 +63,8 @@ $('zoomFitBtn').addEventListener('click',fitView);
 let markerScaleHist=false;
 $('markerScaleInput')?.addEventListener('focus',()=>{ markerScaleHist=false; });
 $('markerScaleInput')?.addEventListener('input',e=>{
+  /* P1-B1：只读时不得先写 settings 再靠 pushHistory 拒绝 */
+  if(!guardWrite(L('修改标记大小'))){ e.target.value=state.settings.markerScale; return; }
   /* M-12：一次编辑会话只压一条历史（首次 input 时压栈，此时 settings 仍是旧值） */
   if(!markerScaleHist){ pushHistory(); markerScaleHist=true; }
   state.settings.markerScale=Math.min(2.5,Math.max(.5,Number(e.target.value)||1));
@@ -229,8 +231,8 @@ function renderList(){
   $('objectTbody').querySelectorAll('[data-row-select]').forEach(chk=>chk.addEventListener('click',e=>{
     e.stopPropagation(); const id=chk.dataset.rowSelect; chk.checked?selectedIds.add(id):selectedIds.delete(id); refreshUI();
   }));
-  $('objectTbody').querySelectorAll('[data-toggle-visible]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleVisible); if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); });
-  $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); });
+  $('objectTbody').querySelectorAll('[data-toggle-visible]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); if(!guardWrite()) return; const o=state.objects.find(x=>x.id===b.dataset.toggleVisible); if(!isEditable(o)) return toast('对象或图层已锁定','warn'); pushHistory(); o.visible=!o.visible; commitChange(undefined,[o.id]); });
+  $('objectTbody').querySelectorAll('[data-toggle-lock]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); if(!guardWrite()) return; const o=state.objects.find(x=>x.id===b.dataset.toggleLock); if(layerOf(o).locked) return toast('图层已锁定','warn'); pushHistory(); o.locked=!o.locked; commitChange(undefined,[o.id]); });
   renderBatchAnnot();
 }
 $('headSelectChk').addEventListener('change',e=>{
@@ -239,8 +241,9 @@ $('headSelectChk').addEventListener('change',e=>{
 $('selectAllChk').addEventListener('change',e=>{
   filteredObjects().forEach(o=>e.target.checked?selectedIds.add(o.id):selectedIds.delete(o.id)); refreshUI();
 });
-$('batchLayerBtn').onclick=()=>{ const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast(TX_NOEDIT,'warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层', items.map(o=>o.id)); };
+$('batchLayerBtn').onclick=()=>{ if(!guardWrite()) return; const lid=$('batchLayer').value; if(!lid) return; const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast(TX_NOEDIT,'warn'); pushHistory(); items.forEach(o=>o.layerId=lid); commitChange('已批量修改图层', items.map(o=>o.id)); };
 $('batchMoveBtn').onclick=()=>{
+  if(!guardWrite()) return;
   const dx=Number($('batchDx').value)||0,dy=Number($('batchDy').value)||0; if(!dx&&!dy) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)); if(!items.length) return toast('没有可移动的选中对象','warn');
   pushHistory(); items.forEach(o=>{
@@ -250,6 +253,7 @@ $('batchMoveBtn').onclick=()=>{
 $('batchRotateBtn').onclick=()=>rotateSelected(Number($('batchAngle').value)||0);
 /* 阵列：选中对象按「行,列,行距X,列距Y」复制；包含原位（1,1），只新增其余位置 */
 $('batchArrayBtn').onclick=async()=>{
+  if(!guardWrite()) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!items.length) return toast(L(TX_PICKFIRST),'warn');
   const v=await showPrompt({title:I18N.t('batchArray'),label:I18N.t('arrayHint'),value:'2,2,5,5'});
@@ -287,6 +291,7 @@ function rotateObjectAbout(o,c,deg){
 }
 /** 环形阵列：绕选中对象包围盒中心按「数量,总角度」复制，含原位 */
 $('batchPolarBtn').onclick=async()=>{
+  if(!guardWrite()) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!items.length) return toast(L(TX_PICKFIRST),'warn');
   const v=await showPrompt({title:I18N.t('batchPolar'),label:I18N.t('polarHint'),value:'6,360'});
@@ -338,6 +343,7 @@ function offsetObject(o,d){
   return null;
 }
 $('batchOffsetBtn').onclick=async()=>{
+  if(!guardWrite()) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!items.length) return toast(L(TX_PICKFIRST),'warn');
   const v=await showPrompt({title:I18N.t('batchOffset'),label:I18N.t('offsetHint'),value:'1'});
@@ -357,12 +363,14 @@ $('batchOffsetBtn').onclick=async()=>{
 /* 批量闭合/反向：只作用可编辑折线；反向同步首点锚，闭合要求 ≥3 点 */
 const editableLines=()=>state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o)&&o.kind==='line');
 $('batchCloseBtn').onclick=()=>{
+  if(!guardWrite()) return;
   const items=editableLines().filter(o=>o.points.length>2);
   if(!items.length) return toast(L(TX_NOEDIT),'warn');
   pushHistory(); const all=items.every(o=>o.closed); items.forEach(o=>o.closed=!all);
   commitChange(L('已更新'),items.map(o=>o.id));
 };
 $('batchReverseBtn').onclick=()=>{
+  if(!guardWrite()) return;
   const items=editableLines();
   if(!items.length) return toast(L(TX_NOEDIT),'warn');
   pushHistory(); items.forEach(o=>{ o.points.reverse(); syncFirstPoint(o); });
@@ -370,6 +378,7 @@ $('batchReverseBtn').onclick=()=>{
 };
 /* 批量样式：选中可编辑对象统一写对象级 style[key]，一次撤销（颜色/线宽共用） */
 function batchStyle(key,value){
+  if(!guardWrite()) return;
   const items=state.objects.filter(o=>selectedIds.has(o.id)&&isEditable(o));
   if(!items.length) return toast(L(TX_NOEDIT),'warn');
   pushHistory(); items.forEach(o=>o.style[key]=value);
@@ -425,6 +434,7 @@ function renderBatchAnnot(){
 }
 /** 写入选中的适用对象；key 缺省表示所有适用键（主复选框） */
 function setSelectedAnnot(on,key){
+  if(!guardWrite()) return;
   const items=batchAnnotItems();
   if(!items.length) return toast('没有可修改标注的选中对象','warn');
   const plan=[];
@@ -475,9 +485,10 @@ function renderLayers(){
     callHook('ui.refresh'); requestRender();
     callHook('ui.toast',L('已选择图层「{layer}」的 {n} 个对象',{layer:l.name,n:items.length}));
   });
-  $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerVisible); if(!l) return; pushHistory(); l.visible=!l.visible; ensureActiveLayerUsable(); commitChange(); });
-  $('layerList').querySelectorAll('[data-layer-lock]').forEach(b=>b.onclick=()=>{ const l=getLayer(b.dataset.layerLock); if(!l) return; pushHistory(); l.locked=!l.locked; ensureActiveLayerUsable(); commitChange(); });
+  $('layerList').querySelectorAll('[data-layer-visible]').forEach(b=>b.onclick=()=>{ if(!guardWrite()) return; const l=getLayer(b.dataset.layerVisible); if(!l) return; pushHistory(); l.visible=!l.visible; ensureActiveLayerUsable(); commitChange(); });
+  $('layerList').querySelectorAll('[data-layer-lock]').forEach(b=>b.onclick=()=>{ if(!guardWrite()) return; const l=getLayer(b.dataset.layerLock); if(!l) return; pushHistory(); l.locked=!l.locked; ensureActiveLayerUsable(); commitChange(); });
   $('layerList').querySelectorAll('[data-layer-rename]').forEach(b=>b.onclick=async()=>{
+    if(!guardWrite()) return;
     const l=getLayer(b.dataset.layerRename); if(!l) return;
     const v=await showPrompt({title:L('重命名图层'),label:L('名称'),value:l.name});
     if(v==null) return;
@@ -487,6 +498,7 @@ function renderLayers(){
     pushHistory(); l.name=name; commitChange();
   });
   $('layerList').querySelectorAll('[data-layer-delete]').forEach(b=>b.onclick=async()=>{
+    if(!guardWrite()) return;
     const l=getLayer(b.dataset.layerDelete);
     if(!l) return;
     if(l.id==='layer.default') return toast(L('默认图层不可删除（可重命名）'),'warn');
@@ -509,6 +521,7 @@ function renderLayers(){
 }
 function getLayer(id){ return state.layers.find(l=>l.id===id); }
 $('addLayerBtn').onclick=()=>{
+  if(!guardWrite()) return;
   const base=String($('newLayerName').value||'').trim().slice(0,40)||L('新图层');
   const name=uniqueLayerName(base), id=uid('layer');
   pushHistory(); state.layers.push({id,name,visible:true,locked:false});
@@ -526,12 +539,14 @@ function renderTypes(){
       <button class="icon-btn" data-type-rename="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeRename')+'：'+typeDisplayName(t))}">✎</button>
       <button class="icon-btn danger" data-type-delete="${esc(t.id)}" ${t.builtin?'disabled':''} aria-label="${esc(I18N.t('ariaTypeDelete')+'：'+typeDisplayName(t))}">×</button>
     </div>`).join('')}`).join('');
-  $('typeList').querySelectorAll('[data-type-color]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeColor); pushHistory(); t.color=i.value; commitChange(); });
-  $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ const t=state.objectTypes.find(x=>x.id===i.dataset.typeIconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });
+  $('typeList').querySelectorAll('[data-type-color]').forEach(i=>i.onchange=()=>{ if(!guardWrite()) { renderTypes(); return; } const t=state.objectTypes.find(x=>x.id===i.dataset.typeColor); pushHistory(); t.color=i.value; commitChange(); });
+  $('typeList').querySelectorAll('[data-type-iconsize]').forEach(i=>i.onchange=()=>{ if(!guardWrite()) { renderTypes(); return; } const t=state.objectTypes.find(x=>x.id===i.dataset.typeIconsize); const v=Math.min(5,Math.max(.5,Number(i.value)||1)); pushHistory(); t.iconSize=v; commitChange(); });
   $('typeList').querySelectorAll('[data-type-rename]').forEach(b=>b.onclick=async()=>{
+    if(!guardWrite()) return;
     const t=state.objectTypes.find(x=>x.id===b.dataset.typeRename); const v=await showPrompt({title:L('重命名类型'),label:L('名称'),value:t.name}); if(v){ pushHistory(); t.name=v; commitChange(); }
   });
   $('typeList').querySelectorAll('[data-type-delete]').forEach(b=>b.onclick=async()=>{
+    if(!guardWrite()) return;
     const t=state.objectTypes.find(x=>x.id===b.dataset.typeDelete);
     if(!t) return;
     /* N-08：跨楼层检查引用；有引用时显式确认并迁移到同类内置类型，避免其他楼层悬空 */
@@ -549,6 +564,7 @@ function renderTypes(){
   });
 }
 $('addTypeBtn').onclick=async()=>{
+  if(!guardWrite()) return;
   const kind=$('newTypeKind').value,name=$('newTypeName').value.trim(),color=$('newTypeColor').value,icon=$('newTypeIcon').value;
   if(!name) return toast('请填写类型名称','warn');
   pushHistory();
@@ -566,6 +582,7 @@ $('addTypeBtn').onclick=async()=>{
 
 $('importSymBtn').onclick=()=>$('symFileInput').click();
 $('symFileInput').addEventListener('change',async e=>{
+  if(!guardWrite(L('导入图元'))){ e.target.value=''; return; }
   const f=e.target.files[0]; e.target.value='';
   if(!f) return;
   try{
@@ -637,6 +654,7 @@ function exportSymbolBundle(){
   toast(L('已导出 {n} 个自定义符号（仅当前工程）',{n:bundle.symbols.length}),'success');
 }
 async function importSymbolBundleFile(file){
+  if(!guardWrite(L('导入符号'))) return;
   try{
     const raw=JSON.parse(await file.text());
     const types=sanitizeSymbolBundle(raw,state.objectTypes.map(t=>t.id));
@@ -870,6 +888,7 @@ async function runPlacementOptimization(){
   const buttons=[{text:L('关闭'),class:'',click:closeModal}];
   if(res.suggestions.length){
     buttons.unshift({text:L('应用建议（新增 {n} 台）',{n:res.suggestions.length}),class:'primary',click:()=>{
+      if(!guardWrite()) return;
       pushHistory();
       const typeId=defaultTypeId('point')==='point.marker'?'point.camera':defaultTypeId('point');
       withObjectNameScope(allObjectNames(), () => res.suggestions.forEach(s=>{

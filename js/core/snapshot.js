@@ -158,6 +158,7 @@ async function restoreSnapshotById(pid,sid){
   if(!rec.data.schema) throw new Error('快照缺少 schema 版本，已拒绝恢复');
   /* RT-P2-04：即使记录归属校验通过，也只允许恢复当前打开的工程，防止跨工程把现场换成 B 工程 */
   if(state.meta.projectId!==pid) throw new Error('只能恢复当前打开工程的快照');
+  if(!guardWrite(L('回滚快照'))) return false;
   const errs=importLimitErrors({objects:countProjectObjects(rec.data)});
   if(errs.length) throw new Error('快照超出上限：'+importLimitMessage(errs));
   const next=buildProject(rec.data);

@@ -723,10 +723,11 @@ function initRuleUI(){
          不弹 toast（避免新增 UI 文案；面板本身已即时反馈）。 */
       clearTimeout(cfgTimer);
       cfgTimer=setTimeout(()=>{
-        pushHistory();
+        if(!guardWrite(L('修改规则'))){ renderRuleConfig(); return; }
+        if(!pushHistory()) return;
         state.rules=readRuleConfigFromUI();
-        commitChange();
-        callHook('collab.sendRules',state.rules);
+        const committed=commitChange();
+        if(committed!==false) callHook('collab.sendRules',state.rules);
       },300);
     });
   }

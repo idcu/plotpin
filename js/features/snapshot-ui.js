@@ -85,6 +85,7 @@ async function openSnapshotManager(pid,pname){
           await openSnapshotManager(pid,pname);
         }else if(op==='restore'){
           if(state.meta.projectId!==pid){ toast(L('请先打开该工程再回滚'),'warn'); return; }
+          if(!guardWrite(L('回滚快照'))) return;
           const ok=await showConfirm(L(TX_SNAP,{name:snapLabel(meta)}));
           if(!ok) return;
           clearDiffOverlay();
