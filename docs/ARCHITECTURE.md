@@ -147,6 +147,7 @@ s2w(p) = [(p.x - panX) / zoom + frame.minX, frame.maxY - (p.y - panY) / zoom]
 - 快照带不可枚举标记；`materializeHistoryState()` 只复制容器，不复制 base64。
 - **`pushHistory()` 不会自动发生在每次状态修改里**：对象拖拽在 `pointerdown` 压栈，或首次越过 2px 阈值时补压；结束时内容未变或拖回原位则弹出空快照。输入提交、批量操作开始前、清空楼层前仍需显式调用。漏调用导致“改了撤销不回去”，重复调用产生冗余中间帧。
 - `pushHistory()` 清空 `future`；`undo()/redo()` 恢复后走 `markDirty('restore')`。
+- **撤销/重做/快照回滚 = 一次新编辑**（A1）：`stampRestoreCommit(prev)` 复用 `diffSnapshots` 对比恢复前后现场——目标中消失的对象/楼层写墓碑（删除时间不早于其最后写入），恢复或内容变化的对象单调打点（严格晚于已有墓碑），场地/底图/楼层元数据变化推进对应楼层时间，最后推进 `meta.updatedAt`。否则协作 LWW 会忽略撤销，或让刚撤销的删除被旧墓碑再次删掉。
 - 校准使用独立的 `calibUndoStack`，不进入工程历史；确认后才落为一次工程变更。
 - 协作合并落地也走历史栈：`mergeProjectJSON()` 默认“有变化就 pushHistory”；实时通道**一次连接内最多写一条远端历史**——首条真正覆盖本地内容时传 `{history:'overwrite'}`，之后传 `{history:false}`，纯新增/纯同步不挤占本地 20 条撤销。
 

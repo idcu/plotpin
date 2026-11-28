@@ -175,9 +175,11 @@ function undo(){
   if(!guardWrite(L('撤销'))) return;
   if(!history.past.length) return;
   const prevFuture=history.future.length?history.future[history.future.length-1]:null;
-  history.future.push(snapshotHistoryState(state,prevFuture));
+  const current=snapshotHistoryState(state,prevFuture);   /* A1：恢复前现场，用于墓碑/打点差异 */
+  history.future.push(current);
   /* 快照不可变：弹出后物化一份可编辑副本，避免 live 编辑污染共享子树（普通条目原样返回） */
   replaceState(materializeHistoryState(history.past.pop()),{fit:false});
+  stampRestoreCommit(current);     /* A1：撤销=新编辑（写墓碑/打点/推进时间），协作与多标签才认 */
   selectedIds.clear();
   scheduleAssetGc(1500);           /* B3：撤销热路径不扫全库，延后回收 */
   markDirty('restore');            /* 撤销后立刻落盘：刷新页面必须保持撤销结果（审计 P0-4） */
@@ -187,8 +189,10 @@ function redo(){
   if(!guardWrite(L('重做'))) return;
   if(!history.future.length) return;
   const prevPast=history.past.length?history.past[history.past.length-1]:null;
-  history.past.push(snapshotHistoryState(state,prevPast));
+  const current=snapshotHistoryState(state,prevPast);
+  history.past.push(current);
   replaceState(materializeHistoryState(history.future.pop()),{fit:false});
+  stampRestoreCommit(current);     /* A1：重做同样视为一次新编辑 */
   selectedIds.clear();
   scheduleAssetGc(1500);           /* B3：重做同样不扫全库 */
   markDirty('restore');            /* 重做同样落盘，避免刷新后回滚（审计 P0-4） */
@@ -244,12 +248,17 @@ function markDirty(kind, ids){
   }
   if(p.broadcast) callHook('collab.onLocalChange');
 }
-/** 单个对象单调打点：新时间必须严格大于旧值（同一毫秒连续提交也递增）。 */
-function stampObject(o){
+/**
+ * 单个对象单调打点：新时间必须严格大于旧值与可选下界（同一毫秒连续提交也递增）。
+ * @param {object} o 对象
+ * @param {string} [notBefore] 额外下界（撤销恢复时传墓碑时间，保证「恢复」晚于「删除」）
+ */
+function stampObject(o,notBefore){
   if(!o||typeof o!=='object') return false;
   const prev=typeof o.updatedAt==='string'?o.updatedAt:'';
+  const floor=typeof notBefore==='string'&&notBefore>prev?notBefore:prev;
   let ts=new Date().toISOString();
-  if(prev && ts<=prev) ts=new Date(new Date(prev).getTime()+1).toISOString();
+  if(floor && ts<=floor) ts=new Date(new Date(floor).getTime()+1).toISOString();
   o.updatedAt=ts; return true;
 }
 /** 对象变更打点（N-06）：只对实际变化的 id 写 updatedAt，供协作 LWW 判定。
@@ -272,6 +281,71 @@ function stampObjectsIn(objs){
   let n=0;
   for(const o of objs) if(stampObject(o)) n++;
   return n;
+}
+/** 楼层最后写入时间：楼层/场地/该层对象的 updatedAt 最大值（与 mergeFloorWrite 同口径）。 */
+function floorWriteTimeOf(f){
+  let t=f&&typeof f.updatedAt==='string'?f.updatedAt:'';
+  if(f&&f.site&&typeof f.site.updatedAt==='string'&&f.site.updatedAt>t) t=f.site.updatedAt;
+  (f&&Array.isArray(f.objects)?f.objects:[]).forEach(o=>{
+    if(o&&typeof o.updatedAt==='string'&&o.updatedAt>t) t=o.updatedAt;
+  });
+  return t;
+}
+/**
+ * A1：撤销/重做/快照回滚视为**一次新编辑**，必须在 replaceState 之后调用。
+ *  - 目标现场中消失的对象/楼层写墓碑（并保证删除时间不早于其最后写入）；
+ *  - 出现或内容变化的对象单调打点（恢复时间严格晚于旧墓碑，避免刚撤销就被 LWW 再删）；
+ *  - 场地变化写 site.updatedAt，楼层元数据变化推进楼层时间；
+ *  - 最后推进工程 meta.updatedAt，供多标签新鲜度与协作 LWW 采纳。
+ * 差异复用 diffSnapshots（与快照对比面板同一判据），不另写一套对象比较。
+ * @param {object} prev 恢复前现场（历史快照/快照数据）
+ * @returns {{tombstoned:number,stamped:number,floors:number}}
+ */
+function stampRestoreCommit(prev){
+  if(!prev||typeof prev!=='object') return {tombstoned:0,stamped:0,floors:0};
+  const diff=diffSnapshots(prev,state);
+  /* 墓碑取恢复前后两侧的并集最新值：目标快照可能早于「删除」，只看 state 会漏掉刚发生的墓碑。 */
+  const tombTimes=new Map();
+  [prev.tombstones,state.tombstones].forEach(arr=>{
+    (Array.isArray(arr)?arr:[]).forEach(t=>{
+      if(!t||t.id===undefined) return;
+      const key=(t.kind||'object')+':'+String(t.id);
+      if((t.deletedAt||'')>(tombTimes.get(key)||'')) tombTimes.set(key,t.deletedAt||'');
+    });
+  });
+  const removedFloors=new Set(), touchedFloors=new Set();
+  diff.items.forEach(it=>{
+    if(it.scope!=='scene') return;
+    if(it.sceneKind==='floor'){
+      const fid=String(it.id||'').slice('scene:floor:'.length);
+      if(it.category==='removed') removedFloors.add(fid);
+      else touchedFloors.add(fid);
+    }else if(it.sceneKind==='site'||it.sceneKind==='background') touchedFloors.add(state.activeFloorId);
+  });
+  const after=snapshotObjectIndex(state);
+  let tombstoned=0, stamped=0;
+  diff.items.forEach(it=>{
+    if(it.scope==='scene') return;
+    if(it.category==='removed'){
+      if(removedFloors.has(it.aFloorId)) return;   /* 整层删除由楼层墓碑覆盖，避免批量墓碑挤占上限 */
+      markTombstone(it.id,'object',it.a&&it.a.updatedAt);
+      tombstoned++;
+      return;
+    }
+    const hit=after.get(String(it.id));
+    if(!hit) return;
+    stampObject(hit.obj,tombTimes.get('object:'+String(it.id)));
+    stamped++;
+  });
+  if(removedFloors.size){
+    const prevFloors=new Map((Array.isArray(prev.floors)?prev.floors:[]).map(f=>[String(f&&f.id),f]));
+    removedFloors.forEach(fid=>{ markTombstone(fid,'floor',floorWriteTimeOf(prevFloors.get(fid))); tombstoned++; });
+  }
+  touchedFloors.forEach(fid=>touchFloor(fid));
+  const siteItem=diff.items.some(it=>it.scope==='scene'&&it.sceneKind==='site');
+  if(siteItem&&state.site) state.site.updatedAt=nowISO();
+  state.meta.updatedAt=nowISO();
+  return {tombstoned,stamped,floors:touchedFloors.size};
 }
 /** @param {string} [floorId] 需要打点的楼层；缺省当前楼层（CORE-P2-8：重命名非当前楼层时也要刷新该层） */
 function commitChange(message, ids, floorId){
@@ -1356,12 +1430,16 @@ function sanitizeTombstones(arr,nowMs){
     .slice(0,TOMBSTONE_LIMIT);
 }
 /** 记录一次删除（对象/楼层/图层/类型）；重复删除同一目标时刷新删除时间。
+ *  @param {string} [notBefore] 删除时间下界：撤销后重做删除时传对象当前时间，
+ *    保证墓碑不早于它（否则同毫秒内重做会被 LWW 判为「删除更旧」而复活）。
  *  增量淘汰：攒够 TOMBSTONE_EVICT_BATCH 条才压缩一次（而非每次删除都全量排序）。 */
-function markTombstone(id,kind='object'){
+function markTombstone(id,kind='object',notBefore){
   if(!id) return null;
   state.tombstones=Array.isArray(state.tombstones)?state.tombstones:[];
   const k=TOMBSTONE_KINDS.includes(kind)?kind:'object';
-  const at=nowISO();
+  let at=nowISO();
+  if(typeof notBefore==='string'&&notBefore&&at<=notBefore)
+    at=new Date(new Date(notBefore).getTime()+1).toISOString();
   const hit=state.tombstones.find(t=>t&&t.id===String(id)&&(t.kind||'object')===k);
   if(hit) hit.deletedAt=at;
   else state.tombstones.push({id:String(id),deletedAt:at,kind:k});

@@ -15,7 +15,7 @@ const {
 
 let leaseActive = false;
 const __lease = __leasePkg.createLease({
-  projectId: () => String((state && state.meta && state.meta.projectId) || ''),
+  projectId: () => leaseCurProject(),
   now: () => Date.now(),
   storage: (() => {
     try { return localStorage; } catch (_) { return null; }
@@ -29,7 +29,16 @@ const __lease = __leasePkg.createLease({
   onActive: (v) => { leaseActive = v; }
 });
 
-function leaseCurProject() { return String((state && state.meta && state.meta.projectId) || ''); }
+/**
+ * A3：租约归组键。已绑定工程用 projectId；未绑定草稿改用草稿自身 meta.id（前缀 D: 与工程 id 隔离），
+ * 避免两个不同草稿因 projectId 都为空串而互相锁死自动保存；
+ * 同一草稿（current 自动存档 / 同一导出文件）meta.id 相同，冲突提示语义不变。
+ */
+function leaseCurProject() {
+  const meta = (state && state.meta) || {};
+  const pid = String(meta.projectId || '');
+  return pid || (meta.id ? 'D:' + String(meta.id) : '');
+}
 function leaseSend(now, force, flag) { return __lease.send(now, force, flag); }
 function leaseFreshTs(now) { return __lease.freshTs(now); }
 function leaseEmit(active, lastBeat) { return __lease.emit(active, lastBeat); }

@@ -70,6 +70,33 @@ test('D-09 flushPendingSave 被租约阻断时保留待保存定时器', async (
   expect(r.error).toContain('另一标签页');
 });
 
+test('A3 未绑定草稿按 meta.id 归组：不同草稿不互锁、同一草稿仍冲突', async ({ page, context }) => {
+  const bootDraft = async (p, id) => {
+    await p.goto('/index.html');
+    await expect(p.locator('#canvas')).toBeVisible();
+    await p.evaluate(id => {
+      state.meta.projectId = '';
+      state.meta.id = id;
+      leaseSyncProject();
+      leaseTick();
+    }, id);
+  };
+  await bootDraft(page, 'DRAFT-A');
+  expect(await page.evaluate(() => leaseCurProject())).toBe('D:DRAFT-A');
+  const p2 = await context.newPage();
+  await bootDraft(p2, 'DRAFT-B');
+  expect(await p2.evaluate(() => leaseCurProject())).toBe('D:DRAFT-B');
+  await page.waitForTimeout(1200);
+  await expect(page.locator('#leaseBanner')).toHaveCount(0);
+  await expect(p2.locator('#leaseBanner')).toHaveCount(0);
+  expect(await page.evaluate(() => leaseStatus().conflict)).toBe(false);
+  expect(await p2.evaluate(() => leaseStatus().conflict)).toBe(false);
+  /* 同一份草稿（同一 meta.id）：冲突检测恢复 */
+  await p2.evaluate(() => { state.meta.id = 'DRAFT-A'; leaseSyncProject(); leaseTick(); });
+  await page.evaluate(() => { leaseSyncProject(); leaseTick(); });
+  await expect(p2.locator('#leaseBanner')).toBeVisible({ timeout: 6000 });
+});
+
 test('D-09 不同工程双标签：互不触发冲突', async ({ page, context }) => {
   await boot(page, 'D09-A');
   const p2 = await context.newPage();

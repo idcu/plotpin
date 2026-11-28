@@ -8821,6 +8821,53 @@ asyncSuites.push(async()=>{
     calls=0; saved=null; api.redo();
     ok('落盘-重做调用保存', calls>=1);
     eq('落盘-重做快照对象归零', saved&&saved.objects.length, 0);
+    /* A1：撤销/重做 = 一次新编辑（时间戳 + 墓碑），否则协作 LWW 会忽略撤销或复活已删对象 */
+    api.resetState(); api.history.past=[]; api.history.future=[];
+    const a1Obj=api.baseObject('point','point.marker',{name:'A1',x:2,y:2});
+    api.state.objects=[a1Obj]; api.syncActiveFloor();
+    api.pushHistory();
+    const a1Tomb=api.markTombstone(a1Obj.id,'object');
+    api.state.objects=[]; api.syncActiveFloor();
+    api.state.meta.updatedAt='2000-01-01T00:00:00.000Z';
+    api.state.floors[0].updatedAt='2000-01-01T00:00:00.000Z';
+    api.undo();
+    const a1Back=api.state.objects.find(o=>o.id===a1Obj.id);
+    ok('A1-撤销恢复删除对象', !!a1Back);
+    ok('A1-撤销打点晚于墓碑', !!a1Back&&Date.parse(a1Back.updatedAt)>Date.parse(a1Tomb));
+    ok('A1-撤销推进工程时间', api.state.meta.updatedAt>'2000-01-01T00:00:00.000Z');
+    ok('A1-撤销推进楼层时间', api.state.floors[0].updatedAt>'2000-01-01T00:00:00.000Z');
+    api.redo();
+    ok('A1-重做删除写墓碑', api.state.tombstones.some(t=>t.id===a1Obj.id&&Date.parse(t.deletedAt)>Date.parse(a1Back.updatedAt)));
+    eq('A1-重做对象移除', api.state.objects.length, 0);
+    /* A1：撤销「新增」= 补写墓碑，避免对端用旧版本复活 */
+    api.resetState(); api.history.past=[]; api.history.future=[];
+    api.pushHistory();
+    const a1Add=api.baseObject('point','point.marker',{name:'A1-ADD',x:3,y:3});
+    api.state.objects=[a1Add]; api.syncActiveFloor();
+    api.undo();
+    eq('A1-撤销新增移除对象', api.state.objects.length, 0);
+    ok('A1-撤销新增写墓碑', api.state.tombstones.some(t=>t.id===a1Add.id&&Date.parse(t.deletedAt)>Date.parse(a1Add.updatedAt)));
+    /* A1：快照回滚同口径：恢复对象晚于墓碑，被回滚掉的对象写墓碑 */
+    api.resetState(); api.history.past=[]; api.history.future=[];
+    api.state.meta.projectId='proj-a1';
+    const a1Keep=api.baseObject('point','point.marker',{name:'SNAP-KEEP',x:4,y:4});
+    api.state.objects=[a1Keep]; api.syncActiveFloor();
+    const a1Snap=JSON.parse(JSON.stringify(api.persistableState()));
+    const a1Gone=api.baseObject('point','point.marker',{name:'SNAP-GONE',x:5,y:5});
+    const a1KeepTomb=api.markTombstone(a1Keep.id,'object');
+    api.state.objects=[a1Gone]; api.syncActiveFloor();
+    api.state.meta.updatedAt='2000-01-01T00:00:00.000Z';
+    api.state.floors[0].updatedAt='2000-01-01T00:00:00.000Z';
+    const prevSnapGet=sandbox.getSnapshot;
+    sandbox.getSnapshot=async()=>({data:JSON.parse(JSON.stringify(a1Snap)),meta:{projectName:'A1'}});
+    let a1Restored=false;
+    try{ a1Restored=await api.restoreSnapshotById('proj-a1','snap-a1'); }
+    finally{ sandbox.getSnapshot=prevSnapGet; }
+    const a1KeepBack=api.state.objects.find(o=>o.id===a1Keep.id);
+    ok('A1-快照回滚成功', a1Restored);
+    ok('A1-快照回滚恢复对象晚于墓碑', !!a1KeepBack&&Date.parse(a1KeepBack.updatedAt)>Date.parse(a1KeepTomb));
+    ok('A1-快照回滚删除对象写墓碑', api.state.tombstones.some(t=>t.id===a1Gone.id));
+    ok('A1-快照回滚推进工程时间', api.state.meta.updatedAt>'2000-01-01T00:00:00.000Z');
     /* 新增楼层：刷新后楼层不能消失 */
     api.resetState(); api.history.past=[]; api.history.future=[];
     calls=0; saved=null;

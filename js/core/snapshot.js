@@ -166,8 +166,10 @@ async function restoreSnapshotById(pid,sid){
   await ensureBackgroundAsset(next);
   await ensureFloorBackgroundAssets(next);
   pushHistory();                               /* 回滚前的当前状态进入撤销栈 */
+  const prev=history.past[history.past.length-1];  /* A1：回滚前现场，用于墓碑/打点差异 */
   selectedIds.clear();
   await replaceState(next,{fit:false,keepCalib:true});  /* 瞬态统一清理；比例尺校准点保留，仿射草稿清空 */
+  stampRestoreCommit(prev);                    /* A1：回滚=新编辑（写墓碑/打点/推进时间），协作与多标签才认 */
   markDirty('restore');                        /* 立即落盘，刷新后保持回滚结果 */
   return true;
 }
