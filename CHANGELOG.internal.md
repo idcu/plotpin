@@ -4,6 +4,18 @@
 
 > 本文件是**历史档案**：条目内数字均为该次提交时的实测值，不代表当前状态；现行事实（体积、断言数、e2e 数、门禁数等）见 [docs/facts.md](docs/facts.md)。
 
+## 2026-11-28 · 修复 leaseClaim 后不补落盘
+
+- **Commit Hash**：`d250a18`
+- **核心改动**：
+  - `persistence.js`：租约冲突时 `scheduleSave` 记录 `leasePendingSave`；新增 `resumeLeasePendingSave()`，冲突解除或 claim 后补一次保存；保存成功清零。
+  - `tab-lease.js`：`leaseClaim` 主动补存；`onLeaseConflict` 包装解除回调，冲突自然解除（对端离开/切工程）时也补存，不再只依赖用户点 claim。
+  - 新增 e2e：双标签冲突期间编辑 → claim → 状态变「已保存」→ IndexedDB `current.meta.name` 为新值。
+- **预算**（实测）：dist **849,332 → 849,609 B（+277）**；gzip **276,574 → 276,646 B（+72）**；上限 840 KiB 下余量 **10,551 B**（gzip 余量 18,266 B）；SW `VERSION=331 → 332`；发行包 SHA256 `0bfed84e…`。
+- **验证数据**（临时整仓副本实跑）：selftest **4,576 / 0**；e2e 源码 **212 passed / 0 failed / 3 skipped**（4.2m）、dist **209 passed / 0 failed / 6 skipped**（3.8m）；check-gates 10/10 + 20/20；bench 缓存 P95 **0.07ms** / 重建 **15.45ms** / heap **30.44MB**；discipline 13/13 L4。
+- **公共抽象清单**：`leasePendingSave` / `resumeLeasePendingSave()`（persistence）；适配层 `onLeaseConflict` 包装；无新增公共 API。
+- **遗留风险**：只覆盖租约冲突的保存补发；`flushBeforeUnload` 仍以定时器存在判断 pending，若未来出现「无定时器的待保存」新路径仍需扩展。
+
 ## 2026-11-28 · 提取 @local/core-lease 本地包
 
 - **Commit Hash**：`d4f65a6`
